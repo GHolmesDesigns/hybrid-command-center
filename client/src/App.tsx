@@ -4,7 +4,7 @@ import { DndContext, KeyboardSensor, PointerSensor, closestCorners, useDroppable
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { AlertCircle, Archive, ArrowRight, BriefcaseBusiness, CalendarDays, Check, CheckCircle2, ChevronRight, CircleAlert, Clock3, ExternalLink, FileText, FolderKanban, FolderSync, GripVertical, LayoutDashboard, ListChecks, Menu, PanelLeft, PanelLeftClose, Pencil, Plus, RefreshCw, Search, Settings, ShieldAlert, Trash2, Users, X } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { addDays, format, parseISO } from 'date-fns';
 import { api, send } from './api';
 import type { Client, DashboardData, DriveStatus, Priority, Project, Task, TaskStatus } from '../../shared/types';
 import { TASK_STATUSES } from '../../shared/types';
@@ -106,7 +106,7 @@ function ProjectDetail({projects,tasks,open,refresh,flash}:{projects:Project[];t
 
 function Kanban({tasks,clients,projects,open,refresh,flash}:{tasks:Task[];clients:Client[];projects:Project[];open:(m:Modal)=>void;refresh:()=>Promise<void>;flash:(s:string,t?:'success'|'error')=>void}){
   const [params,setParams]=useSearchParams();const project=params.get('project')||'',client=params.get('client')||'',flag=params.get('filter')||'';const [priority,setPriority]=useState('');
-  const filtered=tasks.filter(t=>(!project||t.projectId===project)&&(!client||t.clientId===client)&&(!priority||t.priority===priority)&&(!flag||(flag==='overdue'&&t.overdue)||(flag==='blocked'&&t.blocked)||(flag==='today'&&t.dueDate&&format(parseISO(t.dueDate),'yyyy-MM-dd')===format(new Date(),'yyyy-MM-dd'))||(flag==='week'&&t.dueDate)||(flag==='none'&&!t.dueDate)||(flag==='completed'&&t.status==='COMPLETE')));
+  const filtered=tasks.filter(t=>(!project||t.projectId===project)&&(!client||t.clientId===client)&&(!priority||t.priority===priority)&&(!flag||(flag==='overdue'&&t.overdue)||(flag==='blocked'&&t.blocked)||(flag==='today'&&dueWithinDays(t.dueDate,0))||(flag==='week'&&dueWithinDays(t.dueDate,7))||(flag==='none'&&!t.dueDate)||(flag==='completed'&&t.status==='COMPLETE')));
   const sensors=useSensors(useSensor(PointerSensor,{activationConstraint:{distance:6}}),useSensor(KeyboardSensor,{coordinateGetter:sortableKeyboardCoordinates}));
   const move=async(task:Task,status:TaskStatus)=>{try{const ordered=filtered.filter(t=>t.status===status&&t.id!==task.id).map(t=>t.id);ordered.push(task.id);await send('/tasks/reorder','POST',{taskId:task.id,status,orderedIds:ordered});await refresh();flash(`Moved to ${STATUS_LABEL[status]}.`);}catch(e:any){if(e.status===409&&e.data?.code==='TASK_BLOCKED'){if(confirm(`${e.message}\n\nComplete anyway and override the dependency block?`)){await send('/tasks/reorder','POST',{taskId:task.id,status,orderedIds:[task.id],overrideBlocked:true});await refresh();flash('Task completed with dependency override.');}}else flash(e.message,'error');}};
   const dragEnd=(event:DragEndEvent)=>{if(!event.over)return;const task=tasks.find(t=>t.id===event.active.id);if(!task)return;const overTask=tasks.find(t=>t.id===event.over!.id);const status=(TASK_STATUSES.includes(event.over.id as TaskStatus)?event.over.id:overTask?.status) as TaskStatus|undefined;if(status&&status!==task.status)move(task,status);};
@@ -140,3 +140,5 @@ function StatusDot({status}:{status:TaskStatus}){return <span className={`status
 function Due({task}:{task:Task}){if(!task.dueDate)return <span className="due muted"><CalendarDays/> No date</span>;return <span className={`due ${task.overdue?'overdue-text':''}`}><CalendarDays/>{task.overdue?'Due ':''}{formatDate(task.dueDate)}</span>}
 function Empty({title,body,action,compact}:{title:string;body:string;action?:ReactNode;compact?:boolean}){return <div className={`empty ${compact?'compact':''}`}><div><FolderKanban/></div><strong>{title}</strong><p>{body}</p>{action}</div>}
 const formatDate=(value:string)=>{try{return format(parseISO(value),'MMM d, yyyy')}catch{return value}};const dateInput=(value?:string)=>value?.slice(0,10)||'';const initials=(name:string)=>name.split(/\s+/).map(x=>x[0]).slice(0,2).join('').toUpperCase();
+/** True when a due date falls between today and `days` days from now, inclusive. Compares local calendar days as yyyy-MM-dd so it never drifts across timezones. */
+const dueWithinDays=(dueDate:string|undefined,days:number)=>{if(!dueDate)return false;const day=(value:Date)=>format(value,'yyyy-MM-dd');const due=day(parseISO(dueDate));return due>=day(new Date())&&due<=day(addDays(new Date(),days));};
