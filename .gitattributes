@@ -1,0 +1,11 @@
+# Normalize line endings: LF in the repository and in every working copy.
+# Prevents phantom "whole file changed" diffs when working across machines.
+* text=auto eol=lf
+
+# Binary files Git must never convert or try to diff as text.
+*.docx binary
+*.png  binary
+*.jpg  binary
+*.ico  binary
+*.pdf  binary
+*.db   binary
