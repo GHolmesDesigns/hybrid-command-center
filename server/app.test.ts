@@ -35,4 +35,44 @@ describe('command center API',()=>{
     const sync=await request(createApp(db)).post('/api/drive/sync');
     expect(sync.status).toBe(200);expect(sync.body.connected).toBe(false);
   });
+
+  it('clears optional task fields when they are sent empty, and keeps them when omitted',async()=>{
+    const {p}=await setup();const app=createApp(db);
+    const task=(await request(app).post('/api/tasks').send({projectId:p.id,title:'Dated task',dueDate:'2026-08-20',notes:'Keep me'})).body;
+    expect(task.dueDate).toBe('2026-08-20');
+    // Omitting a key must preserve the stored value.
+    const renamed=(await request(app).patch(`/api/tasks/${task.id}`).send({title:'Renamed task'})).body;
+    expect(renamed.dueDate).toBe('2026-08-20');expect(renamed.notes).toBe('Keep me');
+    // Sending an empty string must clear it.
+    const cleared=(await request(app).patch(`/api/tasks/${task.id}`).send({dueDate:'',notes:''})).body;
+    expect(cleared.dueDate).toBeUndefined();expect(cleared.notes).toBeUndefined();
+    expect(cleared.title).toBe('Renamed task');expect(cleared.overdue).toBe(false);
+  });
+
+  it('clears optional client and project fields on request',async()=>{
+    const app=createApp(db);
+    const client=(await request(app).post('/api/clients').send({name:'Clearable Co',contactName:'Dana',phone:'555-0100',notes:'Initial'})).body;
+    expect(client.contactName).toBe('Dana');
+    const wiped=(await request(app).patch(`/api/clients/${client.id}`).send({contactName:'',phone:'',notes:''})).body;
+    expect(wiped.contactName).toBeUndefined();expect(wiped.phone).toBeUndefined();expect(wiped.notes).toBeUndefined();
+    expect(wiped.name).toBe('Clearable Co');
+    const project=(await request(app).post('/api/projects').send({clientId:client.id,name:'Dated Project',targetDeadline:'2026-09-01'})).body;
+    const noDeadline=(await request(app).patch(`/api/projects/${project.id}`).send({targetDeadline:''})).body;
+    expect(noDeadline.targetDeadline).toBeUndefined();expect(noDeadline.name).toBe('Dated Project');
+  });
+
+  it('does not reset status or priority on a PATCH that omits them',async()=>{
+    const {c,p}=await setup();const app=createApp(db);
+    // A project created ON_HOLD/URGENT must survive a name-only edit.
+    const project=(await request(app).post('/api/projects').send({clientId:c.id,name:'Held Project',status:'ON_HOLD',priority:'URGENT'})).body;
+    const renamedProject=(await request(app).patch(`/api/projects/${project.id}`).send({name:'Held Project v2'})).body;
+    expect(renamedProject.status).toBe('ON_HOLD');expect(renamedProject.priority).toBe('URGENT');
+    // Renaming a task from the detail modal sends only { title }.
+    const task=(await request(app).post('/api/tasks').send({projectId:p.id,title:'In flight',status:'IN_PROGRESS',priority:'HIGH'})).body;
+    const renamedTask=(await request(app).patch(`/api/tasks/${task.id}`).send({title:'In flight v2'})).body;
+    expect(renamedTask.status).toBe('IN_PROGRESS');expect(renamedTask.priority).toBe('HIGH');
+    // Completing from the modal sends only { status }.
+    const completed=(await request(app).patch(`/api/tasks/${task.id}`).send({status:'COMPLETE'})).body;
+    expect(completed.priority).toBe('HIGH');expect(completed.title).toBe('In flight v2');
+  });
 });
