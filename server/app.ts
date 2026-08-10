@@ -1,0 +1,139 @@
+﻿import crypto from 'node:crypto';
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import pinoHttp from 'pino-http';
+import { google } from 'googleapis';
+import { z } from 'zod';
+import type { Db } from './db.ts';
+import { getDb, transaction } from './db.ts';
+import { config } from './config.ts';
+import { getTask, listClients, listProjects, listTasks } from './repositories.ts';
+import { wouldCreateCycle, blockingDependencies } from './domain/dependencies.ts';
+import { isDueNextSevenDays, isDueToday } from './domain/deadlines.ts';
+import { driveProvider, getSetting, provisionClient, provisionProject, setSetting, syncAllToDrive } from './drive/service.ts';
+import { encryptJson } from './drive/tokens.ts';
+import { APP_VERSION, BRANDING_SETTING_KEY, DEFAULT_BRANDING, type Branding } from '../shared/branding.ts';
+
+const id = () => crypto.randomUUID();
+const now = () => new Date().toISOString();
+const slugify = (value: string) => value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+const nullable = z.string().trim().optional().transform((v) => v || undefined);
+const priority = z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).default('MEDIUM');
+const clientInput = z.object({ name: z.string().trim().min(2).max(120), contactName: nullable, email: z.string().email().optional().or(z.literal('')), phone: nullable, website: z.string().url().optional().or(z.literal('')), notes: nullable });
+const projectInput = z.object({ clientId: z.string().uuid(), name: z.string().trim().min(2).max(160), description: nullable, status: z.enum(['PLANNING','ACTIVE','ON_HOLD','COMPLETE']).default('ACTIVE'), startDate: nullable, targetDeadline: nullable, priority, notes: nullable });
+const taskInput = z.object({ projectId: z.string().uuid(), title: z.string().trim().min(2).max(200), description: nullable, status: z.enum(['BACKLOG','TODO','IN_PROGRESS','REVIEW','COMPLETE']).default('BACKLOG'), priority, dueDate: nullable, startDate: nullable, notes: nullable });
+
+export function createApp(db: Db = getDb()) {
+  const app = express();
+  app.use(helmet({ contentSecurityPolicy: false })); app.use(cors({ origin: config.appOrigin })); app.use(express.json({ limit: '1mb' })); app.use(pinoHttp());
+  app.get('/api/health', (_req, res) => res.json({ ok: true }));
+
+  app.get('/api/clients', (_req, res) => res.json(listClients(db)));
+  app.post('/api/clients', async (req, res, next) => {
+    try {
+      const data = clientInput.parse(req.body); const clientId = id(); const stamp = now();
+      db.prepare(`INSERT INTO clients(id,name,slug,contact_name,email,phone,website,notes,drive_status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`)
+        .run(clientId, data.name, `${slugify(data.name)}-${clientId.slice(0,6)}`, data.contactName ?? null, data.email || null, data.phone ?? null, data.website || null, data.notes ?? null, 'PENDING', stamp, stamp);
+      try { await provisionClient(db, clientId); } catch (error) { req.log.error({ err: error, clientId }, 'Drive client provisioning failed'); }
+      res.status(201).json(listClients(db).find((c: any) => c.id === clientId));
+    } catch (error) { next(error); }
+  });
+  app.patch('/api/clients/:id', (req, res, next) => {
+    try { const data = clientInput.partial().parse(req.body); const current = db.prepare('SELECT * FROM clients WHERE id=?').get(req.params.id) as any; if (!current) return res.status(404).json({ error: 'Client not found.' });
+      db.prepare(`UPDATE clients SET name=?,contact_name=?,email=?,phone=?,website=?,notes=?,updated_at=? WHERE id=?`).run(data.name ?? current.name, data.contactName ?? current.contact_name, data.email ?? current.email, data.phone ?? current.phone, data.website ?? current.website, data.notes ?? current.notes, now(), req.params.id);
+      res.json(listClients(db).find((c: any) => c.id === req.params.id));
+    } catch (error) { next(error); }
+  });
+  app.post('/api/clients/:id/archive', (req, res) => { const result = db.prepare("UPDATE clients SET status='ARCHIVED',updated_at=? WHERE id=?").run(now(), req.params.id); if (!result.changes) return res.status(404).json({ error: 'Client not found.' }); res.json({ ok: true }); });
+  app.post('/api/clients/:id/retry-drive', async (req, res, next) => { try { await provisionClient(db, req.params.id); res.json(listClients(db).find((c: any) => c.id === req.params.id)); } catch (e) { next(e); } });
+
+  app.get('/api/projects', (_req, res) => res.json(listProjects(db)));
+  app.post('/api/projects', async (req, res, next) => {
+    try { const data = projectInput.parse(req.body); if (!db.prepare("SELECT id FROM clients WHERE id=? AND status='ACTIVE'").get(data.clientId)) return res.status(400).json({ error: 'Choose an active client.' });
+      const projectId = id(); const stamp = now(); db.prepare(`INSERT INTO projects(id,client_id,name,description,status,start_date,target_deadline,priority,notes,drive_status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`)
+        .run(projectId,data.clientId,data.name,data.description??null,data.status,data.startDate??null,data.targetDeadline??null,data.priority,data.notes??null,'PENDING',stamp,stamp);
+      try { await provisionProject(db, projectId); } catch (error) { req.log.error({ err: error, projectId }, 'Drive project provisioning failed'); }
+      res.status(201).json(listProjects(db).find((p: any) => p.id === projectId));
+    } catch (error) { next(error); }
+  });
+  app.patch('/api/projects/:id', (req, res, next) => { try { const data = projectInput.partial().parse(req.body); const p = db.prepare('SELECT * FROM projects WHERE id=?').get(req.params.id) as any; if (!p) return res.status(404).json({error:'Project not found.'});
+    db.prepare(`UPDATE projects SET client_id=?,name=?,description=?,status=?,start_date=?,target_deadline=?,priority=?,notes=?,updated_at=? WHERE id=?`).run(data.clientId??p.client_id,data.name??p.name,data.description??p.description,data.status??p.status,data.startDate??p.start_date,data.targetDeadline??p.target_deadline,data.priority??p.priority,data.notes??p.notes,now(),req.params.id); res.json(listProjects(db).find((x:any)=>x.id===req.params.id)); } catch(e){next(e);} });
+  app.post('/api/projects/:id/archive', (req,res)=>{const r=db.prepare("UPDATE projects SET status='ARCHIVED',updated_at=? WHERE id=?").run(now(),req.params.id); if(!r.changes)return res.status(404).json({error:'Project not found.'});res.json({ok:true});});
+  app.delete('/api/projects/:id', (req, res) => {
+    const project = db.prepare('SELECT id, name FROM projects WHERE id=?').get(req.params.id) as { id: string; name: string } | undefined;
+    if (!project) return res.status(404).json({ error: 'Project not found.' });
+    // Removes local project + tasks only. Drive folders and files are intentionally left untouched.
+    transaction(db, () => {
+      db.prepare('DELETE FROM tasks WHERE project_id=?').run(project.id);
+      db.prepare("DELETE FROM drive_steps WHERE entity_type='project' AND entity_id=?").run(project.id);
+      db.prepare('DELETE FROM projects WHERE id=?').run(project.id);
+    });
+    res.json({ ok: true, deleted: 'project', name: project.name, driveTouched: false });
+  });
+  app.post('/api/projects/:id/retry-drive', async(req,res,next)=>{try{await provisionProject(db,req.params.id);res.json(listProjects(db).find((p:any)=>p.id===req.params.id));}catch(e){next(e);}});
+
+  app.get('/api/tasks', (req,res)=>{ const clauses:string[]=[]; const params:string[]=[]; for(const [query,column] of [['projectId','t.project_id'],['clientId','p.client_id'],['status','t.status'],['priority','t.priority']] as const){if(req.query[query]){clauses.push(`${column}=?`);params.push(String(req.query[query]));}} res.json(listTasks(db,clauses.length?`WHERE ${clauses.join(' AND ')}`:'',params)); });
+  app.post('/api/tasks', (req,res,next)=>{try{const data=taskInput.parse(req.body);if(!db.prepare("SELECT id FROM projects WHERE id=? AND status<>'ARCHIVED'").get(data.projectId))return res.status(400).json({error:'Choose an active project.'});const taskId=id();const stamp=now();const max=(db.prepare('SELECT COALESCE(MAX(position),-1)+1 next FROM tasks WHERE status=?').get(data.status) as any).next;db.prepare(`INSERT INTO tasks(id,project_id,title,description,status,priority,due_date,start_date,notes,position,completed_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(taskId,data.projectId,data.title,data.description??null,data.status,data.priority,data.dueDate??null,data.startDate??null,data.notes??null,max,data.status==='COMPLETE'?stamp:null,stamp,stamp);res.status(201).json(getTask(db,taskId));}catch(e){next(e);}});
+  app.patch('/api/tasks/:id', (req,res,next)=>{try{const data=taskInput.partial().extend({overrideBlocked:z.boolean().optional()}).parse(req.body);const t=db.prepare('SELECT * FROM tasks WHERE id=?').get(req.params.id) as any;if(!t)return res.status(404).json({error:'Task not found.'});const nextStatus=data.status??t.status;if(nextStatus==='COMPLETE'&&!data.overrideBlocked&&blockingDependencies(db,t.id).length)return res.status(409).json({error:'This task is blocked by incomplete dependencies.',code:'TASK_BLOCKED',blockingDependencies:blockingDependencies(db,t.id)});db.prepare(`UPDATE tasks SET project_id=?,title=?,description=?,status=?,priority=?,due_date=?,start_date=?,notes=?,completed_at=?,updated_at=? WHERE id=?`).run(data.projectId??t.project_id,data.title??t.title,data.description??t.description,nextStatus,data.priority??t.priority,data.dueDate??t.due_date,data.startDate??t.start_date,data.notes??t.notes,nextStatus==='COMPLETE'?(t.completed_at||now()):null,now(),t.id);res.json(getTask(db,t.id));}catch(e){next(e);}});
+  app.delete('/api/tasks/:id', (req, res) => {
+    const task = db.prepare('SELECT id, title FROM tasks WHERE id=?').get(req.params.id) as { id: string; title: string } | undefined;
+    if (!task) return res.status(404).json({ error: 'Task not found.' });
+    // Checklist/deps cascade in SQLite. Drive files are never touched.
+    db.prepare('DELETE FROM tasks WHERE id=?').run(task.id);
+    res.json({ ok: true, deleted: 'task', title: task.title, driveTouched: false });
+  });
+  app.post('/api/tasks/reorder', (req,res,next)=>{try{const data=z.object({taskId:z.string().uuid(),status:z.enum(['BACKLOG','TODO','IN_PROGRESS','REVIEW','COMPLETE']),orderedIds:z.array(z.string().uuid()),overrideBlocked:z.boolean().optional()}).parse(req.body);const t=getTask(db,data.taskId);if(!t)return res.status(404).json({error:'Task not found.'});if(data.status==='COMPLETE'&&t.blocked&&!data.overrideBlocked)return res.status(409).json({error:'This task is blocked by incomplete dependencies.',code:'TASK_BLOCKED',blockingDependencies:t.blockingDependencies});transaction(db,()=>{db.prepare('UPDATE tasks SET status=?,completed_at=?,updated_at=? WHERE id=?').run(data.status,data.status==='COMPLETE'?(t.completedAt||now()):null,now(),data.taskId);const stmt=db.prepare('UPDATE tasks SET position=? WHERE id=? AND status=?');data.orderedIds.forEach((taskId,index)=>stmt.run(index,taskId,data.status));});res.json(getTask(db,data.taskId));}catch(e){next(e);}});
+
+  app.post('/api/tasks/:id/checklist', (req,res,next)=>{try{const data=z.object({text:z.string().trim().min(1).max(300)}).parse(req.body);if(!db.prepare('SELECT id FROM tasks WHERE id=?').get(req.params.id))return res.status(404).json({error:'Task not found.'});const itemId=id();const pos=(db.prepare('SELECT COALESCE(MAX(position),-1)+1 next FROM checklist_items WHERE task_id=?').get(req.params.id) as any).next;db.prepare('INSERT INTO checklist_items(id,task_id,text,position) VALUES(?,?,?,?)').run(itemId,req.params.id,data.text,pos);res.status(201).json(getTask(db,req.params.id));}catch(e){next(e);}});
+  app.patch('/api/checklist/:id', (req,res,next)=>{try{const data=z.object({text:z.string().trim().min(1).optional(),completed:z.boolean().optional(),position:z.number().int().min(0).optional()}).parse(req.body);const item=db.prepare('SELECT * FROM checklist_items WHERE id=?').get(req.params.id) as any;if(!item)return res.status(404).json({error:'Checklist item not found.'});db.prepare('UPDATE checklist_items SET text=?,completed=?,position=? WHERE id=?').run(data.text??item.text,data.completed===undefined?item.completed:Number(data.completed),data.position??item.position,item.id);res.json(getTask(db,item.task_id));}catch(e){next(e);}});
+  app.delete('/api/checklist/:id',(req,res)=>{const item=db.prepare('SELECT task_id FROM checklist_items WHERE id=?').get(req.params.id) as any;if(!item)return res.status(404).json({error:'Checklist item not found.'});db.prepare('DELETE FROM checklist_items WHERE id=?').run(req.params.id);res.json(getTask(db,item.task_id));});
+  app.post('/api/tasks/:id/dependencies',(req,res,next)=>{try{const data=z.object({dependencyId:z.string().uuid()}).parse(req.body);const task=db.prepare('SELECT project_id FROM tasks WHERE id=?').get(req.params.id) as any;const dep=db.prepare('SELECT project_id FROM tasks WHERE id=?').get(data.dependencyId) as any;if(!task||!dep)return res.status(404).json({error:'Task not found.'});if(wouldCreateCycle(db,req.params.id,data.dependencyId))return res.status(409).json({error:'That dependency would create a circular relationship.',code:'CIRCULAR_DEPENDENCY'});db.prepare('INSERT OR IGNORE INTO task_dependencies(task_id,dependency_id) VALUES(?,?)').run(req.params.id,data.dependencyId);res.status(201).json(getTask(db,req.params.id));}catch(e){next(e);}});
+  app.delete('/api/tasks/:id/dependencies/:dependencyId',(req,res)=>{db.prepare('DELETE FROM task_dependencies WHERE task_id=? AND dependency_id=?').run(req.params.id,req.params.dependencyId);res.json(getTask(db,req.params.id));});
+
+  app.get('/api/dashboard',(_req,res)=>{const tasks=listTasks(db);const projects=listProjects(db);const open=tasks.filter(t=>t.status!=='COMPLETE');const overdue=open.filter(t=>t.overdue);res.json({counts:{activeClients:listClients(db).filter((c:any)=>c.status==='ACTIVE').length,activeProjects:projects.filter((p:any)=>p.status==='ACTIVE').length,dueToday:open.filter(t=>isDueToday(t.dueDate)).length,dueNextSevenDays:open.filter(t=>isDueNextSevenDays(t.dueDate)).length,overdue:overdue.length,projectsOverdue:new Set(overdue.map(t=>t.projectId)).size},overdueTasks:urgent(overdue),upcomingTasks:urgent(open.filter(t=>isDueToday(t.dueDate)||isDueNextSevenDays(t.dueDate))),recentProjects:projects.slice().sort((a:any,b:any)=>b.updatedAt.localeCompare(a.updatedAt)).slice(0,5)});});
+
+  app.get('/api/settings/branding', (_req, res) => res.json({ version: APP_VERSION, branding: readBranding(db) }));
+  app.put('/api/settings/branding', (req, res, next) => {
+    try {
+      const data = z.object({
+        mark: z.string().trim().min(1).max(4),
+        title: z.string().trim().min(1).max(40),
+        subtitle: z.string().trim().min(1).max(60),
+        tagline: z.string().trim().min(1).max(80),
+      }).parse(req.body);
+      setSetting(db, BRANDING_SETTING_KEY, JSON.stringify(data));
+      res.json({ version: APP_VERSION, branding: data });
+    } catch (error) { next(error); }
+  });
+  app.post('/api/drive/sync', async (req, res, next) => {
+    try { res.json(await syncAllToDrive(db)); } catch (error) { next(error); }
+  });
+
+  app.get('/api/settings/drive',(_req,res)=>res.json({configured:Boolean(config.google.clientId&&config.google.clientSecret&&config.google.encryptionKey),connected:driveProvider(db).connected,rootFolderId:getSetting(db,'drive_root_id'),rootFolderUrl:getSetting(db,'drive_root_url')}));
+  app.get('/api/drive/oauth/start',(_req,res,next)=>{try{if(!config.google.clientId||!config.google.clientSecret||!config.google.encryptionKey)throw new Error('Add Google OAuth credentials and an encryption key to .env first.');const oauth=new google.auth.OAuth2(config.google.clientId,config.google.clientSecret,config.google.redirectUri);const state=id();setSetting(db,'oauth_state',state);res.json({url:oauth.generateAuthUrl({access_type:'offline',prompt:'consent',scope:['https://www.googleapis.com/auth/drive'],state})});}catch(e){next(e);}});
+  app.get('/api/drive/oauth/callback',async(req,res,next)=>{try{if(String(req.query.state)!==getSetting(db,'oauth_state'))return res.status(400).send('Invalid OAuth state.');const oauth=new google.auth.OAuth2(config.google.clientId,config.google.clientSecret,config.google.redirectUri);const {tokens}=await oauth.getToken(String(req.query.code));setSetting(db,'google_tokens',encryptJson(tokens,config.google.encryptionKey));setSetting(db,'oauth_state','used');const returnOrigin=process.argv.includes('--production')?`http://localhost:${config.port}`:config.appOrigin;res.redirect(`${returnOrigin}/settings?drive=connected`);}catch(e){next(e);}});
+  app.post('/api/settings/drive/root',async(req,res,next)=>{try{const data=z.object({folderId:z.string().trim().min(5).max(200)}).parse(req.body);const folderId=parseFolderId(data.folderId);const folder=await driveProvider(db).getFolder(folderId);setSetting(db,'drive_root_id',folder.id);setSetting(db,'drive_root_url',folder.url);res.json({rootFolderId:folder.id,rootFolderUrl:folder.url});}catch(e){next(e);}});
+  app.post('/api/settings/drive/disconnect',(_req,res)=>{db.prepare("DELETE FROM settings WHERE key IN ('google_tokens','drive_root_id','drive_root_url')").run();res.json({ok:true});});
+
+  app.use((error:any,_req:express.Request,res:express.Response,next:express.NextFunction)=>{void next;const status=error instanceof z.ZodError?400:(error?.code==='SQLITE_CONSTRAINT_UNIQUE'?409:500);res.status(status).json({error:error instanceof z.ZodError?error.issues[0]?.message:(error instanceof Error?error.message:'Unexpected error')});});
+  return app;
+}
+
+function parseFolderId(value:string){const match=value.match(/folders\/([a-zA-Z0-9_-]+)/);return match?.[1]||value;}
+function urgent(tasks:any[]){const rank:any={URGENT:0,HIGH:1,MEDIUM:2,LOW:3};return tasks.sort((a,b)=>Number(b.overdue)-Number(a.overdue)||(a.dueDate||'9999').localeCompare(b.dueDate||'9999')||rank[a.priority]-rank[b.priority]);}
+function readBranding(db: Db): Branding {
+  const raw = getSetting(db, BRANDING_SETTING_KEY);
+  if (!raw) return { ...DEFAULT_BRANDING };
+  try {
+    const parsed = JSON.parse(raw) as Partial<Branding>;
+    return {
+      mark: String(parsed.mark || DEFAULT_BRANDING.mark).slice(0, 4),
+      title: String(parsed.title || DEFAULT_BRANDING.title).slice(0, 40),
+      subtitle: String(parsed.subtitle || DEFAULT_BRANDING.subtitle).slice(0, 60),
+      tagline: String(parsed.tagline || DEFAULT_BRANDING.tagline).slice(0, 80),
+    };
+  } catch {
+    return { ...DEFAULT_BRANDING };
+  }
+}
