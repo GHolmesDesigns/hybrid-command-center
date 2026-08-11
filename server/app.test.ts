@@ -79,6 +79,81 @@ describe('command center API', () => {
       .send({ dependencyId: b.id })
       .expect(409);
   });
+  it('normalizes and reuses global tags while supporting CRUD', async () => {
+    const app = createApp(db);
+    const created = await request(app)
+      .post('/api/tags')
+      .send({ name: '  Client   Review ', color: '#335577' })
+      .expect(201);
+    expect(created.body).toMatchObject({ name: 'Client Review', color: '#335577' });
+
+    const reused = await request(app)
+      .post('/api/tags')
+      .send({ name: 'client review', color: '#ffffff' })
+      .expect(200);
+    expect(reused.body).toEqual(created.body);
+    expect((await request(app).get('/api/tags')).body).toEqual([created.body]);
+
+    const updated = await request(app)
+      .patch(`/api/tags/${created.body.id}`)
+      .send({ name: '  Ready   to Publish ', color: '' })
+      .expect(200);
+    expect(updated.body).toEqual({ id: created.body.id, name: 'Ready to Publish' });
+    await request(app).post('/api/tags').send({ name: '   ' }).expect(400);
+  });
+
+  it('attaches and detaches tags and includes them in task reads', async () => {
+    const { p } = await setup();
+    const app = createApp(db);
+    const task = (
+      await request(app).post('/api/tasks').send({ projectId: p.id, title: 'Tagged task' })
+    ).body;
+    expect(task.tags).toEqual([]);
+    const tag = (await request(app).post('/api/tags').send({ name: 'Priority client' })).body;
+
+    const attached = await request(app)
+      .post(`/api/tasks/${task.id}/tags`)
+      .send({ tagId: tag.id })
+      .expect(201);
+    expect(attached.body.tags).toEqual([tag]);
+    expect((await request(app).get('/api/tasks')).body[0].tags).toEqual([tag]);
+
+    const detached = await request(app).delete(`/api/tasks/${task.id}/tags/${tag.id}`).expect(200);
+    expect(detached.body.tags).toEqual([]);
+  });
+
+  it('requires confirmation before deleting an attached tag and cascades tag joins', async () => {
+    const { p } = await setup();
+    const app = createApp(db);
+    const task = (
+      await request(app).post('/api/tasks').send({ projectId: p.id, title: 'Keep this task' })
+    ).body;
+    const tag = (await request(app).post('/api/tags').send({ name: 'Campaign' })).body;
+    await request(app).post(`/api/tasks/${task.id}/tags`).send({ tagId: tag.id }).expect(201);
+
+    const refused = await request(app).delete(`/api/tags/${tag.id}`).expect(409);
+    expect(refused.body).toMatchObject({ code: 'TAG_IN_USE', attachedTaskCount: 1 });
+    expect((await request(app).get('/api/tasks')).body[0].tags).toEqual([tag]);
+
+    const deleted = await request(app).delete(`/api/tags/${tag.id}?confirm=true`).expect(200);
+    expect(deleted.body.detachedFromTasks).toBe(1);
+    expect((await request(app).get('/api/tasks')).body[0]).toMatchObject({ id: task.id, tags: [] });
+    expect(db.prepare('SELECT COUNT(*) count FROM task_tags').get()).toEqual({ count: 0 });
+  });
+
+  it('cascades task tag joins when a task is deleted without deleting the tag', async () => {
+    const { p } = await setup();
+    const app = createApp(db);
+    const task = (
+      await request(app).post('/api/tasks').send({ projectId: p.id, title: 'Temporary task' })
+    ).body;
+    const tag = (await request(app).post('/api/tags').send({ name: 'Reusable tag' })).body;
+    await request(app).post(`/api/tasks/${task.id}/tags`).send({ tagId: tag.id }).expect(201);
+
+    await request(app).delete(`/api/tasks/${task.id}`).expect(200);
+    expect(db.prepare('SELECT COUNT(*) count FROM task_tags').get()).toEqual({ count: 0 });
+    expect((await request(app).get('/api/tags')).body).toEqual([tag]);
+  });
   it('reports overdue and upcoming dashboard counts', async () => {
     const { p } = await setup();
     const app = createApp(db);

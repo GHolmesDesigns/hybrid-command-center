@@ -1,7 +1,7 @@
 ﻿import type { Db } from './db.ts';
 import { blockingDependencies } from './domain/dependencies.ts';
 import { isOverdue } from './domain/deadlines.ts';
-import type { Task } from '../shared/types.ts';
+import type { Tag, Task } from '../shared/types.ts';
 
 const camel = (row: any) =>
   Object.fromEntries(
@@ -26,8 +26,26 @@ export function listProjects(db: Db) {
       .all() as any[]
   ).map(camel);
 }
+export function listTags(db: Db): Tag[] {
+  return (
+    db.prepare('SELECT id, name, color FROM tags ORDER BY name COLLATE NOCASE').all() as any[]
+  ).map(camel) as unknown as Tag[];
+}
+export function getTag(db: Db, id: string): Tag | undefined {
+  const row = db.prepare('SELECT id, name, color FROM tags WHERE id=?').get(id);
+  return row ? (camel(row) as unknown as Tag) : undefined;
+}
 export function hydrateTask(db: Db, raw: any): Task {
   const task: any = camel(raw);
+  const tags = (
+    db
+      .prepare(
+        `SELECT tags.id, tags.name, tags.color FROM task_tags
+         JOIN tags ON tags.id=task_tags.tag_id WHERE task_tags.task_id=?
+         ORDER BY tags.name COLLATE NOCASE`,
+      )
+      .all(task.id) as any[]
+  ).map(camel);
   const checklist = (
     db
       .prepare(
@@ -41,6 +59,7 @@ export function hydrateTask(db: Db, raw: any): Task {
   const blocking = blockingDependencies(db, task.id);
   return {
     ...task,
+    tags,
     checklist,
     dependencyIds,
     blockingDependencies: blocking,
