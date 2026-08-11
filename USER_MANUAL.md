@@ -1,12 +1,12 @@
-# Master Project Command Center
+# Hybrid Command Center
 
 ## First-Time Setup and User Manual
 
-This manual is for the person who will install and use Master Project Command Center on one local computer. No server, hosting account, or paid service is required. Google Drive connection is optional during setup, but it should be completed before creating production clients if you want their folder structures created automatically.
+This manual is for the person who will install and use Hybrid Command Center on one local computer. No server, hosting account, or paid service is required. Google Drive connection is optional during setup, but it should be completed before creating production clients if you want their folder structures created automatically.
 
 ## 1. What the application stores
 
-Master Project Command Center divides information between your computer and Google Drive:
+Hybrid Command Center divides information between your computer and Google Drive:
 
 - Your computer stores clients, projects, tasks, deadlines, checklist items, dependencies, notes, and settings in a local SQLite database.
 - Google Drive stores the actual client and project files.
@@ -38,11 +38,10 @@ The Node result should begin with `v24` or a higher number.
 
 ## 3. Install the application
 
-The application folder is:
-
-```text
-C:\Users\garni\Documents\Codex\master-project-command-center
-```
+Throughout this manual, `<project-folder>` means the folder where you cloned or extracted this
+repository. Substitute your own path wherever it appears — for example
+`C:\Users\you\Documents\hybrid-command-center` on Windows, or
+`~/projects/hybrid-command-center` on macOS or Linux.
 
 ### Windows setup
 
@@ -50,7 +49,7 @@ C:\Users\garni\Documents\Codex\master-project-command-center
 2. Go to the application folder:
 
    ```powershell
-   cd C:\Users\garni\Documents\Codex\master-project-command-center
+   cd <project-folder>
    ```
 
 3. Install the application packages:
@@ -99,9 +98,9 @@ Run:
 npm run db:seed
 ```
 
-This creates three example clients, several projects, tasks in every Kanban column, overdue work, checklists, and a blocked task. It does not contact Google Drive or create Drive folders.
+This creates three example clients, several projects, tasks in every Status column, overdue work, checklists, and a blocked task. It does not contact Google Drive or create Drive folders.
 
-The seed command only works when the database has no clients. Demo records can be archived in the application, but there is no permanent-delete screen in this version. Use an empty workspace if you do not want demonstration records mixed with real work.
+The seed command only works when the database has no clients. Demo clients can be archived, and demo projects and tasks can be deleted outright — see [Removing records](#removing-records). Use an empty workspace if you do not want demonstration records mixed with real work.
 
 ## 5. Start and stop the application
 
@@ -143,7 +142,7 @@ Google’s current official instructions for web-server OAuth are available in [
 ### 6.1 Create a Google Cloud project
 
 1. Open [Google Cloud Console](https://console.cloud.google.com/).
-2. Select an existing project or create a new one, such as `Master Project Command Center`.
+2. Select an existing project or create a new one, such as `Hybrid Command Center`.
 3. Open **APIs & Services → Library**.
 4. Search for **Google Drive API**.
 5. Open it and select **Enable**.
@@ -154,7 +153,7 @@ Google may label this area **Google Auth Platform**. The exact menu arrangement 
 
 1. Open **Google Auth Platform** for your project.
 2. Complete the branding or application-information page.
-3. Use a name such as `Master Project Command Center`.
+3. Use a name such as `Hybrid Command Center`.
 4. Choose the appropriate audience:
    - Choose **Internal** only if you use Google Workspace and the application is limited to users in your organization.
    - Otherwise choose **External**.
@@ -234,7 +233,7 @@ If Google displays an unverified-app warning for your private Testing app, confi
 
 ### 6.7 Choose the Command Center root folder
 
-1. In Google Drive, create or select one folder to contain all managed clients. A name such as `Master Project Command Center` works well.
+1. In Google Drive, create or select one folder to contain all managed clients. A name such as `Hybrid Command Center` works well.
 2. Open that folder and copy its browser URL.
 3. Return to **Settings → Google Drive**.
 4. Paste the folder URL or folder ID into **Command Center root folder URL or ID**.
@@ -243,7 +242,7 @@ If Google displays an unverified-app warning for your private Testing app, confi
 New folders will follow this pattern:
 
 ```text
-Master Project Command Center/
+Hybrid Command Center/
 └── Client Name/
     └── Project Name/
         ├── 01_Admin/
@@ -253,7 +252,20 @@ Master Project Command Center/
         └── 05_Final_Deliverables/
 ```
 
-Connect Drive and select the root before creating production clients. Records created while Drive is disconnected remain valid locally, but this version does not provide a visible bulk backfill control for their missing folders.
+Connect Drive and select the root before creating production clients. Records created while Drive is disconnected remain valid locally, and you can create their missing folders later with **Sync to Folder** on the Dashboard.
+
+#### What Sync to Folder does
+
+**Sync to Folder** provisions folder skeletons. It walks every active client and every non-archived project and creates any folder that does not exist yet — the client folder, the project folder, and the five standard subfolders.
+
+That is the whole operation. Despite the word "sync", it does not:
+
+- upload files to Drive
+- download files from Drive
+- mirror, compare, or reconcile file contents
+- delete or rename anything in Drive
+
+Existing folders are matched by a stable Command Center property rather than by name, so running it repeatedly is safe and cannot create duplicates. If Drive is disconnected, or no root folder is selected, the button reports what to fix instead of making changes.
 
 ## 7. Your first working session
 
@@ -287,25 +299,25 @@ With Drive connected, the application creates the project folder and five standa
 
 ### Step 3: Create a task
 
-1. Select **New task** in the top bar or on the Kanban page.
+1. Select **New task** in the top bar or on the Status page.
 2. Choose a project. The last project you opened is pre-selected, and you can pick a different one. The client is derived automatically from that project.
 3. Enter a title.
 4. Choose a status and priority.
 5. Add a start date, due date, description, or notes if useful.
 6. Select **Create task**.
 
-The task appears in its selected Kanban column.
+The task appears in its selected Status column.
 
 ### Step 4: Add a checklist
 
-1. Open **Kanban**.
+1. Open **Status**.
 2. Select the task title.
 3. Under **Checklist**, type an item and select **Add**.
 4. Repeat for each item.
 5. Select a checkbox when an item is complete.
 6. Use the delete control to remove an item.
 
-The Kanban card displays completed items as a fraction, such as `2/4`.
+The status card displays completed items as a fraction, such as `2/4`.
 
 ### Step 5: Add a dependency
 
@@ -317,7 +329,7 @@ The waiting task receives a **Blocked** label until all its dependencies are com
 
 If you try to complete a blocked task, the application explains the conflict. Complete the dependencies first or explicitly confirm the override when appropriate.
 
-### Step 6: Move work through Kanban
+### Step 6: Move work through Status
 
 The workflow is fixed in this version:
 
@@ -359,6 +371,8 @@ Use Clients to:
 
 Archiving requires confirmation and preserves the record, its projects, and Drive files.
 
+Clients cannot be deleted. Archiving is the only way to retire one. See [Removing records](#removing-records).
+
 ### Projects
 
 Use Projects to:
@@ -367,11 +381,14 @@ Use Projects to:
 - Filter by client
 - Review task progress and overdue counts
 - Edit project details
-- Open the project Kanban board
+- Open the Project Status board
 - Open the connected Drive folder
 - Archive completed or inactive projects
+- Delete a project and its tasks from the application
 
-### Kanban
+Archive keeps the project and its history. Delete removes the project and every task inside it. Both are available from the Projects list and from a project's detail page, and both ask for confirmation first. Neither one touches Drive.
+
+### Status
 
 Use the filters above the board to focus by:
 
@@ -387,15 +404,35 @@ Use the filters above the board to focus by:
 
 Each card shows its project, priority, due date, checklist progress, and dependency state.
 
+Open a task to rename it, edit its details, or delete it.
+
+### Removing records
+
+Removal works differently for each kind of record:
+
+| Record | What you can do |
+| --- | --- |
+| Client | Archive only. No delete exists. |
+| Project | Archive, **or** delete the project and all of its tasks. |
+| Task | Delete. Its checklist items and dependency links go with it. |
+
+Every removal asks for confirmation first, and none of them touch Google Drive. Deleting a project or task in the application leaves its Drive folders and files exactly as they are — remove those in Google Drive yourself if you want them gone.
+
+Deleting cannot be undone from inside the application. Recover a mistake by restoring a database backup, as described in [Safe data backup](#10-safe-data-backup).
+
 ### Settings
 
 Settings contains:
 
 - Google Drive connection and root-folder setup
+- Sidebar branding — the mark, title, subtitle, and tagline shown in the left navigation
+- The current application version
 - Detected local timezone
-- Information about the future Calendar and Files modules
+- Information about the future Calendar, Files, and Import modules
 
-Calendar and the embedded file browser are not available in this version. Use **Open Drive** links to manage project files directly in Google Drive.
+Branding edits save immediately and apply to the sidebar without a restart. The defaults also live in `shared/branding.ts` if you prefer to change them in code. The version appears both beside the Branding heading and at the bottom of the sidebar.
+
+Calendar, the embedded file browser, and campaign playbook import are not available in this version. They appear as dimmed placeholders in the sidebar. Use **Open Drive** links to manage project files directly in Google Drive.
 
 ## 9. Deadlines and timezones
 
@@ -410,6 +447,8 @@ Your application database is normally stored at:
 ```text
 data\command-center.db
 ```
+
+That is the default. If `.env` sets `DATABASE_PATH`, the database lives at that path instead — check `.env` before backing up, and use whatever path it names in place of `data\command-center.db` below.
 
 To make a reliable backup:
 
@@ -519,4 +558,4 @@ Check that:
 - [ ] First task, checklist, and dependency tested
 - [ ] Local database backup plan established
 
-Once these steps are complete, begin each work session on the Dashboard, resolve overdue work first, and use the Kanban board to move active tasks through Review and Complete.
+Once these steps are complete, begin each work session on the Dashboard, resolve overdue work first, and use the Status board to move active tasks through Review and Complete.

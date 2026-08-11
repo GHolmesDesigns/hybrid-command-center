@@ -9,11 +9,13 @@ For nontechnical installation and day-to-day instructions, see the [First-Time S
 ## What is included
 
 - Deadline-led dashboard with overdue, due-today, seven-day, and project-health counts
-- **Sync to Folder** on the dashboard — provisions Drive folders for existing clients/projects without discovering projects from Drive
-- Client and project creation, editing, archival, **record-only delete** (Drive files untouched), detail views, and Drive status
-- Five-stage Kanban board with persistent ordering, drag-and-drop, filters, and keyboard status controls
+- **Sync to Folder** on the dashboard — provisions missing Drive folder skeletons for existing clients/projects; it uploads, downloads, and mirrors nothing, and never discovers projects from Drive
+- Client creation, editing, archival, detail views, and Drive status
+- Project creation, editing, archival, and **record-only delete** that cascades to tasks (Drive files untouched)
+- Five-stage **Status** board with persistent ordering, drag-and-drop, filters, and keyboard status controls
 - Task checklists, dependency blocking, circular-dependency prevention, **rename**, **record-only delete**, and explicit completion override
 - Collapsible sidebar with **version tracker** and Settings-editable branding (defaults also in `shared/branding.ts`)
+- Reserved placeholders for the Calendar, Files, and campaign playbook **Import** modules — visible in the sidebar and Settings, not yet implemented
 - Server-only Google OAuth 2.0, encrypted token storage, configurable Drive root, and resumable/idempotent folder creation
 - Responsive desktop/tablet/mobile interface with empty, error, loading, disconnected, and confirmation states
 - Optional realistic seed data that never contacts Drive unless explicitly requested
@@ -22,7 +24,7 @@ For nontechnical installation and day-to-day instructions, see the [First-Time S
 
 ```text
 client/                    React + TypeScript + Vite
-  src/App.tsx              routes, views, forms, Kanban interactions
+  src/App.tsx              routes, views, forms, Status board interactions
   src/api.ts               typed HTTP boundary
 server/                    Express local API
   domain/                  deadline and dependency rules
@@ -168,7 +170,8 @@ Stop the app, then copy `data/command-center.db` and the `GOOGLE_TOKEN_ENCRYPTIO
 
 - Single local user; no collaboration, portals, permissions, billing, or time tracking
 - No automatic Drive-folder rename after local name edits
-- No permanent-delete UI; records are archived
+- Clients can only be archived; there is no client delete. Projects and tasks delete permanently from SQLite with no in-app undo — recover from a database backup
+- **Sync to Folder** provisions folder skeletons only; there is no file-level Drive sync, and nothing is uploaded, downloaded, or mirrored
 - Google shared-drive-specific controls are not exposed
 - The file browser and calendar views are intentionally not implemented
 - Checklist reordering is supported by the API/data model; the current UI focuses on add, edit-by-state, and removal
