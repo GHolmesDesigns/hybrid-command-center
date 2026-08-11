@@ -320,7 +320,20 @@ The task appears in its selected Status column. Tasks created before types exist
 
 The status card displays completed items as a fraction, such as `2/4`.
 
-### Step 5: Add a dependency
+### Step 5: Add tags
+
+Tags are shared across the whole workspace, so the same label means the same thing on every task.
+
+1. Open a task, or open the create/edit form.
+2. Under **Tags**, type a name and press <kbd>Enter</kbd>, type a comma, or select **Add**.
+3. Repeat for each tag. Names already in use appear as suggestions while you type.
+4. Remove a tag from the task with the **×** beside its chip, or press <kbd>Backspace</kbd> in an empty tag field to remove the last one.
+
+Capitalisation and extra spaces do not create new tags: `brand system`, `Brand System`, and `  Brand   System ` all attach the one existing tag and keep its stored spelling. Tags added from the task detail view apply immediately; tags added in the create/edit form apply when the task is saved.
+
+Each tag has a colour, but the name is always written out beside it — on cards, in the task detail, and in the board filter.
+
+### Step 6: Add a dependency
 
 1. Open the task that must wait for another task.
 2. Under **Dependencies**, choose the task that must be completed first.
@@ -330,7 +343,7 @@ The waiting task receives a **Blocked** label until all its dependencies are com
 
 If you try to complete a blocked task, the application explains the conflict. Complete the dependencies first or explicitly confirm the override when appropriate.
 
-### Step 6: Move work through Status
+### Step 7: Move work through Status
 
 The workflow is fixed in this version:
 
@@ -412,7 +425,9 @@ Use the filters above the board to focus by:
 - Blocked
 - Completed
 
-Each card shows its project, priority, type when one is set, due date, checklist progress, and dependency state. The type is repeated at the top of the task detail view.
+Below the filters, the search box matches both task titles and tag names, and the **Tags** row filters the board by tag. Selecting more than one tag shows only the tasks carrying every one of them; **Clear tags** removes the whole selection. Tag and search filters combine with the client, project, priority, and focus filters above them. The client, project, focus, and tag selections are kept in the page address, so a filtered board survives a reload and can be shared as a link.
+
+Each card shows its project, priority, type when one is set, tags, due date, checklist progress, and dependency state. The type is repeated at the top of the task detail view.
 
 Open a task to rename it, edit its details, or delete it. **Edit details** opens the same form used to create the task, so this is where you set a type on an older task, change its project, or adjust its dates.
 
@@ -424,9 +439,10 @@ Removal works differently for each kind of record:
 | --- | --- |
 | Client | Archive only. No delete exists. |
 | Project | Archive, **or** delete the project and all of its tasks. |
-| Task | Delete. Its checklist items and dependency links go with it. |
+| Task | Delete. Its checklist items, tag links, and dependency links go with it. |
+| Tag | Delete from Settings. It is removed from every task carrying it; no task is deleted. |
 
-Every removal asks for confirmation first, and none of them touch Google Drive. Deleting a project or task in the application leaves its Drive folders and files exactly as they are — remove those in Google Drive yourself if you want them gone.
+Every removal asks for confirmation first — except a tag no task is using, which has nothing to lose — and none of them touch Google Drive. Deleting a project or task in the application leaves its Drive folders and files exactly as they are — remove those in Google Drive yourself if you want them gone.
 
 Deleting cannot be undone from inside the application. Recover a mistake by restoring a database backup, as described in [Safe data backup](#10-safe-data-backup).
 
@@ -436,9 +452,12 @@ Settings contains:
 
 - Google Drive connection and root-folder setup
 - Sidebar branding — the mark, title, subtitle, and tagline shown in the left navigation
+- **Task tags** — every tag in the workspace, with how many tasks carry it, and the only place a tag is deleted
 - The current application version
 - Detected local timezone
 - Information about the future Calendar, Files, and Import modules
+
+Deleting a tag that is still attached asks first and tells you how many tasks are affected; a tag no task carries is removed straight away. Tags are created from tasks, not here.
 
 Branding edits save immediately and apply to the sidebar without a restart. The defaults also live in `shared/branding.ts` if you prefer to change them in code. The version appears both beside the Branding heading and at the bottom of the sidebar.
 
