@@ -6,6 +6,8 @@ Built from Master Project Command Center (Codex) infrastructure, with Hybrid V2 
 
 For nontechnical installation and day-to-day instructions, see the [First-Time Setup and User Manual](USER_MANUAL.md).
 
+The future Import module's versioned XLSX contract and example campaigns are documented in the [Campaign Playbook Import Format](docs/campaign-playbook-import-format.md).
+
 ## What is included
 
 - Deadline-led dashboard with overdue, due-today, seven-day, and project-health counts
