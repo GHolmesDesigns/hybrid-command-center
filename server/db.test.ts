@@ -91,6 +91,7 @@ describe('additive schema migration', () => {
         'start_date',
         'target_deadline',
         'notes',
+        'position',
         'drive_folder_id',
         'drive_folder_url',
         'drive_status',
@@ -113,8 +114,8 @@ describe('additive schema migration', () => {
     expect(rows(db, 'SELECT position, due_date, notes, completed_at FROM tasks')).toEqual([
       { position: 0, due_date: null, notes: null, completed_at: null },
     ]);
-    expect(rows(db, 'SELECT drive_status, drive_error FROM projects')).toEqual([
-      { drive_status: 'DISCONNECTED', drive_error: null },
+    expect(rows(db, 'SELECT position, drive_status, drive_error FROM projects')).toEqual([
+      { position: 0, drive_status: 'DISCONNECTED', drive_error: null },
     ]);
   });
 

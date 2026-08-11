@@ -31,6 +31,8 @@ export interface Project {
   targetDeadline?: string;
   priority: Priority;
   notes?: string;
+  /** Manual tile order on the Projects view, honoured by the Custom sort mode. */
+  position: number;
   driveFolderId?: string;
   driveFolderUrl?: string;
   driveStatus: DriveStatus;

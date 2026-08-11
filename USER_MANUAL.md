@@ -379,12 +379,21 @@ Use Projects to:
 
 - Search projects
 - Filter by client
+- Sort the tiles, or arrange them by hand
 - Review task progress and overdue counts
 - Edit project details
 - Open the Project Status board
 - Open the connected Drive folder
 - Archive completed or inactive projects
 - Delete a project and its tasks from the application
+
+#### Ordering the tiles
+
+The **Sort by** control offers recently updated, recently created, name A–Z, name Z–A, soonest deadline, highest priority, and **Custom order**.
+
+Custom order is the only mode you can rearrange by hand, because in every other mode a moved tile would immediately jump back to its sorted place. Choose Custom order, then either drag a tile by the grip at the bottom-right of its card, or use the position selector below the card's buttons — the selector is the keyboard-accessible alternative and works the same way. In every other sort mode the grip and the position selector are visibly greyed out.
+
+Your arrangement is saved as soon as you make it. It survives a reload, and switching to another sort mode and back brings it back unchanged. New projects are added to the end of the custom arrangement.
 
 Archive keeps the project and its history. Delete removes the project and every task inside it. Both are available from the Projects list and from a project's detail page, and both ask for confirmation first. Neither one touches Drive.
 
