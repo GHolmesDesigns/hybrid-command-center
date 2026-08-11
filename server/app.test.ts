@@ -206,4 +206,46 @@ describe('command center API', () => {
     expect(completed.priority).toBe('HIGH');
     expect(completed.title).toBe('In flight v2');
   });
+
+  it('rejects task dates that are not real YYYY-MM-DD calendar dates', async () => {
+    const { p } = await setup();
+    const app = createApp(db);
+    for (const dueDate of ['banana', '2026-02-30', '08/20/2026', '2026-8-20', '2026-13-01']) {
+      const response = await request(app)
+        .post('/api/tasks')
+        .send({ projectId: p.id, title: 'Bad date task', dueDate });
+      expect(response.status, `POST dueDate=${dueDate}`).toBe(400);
+    }
+    // A real date is accepted, and a later PATCH is validated the same way.
+    const task = (
+      await request(app)
+        .post('/api/tasks')
+        .send({ projectId: p.id, title: 'Good date task', dueDate: '2026-08-10' })
+    ).body;
+    expect(task.dueDate).toBe('2026-08-10');
+    await request(app).patch(`/api/tasks/${task.id}`).send({ dueDate: 'banana' }).expect(400);
+    await request(app).patch(`/api/tasks/${task.id}`).send({ startDate: '2026-02-30' }).expect(400);
+    // The rejected PATCHes must not have disturbed the stored value.
+    const stored = (await request(app).get('/api/tasks')).body.find((t: any) => t.id === task.id);
+    expect(stored.dueDate).toBe('2026-08-10');
+  });
+
+  it('rejects project dates that are not real YYYY-MM-DD calendar dates', async () => {
+    const { c } = await setup();
+    const app = createApp(db);
+    await request(app)
+      .post('/api/projects')
+      .send({ clientId: c.id, name: 'Bad date project', targetDeadline: 'next friday' })
+      .expect(400);
+    const project = (
+      await request(app)
+        .post('/api/projects')
+        .send({ clientId: c.id, name: 'Good date project', startDate: '2026-08-10' })
+    ).body;
+    expect(project.startDate).toBe('2026-08-10');
+    await request(app)
+      .patch(`/api/projects/${project.id}`)
+      .send({ targetDeadline: '2026-02-30' })
+      .expect(400);
+  });
 });
