@@ -4,6 +4,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import pinoHttp from 'pino-http';
 import { google } from 'googleapis';
+import { isValid, parseISO } from 'date-fns';
 import { z } from 'zod';
 import type { Db } from './db.ts';
 import { getDb, transaction } from './db.ts';
@@ -53,6 +54,24 @@ const nullableUrl = z
   .union([z.literal(''), z.string().url()])
   .optional()
   .transform((v) => (v === undefined ? undefined : v || null));
+/**
+ * Optional calendar date. User-supplied dates are `YYYY-MM-DD` values interpreted in local
+ * time, so the pattern is checked first and `isValid` then rejects real-looking impossibilities
+ * such as `2026-02-30`. Without both, junk reaches `server/domain/deadlines.ts`, where
+ * `parseISO` yields an `Invalid Date` and every deadline rule silently answers `false`.
+ * Server-generated timestamps (`created_at`, `updated_at`, `completed_at`) are full ISO
+ * strings and never pass through here.
+ */
+const nullableDate = z
+  .union([
+    z.literal(''),
+    z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected a date in YYYY-MM-DD format')
+      .refine((v) => isValid(parseISO(v)), 'Not a real calendar date'),
+  ])
+  .optional()
+  .transform((v) => (v === undefined ? undefined : v || null));
 /** Resolve one PATCH field: an omitted key keeps the stored value, `null` clears it. */
 const patch = <T>(next: T | undefined, current: T): T => (next === undefined ? current : next);
 
@@ -77,8 +96,8 @@ const projectFields = {
   clientId: z.string().uuid(),
   name: z.string().trim().min(2).max(160),
   description: nullable,
-  startDate: nullable,
-  targetDeadline: nullable,
+  startDate: nullableDate,
+  targetDeadline: nullableDate,
   notes: nullable,
 };
 const projectInput = z.object({
@@ -94,8 +113,8 @@ const taskFields = {
   projectId: z.string().uuid(),
   title: z.string().trim().min(2).max(200),
   description: nullable,
-  dueDate: nullable,
-  startDate: nullable,
+  dueDate: nullableDate,
+  startDate: nullableDate,
   notes: nullable,
 };
 const taskInput = z.object({
