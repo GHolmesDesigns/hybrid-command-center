@@ -55,6 +55,7 @@ import {
   Settings,
   ShieldAlert,
   Trash2,
+  Upload,
   Users,
   X,
 } from 'lucide-react';
@@ -199,6 +200,9 @@ export function App() {
               </span>
               <span className="nav-disabled">
                 <FileText /> Files
+              </span>
+              <span className="nav-disabled">
+                <Upload /> Import
               </span>
             </>
           )}
@@ -1660,7 +1664,7 @@ function SettingsView({
           <div className="section-title">
             <div>
               <span className="eyebrow">Future modules</span>
-              <h2>Calendar & files</h2>
+              <h2>Calendar, files & import</h2>
             </div>
           </div>
           <p>
@@ -1673,6 +1677,9 @@ function SettingsView({
             </span>
             <span>
               <FileText /> Embedded Drive browser
+            </span>
+            <span>
+              <Upload /> Campaign playbook import
             </span>
           </div>
         </section>
