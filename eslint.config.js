@@ -10,7 +10,11 @@ export default tseslint.config(
   {
     files: ['client/**/*.{ts,tsx}'],
     plugins: { 'react-hooks': reactHooks, 'react-refresh': reactRefresh },
-    rules: { ...reactHooks.configs.recommended.rules, ...reactRefresh.configs.vite.rules, 'react-hooks/set-state-in-effect': 'off' },
+    rules: {
+      ...reactHooks.configs.recommended.rules,
+      ...reactRefresh.configs.vite.rules,
+      'react-hooks/set-state-in-effect': 'off',
+    },
   },
   { rules: { '@typescript-eslint/no-explicit-any': 'off' } },
 );

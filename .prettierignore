@@ -1,0 +1,15 @@
+# Build output and local data — mirrors .gitignore.
+dist/
+data/
+playwright-report/
+test-results/
+coverage/
+
+# npm owns this file's formatting.
+package-lock.json
+
+# Markdown is deliberately excluded: README.md and USER_MANUAL.md are the
+# subject of issue #14, and reformatting them here would conflict with it.
+*.md
+
+*.docx
