@@ -1,5 +1,5 @@
 /** Default sidebar branding. Override at runtime via Settings, or edit these defaults in code. */
-export const APP_VERSION = '2.1.0';
+export const APP_VERSION = '2.1.1';
 
 export interface Branding {
   mark: string;

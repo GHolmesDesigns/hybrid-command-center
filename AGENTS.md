@@ -29,6 +29,15 @@
 - Pair visual status colors with text or icons and preserve visible keyboard focus.
 - Prefer small service/provider boundaries over generic abstractions.
 
+## Branches and versioning
+
+- Branch from `main`. One card per branch, named `<type>/<issue>-<slug>` — for example `chore/2-prettier-reformat`, `fix/6-same-column-reorder`, `feat/9-projects-sort-by`.
+- Types are `feat` (new capability), `fix` (defect), `chore` (tooling, dependencies, formatting), and `docs` (documentation only).
+- Keep the slug lowercase, hyphen-separated, and short enough to scan in a branch list. The issue number is the identifier; the slug is a reminder.
+- **Do not name branches after version numbers.** The version a card ships as is decided at merge time from milestone close order — the first card closed in a milestone takes the minor bump, the rest take patches — so it is unknowable when the branch is created. Several milestones carry four or five open cards at once.
+- Every merged card ships a version bump. Run `npm version <new-version> --no-git-tag-version` and set `APP_VERSION` in `shared/branding.ts` to the same value, so `package.json` and both `package-lock.json` values stay aligned. The full bump rule is stated on each issue.
+- Settle the branch name before opening a pull request. Renaming a head branch closes the open PR, and it cannot be reopened once the old ref is gone.
+
 ## Security and Drive rules
 
 - Never commit `.env`, OAuth credentials, encryption keys, tokens, SQLite files, or logs.
