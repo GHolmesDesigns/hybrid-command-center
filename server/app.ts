@@ -9,7 +9,7 @@ import { z } from 'zod';
 import type { Db } from './db.ts';
 import { getDb, transaction } from './db.ts';
 import { config } from './config.ts';
-import { getTask, listClients, listProjects, listTasks } from './repositories.ts';
+import { getTag, getTask, listClients, listProjects, listTags, listTasks } from './repositories.ts';
 import { wouldCreateCycle, blockingDependencies } from './domain/dependencies.ts';
 import { isDueNextSevenDays, isDueToday } from './domain/deadlines.ts';
 import {
@@ -153,6 +153,19 @@ const taskInput = z.object({
 const taskPatch = z
   .object({ ...taskFields, status: z.enum(TASK_STATUSES), priority: z.enum(PRIORITIES) })
   .partial();
+
+const normalizedTagName = z
+  .string()
+  .transform((value) => value.trim().replace(/\s+/g, ' '))
+  .pipe(z.string().min(1).max(60));
+const tagColor = z
+  .union([z.literal(''), z.string().trim().min(1).max(32)])
+  .optional()
+  .transform((value) => (value === undefined ? undefined : value || null));
+const tagInput = z.object({ name: normalizedTagName, color: tagColor });
+const tagPatch = tagInput.partial().refine((value) => Object.keys(value).length > 0, {
+  message: 'Provide a tag field to update.',
+});
 
 export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   const app = express();
@@ -445,6 +458,63 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     db.prepare('DELETE FROM tasks WHERE id=?').run(task.id);
     res.json({ ok: true, deleted: 'task', title: task.title, driveTouched: false });
   });
+
+  app.get('/api/tags', (_req, res) => res.json(listTags(db)));
+  app.post('/api/tags', (req, res, next) => {
+    try {
+      const data = tagInput.parse(req.body);
+      const existing = db
+        .prepare('SELECT id FROM tags WHERE name=? COLLATE NOCASE')
+        .get(data.name) as { id: string } | undefined;
+      if (existing) return res.json(getTag(db, existing.id));
+      const tagId = id();
+      db.prepare('INSERT INTO tags(id,name,color) VALUES(?,?,?)').run(
+        tagId,
+        data.name,
+        data.color ?? null,
+      );
+      res.status(201).json(getTag(db, tagId));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.patch('/api/tags/:id', (req, res, next) => {
+    try {
+      const data = tagPatch.parse(req.body);
+      const current = db.prepare('SELECT * FROM tags WHERE id=?').get(req.params.id) as any;
+      if (!current) return res.status(404).json({ error: 'Tag not found.' });
+      db.prepare('UPDATE tags SET name=?,color=? WHERE id=?').run(
+        patch(data.name, current.name),
+        patch(data.color, current.color),
+        current.id,
+      );
+      res.json(getTag(db, current.id));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.delete('/api/tags/:id', (req, res, next) => {
+    try {
+      const query = z.object({ confirm: z.literal('true').optional() }).parse(req.query);
+      const tag = getTag(db, req.params.id);
+      if (!tag) return res.status(404).json({ error: 'Tag not found.' });
+      const attached = (
+        db.prepare('SELECT COUNT(*) count FROM task_tags WHERE tag_id=?').get(tag.id) as {
+          count: number;
+        }
+      ).count;
+      if (attached > 0 && query.confirm !== 'true')
+        return res.status(409).json({
+          error: 'This tag is attached to tasks. Confirm deletion to detach it everywhere.',
+          code: 'TAG_IN_USE',
+          attachedTaskCount: attached,
+        });
+      db.prepare('DELETE FROM tags WHERE id=?').run(tag.id);
+      res.json({ ok: true, deleted: 'tag', name: tag.name, detachedFromTasks: attached });
+    } catch (error) {
+      next(error);
+    }
+  });
   app.post('/api/tasks/reorder', (req, res, next) => {
     try {
       const data = z
@@ -530,6 +600,30 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     if (!item) return res.status(404).json({ error: 'Checklist item not found.' });
     db.prepare('DELETE FROM checklist_items WHERE id=?').run(req.params.id);
     res.json(getTask(db, item.task_id));
+  });
+  app.post('/api/tasks/:id/tags', (req, res, next) => {
+    try {
+      const data = z.object({ tagId: z.string().uuid() }).parse(req.body);
+      if (!db.prepare('SELECT id FROM tasks WHERE id=?').get(req.params.id))
+        return res.status(404).json({ error: 'Task not found.' });
+      if (!db.prepare('SELECT id FROM tags WHERE id=?').get(data.tagId))
+        return res.status(404).json({ error: 'Tag not found.' });
+      const result = db
+        .prepare('INSERT OR IGNORE INTO task_tags(task_id,tag_id) VALUES(?,?)')
+        .run(req.params.id, data.tagId);
+      res.status(result.changes ? 201 : 200).json(getTask(db, req.params.id));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.delete('/api/tasks/:id/tags/:tagId', (req, res) => {
+    if (!db.prepare('SELECT id FROM tasks WHERE id=?').get(req.params.id))
+      return res.status(404).json({ error: 'Task not found.' });
+    db.prepare('DELETE FROM task_tags WHERE task_id=? AND tag_id=?').run(
+      req.params.id,
+      req.params.tagId,
+    );
+    res.json(getTask(db, req.params.id));
   });
   app.post('/api/tasks/:id/dependencies', (req, res, next) => {
     try {

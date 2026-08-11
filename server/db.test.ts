@@ -129,7 +129,14 @@ describe('additive schema migration', () => {
       `SELECT name FROM sqlite_master WHERE type = 'table'`,
     ).map((table) => table.name);
     expect(tables).toEqual(
-      expect.arrayContaining(['checklist_items', 'task_dependencies', 'settings', 'drive_steps']),
+      expect.arrayContaining([
+        'checklist_items',
+        'task_dependencies',
+        'tags',
+        'task_tags',
+        'settings',
+        'drive_steps',
+      ]),
     );
   });
 

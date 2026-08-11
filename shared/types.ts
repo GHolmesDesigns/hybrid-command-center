@@ -47,6 +47,11 @@ export interface ChecklistItem {
   completed: boolean;
   position: number;
 }
+export interface Tag {
+  id: string;
+  name: string;
+  color?: string;
+}
 export interface Task {
   id: string;
   projectId: string;
@@ -64,6 +69,7 @@ export interface Task {
   completedAt?: string;
   createdAt: string;
   updatedAt: string;
+  tags: Tag[];
   checklist: ChecklistItem[];
   dependencyIds: string[];
   blockingDependencies: { id: string; title: string }[];
