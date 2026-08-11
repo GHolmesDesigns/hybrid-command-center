@@ -92,6 +92,7 @@ type Modal =
   | { type: 'taskDetail'; value: Task }
   | null;
 const SIDEBAR_KEY = 'hcc-sidebar-collapsed';
+const LAST_PROJECT_KEY = 'hcc-last-project';
 
 export function App() {
   const [clients, setClients] = useState<Client[]>([]),
@@ -103,6 +104,9 @@ export function App() {
   const [notice, setNotice] = useState<{ tone: 'success' | 'error'; text: string } | null>(null),
     [navOpen, setNavOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === '1');
+  const [lastProjectId, setLastProjectId] = useState(
+    () => localStorage.getItem(LAST_PROJECT_KEY) || '',
+  );
   const [branding, setBranding] = useState<Branding>(DEFAULT_BRANDING);
   const location = useLocation();
   const refresh = useCallback(async () => {
@@ -134,6 +138,9 @@ export function App() {
   useEffect(() => {
     localStorage.setItem(SIDEBAR_KEY, collapsed ? '1' : '0');
   }, [collapsed]);
+  useEffect(() => {
+    localStorage.setItem(LAST_PROJECT_KEY, lastProjectId);
+  }, [lastProjectId]);
   const flash = (text: string, tone: 'success' | 'error' = 'success') => {
     setNotice({ text, tone });
     window.setTimeout(() => setNotice(null), 3600);
@@ -144,6 +151,10 @@ export function App() {
     flash(text);
   };
   const toggleCollapse = () => setCollapsed((v) => !v);
+  // The remembered project is only a default, and only while TaskForm() still offers it.
+  const defaultProject = projects.some((p) => p.id === lastProjectId && p.status !== 'ARCHIVED')
+    ? lastProjectId
+    : undefined;
   if (loading)
     return (
       <div className="splash">
@@ -230,7 +241,10 @@ export function App() {
             <ChevronRight />
             <strong>{pageName(location.pathname)}</strong>
           </div>
-          <button className="top-action" onClick={() => setModal({ type: 'task' })}>
+          <button
+            className="top-action"
+            onClick={() => setModal({ type: 'task', projectId: defaultProject })}
+          >
             <Plus /> New task
           </button>
         </header>
@@ -239,7 +253,13 @@ export function App() {
             <Route
               path="/"
               element={
-                <Dashboard dashboard={dashboard} open={setModal} refresh={refresh} flash={flash} />
+                <Dashboard
+                  dashboard={dashboard}
+                  open={setModal}
+                  defaultProject={defaultProject}
+                  refresh={refresh}
+                  flash={flash}
+                />
               }
             />
             <Route
@@ -278,6 +298,7 @@ export function App() {
                   projects={projects}
                   tasks={tasks}
                   open={setModal}
+                  remember={setLastProjectId}
                   refresh={refresh}
                   flash={flash}
                 />
@@ -291,6 +312,7 @@ export function App() {
                   clients={clients}
                   projects={projects}
                   open={setModal}
+                  remember={setLastProjectId}
                   refresh={refresh}
                   flash={flash}
                 />
@@ -376,11 +398,13 @@ function PageHead({
 function Dashboard({
   dashboard,
   open,
+  defaultProject,
   refresh,
   flash,
 }: {
   dashboard: DashboardData | null;
   open: (m: Modal) => void;
+  defaultProject?: string;
   refresh: () => Promise<void>;
   flash: (s: string, t?: 'success' | 'error') => void;
 }) {
@@ -545,7 +569,7 @@ function Dashboard({
             <BriefcaseBusiness />
             New project
           </button>
-          <button onClick={() => open({ type: 'task' })}>
+          <button onClick={() => open({ type: 'task', projectId: defaultProject })}>
             <ListChecks />
             New task
           </button>
@@ -914,18 +938,24 @@ function ProjectDetail({
   projects,
   tasks,
   open,
+  remember,
   refresh,
   flash,
 }: {
   projects: Project[];
   tasks: Task[];
   open: (m: Modal) => void;
+  remember: (id: string) => void;
   refresh: () => Promise<void>;
   flash: (s: string, t?: 'success' | 'error') => void;
 }) {
   const { id } = useParams();
   const nav = useNavigate();
   const p = projects.find((x) => x.id === id);
+  const projectId = p?.id;
+  useEffect(() => {
+    if (projectId) remember(projectId);
+  }, [projectId, remember]);
   if (!p) return <Empty title="Project not found" body="Return to Projects to choose another." />;
   const mine = tasks.filter((t) => t.projectId === id);
   const remove = async () => {
@@ -1035,6 +1065,7 @@ function Kanban({
   clients,
   projects,
   open,
+  remember,
   refresh,
   flash,
 }: {
@@ -1042,6 +1073,7 @@ function Kanban({
   clients: Client[];
   projects: Project[];
   open: (m: Modal) => void;
+  remember: (id: string) => void;
   refresh: () => Promise<void>;
   flash: (s: string, t?: 'success' | 'error') => void;
 }) {
@@ -1050,6 +1082,9 @@ function Kanban({
     client = params.get('client') || '',
     flag = params.get('filter') || '';
   const [priority, setPriority] = useState('');
+  useEffect(() => {
+    if (project) remember(project);
+  }, [project, remember]);
   const filtered = tasks.filter(
     (t) =>
       (!project || t.projectId === project) &&
