@@ -54,10 +54,18 @@ export function createDb(filename = config.databasePath): Db {
 }
 
 let singleton: Db | undefined;
-export function getDb() { return singleton ??= createDb(); }
+export function getDb() {
+  return (singleton ??= createDb());
+}
 
 export function transaction<T>(db: Db, work: () => T): T {
   db.exec('BEGIN IMMEDIATE');
-  try { const result = work(); db.exec('COMMIT'); return result; }
-  catch (error) { db.exec('ROLLBACK'); throw error; }
+  try {
+    const result = work();
+    db.exec('COMMIT');
+    return result;
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
 }

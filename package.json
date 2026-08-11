@@ -1,6 +1,6 @@
 {
   "name": "hybrid-command-center",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,6 +11,8 @@
     "start": "node --experimental-strip-types server/index.ts --production",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
@@ -52,6 +54,7 @@
     "eslint-plugin-react-hooks": "latest",
     "eslint-plugin-react-refresh": "latest",
     "jsdom": "latest",
+    "prettier": "latest",
     "supertest": "latest",
     "typescript": "latest",
     "typescript-eslint": "latest",

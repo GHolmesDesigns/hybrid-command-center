@@ -1,144 +1,2293 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { Link, NavLink, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { DndContext, KeyboardSensor, PointerSensor, closestCorners, useDroppable, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
-import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import {
+  Link,
+  NavLink,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from 'react-router-dom';
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCorners,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { AlertCircle, Archive, ArrowRight, BriefcaseBusiness, CalendarDays, Check, CheckCircle2, ChevronRight, CircleAlert, Clock3, ExternalLink, FileText, FolderKanban, FolderSync, GripVertical, LayoutDashboard, ListChecks, Menu, PanelLeft, PanelLeftClose, Pencil, Plus, RefreshCw, Search, Settings, ShieldAlert, Trash2, Users, X } from 'lucide-react';
+import {
+  AlertCircle,
+  Archive,
+  ArrowRight,
+  BriefcaseBusiness,
+  CalendarDays,
+  Check,
+  CheckCircle2,
+  ChevronRight,
+  CircleAlert,
+  Clock3,
+  ExternalLink,
+  FileText,
+  FolderKanban,
+  FolderSync,
+  GripVertical,
+  LayoutDashboard,
+  ListChecks,
+  Menu,
+  PanelLeft,
+  PanelLeftClose,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Search,
+  Settings,
+  ShieldAlert,
+  Trash2,
+  Users,
+  X,
+} from 'lucide-react';
 import { addDays, format, parseISO } from 'date-fns';
 import { api, send } from './api';
-import type { Client, DashboardData, DriveStatus, Priority, Project, Task, TaskStatus } from '../../shared/types';
+import type {
+  Client,
+  DashboardData,
+  DriveStatus,
+  Priority,
+  Project,
+  Task,
+  TaskStatus,
+} from '../../shared/types';
 import { TASK_STATUSES } from '../../shared/types';
 import { APP_VERSION, DEFAULT_BRANDING, type Branding } from '../../shared/branding';
 
-const STATUS_LABEL: Record<TaskStatus,string> = { BACKLOG:'Backlog', TODO:'To Do', IN_PROGRESS:'In Progress', REVIEW:'Review', COMPLETE:'Complete' };
-const STATUS_HELP: Record<TaskStatus,string> = { BACKLOG:'Ideas and incoming work', TODO:'Ready to begin', IN_PROGRESS:'Currently moving', REVIEW:'Waiting for approval', COMPLETE:'Finished work' };
-type Modal = { type:'client'; value?:Client } | { type:'project'; value?:Project; clientId?:string } | { type:'task'; value?:Task; projectId?:string } | { type:'taskDetail'; value:Task } | null;
+const STATUS_LABEL: Record<TaskStatus, string> = {
+  BACKLOG: 'Backlog',
+  TODO: 'To Do',
+  IN_PROGRESS: 'In Progress',
+  REVIEW: 'Review',
+  COMPLETE: 'Complete',
+};
+const STATUS_HELP: Record<TaskStatus, string> = {
+  BACKLOG: 'Ideas and incoming work',
+  TODO: 'Ready to begin',
+  IN_PROGRESS: 'Currently moving',
+  REVIEW: 'Waiting for approval',
+  COMPLETE: 'Finished work',
+};
+type Modal =
+  | { type: 'client'; value?: Client }
+  | { type: 'project'; value?: Project; clientId?: string }
+  | { type: 'task'; value?: Task; projectId?: string }
+  | { type: 'taskDetail'; value: Task }
+  | null;
 const SIDEBAR_KEY = 'hcc-sidebar-collapsed';
 
 export function App() {
-  const [clients,setClients]=useState<Client[]>([]), [projects,setProjects]=useState<Project[]>([]), [tasks,setTasks]=useState<Task[]>([]);
-  const [dashboard,setDashboard]=useState<DashboardData|null>(null), [loading,setLoading]=useState(true), [modal,setModal]=useState<Modal>(null);
-  const [notice,setNotice]=useState<{tone:'success'|'error';text:string}|null>(null), [navOpen,setNavOpen]=useState(false);
-  const [collapsed,setCollapsed]=useState(()=>localStorage.getItem(SIDEBAR_KEY)==='1');
-  const [branding,setBranding]=useState<Branding>(DEFAULT_BRANDING);
-  const location=useLocation();
-  const refresh=useCallback(async()=>{try{const [c,p,t,d,b]=await Promise.all([api<Client[]>('/clients'),api<Project[]>('/projects'),api<Task[]>('/tasks'),api<DashboardData>('/dashboard'),api<{branding:Branding}>('/settings/branding')]);setClients(c);setProjects(p);setTasks(t);setDashboard(d);setBranding(b.branding);}catch(e){setNotice({tone:'error',text:(e as Error).message});}finally{setLoading(false);}},[]);
-  useEffect(()=>{refresh();},[refresh]); useEffect(()=>{setNavOpen(false);},[location.pathname]);
-  useEffect(()=>{localStorage.setItem(SIDEBAR_KEY,collapsed?'1':'0');},[collapsed]);
-  const flash=(text:string,tone:'success'|'error'='success')=>{setNotice({text,tone});window.setTimeout(()=>setNotice(null),3600);};
-  const saved=async(text:string)=>{setModal(null);await refresh();flash(text);};
-  const toggleCollapse=()=>setCollapsed(v=>!v);
-  if(loading) return <div className="splash"><div className="brand-mark">{branding.mark}</div><p>Organizing your command center…</p></div>;
-  return <div className={`app-shell ${collapsed?'sidebar-collapsed':''}`}>
-    <aside className={`sidebar ${navOpen?'open':''} ${collapsed?'collapsed':''}`}>
-      <div className="brand"><div className="brand-mark" title={branding.title}>{branding.mark}</div><div className="brand-copy"><strong>{branding.title}</strong><span>{branding.subtitle}</span></div><button className="icon-btn mobile-close" onClick={()=>setNavOpen(false)} aria-label="Close navigation"><X/></button></div>
-      <nav aria-label="Primary navigation">
-        <Nav icon={<LayoutDashboard/>} to="/" label="Dashboard" collapsed={collapsed}/>
-        <Nav icon={<Users/>} to="/clients" label="Clients" collapsed={collapsed}/>
-        <Nav icon={<BriefcaseBusiness/>} to="/projects" label="Projects" collapsed={collapsed}/>
-        <Nav icon={<FolderKanban/>} to="/kanban" label="Kanban" collapsed={collapsed}/>
-        {!collapsed&&<div className="nav-divider"><span>Coming next</span></div>}
-        {!collapsed&&<><span className="nav-disabled"><CalendarDays/> Calendar</span><span className="nav-disabled"><FileText/> Files</span></>}
-        <Nav icon={<Settings/>} to="/settings" label="Settings" collapsed={collapsed}/>
-      </nav>
-      <div className="sidebar-foot">
-        <button className="collapse-btn" onClick={toggleCollapse} aria-label={collapsed?'Expand sidebar':'Collapse sidebar'} title={collapsed?'Expand sidebar':'Collapse sidebar'}>
-          {collapsed?<PanelLeft/>:<PanelLeftClose/>}{!collapsed&&<span>Collapse</span>}
-        </button>
-        <div className="version-track" title={`Hybrid Command Center ${APP_VERSION}`}>
-          <span className="connection-dot"/>{!collapsed&&<span>Local · {branding.tagline}</span>}
-          <strong>v{APP_VERSION}</strong>
+  const [clients, setClients] = useState<Client[]>([]),
+    [projects, setProjects] = useState<Project[]>([]),
+    [tasks, setTasks] = useState<Task[]>([]);
+  const [dashboard, setDashboard] = useState<DashboardData | null>(null),
+    [loading, setLoading] = useState(true),
+    [modal, setModal] = useState<Modal>(null);
+  const [notice, setNotice] = useState<{ tone: 'success' | 'error'; text: string } | null>(null),
+    [navOpen, setNavOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === '1');
+  const [branding, setBranding] = useState<Branding>(DEFAULT_BRANDING);
+  const location = useLocation();
+  const refresh = useCallback(async () => {
+    try {
+      const [c, p, t, d, b] = await Promise.all([
+        api<Client[]>('/clients'),
+        api<Project[]>('/projects'),
+        api<Task[]>('/tasks'),
+        api<DashboardData>('/dashboard'),
+        api<{ branding: Branding }>('/settings/branding'),
+      ]);
+      setClients(c);
+      setProjects(p);
+      setTasks(t);
+      setDashboard(d);
+      setBranding(b.branding);
+    } catch (e) {
+      setNotice({ tone: 'error', text: (e as Error).message });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+  useEffect(() => {
+    setNavOpen(false);
+  }, [location.pathname]);
+  useEffect(() => {
+    localStorage.setItem(SIDEBAR_KEY, collapsed ? '1' : '0');
+  }, [collapsed]);
+  const flash = (text: string, tone: 'success' | 'error' = 'success') => {
+    setNotice({ text, tone });
+    window.setTimeout(() => setNotice(null), 3600);
+  };
+  const saved = async (text: string) => {
+    setModal(null);
+    await refresh();
+    flash(text);
+  };
+  const toggleCollapse = () => setCollapsed((v) => !v);
+  if (loading)
+    return (
+      <div className="splash">
+        <div className="brand-mark">{branding.mark}</div>
+        <p>Organizing your command center…</p>
+      </div>
+    );
+  return (
+    <div className={`app-shell ${collapsed ? 'sidebar-collapsed' : ''}`}>
+      <aside className={`sidebar ${navOpen ? 'open' : ''} ${collapsed ? 'collapsed' : ''}`}>
+        <div className="brand">
+          <div className="brand-mark" title={branding.title}>
+            {branding.mark}
+          </div>
+          <div className="brand-copy">
+            <strong>{branding.title}</strong>
+            <span>{branding.subtitle}</span>
+          </div>
+          <button
+            className="icon-btn mobile-close"
+            onClick={() => setNavOpen(false)}
+            aria-label="Close navigation"
+          >
+            <X />
+          </button>
+        </div>
+        <nav aria-label="Primary navigation">
+          <Nav icon={<LayoutDashboard />} to="/" label="Dashboard" collapsed={collapsed} />
+          <Nav icon={<Users />} to="/clients" label="Clients" collapsed={collapsed} />
+          <Nav icon={<BriefcaseBusiness />} to="/projects" label="Projects" collapsed={collapsed} />
+          <Nav icon={<FolderKanban />} to="/kanban" label="Kanban" collapsed={collapsed} />
+          {!collapsed && (
+            <div className="nav-divider">
+              <span>Coming next</span>
+            </div>
+          )}
+          {!collapsed && (
+            <>
+              <span className="nav-disabled">
+                <CalendarDays /> Calendar
+              </span>
+              <span className="nav-disabled">
+                <FileText /> Files
+              </span>
+            </>
+          )}
+          <Nav icon={<Settings />} to="/settings" label="Settings" collapsed={collapsed} />
+        </nav>
+        <div className="sidebar-foot">
+          <button
+            className="collapse-btn"
+            onClick={toggleCollapse}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {collapsed ? <PanelLeft /> : <PanelLeftClose />}
+            {!collapsed && <span>Collapse</span>}
+          </button>
+          <div className="version-track" title={`Hybrid Command Center ${APP_VERSION}`}>
+            <span className="connection-dot" />
+            {!collapsed && <span>Local · {branding.tagline}</span>}
+            <strong>v{APP_VERSION}</strong>
+          </div>
+        </div>
+      </aside>
+      {navOpen && (
+        <button
+          className="nav-scrim"
+          aria-label="Close navigation"
+          onClick={() => setNavOpen(false)}
+        />
+      )}
+      <main>
+        <header className="topbar">
+          <button
+            className="icon-btn menu-btn"
+            onClick={() => setNavOpen(true)}
+            aria-label="Open navigation"
+          >
+            <Menu />
+          </button>
+          <div className="crumb">
+            <span>Command Center</span>
+            <ChevronRight />
+            <strong>{pageName(location.pathname)}</strong>
+          </div>
+          <button className="top-action" onClick={() => setModal({ type: 'task' })}>
+            <Plus /> New task
+          </button>
+        </header>
+        <div className="page-wrap">
+          <Routes>
+            <Route
+              path="/"
+              element={
+                <Dashboard dashboard={dashboard} open={setModal} refresh={refresh} flash={flash} />
+              }
+            />
+            <Route
+              path="/clients"
+              element={
+                <Clients
+                  clients={clients}
+                  projects={projects}
+                  open={setModal}
+                  refresh={refresh}
+                  flash={flash}
+                />
+              }
+            />
+            <Route
+              path="/clients/:id"
+              element={<ClientDetail clients={clients} projects={projects} open={setModal} />}
+            />
+            <Route
+              path="/projects"
+              element={
+                <Projects
+                  projects={projects}
+                  clients={clients}
+                  tasks={tasks}
+                  open={setModal}
+                  refresh={refresh}
+                  flash={flash}
+                />
+              }
+            />
+            <Route
+              path="/projects/:id"
+              element={
+                <ProjectDetail
+                  projects={projects}
+                  tasks={tasks}
+                  open={setModal}
+                  refresh={refresh}
+                  flash={flash}
+                />
+              }
+            />
+            <Route
+              path="/kanban"
+              element={
+                <Kanban
+                  tasks={tasks}
+                  clients={clients}
+                  projects={projects}
+                  open={setModal}
+                  refresh={refresh}
+                  flash={flash}
+                />
+              }
+            />
+            <Route
+              path="/settings"
+              element={<SettingsView branding={branding} refresh={refresh} flash={flash} />}
+            />
+          </Routes>
+        </div>
+      </main>
+      {modal && (
+        <ModalHost
+          modal={modal}
+          clients={clients}
+          projects={projects}
+          tasks={tasks}
+          close={() => setModal(null)}
+          saved={saved}
+          refresh={refresh}
+          flash={flash}
+        />
+      )}
+      {notice && (
+        <div className={`toast ${notice.tone}`} role="status">
+          {notice.tone === 'success' ? <CheckCircle2 /> : <CircleAlert />}
+          {notice.text}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Nav({
+  icon,
+  to,
+  label,
+  collapsed,
+}: {
+  icon: ReactNode;
+  to: string;
+  label: string;
+  collapsed: boolean;
+}) {
+  return (
+    <NavLink to={to} end={to === '/'} title={label}>
+      {icon}
+      {!collapsed && <span>{label}</span>}
+    </NavLink>
+  );
+}
+function pageName(path: string) {
+  if (path.startsWith('/clients')) return 'Clients';
+  if (path.startsWith('/projects')) return 'Projects';
+  if (path.startsWith('/kanban')) return 'Kanban';
+  if (path.startsWith('/settings')) return 'Settings';
+  return 'Dashboard';
+}
+function PageHead({
+  eyebrow,
+  title,
+  body,
+  action,
+}: {
+  eyebrow: string;
+  title: string;
+  body: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="page-head">
+      <div>
+        <span className="eyebrow">{eyebrow}</span>
+        <h1>{title}</h1>
+        <p>{body}</p>
+      </div>
+      {action}
+    </div>
+  );
+}
+
+function Dashboard({
+  dashboard,
+  open,
+  refresh,
+  flash,
+}: {
+  dashboard: DashboardData | null;
+  open: (m: Modal) => void;
+  refresh: () => Promise<void>;
+  flash: (s: string, t?: 'success' | 'error') => void;
+}) {
+  const nav = useNavigate();
+  const [syncing, setSyncing] = useState(false);
+  if (!dashboard)
+    return <Empty title="Dashboard unavailable" body="Refresh the page to try again." />;
+  const cards = [
+    ['Active clients', dashboard.counts.activeClients, <Users />],
+    ['Active projects', dashboard.counts.activeProjects, <BriefcaseBusiness />],
+    ['Due today', dashboard.counts.dueToday, <Clock3 />],
+    ['Next 7 days', dashboard.counts.dueNextSevenDays, <CalendarDays />],
+  ] as const;
+  const syncFolders = async () => {
+    setSyncing(true);
+    try {
+      const result = await send<{ message: string; connected: boolean }>('/drive/sync', 'POST');
+      await refresh();
+      flash(result.message, result.connected ? 'success' : 'error');
+    } catch (e) {
+      flash((e as Error).message, 'error');
+    } finally {
+      setSyncing(false);
+    }
+  };
+  return (
+    <>
+      <PageHead
+        eyebrow="Sunday overview"
+        title="Your work, in focus."
+        body="Deadlines, active projects, and the next decisions that need your attention. Projects live in Command Center — Drive folders are storage, not the source of project records."
+        action={
+          <div className="head-actions">
+            <button className="secondary" onClick={syncFolders} disabled={syncing}>
+              {syncing ? (
+                <>
+                  <RefreshCw className="spin" /> Syncing…
+                </>
+              ) : (
+                <>
+                  <FolderSync /> Sync to Folder
+                </>
+              )}
+            </button>
+            <button className="secondary" onClick={() => open({ type: 'client' })}>
+              <Users /> New client
+            </button>
+            <button onClick={() => open({ type: 'project' })}>
+              <Plus /> New project
+            </button>
+          </div>
+        }
+      />
+      <section className="metric-grid">
+        {cards.map(([label, value, icon]) => (
+          <article className="metric" key={label}>
+            <div className="metric-icon">{icon}</div>
+            <span>{label}</span>
+            <strong>{value}</strong>
+          </article>
+        ))}
+      </section>
+      <section className={`overdue-panel ${dashboard.counts.overdue ? 'has-overdue' : ''}`}>
+        <div className="panel-title">
+          <div className="alert-icon">
+            <ShieldAlert />
+          </div>
+          <div>
+            <span className="eyebrow">Deadline watch</span>
+            <h2>
+              {dashboard.counts.overdue
+                ? `${dashboard.counts.overdue} overdue task${dashboard.counts.overdue === 1 ? '' : 's'}`
+                : 'Nothing overdue'}
+            </h2>
+            <p>
+              {dashboard.counts.overdue
+                ? `Across ${dashboard.counts.projectsOverdue} active project${dashboard.counts.projectsOverdue === 1 ? '' : 's'}. Start here.`
+                : 'You are caught up. Keep the momentum going.'}
+            </p>
+          </div>
+          <button className="secondary" onClick={() => nav('/kanban?filter=overdue')}>
+            Open board <ArrowRight />
+          </button>
+        </div>
+        {dashboard.overdueTasks.length > 0 && (
+          <div className="urgent-list">
+            {dashboard.overdueTasks.slice(0, 5).map((t) => (
+              <button key={t.id} onClick={() => open({ type: 'taskDetail', value: t })}>
+                <span className="priority-stripe" data-priority={t.priority} />
+                <div>
+                  <strong>{t.title}</strong>
+                  <span>
+                    {t.clientName} · {t.projectName}
+                  </span>
+                </div>
+                <Due task={t} />
+                <ChevronRight />
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+      <div className="dashboard-grid">
+        <section className="panel">
+          <div className="section-title">
+            <div>
+              <span className="eyebrow">On the horizon</span>
+              <h2>Coming up next</h2>
+            </div>
+            <button className="text-btn" onClick={() => nav('/kanban')}>
+              See all <ArrowRight />
+            </button>
+          </div>
+          {dashboard.upcomingTasks.length ? (
+            <div className="simple-list">
+              {dashboard.upcomingTasks.slice(0, 6).map((t) => (
+                <button key={t.id} onClick={() => open({ type: 'taskDetail', value: t })}>
+                  <StatusDot status={t.status} />
+                  <div>
+                    <strong>{t.title}</strong>
+                    <span>{t.projectName}</span>
+                  </div>
+                  <Due task={t} />
+                </button>
+              ))}
+            </div>
+          ) : (
+            <Empty compact title="A clear week ahead" body="Tasks due soon will appear here." />
+          )}
+        </section>
+        <section className="panel">
+          <div className="section-title">
+            <div>
+              <span className="eyebrow">Momentum</span>
+              <h2>Recently updated</h2>
+            </div>
+          </div>
+          <div className="project-list">
+            {dashboard.recentProjects.map((p) => (
+              <Link key={p.id} to={`/projects/${p.id}`}>
+                <div className="monogram">{initials(p.name)}</div>
+                <div>
+                  <strong>{p.name}</strong>
+                  <span>
+                    {p.clientName} · {formatDate(p.updatedAt)}
+                  </span>
+                </div>
+                <ChevronRight />
+              </Link>
+            ))}
+          </div>
+        </section>
+      </div>
+      <section className="quick-actions">
+        <span className="eyebrow">Quick start</span>
+        <div>
+          <button onClick={() => open({ type: 'client' })}>
+            <Users />
+            New client
+          </button>
+          <button onClick={() => open({ type: 'project' })}>
+            <BriefcaseBusiness />
+            New project
+          </button>
+          <button onClick={() => open({ type: 'task' })}>
+            <ListChecks />
+            New task
+          </button>
+          <button onClick={() => nav('/kanban')}>
+            <FolderKanban />
+            Open Kanban
+          </button>
+        </div>
+      </section>
+    </>
+  );
+}
+
+function Clients({
+  clients,
+  projects,
+  open,
+  refresh,
+  flash,
+}: {
+  clients: Client[];
+  projects: Project[];
+  open: (m: Modal) => void;
+  refresh: () => Promise<void>;
+  flash: (s: string, t?: 'success' | 'error') => void;
+}) {
+  const [query, setQuery] = useState('');
+  const visible = clients.filter((c) => c.name.toLowerCase().includes(query.toLowerCase()));
+  const archive = async (c: Client) => {
+    if (!confirm(`Archive ${c.name}? Its Drive folder and project history will remain intact.`))
+      return;
+    await send(`/clients/${c.id}/archive`, 'POST');
+    await refresh();
+    flash('Client archived.');
+  };
+  return (
+    <>
+      <PageHead
+        eyebrow="Relationships"
+        title="Clients"
+        body="A clear view of every client, their work, and Drive connection."
+        action={
+          <button onClick={() => open({ type: 'client' })}>
+            <Plus /> New client
+          </button>
+        }
+      />
+      <SearchBox value={query} set={setQuery} placeholder="Search clients…" />
+      <div className="card-grid">
+        {visible.map((c) => (
+          <article className={`entity-card ${c.status === 'ARCHIVED' ? 'muted' : ''}`} key={c.id}>
+            <div className="entity-top">
+              <div className="monogram large">{initials(c.name)}</div>
+              <DriveBadge status={c.driveStatus} />
+            </div>
+            <Link className="entity-title" to={`/clients/${c.id}`}>
+              <h2>{c.name}</h2>
+              <span>
+                {projects.filter((p) => p.clientId === c.id && p.status !== 'ARCHIVED').length}{' '}
+                active projects
+              </span>
+            </Link>
+            <div className="entity-contact">
+              {c.contactName && <span>{c.contactName}</span>}
+              {c.email && <a href={`mailto:${c.email}`}>{c.email}</a>}
+            </div>
+            <div className="card-actions">
+              {c.driveFolderUrl ? (
+                <a className="secondary" href={c.driveFolderUrl} target="_blank" rel="noreferrer">
+                  Drive <ExternalLink />
+                </a>
+              ) : (
+                <span />
+              )}
+              <button
+                className="icon-btn"
+                onClick={() => open({ type: 'client', value: c })}
+                aria-label={`Edit ${c.name}`}
+              >
+                <Settings />
+              </button>
+              {c.status === 'ACTIVE' && (
+                <button
+                  className="icon-btn danger"
+                  onClick={() => archive(c)}
+                  aria-label={`Archive ${c.name}`}
+                >
+                  <Archive />
+                </button>
+              )}
+            </div>
+          </article>
+        ))}
+      </div>
+      {!visible.length && (
+        <Empty
+          title="No clients found"
+          body={query ? 'Try a different search.' : 'Create your first client to begin.'}
+          action={
+            !query ? (
+              <button onClick={() => open({ type: 'client' })}>
+                <Plus /> New client
+              </button>
+            ) : undefined
+          }
+        />
+      )}
+    </>
+  );
+}
+
+function ClientDetail({
+  clients,
+  projects,
+  open,
+}: {
+  clients: Client[];
+  projects: Project[];
+  open: (m: Modal) => void;
+}) {
+  const { id } = useParams();
+  const client = clients.find((c) => c.id === id);
+  if (!client)
+    return <Empty title="Client not found" body="This client may have been archived or removed." />;
+  const mine = projects.filter((p) => p.clientId === id);
+  return (
+    <>
+      <div className="backline">
+        <Link to="/clients">← All clients</Link>
+      </div>
+      <PageHead
+        eyebrow="Client portfolio"
+        title={client.name}
+        body={client.notes || 'Client details and every project in one place.'}
+        action={
+          <div className="head-actions">
+            {client.driveFolderUrl && (
+              <a
+                className="secondary buttonlike"
+                href={client.driveFolderUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open Drive <ExternalLink />
+              </a>
+            )}
+            <button onClick={() => open({ type: 'project', clientId: client.id })}>
+              <Plus /> New project
+            </button>
+          </div>
+        }
+      />
+      <div className="detail-grid">
+        <section className="panel detail-info">
+          <h2>Client information</h2>
+          <dl>
+            <dt>Contact</dt>
+            <dd>{client.contactName || 'Not added'}</dd>
+            <dt>Email</dt>
+            <dd>{client.email || 'Not added'}</dd>
+            <dt>Phone</dt>
+            <dd>{client.phone || 'Not added'}</dd>
+            <dt>Drive</dt>
+            <dd>
+              <DriveBadge status={client.driveStatus} />
+              {client.driveError && <small>{client.driveError}</small>}
+            </dd>
+          </dl>
+          <button className="secondary" onClick={() => open({ type: 'client', value: client })}>
+            Edit details
+          </button>
+        </section>
+        <section className="panel span2">
+          <div className="section-title">
+            <div>
+              <span className="eyebrow">Portfolio</span>
+              <h2>Projects</h2>
+            </div>
+          </div>
+          {mine.length ? (
+            <div className="project-table">
+              {mine.map((p) => (
+                <Link to={`/projects/${p.id}`} key={p.id}>
+                  <span className="priority-stripe" data-priority={p.priority} />
+                  <div>
+                    <strong>{p.name}</strong>
+                    <span>
+                      {p.status.replace('_', ' ')} ·{' '}
+                      {p.targetDeadline ? `Due ${formatDate(p.targetDeadline)}` : 'No deadline'}
+                    </span>
+                  </div>
+                  <DriveBadge status={p.driveStatus} />
+                  <ChevronRight />
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <Empty
+              compact
+              title="No projects yet"
+              body="Create the first project for this client."
+            />
+          )}
+        </section>
+      </div>
+    </>
+  );
+}
+
+function Projects({
+  projects,
+  clients,
+  tasks,
+  open,
+  refresh,
+  flash,
+}: {
+  projects: Project[];
+  clients: Client[];
+  tasks: Task[];
+  open: (m: Modal) => void;
+  refresh: () => Promise<void>;
+  flash: (s: string, t?: 'success' | 'error') => void;
+}) {
+  const [query, setQuery] = useState(''),
+    [clientFilter, setClientFilter] = useState('');
+  const visible = projects.filter(
+    (p) =>
+      (!clientFilter || p.clientId === clientFilter) &&
+      `${p.name} ${p.clientName}`.toLowerCase().includes(query.toLowerCase()),
+  );
+  const archive = async (p: Project) => {
+    if (!confirm(`Archive ${p.name}? Tasks and Drive files will be preserved.`)) return;
+    await send(`/projects/${p.id}/archive`, 'POST');
+    await refresh();
+    flash('Project archived.');
+  };
+  const remove = async (p: Project) => {
+    if (
+      !confirm(
+        `Delete project “${p.name}” from Command Center?\n\nThis removes the project and its tasks from the app only. Drive folders and files are not touched.`,
+      )
+    )
+      return;
+    try {
+      await send(`/projects/${p.id}`, 'DELETE');
+      await refresh();
+      flash('Project deleted from Command Center. Drive files were left alone.');
+    } catch (e) {
+      flash((e as Error).message, 'error');
+    }
+  };
+  return (
+    <>
+      <PageHead
+        eyebrow="Workstreams"
+        title="Projects"
+        body="Track scope, deadlines, task health, and storage from one view. Projects are owned by Command Center — not by Drive folder names."
+        action={
+          <button onClick={() => open({ type: 'project' })}>
+            <Plus /> New project
+          </button>
+        }
+      />
+      <div className="filterbar">
+        <SearchBox value={query} set={setQuery} placeholder="Search projects…" />
+        <select
+          value={clientFilter}
+          onChange={(e) => setClientFilter(e.target.value)}
+          aria-label="Filter by client"
+        >
+          <option value="">All clients</option>
+          {clients.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="project-cards">
+        {visible.map((p) => {
+          const mine = tasks.filter((t) => t.projectId === p.id),
+            done = mine.filter((t) => t.status === 'COMPLETE').length,
+            over = mine.filter((t) => t.overdue).length;
+          return (
+            <article key={p.id}>
+              <div className="project-card-head">
+                <span className="status-label">{p.status.replace('_', ' ')}</span>
+                <DriveBadge status={p.driveStatus} />
+              </div>
+              <Link to={`/projects/${p.id}`}>
+                <span className="client-name">{p.clientName}</span>
+                <h2>{p.name}</h2>
+                <p>{p.description || 'No project description yet.'}</p>
+              </Link>
+              <div className="progress">
+                <div>
+                  <span>Task progress</span>
+                  <strong>
+                    {done}/{mine.length}
+                  </strong>
+                </div>
+                <div className="progress-track">
+                  <span style={{ width: `${mine.length ? (done / mine.length) * 100 : 0}%` }} />
+                </div>
+              </div>
+              <div className="project-meta">
+                <span className={over ? 'overdue-text' : ''}>
+                  {over ? (
+                    <>
+                      <AlertCircle />
+                      {over} overdue
+                    </>
+                  ) : (
+                    <>
+                      <Check />
+                      On track
+                    </>
+                  )}
+                </span>
+                <span>
+                  <CalendarDays />
+                  {p.targetDeadline ? formatDate(p.targetDeadline) : 'No deadline'}
+                </span>
+              </div>
+              <div className="card-actions">
+                <Link className="secondary buttonlike" to={`/kanban?project=${p.id}`}>
+                  Open board
+                </Link>
+                <button
+                  className="icon-btn"
+                  onClick={() => open({ type: 'project', value: p })}
+                  aria-label={`Edit ${p.name}`}
+                >
+                  <Settings />
+                </button>
+                {p.status !== 'ARCHIVED' && (
+                  <button
+                    className="icon-btn danger"
+                    onClick={() => archive(p)}
+                    aria-label={`Archive ${p.name}`}
+                  >
+                    <Archive />
+                  </button>
+                )}
+                <button
+                  className="icon-btn danger"
+                  onClick={() => remove(p)}
+                  aria-label={`Delete ${p.name}`}
+                >
+                  <Trash2 />
+                </button>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+      {!visible.length && (
+        <Empty title="No projects found" body="Adjust your filters or create a new project." />
+      )}
+    </>
+  );
+}
+
+function ProjectDetail({
+  projects,
+  tasks,
+  open,
+  refresh,
+  flash,
+}: {
+  projects: Project[];
+  tasks: Task[];
+  open: (m: Modal) => void;
+  refresh: () => Promise<void>;
+  flash: (s: string, t?: 'success' | 'error') => void;
+}) {
+  const { id } = useParams();
+  const nav = useNavigate();
+  const p = projects.find((x) => x.id === id);
+  if (!p) return <Empty title="Project not found" body="Return to Projects to choose another." />;
+  const mine = tasks.filter((t) => t.projectId === id);
+  const remove = async () => {
+    if (
+      !confirm(
+        `Delete project “${p.name}” from Command Center?\n\nThis removes the project and its tasks from the app only. Drive folders and files are not touched.`,
+      )
+    )
+      return;
+    try {
+      await send(`/projects/${p.id}`, 'DELETE');
+      await refresh();
+      flash('Project deleted from Command Center. Drive files were left alone.');
+      nav('/projects');
+    } catch (e) {
+      flash((e as Error).message, 'error');
+    }
+  };
+  return (
+    <>
+      <div className="backline">
+        <Link to="/projects">← All projects</Link>
+      </div>
+      <PageHead
+        eyebrow={p.clientName || 'Project'}
+        title={p.name}
+        body={p.description || 'Project tasks, deadline, and Drive workspace.'}
+        action={
+          <div className="head-actions">
+            {p.driveFolderUrl && (
+              <a
+                className="secondary buttonlike"
+                href={p.driveFolderUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open Drive <ExternalLink />
+              </a>
+            )}
+            <button onClick={() => open({ type: 'task', projectId: p.id })}>
+              <Plus /> New task
+            </button>
+          </div>
+        }
+      />
+      <div className="project-summary">
+        <div>
+          <span>Status</span>
+          <strong>{p.status.replace('_', ' ')}</strong>
+        </div>
+        <div>
+          <span>Deadline</span>
+          <strong>{p.targetDeadline ? formatDate(p.targetDeadline) : 'Not set'}</strong>
+        </div>
+        <div>
+          <span>Priority</span>
+          <strong>{p.priority}</strong>
+        </div>
+        <div>
+          <span>Task health</span>
+          <strong>{mine.filter((t) => t.overdue).length} overdue</strong>
         </div>
       </div>
-    </aside>
-    {navOpen&&<button className="nav-scrim" aria-label="Close navigation" onClick={()=>setNavOpen(false)}/>} 
-    <main>
-      <header className="topbar"><button className="icon-btn menu-btn" onClick={()=>setNavOpen(true)} aria-label="Open navigation"><Menu/></button><div className="crumb"><span>Command Center</span><ChevronRight/><strong>{pageName(location.pathname)}</strong></div><button className="top-action" onClick={()=>setModal({type:'task'})}><Plus/> New task</button></header>
-      <div className="page-wrap">
-        <Routes>
-          <Route path="/" element={<Dashboard dashboard={dashboard} open={setModal} refresh={refresh} flash={flash}/>}/>
-          <Route path="/clients" element={<Clients clients={clients} projects={projects} open={setModal} refresh={refresh} flash={flash}/>}/>
-          <Route path="/clients/:id" element={<ClientDetail clients={clients} projects={projects} open={setModal}/>}/>
-          <Route path="/projects" element={<Projects projects={projects} clients={clients} tasks={tasks} open={setModal} refresh={refresh} flash={flash}/>}/>
-          <Route path="/projects/:id" element={<ProjectDetail projects={projects} tasks={tasks} open={setModal} refresh={refresh} flash={flash}/>}/>
-          <Route path="/kanban" element={<Kanban tasks={tasks} clients={clients} projects={projects} open={setModal} refresh={refresh} flash={flash}/>}/>
-          <Route path="/settings" element={<SettingsView branding={branding} refresh={refresh} flash={flash}/>}/>
-        </Routes>
+      <div className="detail-actions">
+        <Link className="buttonlike" to={`/kanban?project=${p.id}`}>
+          Open project Kanban <ArrowRight />
+        </Link>
+        <button className="secondary" onClick={() => open({ type: 'project', value: p })}>
+          Edit project
+        </button>
+        <button className="secondary danger-outline" onClick={remove}>
+          <Trash2 /> Delete project
+        </button>
       </div>
-    </main>
-    {modal&&<ModalHost modal={modal} clients={clients} projects={projects} tasks={tasks} close={()=>setModal(null)} saved={saved} refresh={refresh} flash={flash}/>} 
-    {notice&&<div className={`toast ${notice.tone}`} role="status">{notice.tone==='success'?<CheckCircle2/>:<CircleAlert/>}{notice.text}</div>}
-  </div>;
+      <section className="panel">
+        <div className="section-title">
+          <div>
+            <span className="eyebrow">Execution</span>
+            <h2>All project tasks</h2>
+          </div>
+        </div>
+        {mine.length ? (
+          <div className="task-table">
+            {mine.map((t) => (
+              <button key={t.id} onClick={() => open({ type: 'taskDetail', value: t })}>
+                <StatusDot status={t.status} />
+                <div>
+                  <strong>{t.title}</strong>
+                  <span>{STATUS_LABEL[t.status]}</span>
+                </div>
+                <PriorityBadge priority={t.priority} />
+                <Due task={t} />
+                <ChevronRight />
+              </button>
+            ))}
+          </div>
+        ) : (
+          <Empty compact title="No tasks yet" body="Create a task to start planning the work." />
+        )}
+      </section>
+    </>
+  );
 }
 
-function Nav({icon,to,label,collapsed}:{icon:ReactNode;to:string;label:string;collapsed:boolean}){return <NavLink to={to} end={to==='/'} title={label}>{icon}{!collapsed&&<span>{label}</span>}</NavLink>}
-function pageName(path:string){if(path.startsWith('/clients'))return 'Clients';if(path.startsWith('/projects'))return 'Projects';if(path.startsWith('/kanban'))return 'Kanban';if(path.startsWith('/settings'))return 'Settings';return 'Dashboard'}
-function PageHead({eyebrow,title,body,action}:{eyebrow:string;title:string;body:string;action?:ReactNode}){return <div className="page-head"><div><span className="eyebrow">{eyebrow}</span><h1>{title}</h1><p>{body}</p></div>{action}</div>}
-
-function Dashboard({dashboard,open,refresh,flash}:{dashboard:DashboardData|null;open:(m:Modal)=>void;refresh:()=>Promise<void>;flash:(s:string,t?:'success'|'error')=>void}){
-  const nav=useNavigate(); const [syncing,setSyncing]=useState(false);
-  if(!dashboard)return <Empty title="Dashboard unavailable" body="Refresh the page to try again."/>;
-  const cards=[['Active clients',dashboard.counts.activeClients,<Users/>],['Active projects',dashboard.counts.activeProjects,<BriefcaseBusiness/>],['Due today',dashboard.counts.dueToday,<Clock3/>],['Next 7 days',dashboard.counts.dueNextSevenDays,<CalendarDays/>]] as const;
-  const syncFolders=async()=>{setSyncing(true);try{const result=await send<{message:string;connected:boolean}>('/drive/sync','POST');await refresh();flash(result.message,result.connected?'success':'error');}catch(e){flash((e as Error).message,'error');}finally{setSyncing(false);}};
-  return <><PageHead eyebrow="Sunday overview" title="Your work, in focus." body="Deadlines, active projects, and the next decisions that need your attention. Projects live in Command Center — Drive folders are storage, not the source of project records." action={<div className="head-actions"><button className="secondary" onClick={syncFolders} disabled={syncing}>{syncing?<><RefreshCw className="spin"/> Syncing…</>:<><FolderSync/> Sync to Folder</>}</button><button className="secondary" onClick={()=>open({type:'client'})}><Users/> New client</button><button onClick={()=>open({type:'project'})}><Plus/> New project</button></div>}/>
-    <section className="metric-grid">{cards.map(([label,value,icon])=><article className="metric" key={label}><div className="metric-icon">{icon}</div><span>{label}</span><strong>{value}</strong></article>)}</section>
-    <section className={`overdue-panel ${dashboard.counts.overdue?'has-overdue':''}`}><div className="panel-title"><div className="alert-icon"><ShieldAlert/></div><div><span className="eyebrow">Deadline watch</span><h2>{dashboard.counts.overdue?`${dashboard.counts.overdue} overdue task${dashboard.counts.overdue===1?'':'s'}`:'Nothing overdue'}</h2><p>{dashboard.counts.overdue?`Across ${dashboard.counts.projectsOverdue} active project${dashboard.counts.projectsOverdue===1?'':'s'}. Start here.`:'You are caught up. Keep the momentum going.'}</p></div><button className="secondary" onClick={()=>nav('/kanban?filter=overdue')}>Open board <ArrowRight/></button></div>
-      {dashboard.overdueTasks.length>0&&<div className="urgent-list">{dashboard.overdueTasks.slice(0,5).map(t=><button key={t.id} onClick={()=>open({type:'taskDetail',value:t})}><span className="priority-stripe" data-priority={t.priority}/><div><strong>{t.title}</strong><span>{t.clientName} · {t.projectName}</span></div><Due task={t}/><ChevronRight/></button>)}</div>}
+function Kanban({
+  tasks,
+  clients,
+  projects,
+  open,
+  refresh,
+  flash,
+}: {
+  tasks: Task[];
+  clients: Client[];
+  projects: Project[];
+  open: (m: Modal) => void;
+  refresh: () => Promise<void>;
+  flash: (s: string, t?: 'success' | 'error') => void;
+}) {
+  const [params, setParams] = useSearchParams();
+  const project = params.get('project') || '',
+    client = params.get('client') || '',
+    flag = params.get('filter') || '';
+  const [priority, setPriority] = useState('');
+  const filtered = tasks.filter(
+    (t) =>
+      (!project || t.projectId === project) &&
+      (!client || t.clientId === client) &&
+      (!priority || t.priority === priority) &&
+      (!flag ||
+        (flag === 'overdue' && t.overdue) ||
+        (flag === 'blocked' && t.blocked) ||
+        (flag === 'today' && dueWithinDays(t.dueDate, 0)) ||
+        (flag === 'week' && dueWithinDays(t.dueDate, 7)) ||
+        (flag === 'none' && !t.dueDate) ||
+        (flag === 'completed' && t.status === 'COMPLETE')),
+  );
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const move = async (task: Task, status: TaskStatus) => {
+    try {
+      const ordered = filtered
+        .filter((t) => t.status === status && t.id !== task.id)
+        .map((t) => t.id);
+      ordered.push(task.id);
+      await send('/tasks/reorder', 'POST', { taskId: task.id, status, orderedIds: ordered });
+      await refresh();
+      flash(`Moved to ${STATUS_LABEL[status]}.`);
+    } catch (e: any) {
+      if (e.status === 409 && e.data?.code === 'TASK_BLOCKED') {
+        if (confirm(`${e.message}\n\nComplete anyway and override the dependency block?`)) {
+          await send('/tasks/reorder', 'POST', {
+            taskId: task.id,
+            status,
+            orderedIds: [task.id],
+            overrideBlocked: true,
+          });
+          await refresh();
+          flash('Task completed with dependency override.');
+        }
+      } else flash(e.message, 'error');
+    }
+  };
+  const dragEnd = (event: DragEndEvent) => {
+    if (!event.over) return;
+    const task = tasks.find((t) => t.id === event.active.id);
+    if (!task) return;
+    const overTask = tasks.find((t) => t.id === event.over!.id);
+    const status = (
+      TASK_STATUSES.includes(event.over.id as TaskStatus) ? event.over.id : overTask?.status
+    ) as TaskStatus | undefined;
+    if (status && status !== task.status) move(task, status);
+  };
+  const set = (key: string, value: string) => {
+    const next = new URLSearchParams(params);
+    if (value) next.set(key, value);
+    else next.delete(key);
+    setParams(next);
+  };
+  return (
+    <>
+      <PageHead
+        eyebrow="Workflow"
+        title="Kanban board"
+        body={`${filtered.length} visible tasks · move work forward with drag, touch, or keyboard controls.`}
+        action={
+          <button onClick={() => open({ type: 'task', projectId: project || undefined })}>
+            <Plus /> New task
+          </button>
+        }
+      />
+      <div className="board-filters">
+        <label>
+          <span>Client</span>
+          <select value={client} onChange={(e) => set('client', e.target.value)}>
+            <option value="">All clients</option>
+            {clients
+              .filter((c) => c.status === 'ACTIVE')
+              .map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+          </select>
+        </label>
+        <label>
+          <span>Project</span>
+          <select value={project} onChange={(e) => set('project', e.target.value)}>
+            <option value="">All projects</option>
+            {projects
+              .filter((p) => !client || p.clientId === client)
+              .map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+          </select>
+        </label>
+        <label>
+          <span>Priority</span>
+          <select value={priority} onChange={(e) => setPriority(e.target.value)}>
+            <option value="">Any priority</option>
+            {['URGENT', 'HIGH', 'MEDIUM', 'LOW'].map((p) => (
+              <option key={p}>{p}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Focus</span>
+          <select value={flag} onChange={(e) => set('filter', e.target.value)}>
+            <option value="">All tasks</option>
+            <option value="overdue">Overdue</option>
+            <option value="today">Due today</option>
+            <option value="week">Due this week</option>
+            <option value="none">No due date</option>
+            <option value="blocked">Blocked</option>
+            <option value="completed">Completed</option>
+          </select>
+        </label>
+      </div>
+      <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={dragEnd}>
+        <div className="kanban-board">
+          {TASK_STATUSES.map((status) => (
+            <KanbanColumn
+              key={status}
+              status={status}
+              tasks={filtered.filter((t) => t.status === status)}
+              open={open}
+              move={move}
+            />
+          ))}
+        </div>
+      </DndContext>
+    </>
+  );
+}
+function KanbanColumn({
+  status,
+  tasks,
+  open,
+  move,
+}: {
+  status: TaskStatus;
+  tasks: Task[];
+  open: (m: Modal) => void;
+  move: (t: Task, s: TaskStatus) => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: status });
+  return (
+    <section ref={setNodeRef} className={`kanban-column ${isOver ? 'drop-active' : ''}`}>
+      <header>
+        <div>
+          <span className={`status-dot ${status.toLowerCase()}`} />
+          <h2>{STATUS_LABEL[status]}</h2>
+          <span className="count">{tasks.length}</span>
+        </div>
+        <p>{STATUS_HELP[status]}</p>
+      </header>
+      <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+        <div className="column-body">
+          {tasks.map((t) => (
+            <KanbanCard key={t.id} task={t} open={open} move={move} />
+          ))}
+          {!tasks.length && <div className="column-empty">Drop tasks here</div>}
+        </div>
+      </SortableContext>
     </section>
-    <div className="dashboard-grid"><section className="panel"><div className="section-title"><div><span className="eyebrow">On the horizon</span><h2>Coming up next</h2></div><button className="text-btn" onClick={()=>nav('/kanban')}>See all <ArrowRight/></button></div>{dashboard.upcomingTasks.length?<div className="simple-list">{dashboard.upcomingTasks.slice(0,6).map(t=><button key={t.id} onClick={()=>open({type:'taskDetail',value:t})}><StatusDot status={t.status}/><div><strong>{t.title}</strong><span>{t.projectName}</span></div><Due task={t}/></button>)}</div>:<Empty compact title="A clear week ahead" body="Tasks due soon will appear here."/>}</section>
-      <section className="panel"><div className="section-title"><div><span className="eyebrow">Momentum</span><h2>Recently updated</h2></div></div><div className="project-list">{dashboard.recentProjects.map(p=><Link key={p.id} to={`/projects/${p.id}`}><div className="monogram">{initials(p.name)}</div><div><strong>{p.name}</strong><span>{p.clientName} · {formatDate(p.updatedAt)}</span></div><ChevronRight/></Link>)}</div></section></div>
-    <section className="quick-actions"><span className="eyebrow">Quick start</span><div><button onClick={()=>open({type:'client'})}><Users/>New client</button><button onClick={()=>open({type:'project'})}><BriefcaseBusiness/>New project</button><button onClick={()=>open({type:'task'})}><ListChecks/>New task</button><button onClick={()=>nav('/kanban')}><FolderKanban/>Open Kanban</button></div></section>
-  </>;
+  );
+}
+function KanbanCard({
+  task,
+  open,
+  move,
+}: {
+  task: Task;
+  open: (m: Modal) => void;
+  move: (t: Task, s: TaskStatus) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: task.id,
+  });
+  return (
+    <article
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={`kanban-card ${isDragging ? 'dragging' : ''} ${task.overdue ? 'is-overdue' : ''} ${task.blocked ? 'is-blocked' : ''}`}
+    >
+      <div className="card-labels">
+        <PriorityBadge priority={task.priority} />
+        {task.blocked && (
+          <span className="blocked-label">
+            <ShieldAlert /> Blocked
+          </span>
+        )}
+        {task.overdue && (
+          <span className="overdue-label">
+            <AlertCircle /> Overdue
+          </span>
+        )}
+      </div>
+      <button className="card-title" onClick={() => open({ type: 'taskDetail', value: task })}>
+        <strong>{task.title}</strong>
+        <span>
+          {task.clientName} · {task.projectName}
+        </span>
+      </button>
+      {task.description && <p>{task.description}</p>}
+      <div className="card-foot">
+        <Due task={task} />
+        {task.checklistTotal > 0 && (
+          <span>
+            <ListChecks />
+            {task.checklistCompleted}/{task.checklistTotal}
+          </span>
+        )}
+        <button
+          className="drag-handle"
+          {...attributes}
+          {...listeners}
+          aria-label={`Drag ${task.title}`}
+        >
+          <GripVertical />
+        </button>
+      </div>
+      <label className="keyboard-move">
+        <span className="sr-only">Move task status</span>
+        <select value={task.status} onChange={(e) => move(task, e.target.value as TaskStatus)}>
+          {TASK_STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {STATUS_LABEL[s]}
+            </option>
+          ))}
+        </select>
+      </label>
+    </article>
+  );
 }
 
-function Clients({clients,projects,open,refresh,flash}:{clients:Client[];projects:Project[];open:(m:Modal)=>void;refresh:()=>Promise<void>;flash:(s:string,t?:'success'|'error')=>void}){
-  const [query,setQuery]=useState('');const visible=clients.filter(c=>c.name.toLowerCase().includes(query.toLowerCase()));
-  const archive=async(c:Client)=>{if(!confirm(`Archive ${c.name}? Its Drive folder and project history will remain intact.`))return;await send(`/clients/${c.id}/archive`,'POST');await refresh();flash('Client archived.');};
-  return <><PageHead eyebrow="Relationships" title="Clients" body="A clear view of every client, their work, and Drive connection." action={<button onClick={()=>open({type:'client'})}><Plus/> New client</button>}/><SearchBox value={query} set={setQuery} placeholder="Search clients…"/>
-    <div className="card-grid">{visible.map(c=><article className={`entity-card ${c.status==='ARCHIVED'?'muted':''}`} key={c.id}><div className="entity-top"><div className="monogram large">{initials(c.name)}</div><DriveBadge status={c.driveStatus}/></div><Link className="entity-title" to={`/clients/${c.id}`}><h2>{c.name}</h2><span>{projects.filter(p=>p.clientId===c.id&&p.status!=='ARCHIVED').length} active projects</span></Link><div className="entity-contact">{c.contactName&&<span>{c.contactName}</span>}{c.email&&<a href={`mailto:${c.email}`}>{c.email}</a>}</div><div className="card-actions">{c.driveFolderUrl?<a className="secondary" href={c.driveFolderUrl} target="_blank" rel="noreferrer">Drive <ExternalLink/></a>:<span/>}<button className="icon-btn" onClick={()=>open({type:'client',value:c})} aria-label={`Edit ${c.name}`}><Settings/></button>{c.status==='ACTIVE'&&<button className="icon-btn danger" onClick={()=>archive(c)} aria-label={`Archive ${c.name}`}><Archive/></button>}</div></article>)}</div>{!visible.length&&<Empty title="No clients found" body={query?'Try a different search.':'Create your first client to begin.'} action={!query?<button onClick={()=>open({type:'client'})}><Plus/> New client</button>:undefined}/>}</>;
+function SettingsView({
+  branding,
+  refresh,
+  flash,
+}: {
+  branding: Branding;
+  refresh: () => Promise<void>;
+  flash: (s: string, t?: 'success' | 'error') => void;
+}) {
+  const [state, setState] = useState<{
+      configured: boolean;
+      connected: boolean;
+      rootFolderId?: string;
+      rootFolderUrl?: string;
+    } | null>(null),
+    [root, setRoot] = useState(''),
+    [brandForm, setBrandForm] = useState<Branding>(branding),
+    [brandBusy, setBrandBusy] = useState(false);
+  const load = useCallback(() => api<any>('/settings/drive').then(setState), []);
+  useEffect(() => {
+    load();
+  }, [load]);
+  useEffect(() => {
+    setBrandForm(branding);
+  }, [branding]);
+  const connect = async () => {
+    try {
+      const { url } = await api<{ url: string }>('/drive/oauth/start');
+      window.location.href = url;
+    } catch (e) {
+      flash((e as Error).message, 'error');
+    }
+  };
+  const saveRoot = async (e: FormEvent) => {
+    e.preventDefault();
+    try {
+      await send('/settings/drive/root', 'POST', { folderId: root });
+      await load();
+      await refresh();
+      flash('Command Center root folder saved.');
+    } catch (err) {
+      flash((err as Error).message, 'error');
+    }
+  };
+  const disconnect = async () => {
+    if (
+      !confirm(
+        'Disconnect Google Drive? Local project data will remain, and no Drive files will be deleted.',
+      )
+    )
+      return;
+    await send('/settings/drive/disconnect', 'POST');
+    await load();
+    flash('Google Drive disconnected.');
+  };
+  const saveBranding = async (e: FormEvent) => {
+    e.preventDefault();
+    setBrandBusy(true);
+    try {
+      await send('/settings/branding', 'PUT', brandForm);
+      await refresh();
+      flash('Sidebar branding saved.');
+    } catch (err) {
+      flash((err as Error).message, 'error');
+    } finally {
+      setBrandBusy(false);
+    }
+  };
+  return (
+    <>
+      <PageHead
+        eyebrow="Workspace"
+        title="Settings"
+        body="Connect storage, shape the sidebar brand, and control how this local command center behaves."
+      />
+      <div className="settings-layout">
+        <section className="panel settings-card">
+          <div className="settings-icon">
+            <ExternalLink />
+          </div>
+          <div className="section-title">
+            <div>
+              <span className="eyebrow">Integration</span>
+              <h2>Google Drive</h2>
+            </div>
+            <DriveBadge status={state?.connected ? 'CONNECTED' : 'DISCONNECTED'} />
+          </div>
+          <p>
+            Drive stores project files. Clients and projects are owned by Command Center — folder
+            names never create projects. OAuth tokens stay encrypted locally and never reach the
+            browser.
+          </p>
+          {!state?.configured && (
+            <div className="inline-warning">
+              <AlertCircle />
+              <div>
+                <strong>Credentials required</strong>
+                <span>
+                  Add the Google OAuth values and encryption key from <code>.env.example</code>,
+                  then restart the app.
+                </span>
+              </div>
+            </div>
+          )}
+          {state?.connected ? (
+            <>
+              <form onSubmit={saveRoot} className="root-form">
+                <label>
+                  Command Center root folder URL or ID
+                  <input
+                    value={root}
+                    onChange={(e) => setRoot(e.target.value)}
+                    placeholder={state.rootFolderId || 'Paste a Google Drive folder URL'}
+                    required
+                  />
+                </label>
+                <button type="submit">Verify & save root</button>
+              </form>
+              {state.rootFolderUrl && (
+                <a
+                  className="drive-root"
+                  target="_blank"
+                  rel="noreferrer"
+                  href={state.rootFolderUrl}
+                >
+                  <div>
+                    <FolderKanban />
+                    <span>
+                      <strong>Current root folder</strong>
+                      <small>{state.rootFolderId}</small>
+                    </span>
+                  </div>
+                  <ExternalLink />
+                </a>
+              )}
+              <button className="text-btn danger-text" onClick={disconnect}>
+                Disconnect Google Drive
+              </button>
+            </>
+          ) : (
+            <button onClick={connect} disabled={!state?.configured}>
+              Connect Google Drive
+            </button>
+          )}
+        </section>
+        <section className="panel settings-card">
+          <div className="settings-icon neutral">
+            <Pencil />
+          </div>
+          <div className="section-title">
+            <div>
+              <span className="eyebrow">Sidebar</span>
+              <h2>Branding</h2>
+            </div>
+            <span className="version-pill">v{APP_VERSION}</span>
+          </div>
+          <p>
+            Edit the mark, title, and tagline shown in the sidebar. Defaults also live in{' '}
+            <code>shared/branding.ts</code> if you prefer changing them in code.
+          </p>
+          <form className="form brand-form" onSubmit={saveBranding}>
+            <div className="form-row">
+              <label>
+                Mark
+                <input
+                  value={brandForm.mark}
+                  maxLength={4}
+                  onChange={(e) => setBrandForm({ ...brandForm, mark: e.target.value })}
+                  required
+                />
+              </label>
+              <label>
+                Title
+                <input
+                  value={brandForm.title}
+                  maxLength={40}
+                  onChange={(e) => setBrandForm({ ...brandForm, title: e.target.value })}
+                  required
+                />
+              </label>
+            </div>
+            <label>
+              Subtitle
+              <input
+                value={brandForm.subtitle}
+                maxLength={60}
+                onChange={(e) => setBrandForm({ ...brandForm, subtitle: e.target.value })}
+                required
+              />
+            </label>
+            <label>
+              Tagline
+              <input
+                value={brandForm.tagline}
+                maxLength={80}
+                onChange={(e) => setBrandForm({ ...brandForm, tagline: e.target.value })}
+                required
+              />
+            </label>
+            <div className="brand-preview">
+              <div className="brand-mark">{brandForm.mark || 'HC'}</div>
+              <div>
+                <strong>{brandForm.title || 'Hybrid'}</strong>
+                <span>{brandForm.subtitle || 'Command Center'}</span>
+              </div>
+            </div>
+            <button className="submit" disabled={brandBusy}>
+              {brandBusy ? (
+                <>
+                  <RefreshCw className="spin" /> Saving…
+                </>
+              ) : (
+                'Save branding'
+              )}
+            </button>
+          </form>
+        </section>
+        <section className="panel settings-card">
+          <div className="settings-icon neutral">
+            <Clock3 />
+          </div>
+          <div className="section-title">
+            <div>
+              <span className="eyebrow">Dates & deadlines</span>
+              <h2>Local timezone</h2>
+            </div>
+          </div>
+          <p>
+            Deadlines are interpreted at the end of each date in your current browser timezone.
+            Stored timestamps use UTC for consistency.
+          </p>
+          <div className="timezone">
+            <span>Detected timezone</span>
+            <strong>{Intl.DateTimeFormat().resolvedOptions().timeZone}</strong>
+          </div>
+        </section>
+        <section className="panel settings-card">
+          <div className="settings-icon neutral">
+            <FileText />
+          </div>
+          <div className="section-title">
+            <div>
+              <span className="eyebrow">Future modules</span>
+              <h2>Calendar & files</h2>
+            </div>
+          </div>
+          <p>
+            Route and service extension points are reserved. These modules can be added without
+            changing current task or project data.
+          </p>
+          <div className="future-list">
+            <span>
+              <CalendarDays /> Calendar views
+            </span>
+            <span>
+              <FileText /> Embedded Drive browser
+            </span>
+          </div>
+        </section>
+      </div>
+    </>
+  );
 }
 
-function ClientDetail({clients,projects,open}:{clients:Client[];projects:Project[];open:(m:Modal)=>void}){const {id}=useParams();const client=clients.find(c=>c.id===id);if(!client)return <Empty title="Client not found" body="This client may have been archived or removed."/>;const mine=projects.filter(p=>p.clientId===id);return <><div className="backline"><Link to="/clients">← All clients</Link></div><PageHead eyebrow="Client portfolio" title={client.name} body={client.notes||'Client details and every project in one place.'} action={<div className="head-actions">{client.driveFolderUrl&&<a className="secondary buttonlike" href={client.driveFolderUrl} target="_blank" rel="noreferrer">Open Drive <ExternalLink/></a>}<button onClick={()=>open({type:'project',clientId:client.id})}><Plus/> New project</button></div>}/><div className="detail-grid"><section className="panel detail-info"><h2>Client information</h2><dl><dt>Contact</dt><dd>{client.contactName||'Not added'}</dd><dt>Email</dt><dd>{client.email||'Not added'}</dd><dt>Phone</dt><dd>{client.phone||'Not added'}</dd><dt>Drive</dt><dd><DriveBadge status={client.driveStatus}/>{client.driveError&&<small>{client.driveError}</small>}</dd></dl><button className="secondary" onClick={()=>open({type:'client',value:client})}>Edit details</button></section><section className="panel span2"><div className="section-title"><div><span className="eyebrow">Portfolio</span><h2>Projects</h2></div></div>{mine.length?<div className="project-table">{mine.map(p=><Link to={`/projects/${p.id}`} key={p.id}><span className="priority-stripe" data-priority={p.priority}/><div><strong>{p.name}</strong><span>{p.status.replace('_',' ')} · {p.targetDeadline?`Due ${formatDate(p.targetDeadline)}`:'No deadline'}</span></div><DriveBadge status={p.driveStatus}/><ChevronRight/></Link>)}</div>:<Empty compact title="No projects yet" body="Create the first project for this client."/>}</section></div></>}
-
-function Projects({projects,clients,tasks,open,refresh,flash}:{projects:Project[];clients:Client[];tasks:Task[];open:(m:Modal)=>void;refresh:()=>Promise<void>;flash:(s:string,t?:'success'|'error')=>void}){const [query,setQuery]=useState(''),[clientFilter,setClientFilter]=useState('');const visible=projects.filter(p=>(!clientFilter||p.clientId===clientFilter)&&`${p.name} ${p.clientName}`.toLowerCase().includes(query.toLowerCase()));const archive=async(p:Project)=>{if(!confirm(`Archive ${p.name}? Tasks and Drive files will be preserved.`))return;await send(`/projects/${p.id}/archive`,'POST');await refresh();flash('Project archived.');};const remove=async(p:Project)=>{if(!confirm(`Delete project “${p.name}” from Command Center?\n\nThis removes the project and its tasks from the app only. Drive folders and files are not touched.`))return;try{await send(`/projects/${p.id}`,'DELETE');await refresh();flash('Project deleted from Command Center. Drive files were left alone.');}catch(e){flash((e as Error).message,'error');}};return <><PageHead eyebrow="Workstreams" title="Projects" body="Track scope, deadlines, task health, and storage from one view. Projects are owned by Command Center — not by Drive folder names." action={<button onClick={()=>open({type:'project'})}><Plus/> New project</button>}/><div className="filterbar"><SearchBox value={query} set={setQuery} placeholder="Search projects…"/><select value={clientFilter} onChange={e=>setClientFilter(e.target.value)} aria-label="Filter by client"><option value="">All clients</option>{clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div><div className="project-cards">{visible.map(p=>{const mine=tasks.filter(t=>t.projectId===p.id),done=mine.filter(t=>t.status==='COMPLETE').length,over=mine.filter(t=>t.overdue).length;return <article key={p.id}><div className="project-card-head"><span className="status-label">{p.status.replace('_',' ')}</span><DriveBadge status={p.driveStatus}/></div><Link to={`/projects/${p.id}`}><span className="client-name">{p.clientName}</span><h2>{p.name}</h2><p>{p.description||'No project description yet.'}</p></Link><div className="progress"><div><span>Task progress</span><strong>{done}/{mine.length}</strong></div><div className="progress-track"><span style={{width:`${mine.length?done/mine.length*100:0}%`}}/></div></div><div className="project-meta"><span className={over?'overdue-text':''}>{over?<><AlertCircle/>{over} overdue</>:<><Check/>On track</>}</span><span><CalendarDays/>{p.targetDeadline?formatDate(p.targetDeadline):'No deadline'}</span></div><div className="card-actions"><Link className="secondary buttonlike" to={`/kanban?project=${p.id}`}>Open board</Link><button className="icon-btn" onClick={()=>open({type:'project',value:p})} aria-label={`Edit ${p.name}`}><Settings/></button>{p.status!=='ARCHIVED'&&<button className="icon-btn danger" onClick={()=>archive(p)} aria-label={`Archive ${p.name}`}><Archive/></button>}<button className="icon-btn danger" onClick={()=>remove(p)} aria-label={`Delete ${p.name}`}><Trash2/></button></div></article>})}</div>{!visible.length&&<Empty title="No projects found" body="Adjust your filters or create a new project."/>}</>}
-
-function ProjectDetail({projects,tasks,open,refresh,flash}:{projects:Project[];tasks:Task[];open:(m:Modal)=>void;refresh:()=>Promise<void>;flash:(s:string,t?:'success'|'error')=>void}){const {id}=useParams();const nav=useNavigate();const p=projects.find(x=>x.id===id);if(!p)return <Empty title="Project not found" body="Return to Projects to choose another."/>;const mine=tasks.filter(t=>t.projectId===id);const remove=async()=>{if(!confirm(`Delete project “${p.name}” from Command Center?\n\nThis removes the project and its tasks from the app only. Drive folders and files are not touched.`))return;try{await send(`/projects/${p.id}`,'DELETE');await refresh();flash('Project deleted from Command Center. Drive files were left alone.');nav('/projects');}catch(e){flash((e as Error).message,'error');}};return <><div className="backline"><Link to="/projects">← All projects</Link></div><PageHead eyebrow={p.clientName||'Project'} title={p.name} body={p.description||'Project tasks, deadline, and Drive workspace.'} action={<div className="head-actions">{p.driveFolderUrl&&<a className="secondary buttonlike" href={p.driveFolderUrl} target="_blank" rel="noreferrer">Open Drive <ExternalLink/></a>}<button onClick={()=>open({type:'task',projectId:p.id})}><Plus/> New task</button></div>}/><div className="project-summary"><div><span>Status</span><strong>{p.status.replace('_',' ')}</strong></div><div><span>Deadline</span><strong>{p.targetDeadline?formatDate(p.targetDeadline):'Not set'}</strong></div><div><span>Priority</span><strong>{p.priority}</strong></div><div><span>Task health</span><strong>{mine.filter(t=>t.overdue).length} overdue</strong></div></div><div className="detail-actions"><Link className="buttonlike" to={`/kanban?project=${p.id}`}>Open project Kanban <ArrowRight/></Link><button className="secondary" onClick={()=>open({type:'project',value:p})}>Edit project</button><button className="secondary danger-outline" onClick={remove}><Trash2/> Delete project</button></div><section className="panel"><div className="section-title"><div><span className="eyebrow">Execution</span><h2>All project tasks</h2></div></div>{mine.length?<div className="task-table">{mine.map(t=><button key={t.id} onClick={()=>open({type:'taskDetail',value:t})}><StatusDot status={t.status}/><div><strong>{t.title}</strong><span>{STATUS_LABEL[t.status]}</span></div><PriorityBadge priority={t.priority}/><Due task={t}/><ChevronRight/></button>)}</div>:<Empty compact title="No tasks yet" body="Create a task to start planning the work."/>}</section></>}
-
-function Kanban({tasks,clients,projects,open,refresh,flash}:{tasks:Task[];clients:Client[];projects:Project[];open:(m:Modal)=>void;refresh:()=>Promise<void>;flash:(s:string,t?:'success'|'error')=>void}){
-  const [params,setParams]=useSearchParams();const project=params.get('project')||'',client=params.get('client')||'',flag=params.get('filter')||'';const [priority,setPriority]=useState('');
-  const filtered=tasks.filter(t=>(!project||t.projectId===project)&&(!client||t.clientId===client)&&(!priority||t.priority===priority)&&(!flag||(flag==='overdue'&&t.overdue)||(flag==='blocked'&&t.blocked)||(flag==='today'&&dueWithinDays(t.dueDate,0))||(flag==='week'&&dueWithinDays(t.dueDate,7))||(flag==='none'&&!t.dueDate)||(flag==='completed'&&t.status==='COMPLETE')));
-  const sensors=useSensors(useSensor(PointerSensor,{activationConstraint:{distance:6}}),useSensor(KeyboardSensor,{coordinateGetter:sortableKeyboardCoordinates}));
-  const move=async(task:Task,status:TaskStatus)=>{try{const ordered=filtered.filter(t=>t.status===status&&t.id!==task.id).map(t=>t.id);ordered.push(task.id);await send('/tasks/reorder','POST',{taskId:task.id,status,orderedIds:ordered});await refresh();flash(`Moved to ${STATUS_LABEL[status]}.`);}catch(e:any){if(e.status===409&&e.data?.code==='TASK_BLOCKED'){if(confirm(`${e.message}\n\nComplete anyway and override the dependency block?`)){await send('/tasks/reorder','POST',{taskId:task.id,status,orderedIds:[task.id],overrideBlocked:true});await refresh();flash('Task completed with dependency override.');}}else flash(e.message,'error');}};
-  const dragEnd=(event:DragEndEvent)=>{if(!event.over)return;const task=tasks.find(t=>t.id===event.active.id);if(!task)return;const overTask=tasks.find(t=>t.id===event.over!.id);const status=(TASK_STATUSES.includes(event.over.id as TaskStatus)?event.over.id:overTask?.status) as TaskStatus|undefined;if(status&&status!==task.status)move(task,status);};
-  const set=(key:string,value:string)=>{const next=new URLSearchParams(params);if(value)next.set(key,value);else next.delete(key);setParams(next)};
-  return <><PageHead eyebrow="Workflow" title="Kanban board" body={`${filtered.length} visible tasks · move work forward with drag, touch, or keyboard controls.`} action={<button onClick={()=>open({type:'task',projectId:project||undefined})}><Plus/> New task</button>}/><div className="board-filters"><label><span>Client</span><select value={client} onChange={e=>set('client',e.target.value)}><option value="">All clients</option>{clients.filter(c=>c.status==='ACTIVE').map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label><span>Project</span><select value={project} onChange={e=>set('project',e.target.value)}><option value="">All projects</option>{projects.filter(p=>!client||p.clientId===client).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label><label><span>Priority</span><select value={priority} onChange={e=>setPriority(e.target.value)}><option value="">Any priority</option>{['URGENT','HIGH','MEDIUM','LOW'].map(p=><option key={p}>{p}</option>)}</select></label><label><span>Focus</span><select value={flag} onChange={e=>set('filter',e.target.value)}><option value="">All tasks</option><option value="overdue">Overdue</option><option value="today">Due today</option><option value="week">Due this week</option><option value="none">No due date</option><option value="blocked">Blocked</option><option value="completed">Completed</option></select></label></div>
-    <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={dragEnd}><div className="kanban-board">{TASK_STATUSES.map(status=><KanbanColumn key={status} status={status} tasks={filtered.filter(t=>t.status===status)} open={open} move={move}/>)}</div></DndContext>
-  </>;
+function ModalHost({
+  modal,
+  clients,
+  projects,
+  tasks,
+  close,
+  saved,
+  refresh,
+  flash,
+}: {
+  modal: NonNullable<Modal>;
+  clients: Client[];
+  projects: Project[];
+  tasks: Task[];
+  close: () => void;
+  saved: (s: string) => Promise<void>;
+  refresh: () => Promise<void>;
+  flash: (s: string, t?: 'success' | 'error') => void;
+}) {
+  if (modal.type === 'client')
+    return (
+      <EntityModal title={modal.value ? 'Edit client' : 'New client'} close={close}>
+        <ClientForm value={modal.value} saved={saved} />
+      </EntityModal>
+    );
+  if (modal.type === 'project')
+    return (
+      <EntityModal title={modal.value ? 'Edit project' : 'New project'} close={close}>
+        <ProjectForm
+          value={modal.value}
+          defaultClient={modal.clientId}
+          clients={clients}
+          saved={saved}
+        />
+      </EntityModal>
+    );
+  if (modal.type === 'task')
+    return (
+      <EntityModal title={modal.value ? 'Edit task' : 'New task'} close={close}>
+        <TaskForm
+          value={modal.value}
+          defaultProject={modal.projectId}
+          projects={projects}
+          saved={saved}
+        />
+      </EntityModal>
+    );
+  return (
+    <EntityModal title="Task details" wide close={close}>
+      <TaskDetail
+        task={tasks.find((t) => t.id === modal.value.id) || modal.value}
+        tasks={tasks}
+        close={close}
+        refresh={refresh}
+        flash={flash}
+      />
+    </EntityModal>
+  );
 }
-function KanbanColumn({status,tasks,open,move}:{status:TaskStatus;tasks:Task[];open:(m:Modal)=>void;move:(t:Task,s:TaskStatus)=>void}){const {setNodeRef,isOver}=useDroppable({id:status});return <section ref={setNodeRef} className={`kanban-column ${isOver?'drop-active':''}`}><header><div><span className={`status-dot ${status.toLowerCase()}`}/><h2>{STATUS_LABEL[status]}</h2><span className="count">{tasks.length}</span></div><p>{STATUS_HELP[status]}</p></header><SortableContext items={tasks.map(t=>t.id)} strategy={verticalListSortingStrategy}><div className="column-body">{tasks.map(t=><KanbanCard key={t.id} task={t} open={open} move={move}/>)}{!tasks.length&&<div className="column-empty">Drop tasks here</div>}</div></SortableContext></section>}
-function KanbanCard({task,open,move}:{task:Task;open:(m:Modal)=>void;move:(t:Task,s:TaskStatus)=>void}){const {attributes,listeners,setNodeRef,transform,transition,isDragging}=useSortable({id:task.id});return <article ref={setNodeRef} style={{transform:CSS.Transform.toString(transform),transition}} className={`kanban-card ${isDragging?'dragging':''} ${task.overdue?'is-overdue':''} ${task.blocked?'is-blocked':''}`}><div className="card-labels"><PriorityBadge priority={task.priority}/>{task.blocked&&<span className="blocked-label"><ShieldAlert/> Blocked</span>}{task.overdue&&<span className="overdue-label"><AlertCircle/> Overdue</span>}</div><button className="card-title" onClick={()=>open({type:'taskDetail',value:task})}><strong>{task.title}</strong><span>{task.clientName} · {task.projectName}</span></button>{task.description&&<p>{task.description}</p>}<div className="card-foot"><Due task={task}/>{task.checklistTotal>0&&<span><ListChecks/>{task.checklistCompleted}/{task.checklistTotal}</span>}<button className="drag-handle" {...attributes} {...listeners} aria-label={`Drag ${task.title}`}><GripVertical/></button></div><label className="keyboard-move"><span className="sr-only">Move task status</span><select value={task.status} onChange={e=>move(task,e.target.value as TaskStatus)}>{TASK_STATUSES.map(s=><option key={s} value={s}>{STATUS_LABEL[s]}</option>)}</select></label></article>}
+function EntityModal({
+  title,
+  close,
+  children,
+  wide,
+}: {
+  title: string;
+  close: () => void;
+  children: ReactNode;
+  wide?: boolean;
+}) {
+  return (
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) close();
+      }}
+    >
+      <section
+        className={`modal ${wide ? 'wide' : ''}`}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+      >
+        <header>
+          <div>
+            <span className="eyebrow">Command Center</span>
+            <h2 id="modal-title">{title}</h2>
+          </div>
+          <button className="icon-btn" onClick={close} aria-label="Close">
+            <X />
+          </button>
+        </header>
+        {children}
+      </section>
+    </div>
+  );
+}
 
-function SettingsView({branding,refresh,flash}:{branding:Branding;refresh:()=>Promise<void>;flash:(s:string,t?:'success'|'error')=>void}){const [state,setState]=useState<{configured:boolean;connected:boolean;rootFolderId?:string;rootFolderUrl?:string}|null>(null),[root,setRoot]=useState(''),[brandForm,setBrandForm]=useState<Branding>(branding),[brandBusy,setBrandBusy]=useState(false);const load=useCallback(()=>api<any>('/settings/drive').then(setState),[]);useEffect(()=>{load();},[load]);useEffect(()=>{setBrandForm(branding);},[branding]);const connect=async()=>{try{const {url}=await api<{url:string}>('/drive/oauth/start');window.location.href=url;}catch(e){flash((e as Error).message,'error');}};const saveRoot=async(e:FormEvent)=>{e.preventDefault();try{await send('/settings/drive/root','POST',{folderId:root});await load();await refresh();flash('Command Center root folder saved.');}catch(err){flash((err as Error).message,'error');}};const disconnect=async()=>{if(!confirm('Disconnect Google Drive? Local project data will remain, and no Drive files will be deleted.'))return;await send('/settings/drive/disconnect','POST');await load();flash('Google Drive disconnected.');};const saveBranding=async(e:FormEvent)=>{e.preventDefault();setBrandBusy(true);try{await send('/settings/branding','PUT',brandForm);await refresh();flash('Sidebar branding saved.');}catch(err){flash((err as Error).message,'error');}finally{setBrandBusy(false);}};return <><PageHead eyebrow="Workspace" title="Settings" body="Connect storage, shape the sidebar brand, and control how this local command center behaves."/><div className="settings-layout"><section className="panel settings-card"><div className="settings-icon"><ExternalLink/></div><div className="section-title"><div><span className="eyebrow">Integration</span><h2>Google Drive</h2></div><DriveBadge status={state?.connected?'CONNECTED':'DISCONNECTED'}/></div><p>Drive stores project files. Clients and projects are owned by Command Center — folder names never create projects. OAuth tokens stay encrypted locally and never reach the browser.</p>{!state?.configured&&<div className="inline-warning"><AlertCircle/><div><strong>Credentials required</strong><span>Add the Google OAuth values and encryption key from <code>.env.example</code>, then restart the app.</span></div></div>}{state?.connected?<><form onSubmit={saveRoot} className="root-form"><label>Command Center root folder URL or ID<input value={root} onChange={e=>setRoot(e.target.value)} placeholder={state.rootFolderId||'Paste a Google Drive folder URL'} required/></label><button type="submit">Verify & save root</button></form>{state.rootFolderUrl&&<a className="drive-root" target="_blank" rel="noreferrer" href={state.rootFolderUrl}><div><FolderKanban/><span><strong>Current root folder</strong><small>{state.rootFolderId}</small></span></div><ExternalLink/></a>}<button className="text-btn danger-text" onClick={disconnect}>Disconnect Google Drive</button></>:<button onClick={connect} disabled={!state?.configured}>Connect Google Drive</button>}</section><section className="panel settings-card"><div className="settings-icon neutral"><Pencil/></div><div className="section-title"><div><span className="eyebrow">Sidebar</span><h2>Branding</h2></div><span className="version-pill">v{APP_VERSION}</span></div><p>Edit the mark, title, and tagline shown in the sidebar. Defaults also live in <code>shared/branding.ts</code> if you prefer changing them in code.</p><form className="form brand-form" onSubmit={saveBranding}><div className="form-row"><label>Mark<input value={brandForm.mark} maxLength={4} onChange={e=>setBrandForm({...brandForm,mark:e.target.value})} required/></label><label>Title<input value={brandForm.title} maxLength={40} onChange={e=>setBrandForm({...brandForm,title:e.target.value})} required/></label></div><label>Subtitle<input value={brandForm.subtitle} maxLength={60} onChange={e=>setBrandForm({...brandForm,subtitle:e.target.value})} required/></label><label>Tagline<input value={brandForm.tagline} maxLength={80} onChange={e=>setBrandForm({...brandForm,tagline:e.target.value})} required/></label><div className="brand-preview"><div className="brand-mark">{brandForm.mark||'HC'}</div><div><strong>{brandForm.title||'Hybrid'}</strong><span>{brandForm.subtitle||'Command Center'}</span></div></div><button className="submit" disabled={brandBusy}>{brandBusy?<><RefreshCw className="spin"/> Saving…</>:'Save branding'}</button></form></section><section className="panel settings-card"><div className="settings-icon neutral"><Clock3/></div><div className="section-title"><div><span className="eyebrow">Dates & deadlines</span><h2>Local timezone</h2></div></div><p>Deadlines are interpreted at the end of each date in your current browser timezone. Stored timestamps use UTC for consistency.</p><div className="timezone"><span>Detected timezone</span><strong>{Intl.DateTimeFormat().resolvedOptions().timeZone}</strong></div></section><section className="panel settings-card"><div className="settings-icon neutral"><FileText/></div><div className="section-title"><div><span className="eyebrow">Future modules</span><h2>Calendar & files</h2></div></div><p>Route and service extension points are reserved. These modules can be added without changing current task or project data.</p><div className="future-list"><span><CalendarDays/> Calendar views</span><span><FileText/> Embedded Drive browser</span></div></section></div></>}
+function ClientForm({ value, saved }: { value?: Client; saved: (s: string) => Promise<void> }) {
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState('');
+  const submit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setBusy(true);
+    const data = Object.fromEntries(new FormData(e.currentTarget));
+    try {
+      await send(value ? `/clients/${value.id}` : '/clients', value ? 'PATCH' : 'POST', data);
+      await saved(
+        value ? 'Client updated.' : 'Client created. Drive setup is continuing in the background.',
+      );
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <form className="form" onSubmit={submit}>
+      <Field label="Client name" name="name" value={value?.name} required />
+      <div className="form-row">
+        <Field label="Contact name" name="contactName" value={value?.contactName} />
+        <Field label="Email" name="email" type="email" value={value?.email} />
+      </div>
+      <div className="form-row">
+        <Field label="Phone" name="phone" value={value?.phone} />
+        <Field label="Website" name="website" type="url" value={value?.website} />
+      </div>
+      <TextArea label="Notes" name="notes" value={value?.notes} />
+      <FormEnd error={error} busy={busy} label={value ? 'Save changes' : 'Create client'} />
+    </form>
+  );
+}
+function ProjectForm({
+  value,
+  defaultClient,
+  clients,
+  saved,
+}: {
+  value?: Project;
+  defaultClient?: string;
+  clients: Client[];
+  saved: (s: string) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState('');
+  const submit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setBusy(true);
+    const data = Object.fromEntries(new FormData(e.currentTarget));
+    try {
+      await send(value ? `/projects/${value.id}` : '/projects', value ? 'PATCH' : 'POST', data);
+      await saved(
+        value ? 'Project updated.' : 'Project created. Drive folders are being prepared.',
+      );
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <form className="form" onSubmit={submit}>
+      <label>
+        Client
+        <select name="clientId" defaultValue={value?.clientId || defaultClient || ''} required>
+          <option value="" disabled>
+            Select a client
+          </option>
+          {clients
+            .filter((c) => c.status === 'ACTIVE' || c.id === value?.clientId)
+            .map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+        </select>
+      </label>
+      <Field label="Project name" name="name" value={value?.name} required />
+      <TextArea label="Description" name="description" value={value?.description} />
+      <div className="form-row">
+        <Select
+          label="Status"
+          name="status"
+          value={value?.status || 'ACTIVE'}
+          options={['PLANNING', 'ACTIVE', 'ON_HOLD', 'COMPLETE']}
+        />
+        <Select
+          label="Priority"
+          name="priority"
+          value={value?.priority || 'MEDIUM'}
+          options={['LOW', 'MEDIUM', 'HIGH', 'URGENT']}
+        />
+      </div>
+      <div className="form-row">
+        <Field
+          label="Start date"
+          name="startDate"
+          type="date"
+          value={dateInput(value?.startDate)}
+        />
+        <Field
+          label="Target deadline"
+          name="targetDeadline"
+          type="date"
+          value={dateInput(value?.targetDeadline)}
+        />
+      </div>
+      <TextArea label="Notes" name="notes" value={value?.notes} />
+      <FormEnd error={error} busy={busy} label={value ? 'Save changes' : 'Create project'} />
+    </form>
+  );
+}
+function TaskForm({
+  value,
+  defaultProject,
+  projects,
+  saved,
+}: {
+  value?: Task;
+  defaultProject?: string;
+  projects: Project[];
+  saved: (s: string) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState('');
+  const submit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setBusy(true);
+    const data = Object.fromEntries(new FormData(e.currentTarget));
+    try {
+      await send(value ? `/tasks/${value.id}` : '/tasks', value ? 'PATCH' : 'POST', data);
+      await saved(value ? 'Task updated.' : 'Task added to the board.');
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <form className="form" onSubmit={submit}>
+      <label>
+        Project
+        <select name="projectId" defaultValue={value?.projectId || defaultProject || ''} required>
+          <option value="" disabled>
+            Select a project
+          </option>
+          {projects
+            .filter((p) => p.status !== 'ARCHIVED')
+            .map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.clientName} — {p.name}
+              </option>
+            ))}
+        </select>
+      </label>
+      <Field label="Task title" name="title" value={value?.title} required />
+      <TextArea label="Description" name="description" value={value?.description} />
+      <div className="form-row">
+        <Select
+          label="Status"
+          name="status"
+          value={value?.status || 'BACKLOG'}
+          options={TASK_STATUSES}
+        />
+        <Select
+          label="Priority"
+          name="priority"
+          value={value?.priority || 'MEDIUM'}
+          options={['LOW', 'MEDIUM', 'HIGH', 'URGENT']}
+        />
+      </div>
+      <div className="form-row">
+        <Field
+          label="Start date"
+          name="startDate"
+          type="date"
+          value={dateInput(value?.startDate)}
+        />
+        <Field label="Due date" name="dueDate" type="date" value={dateInput(value?.dueDate)} />
+      </div>
+      <TextArea label="Notes" name="notes" value={value?.notes} />
+      <FormEnd error={error} busy={busy} label={value ? 'Save changes' : 'Create task'} />
+    </form>
+  );
+}
 
-function ModalHost({modal,clients,projects,tasks,close,saved,refresh,flash}:{modal:NonNullable<Modal>;clients:Client[];projects:Project[];tasks:Task[];close:()=>void;saved:(s:string)=>Promise<void>;refresh:()=>Promise<void>;flash:(s:string,t?:'success'|'error')=>void}){if(modal.type==='client')return <EntityModal title={modal.value?'Edit client':'New client'} close={close}><ClientForm value={modal.value} saved={saved}/></EntityModal>;if(modal.type==='project')return <EntityModal title={modal.value?'Edit project':'New project'} close={close}><ProjectForm value={modal.value} defaultClient={modal.clientId} clients={clients} saved={saved}/></EntityModal>;if(modal.type==='task')return <EntityModal title={modal.value?'Edit task':'New task'} close={close}><TaskForm value={modal.value} defaultProject={modal.projectId} projects={projects} saved={saved}/></EntityModal>;return <EntityModal title="Task details" wide close={close}><TaskDetail task={tasks.find(t=>t.id===modal.value.id)||modal.value} tasks={tasks} close={close} refresh={refresh} flash={flash}/></EntityModal>}
-function EntityModal({title,close,children,wide}:{title:string;close:()=>void;children:ReactNode;wide?:boolean}){return <div className="modal-backdrop" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)close()}}><section className={`modal ${wide?'wide':''}`} role="dialog" aria-modal="true" aria-labelledby="modal-title"><header><div><span className="eyebrow">Command Center</span><h2 id="modal-title">{title}</h2></div><button className="icon-btn" onClick={close} aria-label="Close"><X/></button></header>{children}</section></div>}
+function TaskDetail({
+  task,
+  tasks,
+  close,
+  refresh,
+  flash,
+}: {
+  task: Task;
+  tasks: Task[];
+  close: () => void;
+  refresh: () => Promise<void>;
+  flash: (s: string, t?: 'success' | 'error') => void;
+}) {
+  const [text, setText] = useState(''),
+    [dep, setDep] = useState(''),
+    [renaming, setRenaming] = useState(false),
+    [title, setTitle] = useState(task.title);
+  useEffect(() => {
+    setTitle(task.title);
+    setRenaming(false);
+  }, [task.id, task.title]);
+  const mutate = async (work: () => Promise<unknown>, message: string) => {
+    try {
+      await work();
+      await refresh();
+      flash(message);
+    } catch (e) {
+      flash((e as Error).message, 'error');
+    }
+  };
+  const complete = async () => {
+    try {
+      await send(`/tasks/${task.id}`, 'PATCH', { status: 'COMPLETE' });
+      await refresh();
+      flash('Task completed.');
+      close();
+    } catch (e: any) {
+      if (e.status === 409 && confirm(`${e.message}\n\nOverride the block and complete anyway?`)) {
+        await send(`/tasks/${task.id}`, 'PATCH', { status: 'COMPLETE', overrideBlocked: true });
+        await refresh();
+        flash('Task completed with override.');
+        close();
+      } else flash(e.message, 'error');
+    }
+  };
+  const rename = async (e: FormEvent) => {
+    e.preventDefault();
+    const next = title.trim();
+    if (!next || next === task.title) {
+      setRenaming(false);
+      setTitle(task.title);
+      return;
+    }
+    try {
+      await send(`/tasks/${task.id}`, 'PATCH', { title: next });
+      await refresh();
+      setRenaming(false);
+      flash('Task renamed.');
+    } catch (err) {
+      flash((err as Error).message, 'error');
+    }
+  };
+  const remove = async () => {
+    if (
+      !confirm(
+        `Delete task “${task.title}”?\n\nThis removes the task from Command Center only. Drive folders and files are not touched.`,
+      )
+    )
+      return;
+    try {
+      await send(`/tasks/${task.id}`, 'DELETE');
+      await refresh();
+      flash('Task deleted from Command Center. Drive files were left alone.');
+      close();
+    } catch (err) {
+      flash((err as Error).message, 'error');
+    }
+  };
+  return (
+    <div className="task-detail">
+      <div className="task-detail-head">
+        <div className="card-labels">
+          <PriorityBadge priority={task.priority} />
+          {task.blocked && (
+            <span className="blocked-label">
+              <ShieldAlert /> Blocked
+            </span>
+          )}
+          {task.overdue && (
+            <span className="overdue-label">
+              <AlertCircle /> Overdue
+            </span>
+          )}
+        </div>
+        {renaming ? (
+          <form className="rename-form" onSubmit={rename}>
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              autoFocus
+              aria-label="Task title"
+            />
+            <button type="submit">
+              <Check /> Save
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => {
+                setRenaming(false);
+                setTitle(task.title);
+              }}
+            >
+              Cancel
+            </button>
+          </form>
+        ) : (
+          <div className="title-row">
+            <h3>{task.title}</h3>
+            <button className="icon-btn" onClick={() => setRenaming(true)} aria-label="Rename task">
+              <Pencil />
+            </button>
+          </div>
+        )}
+        <span>
+          {task.clientName} · {task.projectName}
+        </span>
+        {task.description && <p>{task.description}</p>}
+        <div className="detail-chips">
+          <span>
+            <FolderKanban />
+            {STATUS_LABEL[task.status]}
+          </span>
+          <Due task={task} />
+        </div>
+      </div>
+      {task.blocked && (
+        <div className="inline-warning blocked">
+          <ShieldAlert />
+          <div>
+            <strong>
+              Waiting on {task.blockingDependencies.length} task
+              {task.blockingDependencies.length === 1 ? '' : 's'}
+            </strong>
+            <span>{task.blockingDependencies.map((d) => d.title).join(', ')}</span>
+          </div>
+        </div>
+      )}
+      <section>
+        <div className="section-title">
+          <div>
+            <span className="eyebrow">Progress</span>
+            <h2>
+              Checklist{' '}
+              <small>
+                {task.checklistCompleted}/{task.checklistTotal}
+              </small>
+            </h2>
+          </div>
+        </div>
+        <div className="checklist">
+          {task.checklist.map((item) => (
+            <label key={item.id}>
+              <input
+                type="checkbox"
+                checked={item.completed}
+                onChange={() =>
+                  mutate(
+                    () => send(`/checklist/${item.id}`, 'PATCH', { completed: !item.completed }),
+                    'Checklist updated.',
+                  )
+                }
+              />
+              <span>{item.text}</span>
+              <button
+                type="button"
+                onClick={() =>
+                  mutate(() => send(`/checklist/${item.id}`, 'DELETE'), 'Checklist item removed.')
+                }
+                aria-label={`Delete ${item.text}`}
+              >
+                <X />
+              </button>
+            </label>
+          ))}
+        </div>
+        <form
+          className="inline-add"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!text.trim()) return;
+            mutate(
+              () => send(`/tasks/${task.id}/checklist`, 'POST', { text }),
+              'Checklist item added.',
+            );
+            setText('');
+          }}
+        >
+          <input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Add a checklist item"
+          />
+          <button>
+            <Plus /> Add
+          </button>
+        </form>
+      </section>
+      <section>
+        <div className="section-title">
+          <div>
+            <span className="eyebrow">Sequencing</span>
+            <h2>Dependencies</h2>
+          </div>
+        </div>
+        {task.dependencyIds.length > 0 && (
+          <div className="dependency-list">
+            {task.dependencyIds.map((depId) => {
+              const d = tasks.find((t) => t.id === depId);
+              return (
+                d && (
+                  <div key={depId}>
+                    <StatusDot status={d.status} />
+                    <span>{d.title}</span>
+                    <button
+                      onClick={() =>
+                        mutate(
+                          () => send(`/tasks/${task.id}/dependencies/${depId}`, 'DELETE'),
+                          'Dependency removed.',
+                        )
+                      }
+                      aria-label={`Remove ${d.title}`}
+                    >
+                      <X />
+                    </button>
+                  </div>
+                )
+              );
+            })}
+          </div>
+        )}
+        <form
+          className="inline-add"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!dep) return;
+            mutate(
+              () => send(`/tasks/${task.id}/dependencies`, 'POST', { dependencyId: dep }),
+              'Dependency added.',
+            );
+            setDep('');
+          }}
+        >
+          <select value={dep} onChange={(e) => setDep(e.target.value)}>
+            <option value="">Choose a task…</option>
+            {tasks
+              .filter((t) => t.id !== task.id && !task.dependencyIds.includes(t.id))
+              .map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.projectName} — {t.title}
+                </option>
+              ))}
+          </select>
+          <button disabled={!dep}>
+            <Plus /> Add
+          </button>
+        </form>
+      </section>
+      <footer>
+        <button className="secondary danger-outline" onClick={remove}>
+          <Trash2 /> Delete task
+        </button>
+        {task.status !== 'COMPLETE' && (
+          <button onClick={complete}>
+            <Check /> Mark complete
+          </button>
+        )}
+        <button className="secondary" onClick={close}>
+          Close
+        </button>
+      </footer>
+    </div>
+  );
+}
 
-function ClientForm({value,saved}:{value?:Client;saved:(s:string)=>Promise<void>}){const [busy,setBusy]=useState(false),[error,setError]=useState('');const submit=async(e:FormEvent<HTMLFormElement>)=>{e.preventDefault();setBusy(true);const data=Object.fromEntries(new FormData(e.currentTarget));try{await send(value?`/clients/${value.id}`:'/clients',value?'PATCH':'POST',data);await saved(value?'Client updated.':'Client created. Drive setup is continuing in the background.');}catch(err){setError((err as Error).message);setBusy(false);}};return <form className="form" onSubmit={submit}><Field label="Client name" name="name" value={value?.name} required/><div className="form-row"><Field label="Contact name" name="contactName" value={value?.contactName}/><Field label="Email" name="email" type="email" value={value?.email}/></div><div className="form-row"><Field label="Phone" name="phone" value={value?.phone}/><Field label="Website" name="website" type="url" value={value?.website}/></div><TextArea label="Notes" name="notes" value={value?.notes}/><FormEnd error={error} busy={busy} label={value?'Save changes':'Create client'}/></form>}
-function ProjectForm({value,defaultClient,clients,saved}:{value?:Project;defaultClient?:string;clients:Client[];saved:(s:string)=>Promise<void>}){const [busy,setBusy]=useState(false),[error,setError]=useState('');const submit=async(e:FormEvent<HTMLFormElement>)=>{e.preventDefault();setBusy(true);const data=Object.fromEntries(new FormData(e.currentTarget));try{await send(value?`/projects/${value.id}`:'/projects',value?'PATCH':'POST',data);await saved(value?'Project updated.':'Project created. Drive folders are being prepared.');}catch(err){setError((err as Error).message);setBusy(false);}};return <form className="form" onSubmit={submit}><label>Client<select name="clientId" defaultValue={value?.clientId||defaultClient||''} required><option value="" disabled>Select a client</option>{clients.filter(c=>c.status==='ACTIVE'||c.id===value?.clientId).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label><Field label="Project name" name="name" value={value?.name} required/><TextArea label="Description" name="description" value={value?.description}/><div className="form-row"><Select label="Status" name="status" value={value?.status||'ACTIVE'} options={['PLANNING','ACTIVE','ON_HOLD','COMPLETE']}/><Select label="Priority" name="priority" value={value?.priority||'MEDIUM'} options={['LOW','MEDIUM','HIGH','URGENT']}/></div><div className="form-row"><Field label="Start date" name="startDate" type="date" value={dateInput(value?.startDate)}/><Field label="Target deadline" name="targetDeadline" type="date" value={dateInput(value?.targetDeadline)}/></div><TextArea label="Notes" name="notes" value={value?.notes}/><FormEnd error={error} busy={busy} label={value?'Save changes':'Create project'}/></form>}
-function TaskForm({value,defaultProject,projects,saved}:{value?:Task;defaultProject?:string;projects:Project[];saved:(s:string)=>Promise<void>}){const [busy,setBusy]=useState(false),[error,setError]=useState('');const submit=async(e:FormEvent<HTMLFormElement>)=>{e.preventDefault();setBusy(true);const data=Object.fromEntries(new FormData(e.currentTarget));try{await send(value?`/tasks/${value.id}`:'/tasks',value?'PATCH':'POST',data);await saved(value?'Task updated.':'Task added to the board.');}catch(err){setError((err as Error).message);setBusy(false);}};return <form className="form" onSubmit={submit}><label>Project<select name="projectId" defaultValue={value?.projectId||defaultProject||''} required><option value="" disabled>Select a project</option>{projects.filter(p=>p.status!=='ARCHIVED').map(p=><option key={p.id} value={p.id}>{p.clientName} — {p.name}</option>)}</select></label><Field label="Task title" name="title" value={value?.title} required/><TextArea label="Description" name="description" value={value?.description}/><div className="form-row"><Select label="Status" name="status" value={value?.status||'BACKLOG'} options={TASK_STATUSES}/><Select label="Priority" name="priority" value={value?.priority||'MEDIUM'} options={['LOW','MEDIUM','HIGH','URGENT']}/></div><div className="form-row"><Field label="Start date" name="startDate" type="date" value={dateInput(value?.startDate)}/><Field label="Due date" name="dueDate" type="date" value={dateInput(value?.dueDate)}/></div><TextArea label="Notes" name="notes" value={value?.notes}/><FormEnd error={error} busy={busy} label={value?'Save changes':'Create task'}/></form>}
-
-function TaskDetail({task,tasks,close,refresh,flash}:{task:Task;tasks:Task[];close:()=>void;refresh:()=>Promise<void>;flash:(s:string,t?:'success'|'error')=>void}){const [text,setText]=useState(''),[dep,setDep]=useState(''),[renaming,setRenaming]=useState(false),[title,setTitle]=useState(task.title);useEffect(()=>{setTitle(task.title);setRenaming(false);},[task.id,task.title]);const mutate=async(work:()=>Promise<unknown>,message:string)=>{try{await work();await refresh();flash(message);}catch(e){flash((e as Error).message,'error');}};const complete=async()=>{try{await send(`/tasks/${task.id}`,'PATCH',{status:'COMPLETE'});await refresh();flash('Task completed.');close();}catch(e:any){if(e.status===409&&confirm(`${e.message}\n\nOverride the block and complete anyway?`)){await send(`/tasks/${task.id}`,'PATCH',{status:'COMPLETE',overrideBlocked:true});await refresh();flash('Task completed with override.');close();}else flash(e.message,'error');}};const rename=async(e:FormEvent)=>{e.preventDefault();const next=title.trim();if(!next||next===task.title){setRenaming(false);setTitle(task.title);return;}try{await send(`/tasks/${task.id}`,'PATCH',{title:next});await refresh();setRenaming(false);flash('Task renamed.');}catch(err){flash((err as Error).message,'error');}};const remove=async()=>{if(!confirm(`Delete task “${task.title}”?\n\nThis removes the task from Command Center only. Drive folders and files are not touched.`))return;try{await send(`/tasks/${task.id}`,'DELETE');await refresh();flash('Task deleted from Command Center. Drive files were left alone.');close();}catch(err){flash((err as Error).message,'error');}};return <div className="task-detail"><div className="task-detail-head"><div className="card-labels"><PriorityBadge priority={task.priority}/>{task.blocked&&<span className="blocked-label"><ShieldAlert/> Blocked</span>}{task.overdue&&<span className="overdue-label"><AlertCircle/> Overdue</span>}</div>{renaming?<form className="rename-form" onSubmit={rename}><input value={title} onChange={e=>setTitle(e.target.value)} autoFocus aria-label="Task title"/><button type="submit"><Check/> Save</button><button type="button" className="secondary" onClick={()=>{setRenaming(false);setTitle(task.title);}}>Cancel</button></form>:<div className="title-row"><h3>{task.title}</h3><button className="icon-btn" onClick={()=>setRenaming(true)} aria-label="Rename task"><Pencil/></button></div>}<span>{task.clientName} · {task.projectName}</span>{task.description&&<p>{task.description}</p>}<div className="detail-chips"><span><FolderKanban/>{STATUS_LABEL[task.status]}</span><Due task={task}/></div></div>{task.blocked&&<div className="inline-warning blocked"><ShieldAlert/><div><strong>Waiting on {task.blockingDependencies.length} task{task.blockingDependencies.length===1?'':'s'}</strong><span>{task.blockingDependencies.map(d=>d.title).join(', ')}</span></div></div>}<section><div className="section-title"><div><span className="eyebrow">Progress</span><h2>Checklist <small>{task.checklistCompleted}/{task.checklistTotal}</small></h2></div></div><div className="checklist">{task.checklist.map(item=><label key={item.id}><input type="checkbox" checked={item.completed} onChange={()=>mutate(()=>send(`/checklist/${item.id}`,'PATCH',{completed:!item.completed}),'Checklist updated.')}/><span>{item.text}</span><button type="button" onClick={()=>mutate(()=>send(`/checklist/${item.id}`,'DELETE'),'Checklist item removed.')} aria-label={`Delete ${item.text}`}><X/></button></label>)}</div><form className="inline-add" onSubmit={e=>{e.preventDefault();if(!text.trim())return;mutate(()=>send(`/tasks/${task.id}/checklist`,'POST',{text}),'Checklist item added.');setText('')}}><input value={text} onChange={e=>setText(e.target.value)} placeholder="Add a checklist item"/><button><Plus/> Add</button></form></section><section><div className="section-title"><div><span className="eyebrow">Sequencing</span><h2>Dependencies</h2></div></div>{task.dependencyIds.length>0&&<div className="dependency-list">{task.dependencyIds.map(depId=>{const d=tasks.find(t=>t.id===depId);return d&&<div key={depId}><StatusDot status={d.status}/><span>{d.title}</span><button onClick={()=>mutate(()=>send(`/tasks/${task.id}/dependencies/${depId}`,'DELETE'),'Dependency removed.')} aria-label={`Remove ${d.title}`}><X/></button></div>})}</div>}<form className="inline-add" onSubmit={e=>{e.preventDefault();if(!dep)return;mutate(()=>send(`/tasks/${task.id}/dependencies`,'POST',{dependencyId:dep}),'Dependency added.');setDep('')}}><select value={dep} onChange={e=>setDep(e.target.value)}><option value="">Choose a task…</option>{tasks.filter(t=>t.id!==task.id&&!task.dependencyIds.includes(t.id)).map(t=><option key={t.id} value={t.id}>{t.projectName} — {t.title}</option>)}</select><button disabled={!dep}><Plus/> Add</button></form></section><footer><button className="secondary danger-outline" onClick={remove}><Trash2/> Delete task</button>{task.status!=='COMPLETE'&&<button onClick={complete}><Check/> Mark complete</button>}<button className="secondary" onClick={close}>Close</button></footer></div>}
-
-function Field({label,name,value,type='text',required}:{label:string;name:string;value?:string;type?:string;required?:boolean}){return <label>{label}<input name={name} type={type} defaultValue={value||''} required={required}/></label>}
-function TextArea({label,name,value}:{label:string;name:string;value?:string}){return <label>{label}<textarea name={name} defaultValue={value||''} rows={3}/></label>}
-function Select({label,name,value,options}:{label:string;name:string;value:string;options:readonly string[]}){return <label>{label}<select name={name} defaultValue={value}>{options.map(o=><option key={o} value={o}>{o.replaceAll('_',' ')}</option>)}</select></label>}
-function FormEnd({error,busy,label}:{error:string;busy:boolean;label:string}){return <><div className="form-error" role="alert">{error}</div><button className="submit" disabled={busy}>{busy?<><RefreshCw className="spin"/> Saving…</>:label}</button></>}
-function SearchBox({value,set,placeholder}:{value:string;set:(s:string)=>void;placeholder:string}){return <label className="search-box"><Search/><span className="sr-only">Search</span><input value={value} onChange={e=>set(e.target.value)} placeholder={placeholder}/>{value&&<button onClick={()=>set('')} aria-label="Clear search"><X/></button>}</label>}
-function DriveBadge({status}:{status:DriveStatus|string|undefined}){const value=(status||'DISCONNECTED').toLowerCase();return <span className={`drive-badge ${value}`}><span/>{value==='connected'?'Drive ready':value==='pending'?'Drive pending':value==='failed'?'Drive issue':'Drive offline'}</span>}
-function PriorityBadge({priority}:{priority:Priority}){return <span className={`priority-badge ${priority.toLowerCase()}`}>{priority}</span>}
-function StatusDot({status}:{status:TaskStatus}){return <span className={`status-dot ${status.toLowerCase()}`} title={STATUS_LABEL[status]}/>} 
-function Due({task}:{task:Task}){if(!task.dueDate)return <span className="due muted"><CalendarDays/> No date</span>;return <span className={`due ${task.overdue?'overdue-text':''}`}><CalendarDays/>{task.overdue?'Due ':''}{formatDate(task.dueDate)}</span>}
-function Empty({title,body,action,compact}:{title:string;body:string;action?:ReactNode;compact?:boolean}){return <div className={`empty ${compact?'compact':''}`}><div><FolderKanban/></div><strong>{title}</strong><p>{body}</p>{action}</div>}
-const formatDate=(value:string)=>{try{return format(parseISO(value),'MMM d, yyyy')}catch{return value}};const dateInput=(value?:string)=>value?.slice(0,10)||'';const initials=(name:string)=>name.split(/\s+/).map(x=>x[0]).slice(0,2).join('').toUpperCase();
+function Field({
+  label,
+  name,
+  value,
+  type = 'text',
+  required,
+}: {
+  label: string;
+  name: string;
+  value?: string;
+  type?: string;
+  required?: boolean;
+}) {
+  return (
+    <label>
+      {label}
+      <input name={name} type={type} defaultValue={value || ''} required={required} />
+    </label>
+  );
+}
+function TextArea({ label, name, value }: { label: string; name: string; value?: string }) {
+  return (
+    <label>
+      {label}
+      <textarea name={name} defaultValue={value || ''} rows={3} />
+    </label>
+  );
+}
+function Select({
+  label,
+  name,
+  value,
+  options,
+}: {
+  label: string;
+  name: string;
+  value: string;
+  options: readonly string[];
+}) {
+  return (
+    <label>
+      {label}
+      <select name={name} defaultValue={value}>
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o.replaceAll('_', ' ')}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+function FormEnd({ error, busy, label }: { error: string; busy: boolean; label: string }) {
+  return (
+    <>
+      <div className="form-error" role="alert">
+        {error}
+      </div>
+      <button className="submit" disabled={busy}>
+        {busy ? (
+          <>
+            <RefreshCw className="spin" /> Saving…
+          </>
+        ) : (
+          label
+        )}
+      </button>
+    </>
+  );
+}
+function SearchBox({
+  value,
+  set,
+  placeholder,
+}: {
+  value: string;
+  set: (s: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <label className="search-box">
+      <Search />
+      <span className="sr-only">Search</span>
+      <input value={value} onChange={(e) => set(e.target.value)} placeholder={placeholder} />
+      {value && (
+        <button onClick={() => set('')} aria-label="Clear search">
+          <X />
+        </button>
+      )}
+    </label>
+  );
+}
+function DriveBadge({ status }: { status: DriveStatus | string | undefined }) {
+  const value = (status || 'DISCONNECTED').toLowerCase();
+  return (
+    <span className={`drive-badge ${value}`}>
+      <span />
+      {value === 'connected'
+        ? 'Drive ready'
+        : value === 'pending'
+          ? 'Drive pending'
+          : value === 'failed'
+            ? 'Drive issue'
+            : 'Drive offline'}
+    </span>
+  );
+}
+function PriorityBadge({ priority }: { priority: Priority }) {
+  return <span className={`priority-badge ${priority.toLowerCase()}`}>{priority}</span>;
+}
+function StatusDot({ status }: { status: TaskStatus }) {
+  return <span className={`status-dot ${status.toLowerCase()}`} title={STATUS_LABEL[status]} />;
+}
+function Due({ task }: { task: Task }) {
+  if (!task.dueDate)
+    return (
+      <span className="due muted">
+        <CalendarDays /> No date
+      </span>
+    );
+  return (
+    <span className={`due ${task.overdue ? 'overdue-text' : ''}`}>
+      <CalendarDays />
+      {task.overdue ? 'Due ' : ''}
+      {formatDate(task.dueDate)}
+    </span>
+  );
+}
+function Empty({
+  title,
+  body,
+  action,
+  compact,
+}: {
+  title: string;
+  body: string;
+  action?: ReactNode;
+  compact?: boolean;
+}) {
+  return (
+    <div className={`empty ${compact ? 'compact' : ''}`}>
+      <div>
+        <FolderKanban />
+      </div>
+      <strong>{title}</strong>
+      <p>{body}</p>
+      {action}
+    </div>
+  );
+}
+const formatDate = (value: string) => {
+  try {
+    return format(parseISO(value), 'MMM d, yyyy');
+  } catch {
+    return value;
+  }
+};
+const dateInput = (value?: string) => value?.slice(0, 10) || '';
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .map((x) => x[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
 /** True when a due date falls between today and `days` days from now, inclusive. Compares local calendar days as yyyy-MM-dd so it never drifts across timezones. */
-const dueWithinDays=(dueDate:string|undefined,days:number)=>{if(!dueDate)return false;const day=(value:Date)=>format(value,'yyyy-MM-dd');const due=day(parseISO(dueDate));return due>=day(new Date())&&due<=day(addDays(new Date(),days));};
+const dueWithinDays = (dueDate: string | undefined, days: number) => {
+  if (!dueDate) return false;
+  const day = (value: Date) => format(value, 'yyyy-MM-dd');
+  const due = day(parseISO(dueDate));
+  return due >= day(new Date()) && due <= day(addDays(new Date(), days));
+};
