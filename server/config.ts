@@ -10,6 +10,7 @@ export const PROJECT_SUBFOLDERS = [
 ] as const;
 export const config = {
   port: Number(process.env.PORT || 8787),
+  host: process.env.HOST || '127.0.0.1',
   databasePath: path.resolve(process.env.DATABASE_PATH || './data/command-center.db'),
   appOrigin: process.env.APP_ORIGIN || 'http://localhost:5173',
   google: {
