@@ -31,6 +31,34 @@ import { TASK_STATUSES } from '../shared/types.ts';
 
 const id = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
+const isProductionRuntime = () =>
+  process.env.NODE_ENV === 'production' || process.argv.includes('--production');
+
+const productionContentSecurityPolicy = {
+  directives: {
+    defaultSrc: ["'self'"],
+    baseUri: ["'self'"],
+    connectSrc: ["'self'"],
+    fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+    formAction: ["'self'"],
+    frameAncestors: ["'none'"],
+    frameSrc: ["'none'"],
+    imgSrc: ["'self'", 'data:'],
+    manifestSrc: ["'self'"],
+    mediaSrc: ["'self'"],
+    objectSrc: ["'none'"],
+    scriptSrc: ["'self'"],
+    scriptSrcAttr: ["'none'"],
+    styleSrc: ["'self'", 'https://fonts.googleapis.com'],
+    styleSrcAttr: ["'unsafe-inline'"],
+    workerSrc: ["'self'"],
+    // The production app is intentionally served over loopback HTTP by default.
+    upgradeInsecureRequests: null,
+  },
+} as const;
+
+type AppOptions = { production?: boolean };
+
 const slugify = (value: string) =>
   value
     .toLowerCase()
@@ -126,9 +154,15 @@ const taskPatch = z
   .object({ ...taskFields, status: z.enum(TASK_STATUSES), priority: z.enum(PRIORITIES) })
   .partial();
 
-export function createApp(db: Db = getDb()) {
+export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   const app = express();
-  app.use(helmet({ contentSecurityPolicy: false }));
+  const production = options.production ?? isProductionRuntime();
+  app.use(
+    helmet({
+      // Vite's development client needs a relaxed policy for HMR. The built client does not.
+      contentSecurityPolicy: production ? productionContentSecurityPolicy : false,
+    }),
+  );
   app.use(cors({ origin: config.appOrigin }));
   app.use(express.json({ limit: '1mb' }));
   app.use(pinoHttp());

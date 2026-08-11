@@ -106,6 +106,19 @@ Required environment variables:
 
 Secrets, tokens, local databases, logs, and test artifacts are excluded by `.gitignore`.
 
+### Production Content Security Policy
+
+Production responses include a Content Security Policy. Scripts, API connections, images, media,
+manifests, and workers are restricted to the application's own origin; objects and frames are
+disabled. The two external sources are limited to the existing Google Fonts stylesheet
+(`fonts.googleapis.com`) and font files (`fonts.gstatic.com`). Inline script is forbidden. Inline
+style attributes remain allowed because React renders the task-progress width and drag-and-drop
+transform as element styles. Automatic HTTP-to-HTTPS upgrading is disabled because the packaged
+app is served on loopback HTTP by default.
+
+The policy is disabled during `npm run dev` because Vite's development client needs its hot-module
+reload runtime. This exception does not apply to `npm start` or `NODE_ENV=production`.
+
 ### Drive provisioning behavior
 
 Client creation ensures `[Root]/[Client Name]`. Project creation ensures the project folder and the five configured subfolders from `server/config.ts`:
