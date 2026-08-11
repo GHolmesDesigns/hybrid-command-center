@@ -21,6 +21,20 @@ async function setup() {
   return { c, p };
 }
 describe('command center API', () => {
+  it('enables the documented CSP only for production responses', async () => {
+    const development = await request(createApp(db, { production: false })).get('/api/health');
+    expect(development.headers['content-security-policy']).toBeUndefined();
+
+    const production = await request(createApp(db, { production: true })).get('/api/health');
+    const policy = production.headers['content-security-policy'];
+    expect(policy).toContain("default-src 'self'");
+    expect(policy).toContain("script-src 'self'");
+    expect(policy).toContain("script-src-attr 'none'");
+    expect(policy).toContain("style-src 'self' https://fonts.googleapis.com");
+    expect(policy).toContain("style-src-attr 'unsafe-inline'");
+    expect(policy).not.toContain('upgrade-insecure-requests');
+  });
+
   it('creates clients and projects without pretending disconnected Drive is ready', async () => {
     const { c, p } = await setup();
     expect(c.driveStatus).toBe('DISCONNECTED');
