@@ -27,7 +27,7 @@ import {
   DEFAULT_BRANDING,
   type Branding,
 } from '../shared/branding.ts';
-import { TASK_STATUSES } from '../shared/types.ts';
+import { TASK_STATUSES, TASK_TYPES } from '../shared/types.ts';
 
 const id = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
@@ -100,6 +100,15 @@ const nullableDate = z
   ])
   .optional()
   .transform((v) => (v === undefined ? undefined : v || null));
+/**
+ * Optional task type. The form posts `''` for the "No type" option, so the empty string
+ * is accepted and stored as NULL, the same shape the other optional fields use. Anything
+ * outside the vocabulary is rejected with a 400 rather than written through.
+ */
+const nullableTaskType = z
+  .union([z.literal(''), z.enum(TASK_TYPES)])
+  .optional()
+  .transform((v) => (v === undefined ? undefined : v || null));
 /** Resolve one PATCH field: an omitted key keeps the stored value, `null` clears it. */
 const patch = <T>(next: T | undefined, current: T): T => (next === undefined ? current : next);
 
@@ -137,10 +146,13 @@ const projectPatch = z
   .object({ ...projectFields, status: z.enum(PROJECT_STATUSES), priority: z.enum(PRIORITIES) })
   .partial();
 
+// `taskType` belongs here rather than on `taskInput`: it carries no `.default()`, so
+// `.partial()` leaves it absent on a PATCH that omits it and the stored type survives.
 const taskFields = {
   projectId: z.string().uuid(),
   title: z.string().trim().min(2).max(200),
   description: nullable,
+  taskType: nullableTaskType,
   dueDate: nullableDate,
   startDate: nullableDate,
   notes: nullable,
@@ -393,7 +405,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
           .get(data.status) as any
       ).next;
       db.prepare(
-        `INSERT INTO tasks(id,project_id,title,description,status,priority,due_date,start_date,notes,position,completed_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO tasks(id,project_id,title,description,status,priority,task_type,due_date,start_date,notes,position,completed_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       ).run(
         taskId,
         data.projectId,
@@ -401,6 +413,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         data.description ?? null,
         data.status,
         data.priority,
+        data.taskType ?? null,
         data.dueDate ?? null,
         data.startDate ?? null,
         data.notes ?? null,
@@ -431,13 +444,14 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
           blockingDependencies: blockingDependencies(db, t.id),
         });
       db.prepare(
-        `UPDATE tasks SET project_id=?,title=?,description=?,status=?,priority=?,due_date=?,start_date=?,notes=?,completed_at=?,updated_at=? WHERE id=?`,
+        `UPDATE tasks SET project_id=?,title=?,description=?,status=?,priority=?,task_type=?,due_date=?,start_date=?,notes=?,completed_at=?,updated_at=? WHERE id=?`,
       ).run(
         patch(data.projectId, t.project_id),
         patch(data.title, t.title),
         patch(data.description, t.description),
         nextStatus,
         patch(data.priority, t.priority),
+        patch(data.taskType, t.task_type),
         patch(data.dueDate, t.due_date),
         patch(data.startDate, t.start_date),
         patch(data.notes, t.notes),

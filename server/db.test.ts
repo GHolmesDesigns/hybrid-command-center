@@ -99,7 +99,14 @@ describe('additive schema migration', () => {
       ]),
     );
     expect(columnsOf(db, 'tasks')).toEqual(
-      expect.arrayContaining(['due_date', 'start_date', 'notes', 'position', 'completed_at']),
+      expect.arrayContaining([
+        'task_type',
+        'due_date',
+        'start_date',
+        'notes',
+        'position',
+        'completed_at',
+      ]),
     );
   });
 
@@ -111,9 +118,9 @@ describe('additive schema migration', () => {
     expect(rows(db, 'SELECT id, title, status, priority FROM tasks')).toEqual([
       { id: 't1', title: 'Build concepts', status: 'TODO', priority: 'HIGH' },
     ]);
-    expect(rows(db, 'SELECT position, due_date, notes, completed_at FROM tasks')).toEqual([
-      { position: 0, due_date: null, notes: null, completed_at: null },
-    ]);
+    expect(
+      rows(db, 'SELECT position, task_type, due_date, notes, completed_at FROM tasks'),
+    ).toEqual([{ position: 0, task_type: null, due_date: null, notes: null, completed_at: null }]);
     expect(rows(db, 'SELECT position, drive_status, drive_error FROM projects')).toEqual([
       { position: 0, drive_status: 'DISCONNECTED', drive_error: null },
     ]);

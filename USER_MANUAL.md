@@ -303,10 +303,11 @@ With Drive connected, the application creates the project folder and five standa
 2. Choose a project. The last project you opened is pre-selected, and you can pick a different one. The client is derived automatically from that project.
 3. Enter a title.
 4. Choose a status and priority.
-5. Add a start date, due date, description, or notes if useful.
-6. Select **Create task**.
+5. Choose a **Type** if the task is a recognisable piece of studio work. The choices follow the weekly workflow — Blog Post, Video, Social Post, Graphics, Scheduling, QA / Brand Pass, Admin, and Other. Leave it on **No type** when none fits; a task without a type is perfectly normal.
+6. Add a start date, due date, description, or notes if useful.
+7. Select **Create task**.
 
-The task appears in its selected Status column.
+The task appears in its selected Status column. Tasks created before types existed have no type, and you can set one at any time by editing the task.
 
 ### Step 4: Add a checklist
 
@@ -411,9 +412,9 @@ Use the filters above the board to focus by:
 - Blocked
 - Completed
 
-Each card shows its project, priority, due date, checklist progress, and dependency state.
+Each card shows its project, priority, type when one is set, due date, checklist progress, and dependency state. The type is repeated at the top of the task detail view.
 
-Open a task to rename it, edit its details, or delete it.
+Open a task to rename it, edit its details, or delete it. **Edit details** opens the same form used to create the task, so this is where you set a type on an older task, change its project, or adjust its dates.
 
 ### Removing records
 

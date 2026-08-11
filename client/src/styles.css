@@ -870,6 +870,18 @@ button svg,
   background: #eef0ef;
   color: #6f7773;
 }
+/* Outlined rather than filled, so a type never reads as another priority level. */
+.task-type-badge {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: #fff;
+  border: 1px solid #cfd8d4;
+  color: #4b5854;
+  padding: 4px 6px;
+  border-radius: 5px;
+}
 .progress > div:first-child,
 .project-meta {
   display: flex;
@@ -1428,6 +1440,9 @@ button svg,
   grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
+.form-row.triple {
+  grid-template-columns: 1fr 1fr 1fr;
+}
 .form-error {
   color: var(--red);
   font-size: 12px;
@@ -1680,7 +1695,9 @@ button svg,
   .board-filters label {
     width: 100%;
   }
-  .form-row {
+  /* `.form-row.triple` outranks a bare `.form-row`, so it is named again to collapse. */
+  .form-row,
+  .form-row.triple {
     grid-template-columns: 1fr;
   }
   .project-summary {
