@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 import {
   Link,
   NavLink,
@@ -55,6 +63,7 @@ import {
   Search,
   Settings,
   ShieldAlert,
+  Tag as TagIcon,
   Trash2,
   Upload,
   Users,
@@ -68,11 +77,12 @@ import type {
   DriveStatus,
   Priority,
   Project,
+  Tag,
   Task,
   TaskStatus,
   TaskType,
 } from '../../shared/types';
-import { TASK_STATUSES, TASK_TYPES } from '../../shared/types';
+import { TASK_STATUSES, TASK_TYPES, normalizeTagName, sameTagName } from '../../shared/types';
 import { APP_VERSION, DEFAULT_BRANDING, type Branding } from '../../shared/branding';
 
 const STATUS_LABEL: Record<TaskStatus, string> = {
@@ -99,6 +109,24 @@ const TASK_TYPE_LABEL: Record<TaskType, string> = {
   ADMIN: 'Admin',
   OTHER: 'Other',
 };
+/**
+ * A tag as the UI holds it. `id` is missing until the tag exists globally: the chip input
+ * accepts a name the moment it is typed, and `syncTaskTags()` creates it on save.
+ */
+type TagDraft = { id?: string; name: string; color?: string };
+/**
+ * Accent colors for tags that carry no stored color. Derived from the name so the same tag
+ * looks the same everywhere without a color picker. The name is always rendered as text
+ * beside it — color never carries meaning on its own.
+ */
+const TAG_ACCENTS = ['#2f6f52', '#315f79', '#7b4fa8', '#9b5f12', '#a33d63', '#4a6b8a'];
+const tagAccent = (tag: TagDraft) => {
+  if (tag.color) return tag.color;
+  const name = normalizeTagName(tag.name).toLowerCase();
+  let hash = 0;
+  for (const character of name) hash = (hash * 31 + character.charCodeAt(0)) % 100000;
+  return TAG_ACCENTS[hash % TAG_ACCENTS.length];
+};
 type Modal =
   | { type: 'client'; value?: Client }
   | { type: 'project'; value?: Project; clientId?: string }
@@ -111,7 +139,8 @@ const LAST_PROJECT_KEY = 'hcc-last-project';
 export function App() {
   const [clients, setClients] = useState<Client[]>([]),
     [projects, setProjects] = useState<Project[]>([]),
-    [tasks, setTasks] = useState<Task[]>([]);
+    [tasks, setTasks] = useState<Task[]>([]),
+    [tags, setTags] = useState<Tag[]>([]);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null),
     [loading, setLoading] = useState(true),
     [modal, setModal] = useState<Modal>(null);
@@ -125,18 +154,20 @@ export function App() {
   const location = useLocation();
   const refresh = useCallback(async () => {
     try {
-      const [c, p, t, d, b] = await Promise.all([
+      const [c, p, t, d, b, g] = await Promise.all([
         api<Client[]>('/clients'),
         api<Project[]>('/projects'),
         api<Task[]>('/tasks'),
         api<DashboardData>('/dashboard'),
         api<{ branding: Branding }>('/settings/branding'),
+        api<Tag[]>('/tags'),
       ]);
       setClients(c);
       setProjects(p);
       setTasks(t);
       setDashboard(d);
       setBranding(b.branding);
+      setTags(g);
     } catch (e) {
       setNotice({ tone: 'error', text: (e as Error).message });
     } finally {
@@ -330,6 +361,7 @@ export function App() {
                   updateTasks={setTasks}
                   clients={clients}
                   projects={projects}
+                  tags={tags}
                   open={setModal}
                   remember={setLastProjectId}
                   refresh={refresh}
@@ -339,7 +371,15 @@ export function App() {
             />
             <Route
               path="/settings"
-              element={<SettingsView branding={branding} refresh={refresh} flash={flash} />}
+              element={
+                <SettingsView
+                  branding={branding}
+                  tags={tags}
+                  tasks={tasks}
+                  refresh={refresh}
+                  flash={flash}
+                />
+              }
             />
           </Routes>
         </div>
@@ -350,6 +390,7 @@ export function App() {
           clients={clients}
           projects={projects}
           tasks={tasks}
+          tags={tags}
           close={() => setModal(null)}
           edit={(task) => setModal({ type: 'task', value: task })}
           saved={saved}
@@ -1268,6 +1309,7 @@ function Kanban({
   updateTasks,
   clients,
   projects,
+  tags,
   open,
   remember,
   refresh,
@@ -1277,6 +1319,7 @@ function Kanban({
   updateTasks: (tasks: Task[]) => void;
   clients: Client[];
   projects: Project[];
+  tags: Tag[];
   open: (m: Modal) => void;
   remember: (id: string) => void;
   refresh: () => Promise<void>;
@@ -1287,14 +1330,25 @@ function Kanban({
     client = params.get('client') || '',
     flag = params.get('filter') || '';
   const [priority, setPriority] = useState('');
+  const [query, setQuery] = useState('');
+  // Tag selection lives in the URL beside the client and project filters, so a filtered board
+  // survives a reload and can be handed to someone else as a link.
+  const selectedTagIds = (params.get('tags') || '').split(',').filter(Boolean);
   useEffect(() => {
     if (project) remember(project);
   }, [project, remember]);
+  const needle = query.trim().toLowerCase();
   const filtered = tasks.filter(
     (t) =>
       (!project || t.projectId === project) &&
       (!client || t.clientId === client) &&
       (!priority || t.priority === priority) &&
+      // Every selected tag must be present, so each chip narrows the board the way the
+      // selects above it do rather than widening it.
+      selectedTagIds.every((tagId) => t.tags.some((tag) => tag.id === tagId)) &&
+      (!needle ||
+        t.title.toLowerCase().includes(needle) ||
+        t.tags.some((tag) => tag.name.toLowerCase().includes(needle))) &&
       (!flag ||
         (flag === 'overdue' && t.overdue) ||
         (flag === 'blocked' && t.blocked) ||
@@ -1442,6 +1496,48 @@ function Kanban({
           </select>
         </label>
       </div>
+      <SearchBox value={query} set={setQuery} placeholder="Search task titles and tags…" />
+      {tags.length > 0 && (
+        <div className="tag-filter">
+          <span className="tag-filter-label" id="tag-filter-label">
+            <TagIcon /> Tags
+          </span>
+          <div role="group" aria-labelledby="tag-filter-label">
+            {tags.map((tag) => {
+              const active = selectedTagIds.includes(tag.id);
+              return (
+                <button
+                  key={tag.id}
+                  type="button"
+                  className={`tag-chip toggle ${active ? 'active' : ''}`}
+                  aria-pressed={active}
+                  style={{ borderColor: tagAccent(tag) }}
+                  onClick={() =>
+                    set(
+                      'tags',
+                      (active
+                        ? selectedTagIds.filter((tagId) => tagId !== tag.id)
+                        : [...selectedTagIds, tag.id]
+                      ).join(','),
+                    )
+                  }
+                >
+                  <span className="tag-dot" style={{ background: tagAccent(tag) }} />
+                  {tag.name}
+                </button>
+              );
+            })}
+          </div>
+          {selectedTagIds.length > 0 && (
+            <button type="button" className="text-btn" onClick={() => set('tags', '')}>
+              Clear tags
+            </button>
+          )}
+        </div>
+      )}
+      {selectedTagIds.length > 1 && (
+        <p className="filterbar-hint">Showing tasks that carry every selected tag.</p>
+      )}
       <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={dragEnd}>
         <div className="kanban-board">
           {TASK_STATUSES.map((status) => (
@@ -1529,6 +1625,15 @@ function KanbanCard({
           {task.clientName} · {task.projectName}
         </span>
       </button>
+      {task.tags.length > 0 && (
+        <ul className="tag-list" aria-label={`Tags on ${task.title}`}>
+          {task.tags.map((tag) => (
+            <li key={tag.id}>
+              <TagChip tag={tag} />
+            </li>
+          ))}
+        </ul>
+      )}
       {task.description && <p>{task.description}</p>}
       <div className="card-foot">
         <Due task={task} />
@@ -1563,10 +1668,14 @@ function KanbanCard({
 
 function SettingsView({
   branding,
+  tags,
+  tasks,
   refresh,
   flash,
 }: {
   branding: Branding;
+  tags: Tag[];
+  tasks: Task[];
   refresh: () => Promise<void>;
   flash: (s: string, t?: 'success' | 'error') => void;
 }) {
@@ -1778,6 +1887,7 @@ function SettingsView({
             </button>
           </form>
         </section>
+        <TagsCard tags={tags} tasks={tasks} refresh={refresh} flash={flash} />
         <section className="panel settings-card">
           <div className="settings-icon neutral">
             <Clock3 />
@@ -1828,11 +1938,97 @@ function SettingsView({
   );
 }
 
+/**
+ * Global tag list with the only destructive tag action in the app. Deleting a tag that is
+ * still attached is a two-step flow: the first call is refused with `TAG_IN_USE` and the
+ * server's own count, which is what the confirmation quotes before the confirmed call goes
+ * out. The count is read from that response rather than from `tasks`, so what the user
+ * confirms is what the server is about to detach.
+ */
+function TagsCard({
+  tags,
+  tasks,
+  refresh,
+  flash,
+}: {
+  tags: Tag[];
+  tasks: Task[];
+  refresh: () => Promise<void>;
+  flash: (s: string, t?: 'success' | 'error') => void;
+}) {
+  const usage = (tag: Tag) => tasks.filter((t) => t.tags.some((x) => x.id === tag.id)).length;
+  const remove = async (tag: Tag) => {
+    try {
+      await send(`/tags/${tag.id}`, 'DELETE');
+      await refresh();
+      flash(`Tag “${tag.name}” deleted.`);
+    } catch (error: any) {
+      if (error.status !== 409 || error.data?.code !== 'TAG_IN_USE')
+        return flash(error.message, 'error');
+      const count: number = error.data.attachedTaskCount;
+      const tasksWord = `${count} task${count === 1 ? '' : 's'}`;
+      if (
+        !confirm(
+          `“${tag.name}” is attached to ${tasksWord}.\n\nDelete the tag and remove it from ${count === 1 ? 'that task' : 'those tasks'}? The ${count === 1 ? 'task itself is' : 'tasks themselves are'} not deleted.`,
+        )
+      )
+        return;
+      try {
+        await send(`/tags/${tag.id}?confirm=true`, 'DELETE');
+        await refresh();
+        flash(`Tag “${tag.name}” deleted from ${tasksWord}.`);
+      } catch (confirmed) {
+        flash((confirmed as Error).message, 'error');
+      }
+    }
+  };
+  return (
+    <section className="panel settings-card">
+      <div className="settings-icon neutral">
+        <TagIcon />
+      </div>
+      <div className="section-title">
+        <div>
+          <span className="eyebrow">Labels</span>
+          <h2>Task tags</h2>
+        </div>
+        <span className="version-pill">{tags.length}</span>
+      </div>
+      <p>
+        Tags are shared by every task. Add one from a task’s details to create it; deleting one here
+        removes it from every task that carries it, and never deletes a task.
+      </p>
+      {tags.length ? (
+        <ul className="tag-manager">
+          {tags.map((tag) => (
+            <li key={tag.id}>
+              <TagChip tag={tag} />
+              <span>
+                {usage(tag)} task{usage(tag) === 1 ? '' : 's'}
+              </span>
+              <button
+                className="icon-btn danger"
+                onClick={() => remove(tag)}
+                aria-label={`Delete tag ${tag.name}`}
+              >
+                <Trash2 />
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <Empty compact title="No tags yet" body="Tag a task to start building the shared list." />
+      )}
+    </section>
+  );
+}
+
 function ModalHost({
   modal,
   clients,
   projects,
   tasks,
+  tags,
   close,
   edit,
   saved,
@@ -1843,6 +2039,7 @@ function ModalHost({
   clients: Client[];
   projects: Project[];
   tasks: Task[];
+  tags: Tag[];
   close: () => void;
   /** Swaps the detail view for the edit form, the only way to reach a task's fields. */
   edit: (task: Task) => void;
@@ -1874,6 +2071,7 @@ function ModalHost({
           value={modal.value}
           defaultProject={modal.projectId}
           projects={projects}
+          tags={tags}
           saved={saved}
         />
       </EntityModal>
@@ -1884,6 +2082,7 @@ function ModalHost({
       <TaskDetail
         task={task}
         tasks={tasks}
+        tags={tags}
         close={close}
         edit={() => edit(task)}
         refresh={refresh}
@@ -2048,21 +2247,31 @@ function TaskForm({
   value,
   defaultProject,
   projects,
+  tags,
   saved,
 }: {
   value?: Task;
   defaultProject?: string;
   projects: Project[];
+  tags: Tag[];
   saved: (s: string) => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState('');
+  // Tags are the one field FormData cannot carry: they are a multi-value list resolved
+  // against the global tag table, so they are held in state and reconciled after the save.
+  const [chosen, setChosen] = useState<TagDraft[]>(value?.tags ?? []);
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setBusy(true);
     const data = Object.fromEntries(new FormData(e.currentTarget));
     try {
-      await send(value ? `/tasks/${value.id}` : '/tasks', value ? 'PATCH' : 'POST', data);
+      const task = await send<Task>(
+        value ? `/tasks/${value.id}` : '/tasks',
+        value ? 'PATCH' : 'POST',
+        data,
+      );
+      await syncTaskTags(task.id, chosen, value?.tags ?? []);
       await saved(value ? 'Task updated.' : 'Task added to the board.');
     } catch (err) {
       setError((err as Error).message);
@@ -2119,6 +2328,7 @@ function TaskForm({
         />
         <Field label="Due date" name="dueDate" type="date" value={dateInput(value?.dueDate)} />
       </div>
+      <TagChipInput label="Tags" chosen={chosen} available={tags} onChange={setChosen} />
       <TextArea label="Notes" name="notes" value={value?.notes} />
       <FormEnd error={error} busy={busy} label={value ? 'Save changes' : 'Create task'} />
     </form>
@@ -2128,6 +2338,7 @@ function TaskForm({
 function TaskDetail({
   task,
   tasks,
+  tags,
   close,
   edit,
   refresh,
@@ -2135,6 +2346,7 @@ function TaskDetail({
 }: {
   task: Task;
   tasks: Task[];
+  tags: Tag[];
   close: () => void;
   edit: () => void;
   refresh: () => Promise<void>;
@@ -2276,6 +2488,20 @@ function TaskDetail({
           </div>
         </div>
       )}
+      <section>
+        <div className="section-title">
+          <div>
+            <span className="eyebrow">Labels</span>
+            <h2>Tags</h2>
+          </div>
+        </div>
+        <TagChipInput
+          label="Tags"
+          chosen={task.tags}
+          available={tags}
+          onChange={(next) => mutate(() => syncTaskTags(task.id, next, task.tags), 'Tags updated.')}
+        />
+      </section>
       <section>
         <div className="section-title">
           <div>
@@ -2473,6 +2699,115 @@ function Select({
         ))}
       </select>
     </label>
+  );
+}
+/**
+ * Reconciles a task's tags to `next`, creating any tag that does not exist yet. `POST /tags`
+ * answers with the existing row when the normalized name already exists, so a name re-entered
+ * in another case or with extra spaces attaches the tag already in use instead of a duplicate.
+ * Detaches run before attaches so a task never briefly holds both sides of a swap.
+ */
+async function syncTaskTags(taskId: string, next: TagDraft[], previous: Tag[]) {
+  const resolved: Tag[] = [];
+  for (const draft of next)
+    resolved.push(
+      draft.id
+        ? { id: draft.id, name: draft.name, color: draft.color }
+        : await send<Tag>('/tags', 'POST', { name: draft.name }),
+    );
+  const keep = new Set(resolved.map((tag) => tag.id));
+  for (const tag of previous)
+    if (!keep.has(tag.id)) await send(`/tasks/${taskId}/tags/${tag.id}`, 'DELETE');
+  const had = new Set(previous.map((tag) => tag.id));
+  for (const tag of resolved)
+    if (!had.has(tag.id)) await send(`/tasks/${taskId}/tags`, 'POST', { tagId: tag.id });
+}
+function TagChip({ tag }: { tag: TagDraft }) {
+  const accent = tagAccent(tag);
+  return (
+    <span className="tag-chip" style={{ borderColor: accent }}>
+      <span className="tag-dot" style={{ background: accent }} />
+      {tag.name}
+    </span>
+  );
+}
+/**
+ * Controlled multi-value tag field. The rest of the forms read their values from `FormData`
+ * on submit, which cannot express a list of tags resolved against a shared table, so this one
+ * is controlled and reports every change to its owner.
+ *
+ * Enter or a comma commits the typed name; Backspace on an empty field removes the last chip;
+ * blur commits too, so a name typed and then submitted is never quietly dropped. Names are
+ * normalized and matched against `available` case-insensitively before a new tag is proposed.
+ */
+function TagChipInput({
+  label,
+  chosen,
+  available,
+  onChange,
+}: {
+  label: string;
+  chosen: TagDraft[];
+  available: Tag[];
+  onChange: (next: TagDraft[]) => void;
+}) {
+  const [draft, setDraft] = useState('');
+  const listId = useId();
+  const commit = (raw: string) => {
+    const name = normalizeTagName(raw);
+    setDraft('');
+    if (!name || chosen.some((tag) => sameTagName(tag.name, name))) return;
+    onChange([...chosen, available.find((tag) => sameTagName(tag.name, name)) ?? { name }]);
+  };
+  const keyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter' || event.key === ',') {
+      // Enter would otherwise submit the surrounding task form with the name still unread.
+      event.preventDefault();
+      commit(draft);
+    } else if (event.key === 'Backspace' && !draft && chosen.length) onChange(chosen.slice(0, -1));
+  };
+  return (
+    <div className="chip-input">
+      <span className="chip-input-label">{label}</span>
+      {chosen.length > 0 && (
+        <ul className="tag-list" aria-label={`Selected ${label.toLowerCase()}`}>
+          {chosen.map((tag) => (
+            <li key={tag.id ?? `new-${tag.name}`}>
+              <TagChip tag={tag} />
+              <button
+                type="button"
+                className="tag-remove"
+                onClick={() => onChange(chosen.filter((candidate) => candidate !== tag))}
+                aria-label={`Remove tag ${tag.name}`}
+              >
+                <X />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="chip-input-row">
+        <input
+          value={draft}
+          list={listId}
+          aria-label="Add a tag"
+          placeholder="Type a tag, then press Enter"
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={keyDown}
+          onBlur={() => commit(draft)}
+        />
+        <button type="button" onClick={() => commit(draft)}>
+          <Plus /> Add
+        </button>
+      </div>
+      <datalist id={listId}>
+        {available
+          .filter((tag) => !chosen.some((candidate) => sameTagName(candidate.name, tag.name)))
+          .map((tag) => (
+            <option key={tag.id} value={tag.name} />
+          ))}
+      </datalist>
+    </div>
   );
 }
 function FormEnd({ error, busy, label }: { error: string; busy: boolean; label: string }) {

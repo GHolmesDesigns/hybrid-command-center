@@ -1,9 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { APP_VERSION } from '../../shared/branding';
-import type { Client, DashboardData, Project, Task } from '../../shared/types';
+import type { Client, DashboardData, Project, Tag, Task } from '../../shared/types';
+import { sameTagName } from '../../shared/types';
 
 const emptyDashboard: DashboardData = {
   counts: {
@@ -77,32 +78,63 @@ const task = (id: string, title: string, overrides: Partial<Task> = {}): Task =>
 let projectsPayload = projects;
 let clientsPayload: Client[] = [];
 let tasksPayload: Task[] = [];
+let tagsPayload: Tag[] = [];
 
-/** Serves the five endpoints App() requests on mount. */
+/** Serves the six endpoints App() requests on mount. */
 const payloadFor = (url: string) => {
   if (url.endsWith('/api/dashboard')) return emptyDashboard;
   if (url.endsWith('/api/settings/branding')) return { branding };
   if (url.endsWith('/api/projects')) return projectsPayload;
   if (url.endsWith('/api/clients')) return clientsPayload;
   if (url.endsWith('/api/tasks')) return tasksPayload;
+  if (url.endsWith('/api/tags')) return tagsPayload;
   return [];
 };
 
 const requests: { url: string; method: string; body: any }[] = [];
 
+/** A reply that is not a plain 200, so refusals like `TAG_IN_USE` can be rehearsed. */
+type Reply = { status: number; body: unknown };
+const reply = (status: number, body: unknown): Reply => ({ status, body });
+const isReply = (value: unknown): value is Reply =>
+  typeof value === 'object' && value !== null && 'status' in value && 'body' in value;
+
 /**
- * Records every call and stands in for the server on `POST /api/projects/reorder`, so a
- * reorder survives the `refresh()` that follows it rather than snapping back.
+ * Records every call and stands in for the server where a response actually feeds the next
+ * step: reorder (so a reorder survives its `refresh()`), tag creation (so an existing name is
+ * reused rather than duplicated), and tag deletion (so an attached tag is refused first).
  */
 const respondTo = (url: string, init?: RequestInit) => {
+  const method = init?.method ?? 'GET';
   const body = init?.body ? JSON.parse(String(init.body)) : undefined;
-  requests.push({ url, method: init?.method ?? 'GET', body });
+  requests.push({ url, method, body });
   if (url.endsWith('/api/projects/reorder')) {
     const order: string[] = body.orderedIds;
     projectsPayload = [...projectsPayload]
       .sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id))
       .map((p, position) => ({ ...p, position }));
     return projectsPayload;
+  }
+  if (url.endsWith('/api/tasks') && method === 'POST') return task('created-task', body.title);
+  if (url.endsWith('/api/tags') && method === 'POST') {
+    const existing = tagsPayload.find((tag) => sameTagName(tag.name, body.name));
+    if (existing) return existing;
+    const created: Tag = { id: `tag-${tagsPayload.length + 1}`, name: body.name };
+    tagsPayload = [...tagsPayload, created];
+    return created;
+  }
+  if (method === 'DELETE' && /\/api\/tags\/[^/]+/.test(url)) {
+    const id = url.split('/api/tags/')[1].split('?')[0];
+    const attached = tasksPayload.filter((t) => t.tags.some((tag) => tag.id === id)).length;
+    if (attached && !url.includes('confirm=true'))
+      return reply(409, {
+        error: 'This tag is attached to tasks.',
+        code: 'TAG_IN_USE',
+        attachedTaskCount: attached,
+      });
+    tagsPayload = tagsPayload.filter((tag) => tag.id !== id);
+    tasksPayload = tasksPayload.map((t) => ({ ...t, tags: t.tags.filter((tag) => tag.id !== id) }));
+    return { ok: true, detachedFromTasks: attached };
   }
   return payloadFor(url);
 };
@@ -124,16 +156,19 @@ beforeEach(() => {
   projectsPayload = projects;
   clientsPayload = [];
   tasksPayload = [];
+  tagsPayload = [];
   requests.length = 0;
   vi.stubGlobal(
     'fetch',
-    vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
-      Promise.resolve({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve(respondTo(String(input), init)),
-      } as Response),
-    ),
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const result = respondTo(String(input), init);
+      const { status, body } = isReply(result) ? result : reply(200, result);
+      return Promise.resolve({
+        ok: status < 400,
+        status,
+        json: () => Promise.resolve(body),
+      } as Response);
+    }),
   );
 });
 
@@ -460,6 +495,301 @@ describe('Task type on the board', () => {
     expect(document.querySelector('.task-type-badge')).toBeNull();
     // The priority badge beside it still renders, so the row itself is not missing.
     expect(document.querySelector('.priority-badge')).not.toBeNull();
+  });
+});
+
+describe('Tag chip input', () => {
+  const tagField = () => screen.getByLabelText('Add a tag');
+  const type = (value: string) => fireEvent.change(tagField(), { target: { value } });
+  const enter = () => fireEvent.keyDown(tagField(), { key: 'Enter' });
+  const chipNames = () =>
+    screen
+      .getAllByRole('button', { name: /^Remove tag / })
+      .map((button) => button.getAttribute('aria-label')?.replace('Remove tag ', ''));
+
+  const openNewTaskForm = async () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    );
+    await screen.findByText(branding.title);
+    clickTopbarNewTask();
+  };
+  const createTaskNamed = (title: string) => {
+    fireEvent.change(projectSelect(), { target: { value: 'p1' } });
+    fireEvent.change(screen.getByLabelText('Task title'), { target: { value: title } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create task' }));
+  };
+  const attachRequests = () =>
+    requests.filter((r) => r.method === 'POST' && /\/api\/tasks\/[^/]+\/tags$/.test(r.url));
+
+  it('turns a typed name into a chip and creates the tag when the task is saved', async () => {
+    await openNewTaskForm();
+    type('Client review');
+    enter();
+
+    expect(chipNames()).toEqual(['Client review']);
+    expect(tagField()).toHaveValue('');
+
+    createTaskNamed('Draft the recap');
+
+    await waitFor(() => expect(attachRequests().length).toBe(1));
+    const created = requests.find((r) => r.method === 'POST' && r.url.endsWith('/api/tags'));
+    expect(created?.body).toEqual({ name: 'Client review' });
+    expect(attachRequests()[0].url).toBe('/api/tasks/created-task/tags');
+    expect(attachRequests()[0].body).toEqual({ tagId: 'tag-1' });
+  });
+
+  it('reuses an existing global tag whatever the case or surrounding whitespace', async () => {
+    tagsPayload = [{ id: 'tag-brand', name: 'Brand system' }];
+    await openNewTaskForm();
+    type('   brand   SYSTEM  ');
+    enter();
+
+    // The stored spelling wins, so the shared tag is recognisable wherever it appears.
+    expect(chipNames()).toEqual(['Brand system']);
+
+    createTaskNamed('Refresh the deck');
+
+    await waitFor(() => expect(attachRequests().length).toBe(1));
+    expect(requests.some((r) => r.method === 'POST' && r.url.endsWith('/api/tags'))).toBe(false);
+    expect(attachRequests()[0].body).toEqual({ tagId: 'tag-brand' });
+  });
+
+  it('ignores a repeat of a tag already chosen, in any case', async () => {
+    await openNewTaskForm();
+    type('Launch');
+    enter();
+    type('  launch ');
+    enter();
+
+    expect(chipNames()).toEqual(['Launch']);
+  });
+
+  it('commits on a comma and on blur, so a typed name is never quietly dropped', async () => {
+    await openNewTaskForm();
+    type('Video');
+    fireEvent.keyDown(tagField(), { key: ',' });
+    expect(chipNames()).toEqual(['Video']);
+
+    type('Print');
+    fireEvent.blur(tagField());
+    expect(chipNames()).toEqual(['Video', 'Print']);
+  });
+
+  it('removes chips with the remove button and with Backspace on an empty field', async () => {
+    await openNewTaskForm();
+    for (const name of ['Video', 'Print', 'Social']) {
+      type(name);
+      enter();
+    }
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove tag Print' }));
+    expect(chipNames()).toEqual(['Video', 'Social']);
+
+    fireEvent.keyDown(tagField(), { key: 'Backspace' });
+    expect(chipNames()).toEqual(['Video']);
+  });
+
+  it('leaves an existing task alone when its tags are untouched', async () => {
+    tagsPayload = [{ id: 'tag-brand', name: 'Brand system' }];
+    tasksPayload = [
+      task('t1', 'Recap post', { tags: [{ id: 'tag-brand', name: 'Brand system' }] }),
+    ];
+    render(
+      <MemoryRouter initialEntries={['/kanban']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Recap post/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit details' }));
+    expect(chipNames()).toEqual(['Brand system']);
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() =>
+      expect(requests.some((r) => r.method === 'PATCH' && r.url.endsWith('/api/tasks/t1'))).toBe(
+        true,
+      ),
+    );
+    // Only the mount-time `GET /api/tags` touched the tag endpoints; nothing was rewritten.
+    expect(requests.filter((r) => r.method !== 'GET' && r.url.includes('/tags'))).toEqual([]);
+  });
+
+  it('detaches a tag straight from the task detail view', async () => {
+    tagsPayload = [{ id: 'tag-brand', name: 'Brand system' }];
+    tasksPayload = [
+      task('t1', 'Recap post', { tags: [{ id: 'tag-brand', name: 'Brand system' }] }),
+    ];
+    render(
+      <MemoryRouter initialEntries={['/kanban']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Recap post/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove tag Brand system' }));
+
+    await waitFor(() =>
+      expect(
+        requests.some(
+          (r) => r.method === 'DELETE' && r.url.endsWith('/api/tasks/t1/tags/tag-brand'),
+        ),
+      ).toBe(true),
+    );
+  });
+});
+
+describe('Board tag filtering and search', () => {
+  const brand: Tag = { id: 'tag-brand', name: 'Brand system' };
+  const urgent: Tag = { id: 'tag-urgent', name: 'Client review' };
+
+  const renderBoard = async () => {
+    tagsPayload = [brand, urgent];
+    tasksPayload = [
+      task('t1', 'Recap post', { tags: [brand] }),
+      task('t2', 'Deck refresh', { tags: [brand, urgent] }),
+      task('t3', 'Invoice chase', { tags: [] }),
+    ];
+    render(
+      <MemoryRouter initialEntries={['/kanban']}>
+        <App />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('heading', { level: 1, name: 'Project Status' })).toBeVisible();
+  };
+  const cardTitles = () =>
+    [...document.querySelectorAll('.kanban-card .card-title strong')].map((n) => n.textContent);
+  /** The filter toggles are the only buttons named after a tag; cards render chips as text. */
+  const tagFilter = (name: string) =>
+    within(screen.getByRole('group', { name: 'Tags' })).getByRole('button', { name });
+
+  it('names every tag on the card it belongs to', async () => {
+    await renderBoard();
+
+    expect(screen.getByRole('list', { name: 'Tags on Deck refresh' })).toHaveTextContent(
+      'Brand system',
+    );
+    expect(screen.getByRole('list', { name: 'Tags on Deck refresh' })).toHaveTextContent(
+      'Client review',
+    );
+    expect(screen.queryByRole('list', { name: 'Tags on Invoice chase' })).toBeNull();
+  });
+
+  it('narrows the board to tasks carrying every selected tag', async () => {
+    await renderBoard();
+
+    fireEvent.click(tagFilter('Brand system'));
+    expect(cardTitles()).toEqual(['Recap post', 'Deck refresh']);
+    expect(tagFilter('Brand system')).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(tagFilter('Client review'));
+    expect(cardTitles()).toEqual(['Deck refresh']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear tags' }));
+    expect(cardTitles()).toEqual(['Recap post', 'Deck refresh', 'Invoice chase']);
+  });
+
+  it('composes a tag filter with the existing priority filter', async () => {
+    await renderBoard();
+
+    fireEvent.click(tagFilter('Brand system'));
+    expect(cardTitles()).toEqual(['Recap post', 'Deck refresh']);
+
+    // Every seeded task is MEDIUM, so the two filters together can only be empty.
+    fireEvent.change(screen.getByRole('combobox', { name: 'Priority' }), {
+      target: { value: 'URGENT' },
+    });
+    expect(cardTitles()).toEqual([]);
+  });
+
+  it('matches tag names as well as titles from the board search', async () => {
+    await renderBoard();
+    const search = screen.getByRole('textbox', { name: 'Search' });
+
+    fireEvent.change(search, { target: { value: 'client rev' } });
+    expect(cardTitles()).toEqual(['Deck refresh']);
+
+    fireEvent.change(search, { target: { value: 'invoice' } });
+    expect(cardTitles()).toEqual(['Invoice chase']);
+
+    fireEvent.change(search, { target: { value: 'nothing here' } });
+    expect(cardTitles()).toEqual([]);
+  });
+});
+
+describe('Tag deletion from Settings', () => {
+  const brand: Tag = { id: 'tag-brand', name: 'Brand system' };
+  const spare: Tag = { id: 'tag-spare', name: 'Unused idea' };
+
+  const renderSettings = async () => {
+    tagsPayload = [brand, spare];
+    tasksPayload = [
+      task('t1', 'Recap post', { tags: [brand] }),
+      task('t2', 'Deck', { tags: [brand] }),
+    ];
+    render(
+      <MemoryRouter initialEntries={['/settings']}>
+        <App />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
+  };
+  const deleteRequests = (confirmed: boolean) =>
+    requests.filter(
+      (r) =>
+        r.method === 'DELETE' &&
+        r.url.includes('/api/tags/tag-brand') &&
+        r.url.includes('confirm=true') === confirmed,
+    );
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('lists each tag with how many tasks carry it', async () => {
+    await renderSettings();
+
+    const row = screen.getByRole('button', { name: 'Delete tag Brand system' }).closest('li')!;
+    expect(row).toHaveTextContent('Brand system');
+    expect(row).toHaveTextContent('2 tasks');
+  });
+
+  it('reports the affected task count and only deletes once confirmed', async () => {
+    await renderSettings();
+    const confirmed = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete tag Brand system' }));
+
+    await waitFor(() => expect(deleteRequests(true).length).toBe(1));
+    expect(confirmed).toHaveBeenCalledTimes(1);
+    expect(confirmed.mock.calls[0][0]).toContain('attached to 2 tasks');
+    // The unconfirmed call is what produced the count, and it changed nothing.
+    expect(deleteRequests(false).length).toBe(1);
+  });
+
+  it('keeps an attached tag when the confirmation is dismissed', async () => {
+    await renderSettings();
+    const dismissed = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete tag Brand system' }));
+
+    await waitFor(() => expect(dismissed).toHaveBeenCalledTimes(1));
+    expect(deleteRequests(true)).toEqual([]);
+    expect(screen.getByRole('button', { name: 'Delete tag Brand system' })).toBeVisible();
+  });
+
+  it('deletes a tag no task carries without asking twice', async () => {
+    await renderSettings();
+    const asked = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete tag Unused idea' }));
+
+    await waitFor(() =>
+      expect(
+        requests.some((r) => r.method === 'DELETE' && r.url.endsWith('/api/tags/tag-spare')),
+      ).toBe(true),
+    );
+    expect(asked).not.toHaveBeenCalled();
   });
 });
 

@@ -27,7 +27,7 @@ import {
   DEFAULT_BRANDING,
   type Branding,
 } from '../shared/branding.ts';
-import { TASK_STATUSES, TASK_TYPES } from '../shared/types.ts';
+import { TASK_STATUSES, TASK_TYPES, normalizeTagName } from '../shared/types.ts';
 
 const id = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
@@ -166,10 +166,7 @@ const taskPatch = z
   .object({ ...taskFields, status: z.enum(TASK_STATUSES), priority: z.enum(PRIORITIES) })
   .partial();
 
-const normalizedTagName = z
-  .string()
-  .transform((value) => value.trim().replace(/\s+/g, ' '))
-  .pipe(z.string().min(1).max(60));
+const normalizedTagName = z.string().transform(normalizeTagName).pipe(z.string().min(1).max(60));
 const tagColor = z
   .union([z.literal(''), z.string().trim().min(1).max(32)])
   .optional()

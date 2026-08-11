@@ -68,6 +68,16 @@ export interface Tag {
   name: string;
   color?: string;
 }
+/**
+ * One spelling rule for tag names, shared by the API boundary and the chip input so a name
+ * typed in the browser resolves to the same stored tag the server would have matched.
+ * Trims the ends and collapses runs of inner whitespace; case is preserved for display and
+ * ignored when comparing, matching the `COLLATE NOCASE` lookup in `server/app.ts`.
+ */
+export const normalizeTagName = (value: string) => value.trim().replace(/\s+/g, ' ');
+/** True when two names refer to the same global tag, ignoring case and extra whitespace. */
+export const sameTagName = (a: string, b: string) =>
+  normalizeTagName(a).toLowerCase() === normalizeTagName(b).toLowerCase();
 export interface Task {
   id: string;
   projectId: string;
