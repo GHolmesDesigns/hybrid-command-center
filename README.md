@@ -12,6 +12,7 @@ For nontechnical installation and day-to-day instructions, see the [First-Time S
 - **Sync to Folder** on the dashboard — provisions missing Drive folder skeletons for existing clients/projects; it uploads, downloads, and mirrors nothing, and never discovers projects from Drive
 - Client creation, editing, archival, detail views, and Drive status
 - Project creation, editing, archival, and **record-only delete** that cascades to tasks (Drive files untouched)
+- Projects view with search, client filter, and seven sort modes, including a **Custom order** where tiles are rearranged by drag or keyboard and the arrangement persists
 - Five-stage **Status** board with persistent ordering, drag-and-drop, filters, and keyboard status controls
 - Task checklists, dependency blocking, circular-dependency prevention, **rename**, **record-only delete**, and explicit completion override
 - Collapsible sidebar with **version tracker** and Settings-editable branding (defaults also in `shared/branding.ts`)
@@ -41,7 +42,7 @@ The browser never receives Google tokens. UI code calls only the local API. Driv
 
 ### Data ownership
 
-- **SQLite:** clients, projects, tasks, card positions, checklists, dependencies, due dates, notes, settings, branding, Drive IDs/URLs, provisioning steps, and timestamps.
+- **SQLite:** clients, projects, tasks, board-card and project-tile positions, checklists, dependencies, due dates, notes, settings, branding, Drive IDs/URLs, provisioning steps, and timestamps.
 - **Google Drive:** every project file. The database stores references, never duplicate file contents. Deleting a project or task in the app does **not** delete Drive folders or files.
 
 Timestamps are stored as UTC ISO strings. Date-only deadlines are interpreted in the browser/server machine's local timezone and become overdue after their local calendar day has passed.

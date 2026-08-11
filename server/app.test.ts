@@ -118,6 +118,69 @@ describe('command center API', () => {
       (await request(app).get('/api/projects')).body.find((x: any) => x.id === p.id),
     ).toBeUndefined();
   });
+  it('appends new projects to the manual order and persists a reorder', async () => {
+    const { c, p } = await setup();
+    const app = createApp(db);
+    const second = (
+      await request(app).post('/api/projects').send({ clientId: c.id, name: 'Brand System' })
+    ).body;
+    const third = (
+      await request(app).post('/api/projects').send({ clientId: c.id, name: 'Site Refresh' })
+    ).body;
+    expect([p.position, second.position, third.position]).toEqual([0, 1, 2]);
+    expect((await request(app).get('/api/projects')).body.map((x: any) => x.name)).toEqual([
+      'Identity System',
+      'Brand System',
+      'Site Refresh',
+    ]);
+
+    const reordered = await request(app)
+      .post('/api/projects/reorder')
+      .send({ orderedIds: [third.id, p.id, second.id] });
+    expect(reordered.status).toBe(200);
+    expect(reordered.body.map((x: any) => x.name)).toEqual([
+      'Site Refresh',
+      'Identity System',
+      'Brand System',
+    ]);
+    const reloaded = (await request(app).get('/api/projects')).body;
+    expect(reloaded.map((x: any) => x.name)).toEqual([
+      'Site Refresh',
+      'Identity System',
+      'Brand System',
+    ]);
+    expect(reloaded.map((x: any) => x.position)).toEqual([0, 1, 2]);
+  });
+  it('rejects a reorder naming a project that does not exist', async () => {
+    const { p } = await setup();
+    const app = createApp(db);
+    const missing = await request(app)
+      .post('/api/projects/reorder')
+      .send({ orderedIds: [p.id, crypto.randomUUID()] });
+    expect(missing.status).toBe(404);
+    expect((await request(app).get('/api/projects')).body[0].position).toBe(0);
+
+    const malformed = await request(app)
+      .post('/api/projects/reorder')
+      .send({ orderedIds: ['not-a-uuid'] });
+    expect(malformed.status).toBe(400);
+  });
+  it('does not restamp updated_at when tiles are rearranged', async () => {
+    const { c, p } = await setup();
+    const app = createApp(db);
+    const second = (
+      await request(app).post('/api/projects').send({ clientId: c.id, name: 'Brand System' })
+    ).body;
+
+    await request(app)
+      .post('/api/projects/reorder')
+      .send({ orderedIds: [second.id, p.id] })
+      .expect(200);
+
+    const reloaded = (await request(app).get('/api/projects')).body;
+    expect(reloaded.find((x: any) => x.id === p.id).updatedAt).toBe(p.updatedAt);
+    expect(reloaded.find((x: any) => x.id === second.id).updatedAt).toBe(second.updatedAt);
+  });
   it('stores sidebar branding overrides', async () => {
     const app = createApp(db);
     const saved = await request(app)

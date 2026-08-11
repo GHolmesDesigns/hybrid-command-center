@@ -22,6 +22,7 @@ import {
 import {
   SortableContext,
   arrayMove,
+  rectSortingStrategy,
   sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
@@ -288,6 +289,7 @@ export function App() {
               element={
                 <Projects
                   projects={projects}
+                  updateProjects={setProjects}
                   clients={clients}
                   tasks={tasks}
                   open={setModal}
@@ -791,7 +793,8 @@ type ProjectSort =
   | 'name-ascending'
   | 'name-descending'
   | 'deadline'
-  | 'priority';
+  | 'priority'
+  | 'custom';
 
 const PROJECT_PRIORITY_ORDER: Record<Priority, number> = {
   URGENT: 0,
@@ -825,12 +828,16 @@ function projectComparator(sortBy: ProjectSort) {
         compareProjectNames(a, b)
       );
     }
+    // Custom. Projects that have never been dragged all share position 0, so the sort
+    // stays stable and they keep the order the API returned them in.
+    if (sortBy === 'custom') return a.position - b.position;
     return 0;
   };
 }
 
 function Projects({
   projects,
+  updateProjects,
   clients,
   tasks,
   open,
@@ -838,6 +845,7 @@ function Projects({
   flash,
 }: {
   projects: Project[];
+  updateProjects: (projects: Project[]) => void;
   clients: Client[];
   tasks: Task[];
   open: (m: Modal) => void;
@@ -853,6 +861,46 @@ function Projects({
       `${p.name} ${p.clientName}`.toLowerCase().includes(query.toLowerCase()),
   );
   const sortedVisible = [...visible].sort(projectComparator(sortBy));
+  // Manual order and a sort rule cannot both win, so dragging belongs to Custom alone.
+  // Anywhere else a dropped tile would spring back to its sorted place and read as a bug.
+  const rearrangeable = sortBy === 'custom';
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  /**
+   * Moves `project` to where `overId` currently sits. Positions are rewritten across every
+   * project, not just the filtered tiles, so reordering a search result cannot collide with
+   * the positions of projects the filter is hiding.
+   */
+  const reorder = async (project: Project, overId: string) => {
+    const oldIndex = projects.findIndex((p) => p.id === project.id);
+    const newIndex = projects.findIndex((p) => p.id === overId);
+    if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return;
+    const reordered = arrayMove(projects, oldIndex, newIndex).map((p, position) => ({
+      ...p,
+      position,
+    }));
+    updateProjects(reordered);
+    try {
+      await send('/projects/reorder', 'POST', { orderedIds: reordered.map((p) => p.id) });
+      await refresh();
+      flash('Project order saved.');
+    } catch (e) {
+      updateProjects(projects);
+      flash((e as Error).message, 'error');
+    }
+  };
+  const dragEnd = (event: DragEndEvent) => {
+    if (!event.over || event.over.id === event.active.id) return;
+    const project = projects.find((p) => p.id === event.active.id);
+    if (project) reorder(project, String(event.over.id));
+  };
+  /** Keyboard equivalent of dropping a tile onto the tile currently at `nextIndex`. */
+  const moveToIndex = (project: Project, nextIndex: number) => {
+    const target = sortedVisible[nextIndex];
+    if (target) reorder(project, target.id);
+  };
   const archive = async (p: Project) => {
     if (!confirm(`Archive ${p.name}? Tasks and Drive files will be preserved.`)) return;
     await send(`/projects/${p.id}/archive`, 'POST');
@@ -911,90 +959,169 @@ function Projects({
           <option value="name-descending">Name Z–A</option>
           <option value="deadline">Deadline (soonest)</option>
           <option value="priority">Priority (highest)</option>
+          <option value="custom">Custom order</option>
         </select>
       </div>
-      <div className="project-cards">
-        {sortedVisible.map((p) => {
-          const mine = tasks.filter((t) => t.projectId === p.id),
-            done = mine.filter((t) => t.status === 'COMPLETE').length,
-            over = mine.filter((t) => t.overdue).length;
-          return (
-            <article key={p.id}>
-              <div className="project-card-head">
-                <span className="status-label">{p.status.replace('_', ' ')}</span>
-                <DriveBadge status={p.driveStatus} />
-              </div>
-              <Link to={`/projects/${p.id}`}>
-                <span className="client-name">{p.clientName}</span>
-                <h2>{p.name}</h2>
-                <p>{p.description || 'No project description yet.'}</p>
-              </Link>
-              <div className="progress">
-                <div>
-                  <span>Task progress</span>
-                  <strong>
-                    {done}/{mine.length}
-                  </strong>
-                </div>
-                <div className="progress-track">
-                  <span style={{ width: `${mine.length ? (done / mine.length) * 100 : 0}%` }} />
-                </div>
-              </div>
-              <div className="project-meta">
-                <span className={over ? 'overdue-text' : ''}>
-                  {over ? (
-                    <>
-                      <AlertCircle />
-                      {over} overdue
-                    </>
-                  ) : (
-                    <>
-                      <Check />
-                      On track
-                    </>
-                  )}
-                </span>
-                <span>
-                  <CalendarDays />
-                  {p.targetDeadline ? formatDate(p.targetDeadline) : 'No deadline'}
-                </span>
-              </div>
-              <div className="card-actions">
-                <Link className="secondary buttonlike" to={`/kanban?project=${p.id}`}>
-                  Open board
-                </Link>
-                <button
-                  className="icon-btn"
-                  onClick={() => open({ type: 'project', value: p })}
-                  aria-label={`Edit ${p.name}`}
-                >
-                  <Settings />
-                </button>
-                {p.status !== 'ARCHIVED' && (
-                  <button
-                    className="icon-btn danger"
-                    onClick={() => archive(p)}
-                    aria-label={`Archive ${p.name}`}
-                  >
-                    <Archive />
-                  </button>
-                )}
-                <button
-                  className="icon-btn danger"
-                  onClick={() => remove(p)}
-                  aria-label={`Delete ${p.name}`}
-                >
-                  <Trash2 />
-                </button>
-              </div>
-            </article>
-          );
-        })}
-      </div>
+      <p className="filterbar-hint">
+        {rearrangeable
+          ? 'Drag a tile by its grip, or use its position selector, to arrange projects by hand.'
+          : 'Switch to Custom order to arrange tiles by hand.'}
+      </p>
+      <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={dragEnd}>
+        <SortableContext items={sortedVisible.map((p) => p.id)} strategy={rectSortingStrategy}>
+          <div className="project-cards">
+            {sortedVisible.map((p, index) => (
+              <ProjectTile
+                key={p.id}
+                project={p}
+                tasks={tasks}
+                index={index}
+                total={sortedVisible.length}
+                rearrangeable={rearrangeable}
+                open={open}
+                archive={archive}
+                remove={remove}
+                moveToIndex={moveToIndex}
+              />
+            ))}
+          </div>
+        </SortableContext>
+      </DndContext>
       {!visible.length && (
         <Empty title="No projects found" body="Adjust your filters or create a new project." />
       )}
     </>
+  );
+}
+
+function ProjectTile({
+  project,
+  tasks,
+  index,
+  total,
+  rearrangeable,
+  open,
+  archive,
+  remove,
+  moveToIndex,
+}: {
+  project: Project;
+  tasks: Task[];
+  index: number;
+  total: number;
+  rearrangeable: boolean;
+  open: (m: Modal) => void;
+  archive: (p: Project) => void;
+  remove: (p: Project) => void;
+  moveToIndex: (p: Project, nextIndex: number) => void;
+}) {
+  // Listeners sit on the grip alone. A tile is mostly a <Link>, and dragging the whole
+  // surface would fight navigation.
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: project.id,
+    disabled: !rearrangeable,
+  });
+  const mine = tasks.filter((t) => t.projectId === project.id),
+    done = mine.filter((t) => t.status === 'COMPLETE').length,
+    over = mine.filter((t) => t.overdue).length;
+  return (
+    <article
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={isDragging ? 'dragging' : ''}
+    >
+      <div className="project-card-head">
+        <span className="status-label">{project.status.replace('_', ' ')}</span>
+        <DriveBadge status={project.driveStatus} />
+      </div>
+      <Link to={`/projects/${project.id}`}>
+        <span className="client-name">{project.clientName}</span>
+        <h2>{project.name}</h2>
+        <p>{project.description || 'No project description yet.'}</p>
+      </Link>
+      <div className="progress">
+        <div>
+          <span>Task progress</span>
+          <strong>
+            {done}/{mine.length}
+          </strong>
+        </div>
+        <div className="progress-track">
+          <span style={{ width: `${mine.length ? (done / mine.length) * 100 : 0}%` }} />
+        </div>
+      </div>
+      <div className="project-meta">
+        <span className={over ? 'overdue-text' : ''}>
+          {over ? (
+            <>
+              <AlertCircle />
+              {over} overdue
+            </>
+          ) : (
+            <>
+              <Check />
+              On track
+            </>
+          )}
+        </span>
+        <span>
+          <CalendarDays />
+          {project.targetDeadline ? formatDate(project.targetDeadline) : 'No deadline'}
+        </span>
+      </div>
+      <div className="card-actions">
+        <Link className="secondary buttonlike" to={`/kanban?project=${project.id}`}>
+          Open board
+        </Link>
+        <button
+          className="icon-btn"
+          onClick={() => open({ type: 'project', value: project })}
+          aria-label={`Edit ${project.name}`}
+        >
+          <Settings />
+        </button>
+        {project.status !== 'ARCHIVED' && (
+          <button
+            className="icon-btn danger"
+            onClick={() => archive(project)}
+            aria-label={`Archive ${project.name}`}
+          >
+            <Archive />
+          </button>
+        )}
+        <button
+          className="icon-btn danger"
+          onClick={() => remove(project)}
+          aria-label={`Delete ${project.name}`}
+        >
+          <Trash2 />
+        </button>
+        <button
+          className="drag-handle"
+          {...attributes}
+          {...listeners}
+          disabled={!rearrangeable}
+          aria-label={`Drag ${project.name}`}
+          title={rearrangeable ? `Drag ${project.name}` : 'Switch to Custom order to rearrange'}
+        >
+          <GripVertical />
+        </button>
+      </div>
+      <label className="keyboard-move">
+        <span className="sr-only">{`Position of ${project.name}`}</span>
+        <select
+          value={index + 1}
+          disabled={!rearrangeable}
+          onChange={(e) => moveToIndex(project, Number(e.target.value) - 1)}
+        >
+          {Array.from({ length: total }, (_, slot) => (
+            <option key={slot} value={slot + 1}>
+              {`Position ${slot + 1} of ${total}`}
+            </option>
+          ))}
+        </select>
+      </label>
+    </article>
   );
 }
 

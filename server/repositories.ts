@@ -18,8 +18,10 @@ export function listProjects(db: Db) {
   return (
     db
       .prepare(
+        // `position` leads so the manual tile order survives a reload. Until a project is
+        // dragged every row shares position 0, leaving the original ordering intact.
         `SELECT p.*, c.name client_name FROM projects p JOIN clients c ON c.id=p.client_id
-    ORDER BY CASE p.status WHEN 'ACTIVE' THEN 0 ELSE 1 END, p.updated_at DESC`,
+    ORDER BY p.position, CASE p.status WHEN 'ACTIVE' THEN 0 ELSE 1 END, p.updated_at DESC`,
       )
       .all() as any[]
   ).map(camel);

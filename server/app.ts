@@ -245,8 +245,12 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         return res.status(400).json({ error: 'Choose an active client.' });
       const projectId = id();
       const stamp = now();
+      // A new project lands last in the manual tile order, as a new task does in its column.
+      const position = (
+        db.prepare('SELECT COALESCE(MAX(position),-1)+1 next FROM projects').get() as any
+      ).next;
       db.prepare(
-        `INSERT INTO projects(id,client_id,name,description,status,start_date,target_deadline,priority,notes,drive_status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO projects(id,client_id,name,description,status,start_date,target_deadline,priority,notes,position,drive_status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       ).run(
         projectId,
         data.clientId,
@@ -257,6 +261,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         data.targetDeadline ?? null,
         data.priority,
         data.notes ?? null,
+        position,
         'PENDING',
         stamp,
         stamp,
@@ -315,6 +320,25 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       db.prepare('DELETE FROM projects WHERE id=?').run(project.id);
     });
     res.json({ ok: true, deleted: 'project', name: project.name, driveTouched: false });
+  });
+  app.post('/api/projects/reorder', (req, res, next) => {
+    try {
+      const data = z.object({ orderedIds: z.array(z.string().uuid()).min(1) }).parse(req.body);
+      const known = new Set(
+        (db.prepare('SELECT id FROM projects').all() as { id: string }[]).map((row) => row.id),
+      );
+      if (data.orderedIds.some((projectId) => !known.has(projectId)))
+        return res.status(404).json({ error: 'Project not found.' });
+      // `updated_at` is deliberately untouched: rearranging tiles is not an edit, and
+      // stamping it would reshuffle the Recently updated sort on the same screen.
+      transaction(db, () => {
+        const stmt = db.prepare('UPDATE projects SET position=? WHERE id=?');
+        data.orderedIds.forEach((projectId, index) => stmt.run(index, projectId));
+      });
+      res.json(listProjects(db));
+    } catch (e) {
+      next(e);
+    }
   });
   app.post('/api/projects/:id/retry-drive', async (req, res, next) => {
     try {

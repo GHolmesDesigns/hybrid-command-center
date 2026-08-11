@@ -38,6 +38,7 @@ const project = (
   name,
   status,
   priority: 'MEDIUM',
+  position: 0,
   driveStatus: 'DISCONNECTED',
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
@@ -62,6 +63,25 @@ const payloadFor = (url: string) => {
   return [];
 };
 
+const requests: { url: string; method: string; body: any }[] = [];
+
+/**
+ * Records every call and stands in for the server on `POST /api/projects/reorder`, so a
+ * reorder survives the `refresh()` that follows it rather than snapping back.
+ */
+const respondTo = (url: string, init?: RequestInit) => {
+  const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+  requests.push({ url, method: init?.method ?? 'GET', body });
+  if (url.endsWith('/api/projects/reorder')) {
+    const order: string[] = body.orderedIds;
+    projectsPayload = [...projectsPayload]
+      .sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id))
+      .map((p, position) => ({ ...p, position }));
+    return projectsPayload;
+  }
+  return payloadFor(url);
+};
+
 /** The topbar action is rendered before any page-level "New task" button. */
 const clickTopbarNewTask = () =>
   fireEvent.click(screen.getAllByRole('button', { name: /new task/i })[0]);
@@ -78,13 +98,14 @@ beforeEach(() => {
   localStorage.clear();
   projectsPayload = projects;
   clientsPayload = [];
+  requests.length = 0;
   vi.stubGlobal(
     'fetch',
-    vi.fn((input: RequestInfo | URL) =>
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
       Promise.resolve({
         ok: true,
         status: 200,
-        json: () => Promise.resolve(payloadFor(String(input))),
+        json: () => Promise.resolve(respondTo(String(input), init)),
       } as Response),
     ),
   );
@@ -222,6 +243,69 @@ describe('Projects sorting', () => {
     });
 
     expect(renderedProjectNames()).toEqual(['Middle', 'Zulu']);
+  });
+
+  const sortControl = () => screen.getByRole('combobox', { name: 'Sort projects by' });
+  const chooseCustom = () => fireEvent.change(sortControl(), { target: { value: 'custom' } });
+
+  it('offers Custom order and starts from the order the API returned', async () => {
+    await renderProjects();
+    chooseCustom();
+
+    expect(sortControl()).toHaveValue('custom');
+    expect(renderedProjectNames()).toEqual(['Zulu', 'Alpha', 'Middle']);
+  });
+
+  it('reorders a tile from the keyboard and sends the whole new order', async () => {
+    await renderProjects();
+    chooseCustom();
+
+    fireEvent.change(screen.getByLabelText('Position of Middle'), { target: { value: '1' } });
+
+    await waitFor(() => expect(renderedProjectNames()).toEqual(['Middle', 'Zulu', 'Alpha']));
+    const reorder = requests.find((r) => r.url.endsWith('/api/projects/reorder'));
+    expect(reorder?.method).toBe('POST');
+    expect(reorder?.body.orderedIds).toEqual(['sort-middle', 'sort-zulu', 'sort-alpha']);
+  });
+
+  it('keeps the custom order after switching to another sort mode and back', async () => {
+    await renderProjects();
+    chooseCustom();
+    fireEvent.change(screen.getByLabelText('Position of Middle'), { target: { value: '1' } });
+    await waitFor(() => expect(renderedProjectNames()).toEqual(['Middle', 'Zulu', 'Alpha']));
+
+    fireEvent.change(sortControl(), { target: { value: 'name-ascending' } });
+    expect(renderedProjectNames()).toEqual(['Alpha', 'Middle', 'Zulu']);
+
+    chooseCustom();
+    expect(renderedProjectNames()).toEqual(['Middle', 'Zulu', 'Alpha']);
+  });
+
+  it('disables pointer and keyboard reordering outside Custom order', async () => {
+    await renderProjects();
+
+    expect(screen.getByRole('button', { name: 'Drag Zulu' })).toBeDisabled();
+    expect(screen.getByLabelText('Position of Zulu')).toBeDisabled();
+    expect(screen.getByText('Switch to Custom order to arrange tiles by hand.')).toBeVisible();
+
+    chooseCustom();
+
+    expect(screen.getByRole('button', { name: 'Drag Zulu' })).toBeEnabled();
+    expect(screen.getByLabelText('Position of Zulu')).toBeEnabled();
+  });
+
+  it('leaves the tile link navigable while the grip carries the drag', async () => {
+    await renderProjects();
+    chooseCustom();
+
+    expect(screen.getByRole('heading', { level: 2, name: 'Zulu' }).closest('a')).toHaveAttribute(
+      'href',
+      '/projects/sort-zulu',
+    );
+    expect(screen.getByRole('button', { name: 'Drag Zulu' })).toHaveAttribute(
+      'aria-roledescription',
+      'sortable',
+    );
   });
 });
 
