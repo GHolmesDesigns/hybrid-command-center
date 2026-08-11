@@ -174,7 +174,7 @@ export function App() {
           <Nav icon={<LayoutDashboard />} to="/" label="Dashboard" collapsed={collapsed} />
           <Nav icon={<Users />} to="/clients" label="Clients" collapsed={collapsed} />
           <Nav icon={<BriefcaseBusiness />} to="/projects" label="Projects" collapsed={collapsed} />
-          <Nav icon={<FolderKanban />} to="/kanban" label="Kanban" collapsed={collapsed} />
+          <Nav icon={<FolderKanban />} to="/kanban" label="Status" collapsed={collapsed} />
           {!collapsed && (
             <div className="nav-divider">
               <span>Coming next</span>
@@ -346,7 +346,7 @@ function Nav({
 function pageName(path: string) {
   if (path.startsWith('/clients')) return 'Clients';
   if (path.startsWith('/projects')) return 'Projects';
-  if (path.startsWith('/kanban')) return 'Kanban';
+  if (path.startsWith('/kanban')) return 'Status';
   if (path.startsWith('/settings')) return 'Settings';
   return 'Dashboard';
 }
@@ -551,7 +551,7 @@ function Dashboard({
           </button>
           <button onClick={() => nav('/kanban')}>
             <FolderKanban />
-            Open Kanban
+            Open Status board
           </button>
         </div>
       </section>
@@ -991,7 +991,7 @@ function ProjectDetail({
       </div>
       <div className="detail-actions">
         <Link className="buttonlike" to={`/kanban?project=${p.id}`}>
-          Open project Kanban <ArrowRight />
+          Open project status <ArrowRight />
         </Link>
         <button className="secondary" onClick={() => open({ type: 'project', value: p })}>
           Edit project
@@ -1111,7 +1111,7 @@ function Kanban({
     <>
       <PageHead
         eyebrow="Workflow"
-        title="Kanban board"
+        title="Project Status"
         body={`${filtered.length} visible tasks · move work forward with drag, touch, or keyboard controls.`}
         action={
           <button onClick={() => open({ type: 'task', projectId: project || undefined })}>
