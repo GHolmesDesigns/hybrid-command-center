@@ -21,6 +21,7 @@ import {
 } from '@dnd-kit/core';
 import {
   SortableContext,
+  arrayMove,
   sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
@@ -309,6 +310,7 @@ export function App() {
               element={
                 <Kanban
                   tasks={tasks}
+                  updateTasks={setTasks}
                   clients={clients}
                   projects={projects}
                   open={setModal}
@@ -1062,6 +1064,7 @@ function ProjectDetail({
 
 function Kanban({
   tasks,
+  updateTasks,
   clients,
   projects,
   open,
@@ -1070,6 +1073,7 @@ function Kanban({
   flash,
 }: {
   tasks: Task[];
+  updateTasks: (tasks: Task[]) => void;
   clients: Client[];
   projects: Project[];
   open: (m: Modal) => void;
@@ -1102,28 +1106,62 @@ function Kanban({
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
-  const move = async (task: Task, status: TaskStatus) => {
+  const move = async (task: Task, status: TaskStatus, overId?: string | number) => {
+    const destination = tasks.filter((candidate) => candidate.status === status);
+    let reordered: Task[];
+    if (task.status === status) {
+      const oldIndex = destination.findIndex((candidate) => candidate.id === task.id);
+      const overIndex = destination.findIndex((candidate) => candidate.id === overId);
+      const newIndex = overIndex >= 0 ? overIndex : destination.length - 1;
+      reordered = arrayMove(destination, oldIndex, newIndex);
+    } else {
+      const withoutTask = destination.filter((candidate) => candidate.id !== task.id);
+      const overIndex = withoutTask.findIndex((candidate) => candidate.id === overId);
+      const withTask = [...withoutTask, { ...task, status }];
+      const newIndex = overIndex >= 0 ? overIndex : withTask.length - 1;
+      reordered = arrayMove(withTask, withTask.length - 1, newIndex);
+    }
+    const orderedIds = reordered.map((candidate) => candidate.id);
+    const optimisticTasks = TASK_STATUSES.flatMap((candidateStatus) =>
+      candidateStatus === status
+        ? reordered.map((candidate, position) => ({ ...candidate, position }))
+        : tasks.filter(
+            (candidate) => candidate.status === candidateStatus && candidate.id !== task.id,
+          ),
+    );
+    updateTasks(optimisticTasks);
+
     try {
-      const ordered = filtered
-        .filter((t) => t.status === status && t.id !== task.id)
-        .map((t) => t.id);
-      ordered.push(task.id);
-      await send('/tasks/reorder', 'POST', { taskId: task.id, status, orderedIds: ordered });
+      await send('/tasks/reorder', 'POST', { taskId: task.id, status, orderedIds });
       await refresh();
-      flash(`Moved to ${STATUS_LABEL[status]}.`);
+      flash(
+        task.status === status
+          ? `Reordered in ${STATUS_LABEL[status]}.`
+          : `Moved to ${STATUS_LABEL[status]}.`,
+      );
     } catch (e: any) {
       if (e.status === 409 && e.data?.code === 'TASK_BLOCKED') {
         if (confirm(`${e.message}\n\nComplete anyway and override the dependency block?`)) {
-          await send('/tasks/reorder', 'POST', {
-            taskId: task.id,
-            status,
-            orderedIds: [task.id],
-            overrideBlocked: true,
-          });
-          await refresh();
-          flash('Task completed with dependency override.');
+          try {
+            await send('/tasks/reorder', 'POST', {
+              taskId: task.id,
+              status,
+              orderedIds,
+              overrideBlocked: true,
+            });
+            await refresh();
+            flash('Task completed with dependency override.');
+          } catch (overrideError) {
+            updateTasks(tasks);
+            flash((overrideError as Error).message, 'error');
+          }
+        } else {
+          updateTasks(tasks);
         }
-      } else flash(e.message, 'error');
+      } else {
+        updateTasks(tasks);
+        flash(e.message, 'error');
+      }
     }
   };
   const dragEnd = (event: DragEndEvent) => {
@@ -1134,7 +1172,7 @@ function Kanban({
     const status = (
       TASK_STATUSES.includes(event.over.id as TaskStatus) ? event.over.id : overTask?.status
     ) as TaskStatus | undefined;
-    if (status && status !== task.status) move(task, status);
+    if (status) move(task, status, event.over.id);
   };
   const set = (key: string, value: string) => {
     const next = new URLSearchParams(params);
