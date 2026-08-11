@@ -27,7 +27,12 @@ import {
   DEFAULT_BRANDING,
   type Branding,
 } from '../shared/branding.ts';
-import { TASK_STATUSES, TASK_TYPES, normalizeTagName } from '../shared/types.ts';
+import {
+  TASK_CHECKLIST_TEMPLATES,
+  TASK_STATUSES,
+  TASK_TYPES,
+  normalizeTagName,
+} from '../shared/types.ts';
 
 const id = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
@@ -401,24 +406,35 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
           .prepare('SELECT COALESCE(MAX(position),-1)+1 next FROM tasks WHERE status=?')
           .get(data.status) as any
       ).next;
-      db.prepare(
-        `INSERT INTO tasks(id,project_id,title,description,status,priority,task_type,due_date,start_date,notes,position,completed_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      ).run(
-        taskId,
-        data.projectId,
-        data.title,
-        data.description ?? null,
-        data.status,
-        data.priority,
-        data.taskType ?? null,
-        data.dueDate ?? null,
-        data.startDate ?? null,
-        data.notes ?? null,
-        max,
-        data.status === 'COMPLETE' ? stamp : null,
-        stamp,
-        stamp,
-      );
+      transaction(db, () => {
+        db.prepare(
+          `INSERT INTO tasks(id,project_id,title,description,status,priority,task_type,due_date,start_date,notes,position,completed_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        ).run(
+          taskId,
+          data.projectId,
+          data.title,
+          data.description ?? null,
+          data.status,
+          data.priority,
+          data.taskType ?? null,
+          data.dueDate ?? null,
+          data.startDate ?? null,
+          data.notes ?? null,
+          max,
+          data.status === 'COMPLETE' ? stamp : null,
+          stamp,
+          stamp,
+        );
+        const template = data.taskType ? TASK_CHECKLIST_TEMPLATES[data.taskType] : undefined;
+        if (template) {
+          const insertChecklistItem = db.prepare(
+            'INSERT INTO checklist_items(id,task_id,text,position) VALUES(?,?,?,?)',
+          );
+          template.forEach((text, position) =>
+            insertChecklistItem.run(id(), taskId, text, position),
+          );
+        }
+      });
       res.status(201).json(getTask(db, taskId));
     } catch (e) {
       next(e);

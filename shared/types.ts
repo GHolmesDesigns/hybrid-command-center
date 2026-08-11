@@ -16,6 +16,60 @@ export const TASK_TYPES = [
   'OTHER',
 ] as const;
 export type TaskType = (typeof TASK_TYPES)[number];
+
+/**
+ * Default checklist items for newly created typed tasks. Templates are applied once,
+ * at creation time; changing this map never mutates existing tasks.
+ */
+export const TASK_CHECKLIST_TEMPLATES: Partial<Record<TaskType, readonly string[]>> = {
+  BLOG_POST: [
+    'Draft the post',
+    'Edit for clarity and the week’s theme',
+    'Deliver final Markdown',
+    'Schedule on gholmesdesigns.com',
+    'Verify blog-to-video and social-to-blog links',
+  ],
+  VIDEO: [
+    'Draft the script',
+    'Build the storyboard',
+    'Create InstaDoodle illustrations',
+    'Animate the segment',
+    'Verify publish links',
+  ],
+  SOCIAL_POST: [
+    'Draft platform-specific captions',
+    'Check brand voice',
+    'Add #ThinkVisually where appropriate',
+    'Confirm no emoji',
+    'Schedule the week’s posts',
+    'Verify links to the blog or video',
+  ],
+  GRAPHICS: [
+    'Create thumbnails',
+    'Create quote cards',
+    'Create carousel assets',
+    'Verify brand CMYK palette',
+    'Apply the registration-mark motif',
+    'Run a brand QA pass',
+  ],
+  SCHEDULING: [
+    'Schedule the blog post',
+    'Schedule social posts',
+    'Verify cross-links between social, blog, and video',
+  ],
+  QA_BRAND_PASS: [
+    'Verify approved typefaces',
+    'Verify approved palette',
+    'Confirm no gradients',
+    'Confirm no mascots',
+    'Confirm no visual clichés',
+  ],
+  ADMIN: [
+    'Capture the prior week’s platform-native performance',
+    'Record the topic, hook, and format carrying into the next brief',
+  ],
+};
+
 export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 export type DriveStatus = 'DISCONNECTED' | 'PENDING' | 'CONNECTED' | 'FAILED';
 
