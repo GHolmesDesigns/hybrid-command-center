@@ -38,9 +38,25 @@ describe('command center API', () => {
 
   it('creates clients and projects without pretending disconnected Drive is ready', async () => {
     const { c, p } = await setup();
+    expect(c.slug).toBe(`acme-studio-${c.id.slice(0, 6)}`);
     expect(c.driveStatus).toBe('DISCONNECTED');
     expect(p.clientId).toBe(c.id);
     expect(p.driveStatus).toBe('DISCONNECTED');
+  });
+  it('regenerates a client slug only when a PATCH includes the name', async () => {
+    const app = createApp(db);
+    const client = (await createClient('Original Name')).body;
+    const originalSlug = client.slug;
+
+    const detailsOnly = (
+      await request(app).patch(`/api/clients/${client.id}`).send({ notes: 'Updated details' })
+    ).body;
+    expect(detailsOnly.slug).toBe(originalSlug);
+
+    const renamed = (
+      await request(app).patch(`/api/clients/${client.id}`).send({ name: 'G.Holmes Designs' })
+    ).body;
+    expect(renamed.slug).toBe(`g-holmes-designs-${client.id.slice(0, 6)}`);
   });
   it('creates tasks, reorders columns, and calculates checklist progress', async () => {
     const { p } = await setup();

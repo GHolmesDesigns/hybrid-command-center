@@ -2,6 +2,7 @@
 import { addDays, subDays, format } from 'date-fns';
 import { getDb } from '../db.ts';
 import { provisionClient, provisionProject } from '../drive/service.ts';
+import { buildClientSlug } from '../domain/client-slugs.ts';
 
 const db = getDb(),
   stamp = new Date().toISOString(),
@@ -15,7 +16,6 @@ const clients = [
   {
     id: uid(),
     name: 'Northstar Coffee Co.',
-    slug: 'northstar-coffee',
     contact: 'Maya Chen',
     email: 'maya@northstar.example',
     notes: 'Retail brand refresh and seasonal launch work.',
@@ -23,7 +23,6 @@ const clients = [
   {
     id: uid(),
     name: 'Fieldwork Architecture',
-    slug: 'fieldwork-architecture',
     contact: 'Jon Bell',
     email: 'jon@fieldwork.example',
     notes: 'Architecture studio with editorial and digital projects.',
@@ -31,7 +30,6 @@ const clients = [
   {
     id: uid(),
     name: 'Lumen Arts Foundation',
-    slug: 'lumen-arts',
     contact: 'Iris Okafor',
     email: 'iris@lumen.example',
     notes: 'Nonprofit arts programming and annual campaign.',
@@ -41,7 +39,16 @@ const clientStmt = db.prepare(
   `INSERT INTO clients(id,name,slug,contact_name,email,notes,status,drive_status,created_at,updated_at) VALUES(?,?,?,?,?,?,'ACTIVE','DISCONNECTED',?,?)`,
 );
 clients.forEach((c) =>
-  clientStmt.run(c.id, c.name, c.slug, c.contact, c.email, c.notes, stamp, stamp),
+  clientStmt.run(
+    c.id,
+    c.name,
+    buildClientSlug(c.name, c.id),
+    c.contact,
+    c.email,
+    c.notes,
+    stamp,
+    stamp,
+  ),
 );
 const projects = [
   {

@@ -12,6 +12,7 @@ import { config } from './config.ts';
 import { getTag, getTask, listClients, listProjects, listTags, listTasks } from './repositories.ts';
 import { wouldCreateCycle, blockingDependencies } from './domain/dependencies.ts';
 import { isDueNextSevenDays, isDueToday } from './domain/deadlines.ts';
+import { buildClientSlug } from './domain/client-slugs.ts';
 import {
   driveProvider,
   getSetting,
@@ -64,12 +65,6 @@ const productionContentSecurityPolicy = {
 
 type AppOptions = { production?: boolean };
 
-const slugify = (value: string) =>
-  value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '');
 /**
  * Optional text field. An omitted key stays `undefined` so a PATCH keeps the stored
  * value; an empty string becomes `null` so the caller can deliberately clear it.
@@ -206,7 +201,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       ).run(
         clientId,
         data.name,
-        `${slugify(data.name)}-${clientId.slice(0, 6)}`,
+        buildClientSlug(data.name, clientId),
         data.contactName ?? null,
         data.email ?? null,
         data.phone ?? null,
@@ -232,9 +227,10 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       const current = db.prepare('SELECT * FROM clients WHERE id=?').get(req.params.id) as any;
       if (!current) return res.status(404).json({ error: 'Client not found.' });
       db.prepare(
-        `UPDATE clients SET name=?,contact_name=?,email=?,phone=?,website=?,notes=?,updated_at=? WHERE id=?`,
+        `UPDATE clients SET name=?,slug=?,contact_name=?,email=?,phone=?,website=?,notes=?,updated_at=? WHERE id=?`,
       ).run(
         patch(data.name, current.name),
+        data.name === undefined ? current.slug : buildClientSlug(data.name, current.id),
         patch(data.contactName, current.contact_name),
         patch(data.email, current.email),
         patch(data.phone, current.phone),
