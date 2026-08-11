@@ -53,6 +53,10 @@ test('critical project workflow is visible and interactive', async ({ page }) =>
     (task: { title: string; projectId: string }) =>
       task.title === foundationTitle && task.projectId === projectId,
   ).id;
+  const blockedId = currentTasks.find(
+    (task: { title: string; projectId: string }) =>
+      task.title === blockedTitle && task.projectId === projectId,
+  ).id;
   await dependencySection.locator('select').selectOption(foundationId);
   await dependencySection.getByRole('button', { name: 'Add' }).click();
   await expect(page.getByRole('dialog').getByText('Waiting on 1 task')).toBeVisible();
@@ -60,6 +64,56 @@ test('critical project workflow is visible and interactive', async ({ page }) =>
   const blockedCard = page.locator('.kanban-card').filter({ hasText: blockedTitle });
   await expect(blockedCard.locator('.blocked-label')).toBeVisible();
   const foundationCard = page.locator('.kanban-card').filter({ hasText: foundationTitle });
+  let reorderPayload: { taskId: string; status: string; orderedIds: string[] } | undefined;
+  let finishReorder!: () => void;
+  const reorderFinished = new Promise<void>((resolve) => {
+    finishReorder = resolve;
+  });
+  await page.route('**/api/tasks/reorder', async (route) => {
+    try {
+      reorderPayload = route.request().postDataJSON();
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      await route.continue();
+    } finally {
+      finishReorder();
+    }
+  });
+  const dragHandle = blockedCard.getByRole('button', { name: `Drag ${blockedTitle}` });
+  await dragHandle.hover();
+  const source = await dragHandle.boundingBox();
+  if (!source) throw new Error('Expected the task drag handle to have a bounding box.');
+  await page.mouse.down();
+  await page.mouse.move(source.x + source.width / 2 + 10, source.y + source.height / 2, {
+    steps: 5,
+  });
+  await expect(dragHandle).toHaveAttribute('aria-pressed', 'true');
+  const target = await foundationCard.boundingBox();
+  if (!target) throw new Error('Expected the reorder target to have a bounding box.');
+  await page.mouse.move(target.x + target.width / 2, target.y + 10, { steps: 20 });
+  await page.mouse.up();
+  await expect
+    .poll(() => reorderPayload)
+    .toEqual({
+      taskId: blockedId,
+      status: 'BACKLOG',
+      orderedIds: [blockedId, foundationId],
+    });
+  await expect(
+    page
+      .locator('.kanban-column')
+      .filter({ hasText: 'Backlog' })
+      .locator('.kanban-card .card-title strong'),
+  ).toHaveText([blockedTitle, foundationTitle]);
+  await reorderFinished;
+  await expect(page.getByText('Reordered in Backlog.', { exact: true })).toBeVisible();
+  await page.unroute('**/api/tasks/reorder');
+  await page.reload();
+  await expect(
+    page
+      .locator('.kanban-column')
+      .filter({ hasText: 'Backlog' })
+      .locator('.kanban-card .card-title strong'),
+  ).toHaveText([blockedTitle, foundationTitle]);
   await foundationCard.locator('.keyboard-move select').selectOption('IN_PROGRESS');
   await expect(
     page
