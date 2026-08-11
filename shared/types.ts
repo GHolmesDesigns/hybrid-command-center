@@ -1,5 +1,21 @@
 export const TASK_STATUSES = ['BACKLOG', 'TODO', 'IN_PROGRESS', 'REVIEW', 'COMPLETE'] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
+/**
+ * What kind of studio work a task is, following the weekly workflow: content
+ * production, then scheduling and publish, then QA and wrap. Optional — a task
+ * without a type is normal, and every task predating the field has none.
+ */
+export const TASK_TYPES = [
+  'BLOG_POST',
+  'VIDEO',
+  'SOCIAL_POST',
+  'GRAPHICS',
+  'SCHEDULING',
+  'QA_BRAND_PASS',
+  'ADMIN',
+  'OTHER',
+] as const;
+export type TaskType = (typeof TASK_TYPES)[number];
 export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 export type DriveStatus = 'DISCONNECTED' | 'PENDING' | 'CONNECTED' | 'FAILED';
 
@@ -62,6 +78,7 @@ export interface Task {
   description?: string;
   status: TaskStatus;
   priority: Priority;
+  taskType?: TaskType;
   dueDate?: string;
   startDate?: string;
   notes?: string;

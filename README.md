@@ -15,6 +15,8 @@ For nontechnical installation and day-to-day instructions, see the [First-Time S
 - Projects view with search, client filter, and seven sort modes, including a **Custom order** where tiles are rearranged by drag or keyboard and the arrangement persists
 - Five-stage **Status** board with persistent ordering, drag-and-drop, filters, and keyboard status controls
 - Task checklists, dependency blocking, circular-dependency prevention, **rename**, **record-only delete**, and explicit completion override
+- Optional **task type** for design-studio work — blog post, video, social post, graphics, scheduling, QA/brand pass, admin, or other — shown on the card and in the task detail
+- **Edit details** on a task, opening the full create/edit form from the task detail view
 - Collapsible sidebar with **version tracker** and Settings-editable branding (defaults also in `shared/branding.ts`)
 - Reserved placeholders for the Calendar, Files, and campaign playbook **Import** modules — visible in the sidebar and Settings, not yet implemented
 - Server-only Google OAuth 2.0, encrypted token storage, configurable Drive root, and resumable/idempotent folder creation

@@ -70,8 +70,9 @@ import type {
   Project,
   Task,
   TaskStatus,
+  TaskType,
 } from '../../shared/types';
-import { TASK_STATUSES } from '../../shared/types';
+import { TASK_STATUSES, TASK_TYPES } from '../../shared/types';
 import { APP_VERSION, DEFAULT_BRANDING, type Branding } from '../../shared/branding';
 
 const STATUS_LABEL: Record<TaskStatus, string> = {
@@ -87,6 +88,16 @@ const STATUS_HELP: Record<TaskStatus, string> = {
   IN_PROGRESS: 'Currently moving',
   REVIEW: 'Waiting for approval',
   COMPLETE: 'Finished work',
+};
+const TASK_TYPE_LABEL: Record<TaskType, string> = {
+  BLOG_POST: 'Blog Post',
+  VIDEO: 'Video',
+  SOCIAL_POST: 'Social Post',
+  GRAPHICS: 'Graphics',
+  SCHEDULING: 'Scheduling',
+  QA_BRAND_PASS: 'QA / Brand Pass',
+  ADMIN: 'Admin',
+  OTHER: 'Other',
 };
 type Modal =
   | { type: 'client'; value?: Client }
@@ -340,6 +351,7 @@ export function App() {
           projects={projects}
           tasks={tasks}
           close={() => setModal(null)}
+          edit={(task) => setModal({ type: 'task', value: task })}
           saved={saved}
           refresh={refresh}
           flash={flash}
@@ -1499,6 +1511,7 @@ function KanbanCard({
     >
       <div className="card-labels">
         <PriorityBadge priority={task.priority} />
+        {task.taskType && <TaskTypeBadge type={task.taskType} />}
         {task.blocked && (
           <span className="blocked-label">
             <ShieldAlert /> Blocked
@@ -1821,6 +1834,7 @@ function ModalHost({
   projects,
   tasks,
   close,
+  edit,
   saved,
   refresh,
   flash,
@@ -1830,6 +1844,8 @@ function ModalHost({
   projects: Project[];
   tasks: Task[];
   close: () => void;
+  /** Swaps the detail view for the edit form, the only way to reach a task's fields. */
+  edit: (task: Task) => void;
   saved: (s: string) => Promise<void>;
   refresh: () => Promise<void>;
   flash: (s: string, t?: 'success' | 'error') => void;
@@ -1862,12 +1878,14 @@ function ModalHost({
         />
       </EntityModal>
     );
+  const task = tasks.find((t) => t.id === modal.value.id) || modal.value;
   return (
     <EntityModal title="Task details" wide close={close}>
       <TaskDetail
-        task={tasks.find((t) => t.id === modal.value.id) || modal.value}
+        task={task}
         tasks={tasks}
         close={close}
+        edit={() => edit(task)}
         refresh={refresh}
         flash={flash}
       />
@@ -2070,7 +2088,7 @@ function TaskForm({
       </label>
       <Field label="Task title" name="title" value={value?.title} required />
       <TextArea label="Description" name="description" value={value?.description} />
-      <div className="form-row">
+      <div className="form-row triple">
         <Select
           label="Status"
           name="status"
@@ -2082,6 +2100,14 @@ function TaskForm({
           name="priority"
           value={value?.priority || 'MEDIUM'}
           options={['LOW', 'MEDIUM', 'HIGH', 'URGENT']}
+        />
+        <Select
+          label="Type"
+          name="taskType"
+          value={value?.taskType || ''}
+          options={TASK_TYPES}
+          labels={TASK_TYPE_LABEL}
+          placeholder="No type"
         />
       </div>
       <div className="form-row">
@@ -2103,12 +2129,14 @@ function TaskDetail({
   task,
   tasks,
   close,
+  edit,
   refresh,
   flash,
 }: {
   task: Task;
   tasks: Task[];
   close: () => void;
+  edit: () => void;
   refresh: () => Promise<void>;
   flash: (s: string, t?: 'success' | 'error') => void;
 }) {
@@ -2182,6 +2210,7 @@ function TaskDetail({
       <div className="task-detail-head">
         <div className="card-labels">
           <PriorityBadge priority={task.priority} />
+          {task.taskType && <TaskTypeBadge type={task.taskType} />}
           {task.blocked && (
             <span className="blocked-label">
               <ShieldAlert /> Blocked
@@ -2371,6 +2400,9 @@ function TaskDetail({
         <button className="secondary danger-outline" onClick={remove}>
           <Trash2 /> Delete task
         </button>
+        <button className="secondary" onClick={edit}>
+          <Pencil /> Edit details
+        </button>
         {task.status !== 'COMPLETE' && (
           <button onClick={complete}>
             <Check /> Mark complete
@@ -2417,19 +2449,26 @@ function Select({
   name,
   value,
   options,
+  labels,
+  placeholder,
 }: {
   label: string;
   name: string;
   value: string;
   options: readonly string[];
+  /** Display text per option. Falls back to the raw value with underscores spaced out. */
+  labels?: Record<string, string>;
+  /** Leading empty-value option, for a field that may legitimately be left unset. */
+  placeholder?: string;
 }) {
   return (
     <label>
       {label}
       <select name={name} defaultValue={value}>
+        {placeholder && <option value="">{placeholder}</option>}
         {options.map((o) => (
           <option key={o} value={o}>
-            {o.replaceAll('_', ' ')}
+            {labels?.[o] ?? o.replaceAll('_', ' ')}
           </option>
         ))}
       </select>
@@ -2490,6 +2529,9 @@ function DriveBadge({ status }: { status: DriveStatus | string | undefined }) {
             : 'Drive offline'}
     </span>
   );
+}
+function TaskTypeBadge({ type }: { type: TaskType }) {
+  return <span className="task-type-badge">{TASK_TYPE_LABEL[type]}</span>;
 }
 function PriorityBadge({ priority }: { priority: Priority }) {
   return <span className={`priority-badge ${priority.toLowerCase()}`}>{priority}</span>;

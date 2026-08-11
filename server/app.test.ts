@@ -326,7 +326,7 @@ describe('command center API', () => {
     expect(noDeadline.name).toBe('Dated Project');
   });
 
-  it('does not reset status or priority on a PATCH that omits them', async () => {
+  it('does not reset status, priority, or task type on a PATCH that omits them', async () => {
     const { c, p } = await setup();
     const app = createApp(db);
     // A project created ON_HOLD/URGENT must survive a name-only edit.
@@ -342,21 +342,74 @@ describe('command center API', () => {
     expect(renamedProject.priority).toBe('URGENT');
     // Renaming a task from the detail modal sends only { title }.
     const task = (
-      await request(app)
-        .post('/api/tasks')
-        .send({ projectId: p.id, title: 'In flight', status: 'IN_PROGRESS', priority: 'HIGH' })
+      await request(app).post('/api/tasks').send({
+        projectId: p.id,
+        title: 'In flight',
+        status: 'IN_PROGRESS',
+        priority: 'HIGH',
+        taskType: 'BLOG_POST',
+      })
     ).body;
     const renamedTask = (
       await request(app).patch(`/api/tasks/${task.id}`).send({ title: 'In flight v2' })
     ).body;
     expect(renamedTask.status).toBe('IN_PROGRESS');
     expect(renamedTask.priority).toBe('HIGH');
+    expect(renamedTask.taskType).toBe('BLOG_POST');
     // Completing from the modal sends only { status }.
     const completed = (
       await request(app).patch(`/api/tasks/${task.id}`).send({ status: 'COMPLETE' })
     ).body;
     expect(completed.priority).toBe('HIGH');
+    expect(completed.taskType).toBe('BLOG_POST');
     expect(completed.title).toBe('In flight v2');
+  });
+
+  it('stores an optional task type and leaves untyped tasks editable', async () => {
+    const { p } = await setup();
+    const app = createApp(db);
+    // A task created without a type is valid, reads back as undefined, and still edits.
+    const untyped = (
+      await request(app).post('/api/tasks').send({ projectId: p.id, title: 'Legacy task' })
+    ).body;
+    expect(untyped.taskType).toBeUndefined();
+    const renamed = (
+      await request(app).patch(`/api/tasks/${untyped.id}`).send({ title: 'Legacy task v2' })
+    ).body;
+    expect(renamed.taskType).toBeUndefined();
+    expect(renamed.title).toBe('Legacy task v2');
+    // A type set later sticks, and the empty string the form posts for "No type" clears it.
+    const typed = (
+      await request(app).patch(`/api/tasks/${untyped.id}`).send({ taskType: 'QA_BRAND_PASS' })
+    ).body;
+    expect(typed.taskType).toBe('QA_BRAND_PASS');
+    const cleared = (await request(app).patch(`/api/tasks/${untyped.id}`).send({ taskType: '' }))
+      .body;
+    expect(cleared.taskType).toBeUndefined();
+    // The type survives a round trip through the list endpoint.
+    await request(app).patch(`/api/tasks/${untyped.id}`).send({ taskType: 'VIDEO' });
+    const listed = (await request(app).get('/api/tasks')).body.find(
+      (t: any) => t.id === untyped.id,
+    );
+    expect(listed.taskType).toBe('VIDEO');
+  });
+
+  it('rejects a task type outside the vocabulary', async () => {
+    const { p } = await setup();
+    const app = createApp(db);
+    await request(app)
+      .post('/api/tasks')
+      .send({ projectId: p.id, title: 'Bad type task', taskType: 'PODCAST' })
+      .expect(400);
+    const task = (
+      await request(app)
+        .post('/api/tasks')
+        .send({ projectId: p.id, title: 'Good type task', taskType: 'GRAPHICS' })
+    ).body;
+    await request(app).patch(`/api/tasks/${task.id}`).send({ taskType: 'blog_post' }).expect(400);
+    // The rejected PATCH must not have disturbed the stored value.
+    const stored = (await request(app).get('/api/tasks')).body.find((t: any) => t.id === task.id);
+    expect(stored.taskType).toBe('GRAPHICS');
   });
 
   it('rejects task dates that are not real YYYY-MM-DD calendar dates', async () => {

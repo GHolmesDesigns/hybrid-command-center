@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { APP_VERSION } from '../../shared/branding';
-import type { Client, DashboardData, Project } from '../../shared/types';
+import type { Client, DashboardData, Project, Task } from '../../shared/types';
 
 const emptyDashboard: DashboardData = {
   counts: {
@@ -51,8 +51,32 @@ const projects: Project[] = [
   project('p3', 'Old retainer', 'ARCHIVED'),
 ];
 
+const task = (id: string, title: string, overrides: Partial<Task> = {}): Task => ({
+  id,
+  projectId: 'p1',
+  projectName: 'Site refresh',
+  clientId: 'client-p1',
+  clientName: 'Acme',
+  title,
+  status: 'TODO',
+  priority: 'MEDIUM',
+  position: 0,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+  tags: [],
+  checklist: [],
+  dependencyIds: [],
+  blockingDependencies: [],
+  blocked: false,
+  overdue: false,
+  checklistCompleted: 0,
+  checklistTotal: 0,
+  ...overrides,
+});
+
 let projectsPayload = projects;
 let clientsPayload: Client[] = [];
+let tasksPayload: Task[] = [];
 
 /** Serves the five endpoints App() requests on mount. */
 const payloadFor = (url: string) => {
@@ -60,6 +84,7 @@ const payloadFor = (url: string) => {
   if (url.endsWith('/api/settings/branding')) return { branding };
   if (url.endsWith('/api/projects')) return projectsPayload;
   if (url.endsWith('/api/clients')) return clientsPayload;
+  if (url.endsWith('/api/tasks')) return tasksPayload;
   return [];
 };
 
@@ -98,6 +123,7 @@ beforeEach(() => {
   localStorage.clear();
   projectsPayload = projects;
   clientsPayload = [];
+  tasksPayload = [];
   requests.length = 0;
   vi.stubGlobal(
     'fetch',
@@ -306,6 +332,134 @@ describe('Projects sorting', () => {
       'aria-roledescription',
       'sortable',
     );
+  });
+});
+
+describe('Task type selector', () => {
+  const typeSelect = () => screen.getByLabelText('Type') as HTMLSelectElement;
+
+  const openNewTaskForm = async () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    );
+    await screen.findByText(branding.title);
+    clickTopbarNewTask();
+  };
+
+  it('starts untyped and offers the studio vocabulary in reading order', async () => {
+    await openNewTaskForm();
+
+    expect(typeSelect().value).toBe('');
+    expect([...typeSelect().options].map((option) => option.textContent)).toEqual([
+      'No type',
+      'Blog Post',
+      'Video',
+      'Social Post',
+      'Graphics',
+      'Scheduling',
+      'QA / Brand Pass',
+      'Admin',
+      'Other',
+    ]);
+  });
+
+  it('sends the chosen type when the task is created', async () => {
+    await openNewTaskForm();
+    fireEvent.change(projectSelect(), { target: { value: 'p1' } });
+    fireEvent.change(screen.getByLabelText('Task title'), { target: { value: 'Draft the recap' } });
+    fireEvent.change(typeSelect(), { target: { value: 'BLOG_POST' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create task' }));
+
+    await waitFor(() =>
+      expect(requests.some((r) => r.method === 'POST' && r.url.endsWith('/api/tasks'))).toBe(true),
+    );
+    const created = requests.find((r) => r.method === 'POST' && r.url.endsWith('/api/tasks'));
+    expect(created?.body.taskType).toBe('BLOG_POST');
+  });
+
+  it('posts an empty type rather than omitting the key, so "No type" clears it', async () => {
+    await openNewTaskForm();
+    fireEvent.change(projectSelect(), { target: { value: 'p1' } });
+    fireEvent.change(screen.getByLabelText('Task title'), { target: { value: 'Untyped chore' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create task' }));
+
+    await waitFor(() =>
+      expect(requests.some((r) => r.method === 'POST' && r.url.endsWith('/api/tasks'))).toBe(true),
+    );
+    const created = requests.find((r) => r.method === 'POST' && r.url.endsWith('/api/tasks'));
+    expect(created?.body.taskType).toBe('');
+  });
+
+  it('opens an existing task in the edit form with its type already selected', async () => {
+    tasksPayload = [task('t1', 'Recap post', { taskType: 'BLOG_POST' })];
+    render(
+      <MemoryRouter initialEntries={['/kanban']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Recap post/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit details' }));
+
+    expect(await screen.findByRole('heading', { name: 'Edit task' })).toBeVisible();
+    expect(typeSelect().value).toBe('BLOG_POST');
+  });
+
+  it('types a task that has none and sends only the type', async () => {
+    tasksPayload = [task('t1', 'Legacy chore')];
+    render(
+      <MemoryRouter initialEntries={['/kanban']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Legacy chore/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit details' }));
+    expect(typeSelect().value).toBe('');
+
+    fireEvent.change(typeSelect(), { target: { value: 'GRAPHICS' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() =>
+      expect(requests.some((r) => r.method === 'PATCH' && r.url.endsWith('/api/tasks/t1'))).toBe(
+        true,
+      ),
+    );
+    const saved = requests.find((r) => r.method === 'PATCH' && r.url.endsWith('/api/tasks/t1'));
+    expect(saved?.body.taskType).toBe('GRAPHICS');
+  });
+});
+
+describe('Task type on the board', () => {
+  const renderBoard = async (tasks: Task[]) => {
+    tasksPayload = tasks;
+    render(
+      <MemoryRouter initialEntries={['/kanban']}>
+        <App />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('heading', { level: 1, name: 'Project Status' })).toBeVisible();
+  };
+
+  it('shows the type on the card and again in the task detail', async () => {
+    await renderBoard([task('t1', 'Recap post', { taskType: 'QA_BRAND_PASS' })]);
+
+    expect(screen.getByText('QA / Brand Pass')).toBeVisible();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Recap post/ }));
+
+    await waitFor(() => expect(screen.getAllByText('QA / Brand Pass').length).toBe(2));
+  });
+
+  it('renders an untyped task with no badge at all', async () => {
+    await renderBoard([task('t1', 'Legacy chore')]);
+
+    expect(screen.getByRole('button', { name: /^Legacy chore/ })).toBeVisible();
+    expect(document.querySelector('.task-type-badge')).toBeNull();
+    // The priority badge beside it still renders, so the row itself is not missing.
+    expect(document.querySelector('.priority-badge')).not.toBeNull();
   });
 });
 
