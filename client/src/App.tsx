@@ -785,6 +785,50 @@ function ClientDetail({
   );
 }
 
+type ProjectSort =
+  | 'recently-updated'
+  | 'recently-created'
+  | 'name-ascending'
+  | 'name-descending'
+  | 'deadline'
+  | 'priority';
+
+const PROJECT_PRIORITY_ORDER: Record<Priority, number> = {
+  URGENT: 0,
+  HIGH: 1,
+  MEDIUM: 2,
+  LOW: 3,
+};
+
+const compareProjectNames = (a: Project, b: Project) =>
+  a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+
+function projectComparator(sortBy: ProjectSort) {
+  return (a: Project, b: Project) => {
+    if (sortBy === 'recently-updated') {
+      const activeGroup = Number(a.status !== 'ACTIVE') - Number(b.status !== 'ACTIVE');
+      return activeGroup || b.updatedAt.localeCompare(a.updatedAt);
+    }
+    if (sortBy === 'recently-created') {
+      return b.createdAt.localeCompare(a.createdAt) || compareProjectNames(a, b);
+    }
+    if (sortBy === 'name-ascending') return compareProjectNames(a, b);
+    if (sortBy === 'name-descending') return compareProjectNames(b, a);
+    if (sortBy === 'deadline') {
+      if (!a.targetDeadline) return b.targetDeadline ? 1 : compareProjectNames(a, b);
+      if (!b.targetDeadline) return -1;
+      return a.targetDeadline.localeCompare(b.targetDeadline) || compareProjectNames(a, b);
+    }
+    if (sortBy === 'priority') {
+      return (
+        PROJECT_PRIORITY_ORDER[a.priority] - PROJECT_PRIORITY_ORDER[b.priority] ||
+        compareProjectNames(a, b)
+      );
+    }
+    return 0;
+  };
+}
+
 function Projects({
   projects,
   clients,
@@ -801,12 +845,14 @@ function Projects({
   flash: (s: string, t?: 'success' | 'error') => void;
 }) {
   const [query, setQuery] = useState(''),
-    [clientFilter, setClientFilter] = useState('');
+    [clientFilter, setClientFilter] = useState(''),
+    [sortBy, setSortBy] = useState<ProjectSort>('recently-updated');
   const visible = projects.filter(
     (p) =>
       (!clientFilter || p.clientId === clientFilter) &&
       `${p.name} ${p.clientName}`.toLowerCase().includes(query.toLowerCase()),
   );
+  const sortedVisible = [...visible].sort(projectComparator(sortBy));
   const archive = async (p: Project) => {
     if (!confirm(`Archive ${p.name}? Tasks and Drive files will be preserved.`)) return;
     await send(`/projects/${p.id}/archive`, 'POST');
@@ -854,9 +900,21 @@ function Projects({
             </option>
           ))}
         </select>
+        <select
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value as ProjectSort)}
+          aria-label="Sort projects by"
+        >
+          <option value="recently-updated">Recently updated</option>
+          <option value="recently-created">Recently created</option>
+          <option value="name-ascending">Name A–Z</option>
+          <option value="name-descending">Name Z–A</option>
+          <option value="deadline">Deadline (soonest)</option>
+          <option value="priority">Priority (highest)</option>
+        </select>
       </div>
       <div className="project-cards">
-        {visible.map((p) => {
+        {sortedVisible.map((p) => {
           const mine = tasks.filter((t) => t.projectId === p.id),
             done = mine.filter((t) => t.status === 'COMPLETE').length,
             over = mine.filter((t) => t.overdue).length;

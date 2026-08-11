@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { APP_VERSION } from '../../shared/branding';
-import type { DashboardData, Project } from '../../shared/types';
+import type { Client, DashboardData, Project } from '../../shared/types';
 
 const emptyDashboard: DashboardData = {
   counts: {
@@ -26,7 +26,12 @@ const branding = {
   tagline: 'Offline',
 };
 
-const project = (id: string, name: string, status: Project['status'] = 'ACTIVE'): Project => ({
+const project = (
+  id: string,
+  name: string,
+  status: Project['status'] = 'ACTIVE',
+  overrides: Partial<Project> = {},
+): Project => ({
   id,
   clientId: `client-${id}`,
   clientName: 'Acme',
@@ -36,6 +41,7 @@ const project = (id: string, name: string, status: Project['status'] = 'ACTIVE')
   driveStatus: 'DISCONNECTED',
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
+  ...overrides,
 });
 
 const projects: Project[] = [
@@ -44,11 +50,15 @@ const projects: Project[] = [
   project('p3', 'Old retainer', 'ARCHIVED'),
 ];
 
+let projectsPayload = projects;
+let clientsPayload: Client[] = [];
+
 /** Serves the five endpoints App() requests on mount. */
 const payloadFor = (url: string) => {
   if (url.endsWith('/api/dashboard')) return emptyDashboard;
   if (url.endsWith('/api/settings/branding')) return { branding };
-  if (url.endsWith('/api/projects')) return projects;
+  if (url.endsWith('/api/projects')) return projectsPayload;
+  if (url.endsWith('/api/clients')) return clientsPayload;
   return [];
 };
 
@@ -66,6 +76,8 @@ const remembered = (id: string) =>
 
 beforeEach(() => {
   localStorage.clear();
+  projectsPayload = projects;
+  clientsPayload = [];
   vi.stubGlobal(
     'fetch',
     vi.fn((input: RequestInfo | URL) =>
@@ -107,6 +119,109 @@ describe('App', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Project Status' })).toBeVisible();
     expect(screen.queryByText(/kanban/i)).toBeNull();
+  });
+});
+
+describe('Projects sorting', () => {
+  const sortableProjects: Project[] = [
+    project('sort-zulu', 'Zulu', 'ACTIVE', {
+      clientId: 'client-one',
+      clientName: 'Acme',
+      priority: 'LOW',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-03T00:00:00.000Z',
+    }),
+    project('sort-alpha', 'Alpha', 'ACTIVE', {
+      clientId: 'client-two',
+      clientName: 'Bravo',
+      priority: 'URGENT',
+      targetDeadline: '2026-02-01',
+      createdAt: '2026-01-03T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    }),
+    project('sort-middle', 'Middle', 'ARCHIVED', {
+      clientId: 'client-one',
+      clientName: 'Acme',
+      priority: 'HIGH',
+      targetDeadline: '2026-01-01',
+      createdAt: '2026-01-02T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+    }),
+  ];
+  const sortableClients: Client[] = [
+    {
+      id: 'client-one',
+      name: 'Acme',
+      slug: 'acme',
+      status: 'ACTIVE',
+      driveStatus: 'DISCONNECTED',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    },
+    {
+      id: 'client-two',
+      name: 'Bravo',
+      slug: 'bravo',
+      status: 'ACTIVE',
+      driveStatus: 'DISCONNECTED',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    },
+  ];
+
+  const renderProjects = async () => {
+    projectsPayload = sortableProjects;
+    clientsPayload = sortableClients;
+    render(
+      <MemoryRouter initialEntries={['/projects']}>
+        <App />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
+  };
+  const renderedProjectNames = () =>
+    screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent);
+
+  it('offers each sort mode and orders projects correctly', async () => {
+    await renderProjects();
+    const sort = screen.getByRole('combobox', { name: 'Sort projects by' });
+
+    expect(sort).toHaveValue('recently-updated');
+    expect(renderedProjectNames()).toEqual(['Zulu', 'Alpha', 'Middle']);
+
+    fireEvent.change(sort, { target: { value: 'recently-created' } });
+    expect(renderedProjectNames()).toEqual(['Alpha', 'Middle', 'Zulu']);
+
+    fireEvent.change(sort, { target: { value: 'name-ascending' } });
+    expect(renderedProjectNames()).toEqual(['Alpha', 'Middle', 'Zulu']);
+
+    fireEvent.change(sort, { target: { value: 'name-descending' } });
+    expect(renderedProjectNames()).toEqual(['Zulu', 'Middle', 'Alpha']);
+
+    fireEvent.change(sort, { target: { value: 'deadline' } });
+    expect(renderedProjectNames()).toEqual(['Middle', 'Alpha', 'Zulu']);
+
+    fireEvent.change(sort, { target: { value: 'priority' } });
+    expect(renderedProjectNames()).toEqual(['Alpha', 'Middle', 'Zulu']);
+
+    fireEvent.change(sort, { target: { value: 'recently-updated' } });
+    expect(renderedProjectNames()).toEqual(['Zulu', 'Alpha', 'Middle']);
+  });
+
+  it('composes sorting with search and client filters', async () => {
+    await renderProjects();
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Sort projects by' }), {
+      target: { value: 'name-ascending' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Filter by client' }), {
+      target: { value: 'client-one' },
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search' }), {
+      target: { value: 'l' },
+    });
+
+    expect(renderedProjectNames()).toEqual(['Middle', 'Zulu']);
   });
 });
 
