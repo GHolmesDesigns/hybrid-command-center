@@ -10,6 +10,6 @@ if (process.env.NODE_ENV === 'production' || process.argv.includes('--production
   app.use(express.static(root));
   app.get('/{*splat}', (_req, res) => res.sendFile(path.join(root, 'index.html')));
 }
-app.listen(config.port, () =>
-  console.log(`Command Center API ready at http://localhost:${config.port}`),
+app.listen(config.port, config.host, () =>
+  console.log(`Command Center API ready at http://${config.host}:${config.port}`),
 );

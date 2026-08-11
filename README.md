@@ -95,6 +95,7 @@ Required environment variables:
 | Variable | Purpose |
 | --- | --- |
 | `PORT` | Local API port; default `8787` |
+| `HOST` | Interface the API binds to; default `127.0.0.1` (loopback only). Set `0.0.0.0` to expose it on the LAN — the app has no authentication, so do this deliberately |
 | `DATABASE_PATH` | SQLite path; default `./data/command-center.db` |
 | `APP_ORIGIN` | Vite/browser origin; default `http://localhost:5173` |
 | `GOOGLE_CLIENT_ID` | OAuth web client ID |
