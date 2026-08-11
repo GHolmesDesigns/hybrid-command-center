@@ -288,7 +288,7 @@ With Drive connected, the application creates the project folder and five standa
 ### Step 3: Create a task
 
 1. Select **New task** in the top bar or on the Kanban page.
-2. Choose a project. The client is derived automatically from that project.
+2. Choose a project. The last project you opened is pre-selected, and you can pick a different one. The client is derived automatically from that project.
 3. Enter a title.
 4. Choose a status and priority.
 5. Add a start date, due date, description, or notes if useful.
