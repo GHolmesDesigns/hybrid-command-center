@@ -4,6 +4,7 @@ import request from 'supertest';
 import { addDays, format, subDays } from 'date-fns';
 import { createDb, type Db } from './db.ts';
 import { createApp } from './app.ts';
+import { TASK_CHECKLIST_TEMPLATES } from '../shared/types.ts';
 
 let db: Db;
 beforeEach(() => {
@@ -392,6 +393,42 @@ describe('command center API', () => {
       (t: any) => t.id === untyped.id,
     );
     expect(listed.taskType).toBe('VIDEO');
+  });
+
+  it('seeds the exact ordered checklist template when a typed task is created', async () => {
+    const { p } = await setup();
+    const app = createApp(db);
+
+    for (const [taskType, titles] of Object.entries(TASK_CHECKLIST_TEMPLATES)) {
+      const task = (
+        await request(app)
+          .post('/api/tasks')
+          .send({ projectId: p.id, title: `${taskType} task`, taskType })
+          .expect(201)
+      ).body;
+      expect(task.checklist.map((item: any) => item.text)).toEqual(titles);
+      expect(task.checklist.map((item: any) => item.position)).toEqual(
+        titles.map((_, position) => position),
+      );
+      expect(task.checklistTotal).toBe(titles.length);
+      expect(task.checklistCompleted).toBe(0);
+    }
+  });
+
+  it('creates an empty checklist when the task type has no template', async () => {
+    const { p } = await setup();
+    const app = createApp(db);
+
+    for (const input of [{ title: 'Other task', taskType: 'OTHER' }, { title: 'Untyped task' }]) {
+      const task = (
+        await request(app)
+          .post('/api/tasks')
+          .send({ projectId: p.id, ...input })
+          .expect(201)
+      ).body;
+      expect(task.checklist).toEqual([]);
+      expect(task.checklistTotal).toBe(0);
+    }
   });
 
   it('rejects a task type outside the vocabulary', async () => {
