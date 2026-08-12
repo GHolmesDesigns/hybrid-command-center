@@ -9,6 +9,10 @@ const gracefulShutdown = { signal: 'SIGTERM', timeout: 5_000 } as const;
 
 export default defineConfig({
   testDir: './e2e',
+  // Playwright's default also collects `*.test.ts`, which would hand it the Vitest files
+  // that sit beside the helpers they cover. `.spec.ts` is Playwright's, `.test.ts` is
+  // Vitest's, and nothing has to live away from what it tests to keep the two apart.
+  testMatch: '**/*.spec.ts',
   // One worker: every spec shares one API server and one SQLite file that is reset once per
   // run, so a second worker would let one spec's rows land in another spec's counts.
   workers: 1,

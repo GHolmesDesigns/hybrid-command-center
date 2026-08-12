@@ -17,7 +17,12 @@ export default defineConfig({
         test: {
           name: 'server',
           environment: 'node',
-          include: ['server/**/*.test.ts'],
+          // `e2e/` is included for the helpers under it, not for the specs. The two runners
+          // are kept apart by suffix — `.spec.ts` is Playwright's, `.test.ts` is Vitest's —
+          // which `playwright.config.ts` has to say out loud, because Playwright's default
+          // collects both. Without this an E2E helper could only be tested from `server/`,
+          // away from what it covers.
+          include: ['server/**/*.test.ts', 'e2e/**/*.test.ts'],
         },
       },
       {
