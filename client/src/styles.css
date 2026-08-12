@@ -516,10 +516,38 @@ button svg,
 .has-overdue .alert-icon {
   color: var(--red);
 }
+.bucket-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}
+.bucket-toggle button {
+  font-size: 12px;
+  padding: 7px 12px;
+  gap: 7px;
+}
+/* The pressed state is carried by the border and weight as well as the fill, so the
+   selected bucket is not signalled by color alone. */
+.bucket-toggle button[aria-pressed='true'] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+  font-weight: 700;
+}
+.bucket-toggle button > span {
+  background: rgba(0, 0, 0, 0.07);
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-variant-numeric: tabular-nums;
+}
+.bucket-toggle button[aria-pressed='true'] > span {
+  background: rgba(255, 255, 255, 0.22);
+}
 .urgent-list {
   background: #fff;
   border-radius: 10px;
-  margin-top: 20px;
+  margin-top: 14px;
   border: 1px solid #efdcd7;
   overflow: hidden;
 }

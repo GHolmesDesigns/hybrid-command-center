@@ -187,6 +187,11 @@ export interface DashboardData {
     projectsOverdue: number;
   };
   overdueTasks: Task[];
+  dueTodayTasks: Task[];
+  /**
+   * Due within the next seven days, today included — so every task in `dueTodayTasks` is
+   * also here. The two buckets overlap by design; "Next 7 days" is a window that starts now.
+   */
   upcomingTasks: Task[];
   recentProjects: Project[];
 }

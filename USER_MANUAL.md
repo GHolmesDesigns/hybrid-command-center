@@ -363,12 +363,16 @@ Use Dashboard as the start of each working session. It shows:
 
 - Active clients and projects
 - Tasks due today
-- Tasks due within seven days
+- Tasks due within seven days, today included
 - Overdue tasks and affected projects
 - Recently updated projects
 - Quick actions for common work
 
-The overdue area is intentionally prominent. Select a listed task to open its details, or select a recent project to open the project page.
+The **Deadlines** panel covers all three deadline states. It opens on Overdue, which is intentionally prominent, and the buttons beside it switch to Due today or Next 7 days; each state has its own list and its own message when nothing is in it. **Open board** takes you to the Status board filtered to whichever state is on screen. Select a listed task to open its details, or select a recent project to open the project page.
+
+Next 7 days counts today as one of the seven, so a task due today appears under both Due today and Next 7 days. The counts on the dashboard and the tasks the board shows for the same filter are calculated by one shared rule, so they always match.
+
+Work under an archived project or an archived client is left out of every dashboard count and list. It is not deleted or hidden: the Status board and any direct link to that project still show it.
 
 Recently updated follows the work, not the paperwork. Anything you do inside a project moves it to the top of that list: adding, editing, completing, or deleting a task, ticking a checklist item, or changing a task's tags or dependencies. The date shown beside each project is when that work last happened. Rearranging project tiles is not work, so dragging them changes nothing about the order of this list.
 

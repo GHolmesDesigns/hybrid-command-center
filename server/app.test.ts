@@ -10,6 +10,8 @@ let db: Db;
 beforeEach(() => {
   db = createDb(':memory:');
 });
+/** Today's local calendar day, the shape due dates are stored in. */
+const today = format(new Date(), 'yyyy-MM-dd');
 const createClient = (name = 'Acme Studio') =>
   request(createApp(db)).post('/api/clients').send({ name });
 async function setup() {
@@ -205,6 +207,68 @@ describe('command center API', () => {
     expect(d.counts.overdue).toBe(1);
     expect(d.counts.dueNextSevenDays).toBe(1);
     expect(d.counts.projectsOverdue).toBe(1);
+  });
+  it('counts a task due today in Due today and in Next 7 days', async () => {
+    const { p } = await setup();
+    const app = createApp(db);
+    const post = (title: string, dueDate: string, status?: string) =>
+      request(app).post('/api/tasks').send({ projectId: p.id, title, dueDate, status });
+    await post('Due today', today);
+    await post('Due in three days', format(addDays(new Date(), 3), 'yyyy-MM-dd'));
+    await post('Due in eight days', format(addDays(new Date(), 8), 'yyyy-MM-dd'));
+    await post('Finished today', today, 'COMPLETE');
+
+    const d = (await request(app).get('/api/dashboard')).body;
+
+    // The window starts today rather than tomorrow, so today's task is in both buckets.
+    expect(d.counts.dueToday).toBe(1);
+    expect(d.counts.dueNextSevenDays).toBe(2);
+    expect(d.dueTodayTasks.map((t: any) => t.title)).toEqual(['Due today']);
+    expect(d.upcomingTasks.map((t: any) => t.title)).toEqual(['Due today', 'Due in three days']);
+    // Day 8 is outside the window, and finished work is in no bucket at all.
+    expect(
+      [...d.dueTodayTasks, ...d.upcomingTasks, ...d.overdueTasks].map((t: any) => t.title),
+    ).not.toContain('Finished today');
+  });
+  it('keeps archived work out of every dashboard number while leaving it reachable', async () => {
+    const app = createApp(db);
+    const live = await setup();
+    const archivedProject = (
+      await request(app)
+        .post('/api/projects')
+        .send({ clientId: live.c.id, name: 'Shelved microsite' })
+    ).body;
+    const archivedClientProject = (
+      await request(app)
+        .post('/api/projects')
+        .send({ clientId: (await createClient('Former Client')).body.id, name: 'Old retainer' })
+    ).body;
+    const yesterday = format(subDays(new Date(), 1), 'yyyy-MM-dd');
+    const add = (projectId: string, title: string) =>
+      request(app).post('/api/tasks').send({ projectId, title, dueDate: yesterday });
+    const liveTask = (await add(live.p.id, 'Live and late')).body;
+    const shelved = (await add(archivedProject.id, 'Shelved and late')).body;
+    const formerClients = (await add(archivedClientProject.id, 'Former client, late')).body;
+
+    await request(app).post(`/api/projects/${archivedProject.id}/archive`).expect(200);
+    await request(app).post(`/api/clients/${archivedClientProject.clientId}/archive`).expect(200);
+
+    const d = (await request(app).get('/api/dashboard')).body;
+    expect(d.counts.overdue).toBe(1);
+    expect(d.counts.projectsOverdue).toBe(1);
+    expect(d.overdueTasks.map((t: any) => t.id)).toEqual([liveTask.id]);
+
+    // Archived only means "not what needs attention now" — both tasks are still there for
+    // anyone who follows a link to that project or opens the board.
+    const byProject = async (projectId: string) =>
+      ((await request(app).get(`/api/tasks?projectId=${projectId}`)).body as any[]).map(
+        (t) => t.id,
+      );
+    expect(await byProject(archivedProject.id)).toEqual([shelved.id]);
+    expect(await byProject(archivedClientProject.id)).toEqual([formerClients.id]);
+    const board = ((await request(app).get('/api/tasks')).body as any[]).map((t) => t.id);
+    expect(board).toContain(shelved.id);
+    expect(board).toContain(formerClients.id);
   });
   it('rejects malformed relationships', async () => {
     const response = await request(createApp(db))
