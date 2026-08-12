@@ -1,4 +1,5 @@
-import { createServer } from 'vite';
+import { createServer, type ViteDevServer } from 'vite';
+import { handleE2eStopRequest } from './endpoints.ts';
 import { stopWhenTheRunEnds } from './shutdown.ts';
 
 /**
@@ -12,10 +13,23 @@ import { stopWhenTheRunEnds } from './shutdown.ts';
 const host = process.env.WEB_HOST || '127.0.0.1';
 const port = Number(process.env.WEB_PORT || 5174);
 
+const stop = stopWhenTheRunEnds('web server', () => server.close());
+
 // `strictPort` so a busy port fails here and says so, rather than moving to 5175 and
 // leaving Playwright to wait out its timeout on a port nothing will ever answer.
-const server = await createServer({ server: { host, port, strictPort: true } });
+const server: ViteDevServer = await createServer({
+  server: { host, port, strictPort: true },
+  plugins: [
+    {
+      name: 'e2e-stop',
+      enforce: 'pre',
+      configureServer(vite) {
+        vite.middlewares.use((req, res, next) => {
+          if (!handleE2eStopRequest(req, res, stop)) next();
+        });
+      },
+    },
+  ],
+});
 await server.listen();
 console.log(`Command Center E2E web server ready at http://${host}:${port}`);
-
-stopWhenTheRunEnds('web server', () => server.close());

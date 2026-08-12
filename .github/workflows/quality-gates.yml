@@ -74,3 +74,41 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 7
+
+  # Linux cannot catch the Windows-only hang where Playwright prints a passing
+  # summary and then never returns. This job is that check: the suite, on Windows,
+  # must exit on its own.
+  e2e-windows:
+    runs-on: windows-latest
+    timeout-minutes: 8
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chrome
+
+      - name: Run end-to-end tests
+        id: e2e
+        run: npm run test:e2e
+        timeout-minutes: 5
+
+      - name: Upload the Playwright report
+        if: failure() && steps.e2e.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report-windows
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
