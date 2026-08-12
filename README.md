@@ -35,12 +35,13 @@ client/                    React + TypeScript + Vite
 server/                    Express local API
   domain/                  deadline and dependency rules
   drive/                   provider interface, Google implementation, provisioning + sync
-  scripts/                 migration and demo seed commands
+  scripts/                 migration, demo seed, backup, restore, and rehearsal
+  backup.ts                SQLite online backup / restore helpers
   app.ts                   validated HTTP endpoints
   db.ts                    SQLite schema and transaction helper
 shared/                    cross-layer types, workflow constants, branding defaults
 e2e/                       Playwright critical-flow coverage
-data/                      ignored local SQLite database
+data/                      ignored local SQLite database and backups
 ```
 
 The browser never receives Google tokens. UI code calls only the local API. Drive operations sit behind `DriveProvider`, leaving a clean boundary for the future embedded file browser. Deadline calculations are reusable domain functions, leaving a clean boundary for future month/week/agenda calendar views.
@@ -82,6 +83,9 @@ npm test
 npm run test:e2e
 npm run db:migrate
 npm run db:seed
+npm run db:backup
+npm run db:restore -- <backup-file> --force
+npm run db:backup:rehearse
 ```
 
 `npm run db:seed` is safe: it creates local demo records only. To deliberately create Drive folders for seed records after OAuth and root-folder setup, run `npm run db:seed -- --with-drive`. Seed exits without changes if clients already exist.
@@ -162,7 +166,31 @@ The tests use an in-memory SQLite database and a mock Drive provider. They never
 
 ## Backup and recovery
 
-Stop the app, then copy `data/command-center.db` and the `GOOGLE_TOKEN_ENCRYPTION_KEY` from your private environment backup. SQLite may create `-wal` and `-shm` files while running, so do not copy only the main database during active writes. Google Drive files require no local backup from this app; use Google's export/retention tools according to your own policy.
+Do not copy `data/command-center.db` while the app is running. SQLite may be using neighboring `-wal` and `-shm` files, and a naked copy of the main file is not a consistent snapshot.
+
+Use the scripted backup instead. It calls SQLite's online backup API, so committed WAL/journal pages are included in one timestamped file under `data/backups/` (gitignored):
+
+```bash
+npm run db:backup
+```
+
+Restore requires the app to be stopped. The previous database is saved beside the backup first:
+
+```bash
+# stop npm run dev / npm start first
+npm run db:restore -- data/backups/command-center-<timestamp>.db --force
+npm run db:migrate
+```
+
+Before a schema migration release, rehearse against a *copy* of the backup (the live database is only read):
+
+```bash
+npm run db:backup:rehearse
+```
+
+Keep `GOOGLE_TOKEN_ENCRYPTION_KEY` with the backup; encrypted Drive tokens in SQLite cannot be read without it. Folder IDs and URLs survive restore on their own. Google Drive files require no local backup from this app; use Google's export/retention tools according to your own policy.
+
+If `.env` sets `DATABASE_PATH`, pass the same path with `--database`. Write backups elsewhere with `--dir`.
 
 ## Troubleshooting
 

@@ -2,6 +2,7 @@ node_modules/
 .npm-cache/
 dist/
 data/*.db*
+data/backups/
 .env
 .env.local
 credentials.json
