@@ -2103,7 +2103,7 @@ function ModalHost({
   tasks: Task[];
   tags: Tag[];
   close: () => void;
-  /** Swaps the detail view for the edit form, the only way to reach a task's fields. */
+  /** Swaps the detail view for the full edit form. */
   edit: (task: Task) => void;
   saved: (s: string) => Promise<void>;
   refresh: () => Promise<void>;
@@ -2417,19 +2417,80 @@ function TaskDetail({
   const [text, setText] = useState(''),
     [dep, setDep] = useState(''),
     [renaming, setRenaming] = useState(false),
-    [title, setTitle] = useState(task.title);
+    [title, setTitle] = useState(task.title),
+    [editingDescription, setEditingDescription] = useState(false),
+    [description, setDescription] = useState(task.description ?? ''),
+    [editingDue, setEditingDue] = useState(false),
+    [dueDate, setDueDate] = useState(dateInput(task.dueDate)),
+    [editingStart, setEditingStart] = useState(false),
+    [startDate, setStartDate] = useState(dateInput(task.startDate)),
+    [editingNotes, setEditingNotes] = useState(false),
+    [notes, setNotes] = useState(task.notes ?? '');
   useEffect(() => {
     setTitle(task.title);
     setRenaming(false);
   }, [task.id, task.title]);
+  // Saving one field refreshes the task; resetting only on id keeps other editors open.
+  useEffect(() => {
+    setDescription(task.description ?? '');
+    setEditingDescription(false);
+    setDueDate(dateInput(task.dueDate));
+    setEditingDue(false);
+    setStartDate(dateInput(task.startDate));
+    setEditingStart(false);
+    setNotes(task.notes ?? '');
+    setEditingNotes(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset when the open task changes
+  }, [task.id]);
   const mutate = async (work: () => Promise<unknown>, message: string) => {
     try {
       await work();
       await refresh();
       flash(message);
+      return true;
     } catch (e) {
       flash((e as Error).message, 'error');
+      return false;
     }
+  };
+  const patchField = async (body: Record<string, string>, message: string, done: () => void) => {
+    if (await mutate(() => send(`/tasks/${task.id}`, 'PATCH', body), message)) done();
+  };
+  const saveDescription = () => {
+    const next = description.trim();
+    if (next === (task.description ?? '').trim()) {
+      setEditingDescription(false);
+      setDescription(task.description ?? '');
+      return;
+    }
+    void patchField({ description: next }, 'Description updated.', () =>
+      setEditingDescription(false),
+    );
+  };
+  const saveDue = () => {
+    const next = dueDate;
+    if (next === dateInput(task.dueDate)) {
+      setEditingDue(false);
+      return;
+    }
+    void patchField({ dueDate: next }, 'Due date updated.', () => setEditingDue(false));
+  };
+  const saveStart = () => {
+    const next = startDate;
+    if (next === dateInput(task.startDate)) {
+      setEditingStart(false);
+      return;
+    }
+    void patchField({ startDate: next }, 'Start date updated.', () => setEditingStart(false));
+  };
+  const saveNotes = () => {
+    const next = notes.trim();
+    if (next === (task.notes ?? '').trim()) {
+      setEditingNotes(false);
+      setNotes(task.notes ?? '');
+      return;
+    }
+    void patchField({ notes: next }, 'Notes updated.', () => setEditingNotes(false));
   };
   const complete = async () => {
     try {
@@ -2529,13 +2590,68 @@ function TaskDetail({
         <span>
           {task.clientName} · {task.projectName}
         </span>
-        {task.description && <p>{task.description}</p>}
+        <InlineTextEditor
+          label="Description"
+          value={task.description}
+          emptyLabel="Add a description"
+          editLabel="Edit description"
+          editing={editingDescription}
+          draft={description}
+          onDraftChange={setDescription}
+          onEdit={() => {
+            setDescription(task.description ?? '');
+            setEditingDescription(true);
+          }}
+          onCancel={() => {
+            setDescription(task.description ?? '');
+            setEditingDescription(false);
+          }}
+          onSave={saveDescription}
+        />
         <div className="detail-chips">
           <span>
             <FolderKanban />
             {STATUS_LABEL[task.status]}
           </span>
-          <Due task={task} />
+          <InlineDateChip
+            label="Due date"
+            display={
+              task.dueDate ? `${task.overdue ? 'Due ' : ''}${formatDate(task.dueDate)}` : 'No date'
+            }
+            editLabel={task.dueDate ? 'Edit due date' : 'Add due date'}
+            editing={editingDue}
+            draft={dueDate}
+            muted={!task.dueDate}
+            overdue={task.overdue}
+            onDraftChange={setDueDate}
+            onEdit={() => {
+              setDueDate(dateInput(task.dueDate));
+              setEditingDue(true);
+            }}
+            onCancel={() => {
+              setDueDate(dateInput(task.dueDate));
+              setEditingDue(false);
+            }}
+            onSave={saveDue}
+          />
+          <InlineDateChip
+            label="Start date"
+            display={task.startDate ? formatDate(task.startDate) : 'No start date'}
+            editLabel={task.startDate ? 'Edit start date' : 'Add start date'}
+            editing={editingStart}
+            draft={startDate}
+            muted={!task.startDate}
+            onDraftChange={setStartDate}
+            onEdit={() => {
+              setStartDate(dateInput(task.startDate));
+              setEditingStart(true);
+            }}
+            onCancel={() => {
+              setStartDate(dateInput(task.startDate));
+              setEditingStart(false);
+            }}
+            onSave={saveStart}
+          />
         </div>
       </div>
       {task.blocked && (
@@ -2627,6 +2743,32 @@ function TaskDetail({
       <section>
         <div className="section-title">
           <div>
+            <span className="eyebrow">Private</span>
+            <h2>Notes</h2>
+          </div>
+        </div>
+        <InlineTextEditor
+          label="Notes"
+          value={task.notes}
+          emptyLabel="Add notes"
+          editLabel="Edit notes"
+          editing={editingNotes}
+          draft={notes}
+          onDraftChange={setNotes}
+          onEdit={() => {
+            setNotes(task.notes ?? '');
+            setEditingNotes(true);
+          }}
+          onCancel={() => {
+            setNotes(task.notes ?? '');
+            setEditingNotes(false);
+          }}
+          onSave={saveNotes}
+        />
+      </section>
+      <section>
+        <div className="section-title">
+          <div>
             <span className="eyebrow">Sequencing</span>
             <h2>Dependencies</h2>
           </div>
@@ -2701,6 +2843,143 @@ function TaskDetail({
         </button>
       </footer>
     </div>
+  );
+}
+
+function escapeCancels(cancel: () => void) {
+  return (e: KeyboardEvent) => {
+    if (e.key !== 'Escape') return;
+    e.preventDefault();
+    e.stopPropagation();
+    cancel();
+  };
+}
+
+function InlineTextEditor({
+  label,
+  value,
+  emptyLabel,
+  editLabel,
+  editing,
+  draft,
+  onDraftChange,
+  onEdit,
+  onCancel,
+  onSave,
+}: {
+  label: string;
+  value?: string;
+  emptyLabel: string;
+  editLabel: string;
+  editing: boolean;
+  draft: string;
+  onDraftChange: (value: string) => void;
+  onEdit: () => void;
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  if (editing)
+    return (
+      <form
+        className="inline-edit"
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSave();
+        }}
+        onKeyDown={escapeCancels(onCancel)}
+      >
+        <label>
+          {label}
+          <textarea value={draft} onChange={(e) => onDraftChange(e.target.value)} autoFocus />
+        </label>
+        <div className="inline-edit-actions">
+          <button type="submit">
+            <Check /> Save
+          </button>
+          <button type="button" className="secondary" onClick={onCancel}>
+            Cancel
+          </button>
+        </div>
+      </form>
+    );
+  if (value)
+    return (
+      <div className="inline-field">
+        <p>{value}</p>
+        <button type="button" className="icon-btn" onClick={onEdit} aria-label={editLabel}>
+          <Pencil />
+        </button>
+      </div>
+    );
+  return (
+    <button type="button" className="text-btn inline-empty" onClick={onEdit}>
+      {emptyLabel}
+    </button>
+  );
+}
+
+function InlineDateChip({
+  label,
+  display,
+  editLabel,
+  editing,
+  draft,
+  muted,
+  overdue,
+  onDraftChange,
+  onEdit,
+  onCancel,
+  onSave,
+}: {
+  label: string;
+  display: string;
+  editLabel: string;
+  editing: boolean;
+  draft: string;
+  muted?: boolean;
+  overdue?: boolean;
+  onDraftChange: (value: string) => void;
+  onEdit: () => void;
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  if (editing)
+    return (
+      <form
+        className="chip-edit-form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSave();
+        }}
+        onKeyDown={escapeCancels(onCancel)}
+      >
+        <label>
+          {label}
+          <input
+            type="date"
+            value={draft}
+            onChange={(e) => onDraftChange(e.target.value)}
+            autoFocus
+          />
+        </label>
+        <button type="submit">
+          <Check /> Save
+        </button>
+        <button type="button" className="secondary" onClick={onCancel}>
+          Cancel
+        </button>
+      </form>
+    );
+  return (
+    <button
+      type="button"
+      className={`chip-toggle${muted ? ' muted' : ''}${overdue ? ' overdue-text' : ''}`}
+      onClick={onEdit}
+      aria-label={editLabel}
+    >
+      <CalendarDays />
+      {display}
+    </button>
   );
 }
 

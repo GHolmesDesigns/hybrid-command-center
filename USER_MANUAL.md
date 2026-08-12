@@ -437,7 +437,7 @@ Below the filters, the search box matches both task titles and tag names, and th
 
 Each card shows its project, priority, type when one is set, tags, due date, checklist progress, and dependency state. The type is repeated at the top of the task detail view.
 
-Open a task to rename it, edit its details, or delete it. **Edit details** opens the same form used to create the task, so this is where you set a type on an older task, change its project, or adjust its dates.
+Open a task to rename it, edit its description, dates, and notes inline, or delete it. **Edit details** still opens the same form used to create the task, so this is where you set a type on an older task, change its project, or edit every field at once.
 
 ### Removing records
 
