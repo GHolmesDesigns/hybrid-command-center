@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import {
   AlertCircle,
   CalendarDays,
@@ -10,7 +11,6 @@ import {
   Pencil,
   RefreshCw,
   RotateCcw,
-  Upload,
 } from 'lucide-react';
 import { api, send } from '../api';
 import type { Category, Project, Tag, Task } from '../../../shared/types';
@@ -407,7 +407,7 @@ export function SettingsView({
           <div className="section-title">
             <div>
               <span className="eyebrow">Future modules</span>
-              <h2>Calendar, files & import</h2>
+              <h2>Calendar & files</h2>
             </div>
           </div>
           <p>
@@ -421,10 +421,11 @@ export function SettingsView({
             <span>
               <FileText /> Embedded Drive browser
             </span>
-            <span>
-              <Upload /> Campaign playbook import
-            </span>
           </div>
+          <p className="field-hint">
+            Campaign playbook import has shipped — it lives in the sidebar under{' '}
+            <Link to="/import">Import</Link>.
+          </p>
         </section>
       </div>
     </>

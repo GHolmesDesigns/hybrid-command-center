@@ -460,6 +460,43 @@ Each card shows its project, priority, type when one is set, tags, due date, che
 
 Open a task to rename it, edit its description, dates, and notes inline, or delete it. **Edit details** still opens the same form used to create the task, so this is where you set a type on an older task, change its project, or edit every field at once.
 
+### Import
+
+**Import** creates a whole campaign at once from a *campaign playbook*: a client, its projects,
+their tasks, the tasks' checklists, and the order those tasks depend on each other in. It is meant
+for a campaign you have already written down — a spreadsheet you filled in before the work
+started — rather than for typing the same structure in by hand.
+
+A playbook is an `.xlsx` workbook with one tab per kind of record: `Clients`, `Projects`, `Tasks`,
+`ChecklistItems`, and `Dependencies`. There is a sample workbook in the application folder at
+`docs/examples/campaign-playbook-import-format.xlsx`, and the full list of columns is in
+`docs/campaign-playbook-import-format.md`. You can also paste the tabs straight in as text, each
+one under its name in square brackets, which is what a spreadsheet gives you when you copy cells.
+
+**Import a playbook** opens the modal. Choose the workbook or paste the tabs, then press **Check
+this playbook**. Nothing is written yet. The check tells you three things:
+
+- **What it will create**, counted per tab.
+- **What it will skip**, because this workspace already has it — with the reason for each row.
+  A client matches by name, a project by its name under that client, and a task by its title and
+  due date under that project, ignoring capitalisation. Skipped records are left exactly as they
+  are; an import never edits or overwrites something you already have. That is why importing the
+  same playbook twice creates nothing the second time.
+- **What is wrong**, one line per row and column, if anything is. Common causes are a date written
+  in another format, a status spelled in lower case, a key referred to but never defined, and a
+  formula left in a cell where a value belongs.
+
+While anything is wrong, importing stays blocked and nothing is written. Once the check is clean,
+the button reads **Import _n_ records**. Pressing it writes the whole playbook in one action: if
+any part of it fails, none of it is kept.
+
+Every import — successful, refused, or failed — leaves a **receipt** on the Import page. It keeps
+the counts and every skipped or failed row, so you can still see what an import did after closing
+the modal, reloading the page, or restarting the application. The fifty most recent are kept.
+
+Importing never touches Google Drive. Imported clients and projects start as **Drive offline**;
+use **Sync to Folder** on the dashboard to create their folders when you are ready.
+
 ### Removing records
 
 Removal works differently for each kind of record:
@@ -486,7 +523,7 @@ Settings contains:
 - **Task tags** — every tag in the workspace, with how many tasks carry it, and the only place a tag is deleted
 - The current application version
 - Detected local timezone
-- Information about the future Calendar, Files, and Import modules
+- Information about the future Calendar and Files modules
 
 Deleting a tag that is still attached asks first and tells you how many tasks are affected; a tag no task carries is removed straight away. Tags are created from tasks, not here.
 
@@ -512,7 +549,7 @@ Leave the address empty to use the text mark instead. The text mark also returns
 
 **Reset to defaults** restores every branding field — wording, colours, and logo — to the values the application shipped with. The reset fills the form; press **Save branding** to apply it.
 
-Calendar, the embedded file browser, and campaign playbook import are not available in this version. They appear as dimmed placeholders in the sidebar. Use **Open Drive** links to manage project files directly in Google Drive.
+Calendar and the embedded file browser are not available in this version. They appear as dimmed placeholders in the sidebar. Use **Open Drive** links to manage project files directly in Google Drive.
 
 ## 9. Deadlines and timezones
 

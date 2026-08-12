@@ -1,6 +1,8 @@
 # Campaign Playbook Import Format
 
-Status: specification only. The Import module and importer are not implemented by this card.
+Status: implemented. The Import module reads this format — see [Importer behavior](#importer-behavior)
+for the two places the shipped importer settled a rule this specification left open, and for the
+pasted text form the modal also accepts.
 
 Schema version: `1`
 
@@ -160,29 +162,72 @@ Task type, matching issue #11 and `shared/types.ts`:
 
 Schema version 1 is create-only. It never merges into an existing record or silently creates a duplicate.
 
-The preview reports a conflict when it finds:
+An existing record is matched — and the row that describes it is **skipped and reported**, not created twice — when the importer finds:
 
 - a client with the same trimmed name, compared case-insensitively;
 - a project under the resolved client with the same trimmed name, compared case-insensitively;
-- a task under the resolved project with the same trimmed title, compared case-insensitively.
+- a task under the resolved project with the same trimmed title, compared case-insensitively, **and the same `due_date`**, where two empty due dates count as the same and an empty one never matches a filled one.
 
-Archived clients and projects still count as conflicts and are not silently reused. Re-importing the same workbook is refused through the same natural-key checks.
+A matched client or project is what its imported children attach to; a matched task keeps the checklist and dependencies it already has. Nothing about an existing record is edited, and no field of it is overwritten.
+
+Archived clients and projects match too, and are neither revived nor rewritten. Re-importing the same workbook therefore creates nothing the second time.
+
+Two rows of the *same* workbook that resolve to the same record are a different matter: they are ambiguous rather than already-imported, and are reported as errors.
+
+## Importer behavior
+
+Two rules were settled when the importer shipped (issue #72), and this section is the authority on them.
+
+- **Duplicates are skipped, not refused.** The earlier draft of this document refused the whole import on a conflict. The shipped importer skips each matched row, reports it with the rule that matched, and imports the rest, which is what makes a re-import and a partly-extended playbook safe. Validation errors still refuse the whole import: nothing is written while any error remains.
+- **A task matches on title *and* due date.** Title alone would silently drop a weekly task that repeats under one project with a different deadline each week.
+
+Alongside those:
+
+- `ChecklistItems` and `Dependencies` may be absent as well as empty; both mean "none".
+- `TRUE`/`FALSE` typed as text is accepted for `completed` as well as a native boolean, because a spreadsheet column formatted as text is not a different intent. A number is refused: `1` and `0` are not what this column means.
+- `schema_version` is read from a `Schema version` or `schema_version` label on a documentation tab. A workbook that declares nothing is assumed to be version 1; one that declares another version is refused.
+- Stored order continues what the workspace already uses rather than restarting at zero: imported projects land after the existing tiles, and imported tasks land at the bottom of their status column, in workbook order.
+- A task imported as `COMPLETE` is stamped completed at the moment the import is confirmed. The workbook carries no completion timestamp, and that moment is the only one the importer can honestly claim.
+- A task type's default checklist seeds only a task the workbook left without checklist rows, exactly as [Task-template overlap](#task-template-overlap) describes.
+- Every import writes a receipt — counts created, skipped, and failed, with every reason — which the Import page lists after the modal closes. Receipts are pruned to the most recent 50.
+- **Nothing about an import touches Google Drive.** Imported clients and projects are stored disconnected and are provisioned the next time Drive is synced from Settings.
+
+### The pasted text form
+
+The import modal also accepts a playbook pasted as text, for a quick import and for the tabs a person is drafting by hand. It is the same tabs, the same columns, and the same rules, transcribed:
+
+```text
+[Clients]
+client_key	name	contact_name	email	phone	website	notes
+CLI-GHD	G.Holmes Designs	Dana Holmes	dana@example.com			Studio-owned
+
+[Projects]
+project_key	client_key	name	status	priority	start_date	target_deadline	description	notes	position
+PRJ-6WOC	CLI-GHD	Six Weeks of Clarity	ACTIVE	URGENT	2026-03-01	2026-04-12			1
+```
+
+- Each tab is introduced by its name in square brackets, alone on its line.
+- Cells are separated by tabs — what a spreadsheet copies out. Blank lines are ignored.
+- Row numbers in error messages count from each tab's heading, matching the rows of that tab.
+- Pasted cells carry no type, so `completed` is written `TRUE` or `FALSE` and order values as plain digits. Everything else is identical to the workbook.
 
 ## Dry-run preview and confirmation
 
-Every import begins with a read-only dry run. The preview shows:
+Every import begins with a read-only dry run, and the confirmation re-reads the file and re-plans against the workspace as it stands at that moment, so the write is never decided by a preview the browser is holding. A file edited between the two is refused rather than imported against the older preview.
+
+The preview shows:
 
 - the number of records that would be created from each tab;
 - every error with sheet, row, column, and message;
 - duplicate keys and duplicate natural keys;
 - unresolved key references;
 - self-dependencies, duplicate dependency pairs, and cycles;
-- conflicts with existing records;
-- the normalized order that will be stored.
+- the records already in the workspace that rows resolved to, with the rule that matched;
+- the duplicate rule itself, in the preview's own words, so a wrong assumption about what counts as already imported is caught before the write rather than after it.
 
-Confirmation is enabled only for a clean preview. Nothing is written when any validation error or conflict remains.
+Confirmation is enabled only for a clean preview. Nothing is written while any validation error remains; matched records are skipped rather than blocking.
 
-After confirmation, all SQLite inserts occur in one transaction. A database failure rolls back the entire import. Client and project Drive provisioning starts only after the local transaction commits, using the existing retry-safe `PENDING` workflow. Import never renames, moves, deletes, or overwrites existing Drive files or folders.
+After confirmation, all SQLite inserts occur in one transaction. A database failure rolls back the entire import, and the receipt that records the failure is written outside that transaction so it survives the rollback. Import never creates, renames, moves, deletes, or overwrites a Drive file or folder; imported clients and projects are provisioned by the existing Drive sync in Settings when the user next runs it.
 
 ## Task-template overlap
 

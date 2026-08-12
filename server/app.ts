@@ -20,6 +20,7 @@ import {
   listTags,
   listTasks,
 } from './repositories.ts';
+import { touchProjectActivity, touchProjectRecord } from './domain/activity.ts';
 import { wouldCreateCycle, blockingDependencies } from './domain/dependencies.ts';
 import { isDueNextSevenDays, isDueToday, isOverdue } from '../shared/deadlines.ts';
 import { buildClientSlug } from './domain/client-slugs.ts';
@@ -32,6 +33,14 @@ import {
   syncAllToDrive,
 } from './drive/service.ts';
 import { encryptJson } from './drive/tokens.ts';
+import {
+  ImportInputError,
+  commitPlaybook,
+  getReceipt,
+  listReceipts,
+  playbookInput,
+  previewPlaybook,
+} from './import.ts';
 import {
   APP_VERSION,
   BRANDING_SETTING_KEY,
@@ -254,6 +263,17 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     }),
   );
   app.use(cors({ origin: config.appOrigin }));
+  /**
+   * An uploaded workbook is base64 in a JSON body — the committed sample playbook alone is 86 KB
+   * — so the import routes get a larger limit rather than raising it for every endpoint that
+   * only ever carries a form. The Zod schema caps the field itself.
+   *
+   * Registered *before* the 1 MB parser deliberately: whichever parser runs first is the one
+   * that reads the body and the one whose limit applies, and middleware runs in registration
+   * order regardless of where the route is declared. Behind it, the general parser sees a body
+   * that is already read and passes it through.
+   */
+  app.use('/api/import', express.json({ limit: '16mb' }));
   app.use(express.json({ limit: '1mb' }));
   app.use(pinoHttp());
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
@@ -992,6 +1012,36 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       next(error);
     }
   });
+  // Campaign playbook import. The preview is the error report: a workbook that cannot be
+  // imported answers 200 with every reason, because an author needs the whole list, not the
+  // first failure. Only a malformed *request* is a 400.
+  app.post('/api/import/playbook/preview', (req, res, next) => {
+    try {
+      res.json(previewPlaybook(db, playbookInput.parse(req.body)));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/import/playbook', (req, res, next) => {
+    try {
+      const data = playbookInput
+        .and(z.object({ fingerprint: z.string().trim().max(128).optional() }))
+        .parse(req.body);
+      const { receipt, preview } = commitPlaybook(db, data);
+      // A refused import is not a server error and not a success: 409 carries the receipt and
+      // the preview that explains it, which is exactly what the modal renders either way.
+      res.status(receipt.outcome === 'COMMITTED' ? 201 : 409).json({ receipt, preview });
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.get('/api/import/receipts', (_req, res) => res.json(listReceipts(db)));
+  app.get('/api/import/receipts/:id', (req, res) => {
+    const receipt = getReceipt(db, req.params.id);
+    if (!receipt) return res.status(404).json({ error: 'Import receipt not found.' });
+    res.json(receipt);
+  });
+
   app.post('/api/drive/sync', async (req, res, next) => {
     try {
       res.json(await syncAllToDrive(db));
@@ -1075,8 +1125,14 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   app.use(
     (error: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
       void next;
+      // An unreadable upload is the caller's problem, not a 500: the message already says
+      // what to do about it, and the import modal shows it verbatim.
       const status =
-        error instanceof z.ZodError ? 400 : error?.code === 'SQLITE_CONSTRAINT_UNIQUE' ? 409 : 500;
+        error instanceof z.ZodError || error instanceof ImportInputError
+          ? 400
+          : error?.code === 'SQLITE_CONSTRAINT_UNIQUE'
+            ? 409
+            : 500;
       res.status(status).json({
         error:
           error instanceof z.ZodError
@@ -1090,37 +1146,6 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   return app;
 }
 
-/**
- * Records that work happened on a project, which is what the dashboard's Momentum
- * panel orders by. Every write to a project's children — tasks, checklists, task
- * tags, dependencies — calls this from inside its own transaction, so the child row
- * and the parent's activity land together or not at all.
- *
- * It deliberately leaves `projects.updated_at` alone. That field means "the project
- * record itself was edited", every existing consumer reads it that way, and two
- * distinct questions ("when was this project last edited" and "when was work last
- * done on it") need two fields to stay answerable. Direct edits to a project stamp
- * both; rearranging tiles and background Drive provisioning stamp neither.
- *
- * Callers pass the stamp they are already writing to the child row so one request
- * produces one timestamp throughout.
- */
-function touchProjectActivity(db: Db, projectId: string, stamp: string) {
-  db.prepare('UPDATE projects SET last_activity_at=? WHERE id=?').run(stamp, projectId);
-}
-/**
- * Records an edit to the project record itself, moving both stamps the way
- * `PATCH /api/projects/:id` does. Attaching or detaching a category is a change to how the
- * project is described — the same kind of change as renaming it — not work done inside it,
- * so it does not go through `touchProjectActivity` alone.
- */
-function touchProjectRecord(db: Db, projectId: string, stamp: string) {
-  db.prepare('UPDATE projects SET updated_at=?, last_activity_at=? WHERE id=?').run(
-    stamp,
-    stamp,
-    projectId,
-  );
-}
 /** One project in the shape every project endpoint answers with, categories included. */
 function projectById(db: Db, projectId: string) {
   return listProjects(db).find((project: any) => project.id === projectId);

@@ -23,6 +23,7 @@ import { APP_VERSION, DEFAULT_BRANDING, type Branding } from '../../../shared/br
 import { BreadcrumbTrail } from './BreadcrumbTrail';
 import { ClientDetail, Clients } from './Clients';
 import { Dashboard } from './Dashboard';
+import { ImportView } from './ImportView';
 import { Kanban } from './Kanban';
 import { ModalHost } from './Modals';
 import { BrandMark } from './Primitives';
@@ -37,6 +38,7 @@ export type Modal =
   | { type: 'project'; value?: Project; clientId?: string }
   | { type: 'task'; value?: Task; projectId?: string }
   | { type: 'taskDetail'; value: Task }
+  | { type: 'import' }
   | null;
 
 const SIDEBAR_KEY = 'hcc-sidebar-collapsed';
@@ -62,6 +64,9 @@ export function App() {
     () => localStorage.getItem(LAST_PROJECT_KEY) || '',
   );
   const [branding, setBranding] = useState<Branding>(DEFAULT_BRANDING);
+  // When the last import wrote its receipt. The Import page reloads its receipts on it, so a
+  // modal that finished in front of the page does not leave a stale list behind it.
+  const [importedAt, setImportedAt] = useState(0);
   const location = useLocation();
   const refresh = useCallback(async () => {
     setRefreshing(true);
@@ -151,6 +156,7 @@ export function App() {
           <Nav icon={<Users />} to="/clients" label="Clients" collapsed={collapsed} />
           <Nav icon={<BriefcaseBusiness />} to="/projects" label="Projects" collapsed={collapsed} />
           <Nav icon={<FolderKanban />} to="/kanban" label="Status" collapsed={collapsed} />
+          <Nav icon={<Upload />} to="/import" label="Import" collapsed={collapsed} />
           {!collapsed && (
             <div className="nav-divider">
               <span>Coming next</span>
@@ -163,9 +169,6 @@ export function App() {
               </span>
               <span className="nav-disabled">
                 <FileText /> Files
-              </span>
-              <span className="nav-disabled">
-                <Upload /> Import
               </span>
             </>
           )}
@@ -298,6 +301,12 @@ export function App() {
               }
             />
             <Route
+              path="/import"
+              element={
+                <ImportView open={() => setModal({ type: 'import' })} importedAt={importedAt} />
+              }
+            />
+            <Route
               path="/settings"
               element={
                 <SettingsView
@@ -325,6 +334,7 @@ export function App() {
           close={() => setModal(null)}
           edit={(task) => setModal({ type: 'task', value: task })}
           saved={saved}
+          imported={() => setImportedAt(Date.now())}
           refresh={refresh}
           flash={flash}
         />

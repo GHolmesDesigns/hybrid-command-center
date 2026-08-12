@@ -2105,6 +2105,204 @@ button.tag-chip.toggle.active {
   gap: 12px;
   color: var(--muted);
 }
+/* Import: the playbook modal and the receipts the Import page keeps. */
+.import-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: 16px;
+  align-items: start;
+}
+.import-about h2,
+.import-receipts h2 {
+  font: 700 17px Manrope;
+  margin: 0 0 10px;
+}
+.import-about ul {
+  margin: 0 0 12px;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.import-form textarea {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  font-size: 12px;
+  white-space: pre;
+}
+.import-chosen {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+.import-chosen svg {
+  width: 15px;
+  color: var(--green);
+}
+/* The clean-preview twin of `.inline-warning`: the same shape, read as good news. */
+.inline-warning.ready {
+  background: #eaf5ef;
+  border-color: #bcdccb;
+  color: #245743;
+}
+.import-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.import-preview > .inline-warning {
+  margin: 0;
+}
+.import-counts {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.import-counts th,
+.import-counts td {
+  border-bottom: 1px solid var(--line);
+  padding: 7px 8px;
+  text-align: right;
+}
+.import-counts thead th,
+.import-counts tbody th {
+  text-align: left;
+  font-weight: 600;
+}
+.import-counts thead th {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.import-counts td {
+  font-variant-numeric: tabular-nums;
+}
+.import-list h3 {
+  font: 700 13px Manrope;
+  margin: 0 0 8px;
+}
+.import-list summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+.import-list ul,
+.import-rule ul {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 12px;
+  max-height: 260px;
+  overflow: auto;
+}
+.import-list li {
+  display: grid;
+  grid-template-columns: minmax(120px, auto) 1fr;
+  gap: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #f0f0ec;
+}
+.import-where {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+.import-rule summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+}
+.import-rule ul {
+  list-style: disc;
+  padding-left: 18px;
+  color: var(--muted);
+  gap: 5px;
+}
+.import-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+.import-actions .submit {
+  margin: 0;
+}
+.receipt-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.receipt {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.receipt > summary {
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 6px 12px;
+  align-items: center;
+}
+.receipt > summary time {
+  font-size: 11px;
+  color: var(--muted);
+  grid-column: 3;
+}
+.receipt-title {
+  font-weight: 600;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.receipt-counts {
+  grid-column: 2 / span 2;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.receipt-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #f1f1ee;
+  color: var(--muted);
+}
+.receipt-badge svg {
+  width: 13px;
+}
+.receipt-badge.committed {
+  background: #eaf5ef;
+  color: #245743;
+}
+.receipt-badge.rejected,
+.receipt-badge.failed {
+  background: #fdecea;
+  color: var(--red);
+}
+.receipt-error {
+  font-size: 12px;
+  color: var(--red);
+  margin: 10px 0 0;
+}
+.receipt .import-counts,
+.receipt .import-list {
+  margin-top: 12px;
+}
 @media (max-width: 1100px) {
   .card-grid,
   .project-cards {
@@ -2130,6 +2328,11 @@ button.tag-chip.toggle.active {
   }
   .project-summary {
     grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 900px) {
+  .import-layout {
+    grid-template-columns: 1fr;
   }
 }
 @media (max-width: 780px) {

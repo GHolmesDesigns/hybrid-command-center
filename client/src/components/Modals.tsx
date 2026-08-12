@@ -6,6 +6,7 @@ import { TASK_STATUSES, TASK_TYPES } from '../../../shared/types';
 import { type Modal } from './App';
 import { dateInput } from './formatting';
 import { Field, FormEnd, Select, TagChipInput, TextArea } from './FormControls';
+import { ImportForm } from './ImportModal';
 import { TASK_TYPE_LABEL, type TagDraft, syncProjectCategories, syncTaskTags } from './ui-shared';
 import { TaskDetail } from './TaskDetail';
 
@@ -19,6 +20,7 @@ export function ModalHost({
   close,
   edit,
   saved,
+  imported,
   refresh,
   flash,
 }: {
@@ -32,6 +34,8 @@ export function ModalHost({
   /** Swaps the detail view for the full edit form. */
   edit: (task: Task) => void;
   saved: (s: string) => Promise<void>;
+  /** An import wrote a receipt, which the Import page behind the modal reloads on. */
+  imported: () => void;
   refresh: () => Promise<void>;
   flash: (s: string, t?: 'success' | 'error') => void;
 }) {
@@ -51,6 +55,12 @@ export function ModalHost({
           categories={categories}
           saved={saved}
         />
+      </EntityModal>
+    );
+  if (modal.type === 'import')
+    return (
+      <EntityModal title="Import a campaign playbook" wide close={close}>
+        <ImportForm close={close} imported={imported} refresh={refresh} flash={flash} />
       </EntityModal>
     );
   if (modal.type === 'task')
