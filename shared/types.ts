@@ -117,9 +117,14 @@ export interface Project {
    */
   lastActivityAt: string;
 }
+/**
+ * One spelling of "alphabetical" for anything a person typed: case- and accent-insensitive,
+ * so `acme` and `Ácme` sort together instead of in two runs separated by the whole alphabet.
+ */
+const compareNames = (a: string, b: string) =>
+  a.localeCompare(b, undefined, { sensitivity: 'base' });
 /** Case- and accent-insensitive name order, used on its own and as every sort's tie-break. */
-export const compareProjectNames = (a: Project, b: Project) =>
-  a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+export const compareProjectNames = (a: Project, b: Project) => compareNames(a.name, b.name);
 /**
  * "Recently updated": most recent activity first, ties broken by name so equal timestamps
  * cannot reshuffle between renders. Status is deliberately not weighted — a PLANNING or
@@ -177,6 +182,21 @@ export interface Task {
   checklistCompleted: number;
   checklistTotal: number;
 }
+/**
+ * Alphabetical order for pickers that list tasks from every project: project name, then
+ * title, both case-insensitively. Tasks arrive from the API in board order — status, then
+ * column position — which is the right order for a column and no help at all when you are
+ * hunting for one task by name.
+ *
+ * Two tie-breaks keep it total, so no pair of tasks can swap places between renders: the
+ * project id, because two clients may own projects with the same name and grouped views
+ * need each project's tasks to stay in one run, and the task id last.
+ */
+export const compareTasksByProjectThenTitle = (a: Task, b: Task) =>
+  compareNames(a.projectName ?? '', b.projectName ?? '') ||
+  a.projectId.localeCompare(b.projectId) ||
+  compareNames(a.title, b.title) ||
+  a.id.localeCompare(b.id);
 export interface DashboardData {
   counts: {
     activeClients: number;
