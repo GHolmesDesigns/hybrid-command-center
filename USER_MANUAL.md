@@ -292,7 +292,7 @@ Select the client name to open its detail page. Use **Open Drive** when a Drive 
 1. Select **Projects**, or open a client and select **New project**.
 2. Choose the client.
 3. Enter a project name.
-4. Add a description, status, priority, dates, deadline, and notes as needed.
+4. Add a description, status, priority, dates, deadline, categories, and notes as needed.
 5. Select **Create project**.
 
 With Drive connected, the application creates the project folder and five standard subfolders. A local project-name edit does not rename the Drive folder automatically.
@@ -401,6 +401,7 @@ Use Projects to:
 
 - Search projects
 - Filter by client
+- Filter by category
 - Sort the tiles, or arrange them by hand
 - Review task progress and overdue counts
 - Edit project details
@@ -408,6 +409,26 @@ Use Projects to:
 - Open the connected Drive folder
 - Archive completed or inactive projects
 - Delete a project and its tasks from the application
+
+#### Categories
+
+Categories organise projects the way tags organise tasks. A project can carry as many as it needs — retainer, campaign, internal, whatever your work divides into — and every project shares one workspace list, so the same category always means the same thing.
+
+To categorise a project:
+
+1. Select the settings icon on a project's card, or **Edit project** on its detail page.
+2. Under **Categories**, type a name and press <kbd>Enter</kbd>, type a comma, or select **Add**.
+3. Repeat for each category. Names already in use appear as suggestions while you type.
+4. Remove one with the **×** beside its chip, or press <kbd>Backspace</kbd> in an empty category field to remove the last one.
+5. Select **Save changes**. Categories are applied when the project is saved.
+
+Capitalisation and extra spaces do not create new categories: `retainer`, `Retainer`, and `  Retainer ` all attach the one existing category and keep its stored spelling.
+
+The **Categories** row above the project tiles filters the list. Selecting more than one shows only the projects carrying every one of them; **Clear categories** removes the whole selection. The category filter combines with the client filter, the search box, and the sort order. Your selection is kept in the page address, so a filtered list survives a reload and can be shared as a link.
+
+Each card names the categories it carries beneath its description, and a project's detail page names them under its summary. Every category has a colour, but the name is always written out beside it.
+
+Categories are renamed and deleted in Settings — see [Settings](#settings).
 
 #### Ordering the tiles
 
@@ -449,8 +470,9 @@ Removal works differently for each kind of record:
 | Project | Archive, **or** delete the project and all of its tasks. |
 | Task | Delete. Its checklist items, tag links, and dependency links go with it. |
 | Tag | Delete from Settings. It is removed from every task carrying it; no task is deleted. |
+| Category | Delete from Settings. It is removed from every project carrying it; no project is deleted. |
 
-Every removal asks for confirmation first — except a tag no task is using, which has nothing to lose — and none of them touch Google Drive. Deleting a project or task in the application leaves its Drive folders and files exactly as they are — remove those in Google Drive yourself if you want them gone.
+Every removal asks for confirmation first — except a tag no task is using, or a category no project is using, which have nothing to lose — and none of them touch Google Drive. Deleting a project or task in the application leaves its Drive folders and files exactly as they are — remove those in Google Drive yourself if you want them gone.
 
 Deleting cannot be undone from inside the application. Recover a mistake by restoring a database backup, as described in [Safe data backup](#10-safe-data-backup).
 
@@ -460,12 +482,15 @@ Settings contains:
 
 - Google Drive connection and root-folder setup
 - Sidebar branding — the mark, title, subtitle, tagline, colours, and logo shown in the left navigation
+- **Project categories** — every category in the workspace, with how many projects carry it, and the only place a category is renamed or deleted
 - **Task tags** — every tag in the workspace, with how many tasks carry it, and the only place a tag is deleted
 - The current application version
 - Detected local timezone
 - Information about the future Calendar, Files, and Import modules
 
 Deleting a tag that is still attached asks first and tells you how many tasks are affected; a tag no task carries is removed straight away. Tags are created from tasks, not here.
+
+Categories work the same way, with one addition: **Add** creates a category before any project uses it, and the pencil beside a category renames it. A rename reaches every project carrying that category at once, because the projects point at the category rather than storing its name. Deleting a category that is still attached asks first and tells you how many projects are affected; the projects themselves are never deleted, they simply stop carrying the label. A name another category already holds is refused, whatever its capitalisation.
 
 Branding edits save immediately and apply to the sidebar without a restart. The defaults also live in `shared/branding.ts` if you prefer to change them in code. The version appears both beside the Branding heading and at the bottom of the sidebar.
 

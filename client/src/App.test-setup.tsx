@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { addDays, format } from 'date-fns';
 import { App } from './App';
 import { APP_VERSION, DEFAULT_BRANDING, type Branding } from '../../shared/branding';
-import type { Client, DashboardData, Project, Tag, Task } from '../../shared/types';
+import type { Category, Client, DashboardData, Project, Tag, Task } from '../../shared/types';
 import { sameTagName } from '../../shared/types';
 
 export {
@@ -27,7 +27,7 @@ export {
   App,
   APP_VERSION,
 };
-export type { Branding, Client, DashboardData, Project, Tag, Task };
+export type { Branding, Category, Client, DashboardData, Project, Tag, Task };
 
 export const emptyDashboard: DashboardData = {
   counts: {
@@ -90,6 +90,7 @@ export const project = (
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
   lastActivityAt: '2026-01-01T00:00:00.000Z',
+  categories: [],
   ...overrides,
 });
 
@@ -127,6 +128,7 @@ export const testState = {
   clientsPayload: [] as Client[],
   tasksPayload: [] as Task[],
   tagsPayload: [] as Tag[],
+  categoriesPayload: [] as Category[],
   dashboardPayload: emptyDashboard as DashboardData,
   brandingPayload: null as Branding | null,
   taskPatchError: null as string | null,
@@ -134,7 +136,7 @@ export const testState = {
   driveSettingsError: null as string | null,
 };
 
-/** Serves the six endpoints App() requests on mount. */
+/** Serves the seven endpoints App() requests on mount. */
 const payloadFor = (url: string) => {
   if (url.endsWith('/api/dashboard')) return testState.dashboardPayload;
   if (url.endsWith('/api/settings/branding'))
@@ -143,6 +145,7 @@ const payloadFor = (url: string) => {
   if (url.endsWith('/api/clients')) return testState.clientsPayload;
   if (url.endsWith('/api/tasks')) return testState.tasksPayload;
   if (url.endsWith('/api/tags')) return testState.tagsPayload;
+  if (url.endsWith('/api/categories')) return testState.categoriesPayload;
   return [];
 };
 
@@ -156,8 +159,10 @@ const isReply = (value: unknown): value is Reply =>
 
 /**
  * Records every call and stands in for the server where a response actually feeds the next
- * step: reorder (so a reorder survives its `refresh()`), tag creation (so an existing name is
- * reused rather than duplicated), and tag deletion (so an attached tag is refused first).
+ * step: reorder (so a reorder survives its `refresh()`), tag and category creation (so an
+ * existing name is reused rather than duplicated), tag and category deletion (so an attached
+ * one is refused first), and category renames and attachments (so the projects a later
+ * `refresh()` serves carry what was just written).
  */
 const respondTo = (url: string, init?: RequestInit) => {
   const method = init?.method ?? 'GET';
@@ -186,6 +191,22 @@ const respondTo = (url: string, init?: RequestInit) => {
     return { ok: true };
   }
   if (url.endsWith('/api/tasks') && method === 'POST') return task('created-task', body.title);
+  // Both project writes answer with the saved project, because the form reads its id back to
+  // attach categories to it — a new project has no id until this reply arrives.
+  if (url.endsWith('/api/projects') && method === 'POST') {
+    const created = project('created-project', body.name, body.status || 'ACTIVE', {
+      clientId: body.clientId,
+    });
+    testState.projectsPayload = [...testState.projectsPayload, created];
+    return created;
+  }
+  if (method === 'PATCH' && /\/api\/projects\/[^/]+$/.test(url)) {
+    const id = url.split('/api/projects/')[1];
+    testState.projectsPayload = testState.projectsPayload.map((current) =>
+      current.id === id ? { ...current, ...body } : current,
+    );
+    return testState.projectsPayload.find((current) => current.id === id) ?? {};
+  }
   if (method === 'PATCH' && /\/api\/tasks\/[^/]+$/.test(url)) {
     if (testState.taskPatchError) return reply(500, { error: testState.taskPatchError });
     const id = url.split('/api/tasks/')[1];
@@ -224,6 +245,72 @@ const respondTo = (url: string, init?: RequestInit) => {
     }));
     return { ok: true, detachedFromTasks: attached };
   }
+  if (url.endsWith('/api/categories') && method === 'POST') {
+    const existing = testState.categoriesPayload.find((c) => sameTagName(c.name, body.name));
+    if (existing) return existing;
+    const created: Category = {
+      id: `category-${testState.categoriesPayload.length + 1}`,
+      name: body.name,
+    };
+    testState.categoriesPayload = [...testState.categoriesPayload, created];
+    return created;
+  }
+  const categoryPatch = url.match(/\/api\/categories\/([^/?]+)$/);
+  if (categoryPatch && method === 'PATCH') {
+    const id = categoryPatch[1];
+    if (testState.categoriesPayload.some((c) => c.id !== id && sameTagName(c.name, body.name)))
+      return reply(409, {
+        error: `Another category is already called “${body.name}”.`,
+        code: 'CATEGORY_NAME_TAKEN',
+      });
+    const renamed = { ...testState.categoriesPayload.find((c) => c.id === id)!, name: body.name };
+    testState.categoriesPayload = testState.categoriesPayload.map((c) =>
+      c.id === id ? renamed : c,
+    );
+    // One rename, every project: the join is what makes this a single write server-side.
+    testState.projectsPayload = testState.projectsPayload.map((p) => ({
+      ...p,
+      categories: p.categories.map((c) => (c.id === id ? renamed : c)),
+    }));
+    return renamed;
+  }
+  if (method === 'DELETE' && /\/api\/categories\/[^/]+/.test(url)) {
+    const id = url.split('/api/categories/')[1].split('?')[0];
+    const attached = testState.projectsPayload.filter((p) =>
+      p.categories.some((c) => c.id === id),
+    ).length;
+    if (attached && !url.includes('confirm=true'))
+      return reply(409, {
+        error: 'This category is attached to projects.',
+        code: 'CATEGORY_IN_USE',
+        attachedProjectCount: attached,
+      });
+    testState.categoriesPayload = testState.categoriesPayload.filter((c) => c.id !== id);
+    testState.projectsPayload = testState.projectsPayload.map((p) => ({
+      ...p,
+      categories: p.categories.filter((c) => c.id !== id),
+    }));
+    return { ok: true, detachedFromProjects: attached };
+  }
+  const attachCategory = url.match(/\/api\/projects\/([^/]+)\/categories$/);
+  if (attachCategory && method === 'POST') {
+    const category = testState.categoriesPayload.find((c) => c.id === body.categoryId);
+    testState.projectsPayload = testState.projectsPayload.map((p) =>
+      p.id !== attachCategory[1] || !category || p.categories.some((c) => c.id === category.id)
+        ? p
+        : { ...p, categories: [...p.categories, category] },
+    );
+    return testState.projectsPayload.find((p) => p.id === attachCategory[1]) ?? {};
+  }
+  const detachCategory = url.match(/\/api\/projects\/([^/]+)\/categories\/([^/]+)$/);
+  if (detachCategory && method === 'DELETE') {
+    testState.projectsPayload = testState.projectsPayload.map((p) =>
+      p.id === detachCategory[1]
+        ? { ...p, categories: p.categories.filter((c) => c.id !== detachCategory[2]) }
+        : p,
+    );
+    return testState.projectsPayload.find((p) => p.id === detachCategory[1]) ?? {};
+  }
   return payloadFor(url);
 };
 
@@ -248,6 +335,7 @@ beforeEach(() => {
   testState.clientsPayload = [];
   testState.tasksPayload = [];
   testState.tagsPayload = [];
+  testState.categoriesPayload = [];
   testState.dashboardPayload = emptyDashboard;
   testState.brandingPayload = null;
   testState.taskPatchError = null;

@@ -1,8 +1,7 @@
 import { useId, useState, type KeyboardEvent } from 'react';
 import { Plus, RefreshCw, X } from 'lucide-react';
-import type { Tag } from '../../../shared/types';
 import { normalizeTagName, sameTagName } from '../../../shared/types';
-import { type TagDraft, tagAccent } from './ui-shared';
+import { type ChipOption, type TagDraft, tagAccent } from './ui-shared';
 
 export function Field({
   label,
@@ -76,16 +75,23 @@ export function TagChip({ tag }: { tag: TagDraft }) {
   );
 }
 
+/**
+ * Chips for a shared, user-managed list: task tags, and project categories, which work the
+ * same way one level up. `noun` names one item everywhere the control speaks — the accessible
+ * names, the placeholder — so a category input never asks for a tag.
+ */
 export function TagChipInput({
   label,
   chosen,
   available,
   onChange,
+  noun = 'tag',
 }: {
   label: string;
   chosen: TagDraft[];
-  available: Tag[];
+  available: ChipOption[];
   onChange: (next: TagDraft[]) => void;
+  noun?: string;
 }) {
   const [draft, setDraft] = useState('');
   const listId = useId();
@@ -114,7 +120,7 @@ export function TagChipInput({
                 type="button"
                 className="tag-remove"
                 onClick={() => onChange(chosen.filter((candidate) => candidate !== tag))}
-                aria-label={`Remove tag ${tag.name}`}
+                aria-label={`Remove ${noun} ${tag.name}`}
               >
                 <X />
               </button>
@@ -126,8 +132,8 @@ export function TagChipInput({
         <input
           value={draft}
           list={listId}
-          aria-label="Add a tag"
-          placeholder="Type a tag, then press Enter"
+          aria-label={`Add a ${noun}`}
+          placeholder={`Type a ${noun}, then press Enter`}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={keyDown}
           onBlur={() => commit(draft)}

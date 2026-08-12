@@ -18,7 +18,7 @@ import {
   X,
 } from 'lucide-react';
 import { api } from '../api';
-import type { Client, DashboardData, Project, Tag, Task } from '../../../shared/types';
+import type { Category, Client, DashboardData, Project, Tag, Task } from '../../../shared/types';
 import { APP_VERSION, DEFAULT_BRANDING, type Branding } from '../../../shared/branding';
 import { BreadcrumbTrail } from './BreadcrumbTrail';
 import { ClientDetail, Clients } from './Clients';
@@ -47,7 +47,8 @@ export function App() {
   const [clients, setClients] = useState<Client[]>([]),
     [projects, setProjects] = useState<Project[]>([]),
     [tasks, setTasks] = useState<Task[]>([]),
-    [tags, setTags] = useState<Tag[]>([]);
+    [tags, setTags] = useState<Tag[]>([]),
+    [categories, setCategories] = useState<Category[]>([]);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null),
     [loading, setLoading] = useState(true),
     [modal, setModal] = useState<Modal>(null);
@@ -65,13 +66,14 @@ export function App() {
   const refresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      const [c, p, t, d, b, g] = await Promise.all([
+      const [c, p, t, d, b, g, k] = await Promise.all([
         api<Client[]>('/clients'),
         api<Project[]>('/projects'),
         api<Task[]>('/tasks'),
         api<DashboardData>('/dashboard'),
         api<{ branding: Branding }>('/settings/branding'),
         api<Tag[]>('/tags'),
+        api<Category[]>('/categories'),
       ]);
       setClients(c);
       setProjects(p);
@@ -81,6 +83,7 @@ export function App() {
       setDashboardRefreshError(null);
       setBranding(b.branding);
       setTags(g);
+      setCategories(k);
     } catch (e) {
       const message = (e as Error).message;
       setDashboardRefreshError(message);
@@ -257,6 +260,7 @@ export function App() {
                   projects={projects}
                   updateProjects={setProjects}
                   clients={clients}
+                  categories={categories}
                   tasks={tasks}
                   open={setModal}
                   refresh={refresh}
@@ -300,6 +304,8 @@ export function App() {
                   branding={branding}
                   tags={tags}
                   tasks={tasks}
+                  categories={categories}
+                  projects={projects}
                   refresh={refresh}
                   flash={flash}
                 />
@@ -315,6 +321,7 @@ export function App() {
           projects={projects}
           tasks={tasks}
           tags={tags}
+          categories={categories}
           close={() => setModal(null)}
           edit={(task) => setModal({ type: 'task', value: task })}
           saved={saved}

@@ -1,7 +1,7 @@
 ﻿import type { Db } from './db.ts';
 import { blockingDependencies } from './domain/dependencies.ts';
 import { isOverdue } from '../shared/deadlines.ts';
-import type { Tag, Task } from '../shared/types.ts';
+import type { Category, Tag, Task } from '../shared/types.ts';
 
 const camel = (row: any) =>
   Object.fromEntries(
@@ -14,7 +14,27 @@ const camel = (row: any) =>
 export function listClients(db: Db) {
   return (db.prepare('SELECT * FROM clients ORDER BY status, name').all() as any[]).map(camel);
 }
+/**
+ * Every project's categories, grouped by project id, in one statement — so listing
+ * projects costs two queries rather than one per tile.
+ */
+function categoriesByProject(db: Db): Map<string, Category[]> {
+  const grouped = new Map<string, Category[]>();
+  const rows = db
+    .prepare(
+      `SELECT pc.project_id, c.id, c.name, c.color FROM project_categories pc
+       JOIN categories c ON c.id=pc.category_id ORDER BY c.name COLLATE NOCASE`,
+    )
+    .all() as any[];
+  for (const row of rows) {
+    const attached = grouped.get(row.project_id) ?? [];
+    attached.push(camel({ id: row.id, name: row.name, color: row.color }) as unknown as Category);
+    grouped.set(row.project_id, attached);
+  }
+  return grouped;
+}
 export function listProjects(db: Db) {
+  const categories = categoriesByProject(db);
   return (
     db
       .prepare(
@@ -31,7 +51,18 @@ export function listProjects(db: Db) {
     // too keeps `Project.lastActivityAt` a string for every consumer, so a row written
     // by anything that missed the column can never crash a sort or a date format.
     lastActivityAt: row.last_activity_at || row.updated_at,
+    // Empty rather than absent, so every consumer can read `project.categories.length`.
+    categories: categories.get(row.id) ?? [],
   }));
+}
+export function listCategories(db: Db): Category[] {
+  return (
+    db.prepare('SELECT id, name, color FROM categories ORDER BY name COLLATE NOCASE').all() as any[]
+  ).map(camel) as unknown as Category[];
+}
+export function getCategory(db: Db, id: string): Category | undefined {
+  const row = db.prepare('SELECT id, name, color FROM categories WHERE id=?').get(id);
+  return row ? (camel(row) as unknown as Category) : undefined;
 }
 export function listTags(db: Db): Tag[] {
   return (

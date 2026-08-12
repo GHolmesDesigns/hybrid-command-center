@@ -13,7 +13,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { api, send } from '../api';
-import type { Tag, Task } from '../../../shared/types';
+import type { Category, Project, Tag, Task } from '../../../shared/types';
 import {
   APP_VERSION,
   BRANDING_COLOR_FIELDS,
@@ -28,6 +28,7 @@ import { normalizeHex } from '../../../shared/contrast';
 import { BrandMark, DriveBadge } from './Primitives';
 import { PageHead } from './Shell';
 import { brandStyle } from './ui-shared';
+import { CategoriesCard } from './CategoriesCard';
 import { TagsCard } from './TagsCard';
 
 const COLOR_LABEL: Record<BrandingColorField, string> = {
@@ -40,12 +41,16 @@ export function SettingsView({
   branding,
   tags,
   tasks,
+  categories,
+  projects,
   refresh,
   flash,
 }: {
   branding: Branding;
   tags: Tag[];
   tasks: Task[];
+  categories: Category[];
+  projects: Project[];
   refresh: () => Promise<void>;
   flash: (s: string, t?: 'success' | 'error') => void;
 }) {
@@ -369,6 +374,12 @@ export function SettingsView({
             )}
           </form>
         </section>
+        <CategoriesCard
+          categories={categories}
+          projects={projects}
+          refresh={refresh}
+          flash={flash}
+        />
         <TagsCard tags={tags} tasks={tasks} refresh={refresh} flash={flash} />
         <section className="panel settings-card">
           <div className="settings-icon neutral">

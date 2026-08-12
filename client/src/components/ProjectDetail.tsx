@@ -5,6 +5,7 @@ import { send } from '../api';
 import type { Project, Task } from '../../../shared/types';
 import { type Modal } from './App';
 import { formatDate } from './formatting';
+import { TagChip } from './FormControls';
 import { Due, Empty, PriorityBadge, StatusDot } from './Primitives';
 import { STATUS_LABEL } from './ui-shared';
 import { PageHead } from './Shell';
@@ -94,6 +95,15 @@ export function ProjectDetail({
           <strong>{mine.filter((t) => t.overdue).length} overdue</strong>
         </div>
       </div>
+      {p.categories.length > 0 && (
+        <ul className="tag-list" aria-label={`Categories on ${p.name}`}>
+          {p.categories.map((category) => (
+            <li key={category.id}>
+              <TagChip tag={category} />
+            </li>
+          ))}
+        </ul>
+      )}
       <div className="detail-actions">
         <Link className="buttonlike" to={`/kanban?project=${p.id}`}>
           Open project status <ArrowRight />

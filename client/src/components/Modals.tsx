@@ -1,12 +1,12 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { send } from '../api';
-import type { Client, Project, Tag, Task } from '../../../shared/types';
+import type { Category, Client, Project, Tag, Task } from '../../../shared/types';
 import { TASK_STATUSES, TASK_TYPES } from '../../../shared/types';
 import { type Modal } from './App';
 import { dateInput } from './formatting';
 import { Field, FormEnd, Select, TagChipInput, TextArea } from './FormControls';
-import { TASK_TYPE_LABEL, type TagDraft, syncTaskTags } from './ui-shared';
+import { TASK_TYPE_LABEL, type TagDraft, syncProjectCategories, syncTaskTags } from './ui-shared';
 import { TaskDetail } from './TaskDetail';
 
 export function ModalHost({
@@ -15,6 +15,7 @@ export function ModalHost({
   projects,
   tasks,
   tags,
+  categories,
   close,
   edit,
   saved,
@@ -26,6 +27,7 @@ export function ModalHost({
   projects: Project[];
   tasks: Task[];
   tags: Tag[];
+  categories: Category[];
   close: () => void;
   /** Swaps the detail view for the full edit form. */
   edit: (task: Task) => void;
@@ -46,6 +48,7 @@ export function ModalHost({
           value={modal.value}
           defaultClient={modal.clientId}
           clients={clients}
+          categories={categories}
           saved={saved}
         />
       </EntityModal>
@@ -178,21 +181,32 @@ function ProjectForm({
   value,
   defaultClient,
   clients,
+  categories,
   saved,
 }: {
   value?: Project;
   defaultClient?: string;
   clients: Client[];
+  categories: Category[];
   saved: (s: string) => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState('');
+  // Categories are the one field FormData cannot carry, for the same reason task tags are
+  // not: a multi-value list resolved against the shared table, so it is held in state and
+  // reconciled once the project has an id to attach to.
+  const [chosen, setChosen] = useState<TagDraft[]>(value?.categories ?? []);
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setBusy(true);
     const data = Object.fromEntries(new FormData(e.currentTarget));
     try {
-      await send(value ? `/projects/${value.id}` : '/projects', value ? 'PATCH' : 'POST', data);
+      const project = await send<Project>(
+        value ? `/projects/${value.id}` : '/projects',
+        value ? 'PATCH' : 'POST',
+        data,
+      );
+      await syncProjectCategories(project.id, chosen, value?.categories ?? []);
       await saved(
         value ? 'Project updated.' : 'Project created. Drive folders are being prepared.',
       );
@@ -248,6 +262,13 @@ function ProjectForm({
           value={dateInput(value?.targetDeadline)}
         />
       </div>
+      <TagChipInput
+        label="Categories"
+        noun="category"
+        chosen={chosen}
+        available={categories}
+        onChange={setChosen}
+      />
       <TextArea label="Notes" name="notes" value={value?.notes} />
       <FormEnd error={error} busy={busy} label={value ? 'Save changes' : 'Create project'} />
     </form>

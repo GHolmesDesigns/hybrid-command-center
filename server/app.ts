@@ -10,9 +10,11 @@ import type { Db } from './db.ts';
 import { getDb, transaction } from './db.ts';
 import { config } from './config.ts';
 import {
+  getCategory,
   getTag,
   getTask,
   listActiveTasks,
+  listCategories,
   listClients,
   listProjects,
   listTags,
@@ -44,6 +46,7 @@ import {
   TASK_STATUSES,
   TASK_TYPES,
   compareProjectActivity,
+  normalizeCategoryName,
   normalizeTagName,
   type Project,
 } from '../shared/types.ts';
@@ -222,13 +225,23 @@ const brandingInput = z
   });
 
 const normalizedTagName = z.string().transform(normalizeTagName).pipe(z.string().min(1).max(60));
-const tagColor = z
+/** Optional decoration on a tag or category chip. The name always carries the meaning. */
+const chipColor = z
   .union([z.literal(''), z.string().trim().min(1).max(32)])
   .optional()
   .transform((value) => (value === undefined ? undefined : value || null));
-const tagInput = z.object({ name: normalizedTagName, color: tagColor });
+const tagInput = z.object({ name: normalizedTagName, color: chipColor });
 const tagPatch = tagInput.partial().refine((value) => Object.keys(value).length > 0, {
   message: 'Provide a tag field to update.',
+});
+
+const normalizedCategoryName = z
+  .string()
+  .transform(normalizeCategoryName)
+  .pipe(z.string().min(1).max(60));
+const categoryInput = z.object({ name: normalizedCategoryName, color: chipColor });
+const categoryPatch = categoryInput.partial().refine((value) => Object.keys(value).length > 0, {
+  message: 'Provide a category field to update.',
 });
 
 export function createApp(db: Db = getDb(), options: AppOptions = {}) {
@@ -357,7 +370,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       } catch (error) {
         req.log.error({ err: error, projectId }, 'Drive project provisioning failed');
       }
-      res.status(201).json(listProjects(db).find((p: any) => p.id === projectId));
+      res.status(201).json(projectById(db, projectId));
     } catch (error) {
       next(error);
     }
@@ -384,7 +397,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         stamp,
         req.params.id,
       );
-      res.json(listProjects(db).find((x: any) => x.id === req.params.id));
+      res.json(projectById(db, req.params.id));
     } catch (e) {
       next(e);
     }
@@ -434,7 +447,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   app.post('/api/projects/:id/retry-drive', async (req, res, next) => {
     try {
       await provisionProject(db, req.params.id);
-      res.json(listProjects(db).find((p: any) => p.id === req.params.id));
+      res.json(projectById(db, req.params.id));
     } catch (e) {
       next(e);
     }
@@ -623,6 +636,118 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     } catch (error) {
       next(error);
     }
+  });
+
+  // Project categories. The same shape as tags one level up: a shared, user-managed list,
+  // matched case-insensitively, attached through a join so a rename reaches every project at
+  // once and a deletion detaches without deleting anything a person made.
+  app.get('/api/categories', (_req, res) => res.json(listCategories(db)));
+  app.post('/api/categories', (req, res, next) => {
+    try {
+      const data = categoryInput.parse(req.body);
+      const existing = db
+        .prepare('SELECT id FROM categories WHERE name=? COLLATE NOCASE')
+        .get(data.name) as { id: string } | undefined;
+      // Typing a name that already exists picks that category rather than refusing or
+      // duplicating it, which is what makes the chip input safe to type into.
+      if (existing) return res.json(getCategory(db, existing.id));
+      const categoryId = id();
+      db.prepare('INSERT INTO categories(id,name,color) VALUES(?,?,?)').run(
+        categoryId,
+        data.name,
+        data.color ?? null,
+      );
+      res.status(201).json(getCategory(db, categoryId));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.patch('/api/categories/:id', (req, res, next) => {
+    try {
+      const data = categoryPatch.parse(req.body);
+      const current = getCategory(db, req.params.id);
+      if (!current) return res.status(404).json({ error: 'Category not found.' });
+      const nextName = patch(data.name, current.name);
+      // The UNIQUE index would refuse this anyway, with a message naming SQLite rather than
+      // the category already holding the name.
+      const clash = db
+        .prepare('SELECT id FROM categories WHERE name=? COLLATE NOCASE AND id<>?')
+        .get(nextName, current.id) as { id: string } | undefined;
+      if (clash)
+        return res.status(409).json({
+          error: `Another category is already called “${nextName}”.`,
+          code: 'CATEGORY_NAME_TAKEN',
+        });
+      db.prepare('UPDATE categories SET name=?,color=? WHERE id=?').run(
+        nextName,
+        patch(data.color, current.color ?? null),
+        current.id,
+      );
+      res.json(getCategory(db, current.id));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.delete('/api/categories/:id', (req, res, next) => {
+    try {
+      const query = z.object({ confirm: z.literal('true').optional() }).parse(req.query);
+      const category = getCategory(db, req.params.id);
+      if (!category) return res.status(404).json({ error: 'Category not found.' });
+      const attached = (
+        db
+          .prepare('SELECT COUNT(*) count FROM project_categories WHERE category_id=?')
+          .get(category.id) as { count: number }
+      ).count;
+      if (attached > 0 && query.confirm !== 'true')
+        return res.status(409).json({
+          error: 'This category is attached to projects. Confirm deletion to detach it everywhere.',
+          code: 'CATEGORY_IN_USE',
+          attachedProjectCount: attached,
+        });
+      // The join rows cascade. No project is deleted, and no project field changes.
+      db.prepare('DELETE FROM categories WHERE id=?').run(category.id);
+      res.json({
+        ok: true,
+        deleted: 'category',
+        name: category.name,
+        detachedFromProjects: attached,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/projects/:id/categories', (req, res, next) => {
+    try {
+      const data = z.object({ categoryId: z.string().uuid() }).parse(req.body);
+      if (!db.prepare('SELECT id FROM projects WHERE id=?').get(req.params.id))
+        return res.status(404).json({ error: 'Project not found.' });
+      if (!db.prepare('SELECT id FROM categories WHERE id=?').get(data.categoryId))
+        return res.status(404).json({ error: 'Category not found.' });
+      const stamp = now();
+      const attached = transaction(db, () => {
+        const result = db
+          .prepare('INSERT OR IGNORE INTO project_categories(project_id,category_id) VALUES(?,?)')
+          .run(req.params.id, data.categoryId);
+        // Re-attaching a category the project already carries changes nothing.
+        if (result.changes) touchProjectRecord(db, req.params.id, stamp);
+        return result.changes;
+      });
+      res.status(attached ? 201 : 200).json(projectById(db, req.params.id));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.delete('/api/projects/:id/categories/:categoryId', (req, res) => {
+    if (!db.prepare('SELECT id FROM projects WHERE id=?').get(req.params.id))
+      return res.status(404).json({ error: 'Project not found.' });
+    const stamp = now();
+    transaction(db, () => {
+      const result = db
+        .prepare('DELETE FROM project_categories WHERE project_id=? AND category_id=?')
+        .run(req.params.id, req.params.categoryId);
+      if (result.changes) touchProjectRecord(db, req.params.id, stamp);
+    });
+    res.json(projectById(db, req.params.id));
   });
   app.post('/api/tasks/reorder', (req, res, next) => {
     try {
@@ -982,6 +1107,23 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
  */
 function touchProjectActivity(db: Db, projectId: string, stamp: string) {
   db.prepare('UPDATE projects SET last_activity_at=? WHERE id=?').run(stamp, projectId);
+}
+/**
+ * Records an edit to the project record itself, moving both stamps the way
+ * `PATCH /api/projects/:id` does. Attaching or detaching a category is a change to how the
+ * project is described — the same kind of change as renaming it — not work done inside it,
+ * so it does not go through `touchProjectActivity` alone.
+ */
+function touchProjectRecord(db: Db, projectId: string, stamp: string) {
+  db.prepare('UPDATE projects SET updated_at=?, last_activity_at=? WHERE id=?').run(
+    stamp,
+    stamp,
+    projectId,
+  );
+}
+/** One project in the shape every project endpoint answers with, categories included. */
+function projectById(db: Db, projectId: string) {
+  return listProjects(db).find((project: any) => project.id === projectId);
 }
 function parseFolderId(value: string) {
   const match = value.match(/folders\/([a-zA-Z0-9_-]+)/);

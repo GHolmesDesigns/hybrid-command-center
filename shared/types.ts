@@ -116,6 +116,12 @@ export interface Project {
    * Momentum panel orders by and displays; `updatedAt` deliberately stays narrower.
    */
   lastActivityAt: string;
+  /**
+   * The categories attached to this project, name-ordered. Zero or more, from the shared
+   * workspace list — so the same category on two projects is the same row, and renaming it
+   * renames it on both. Always present, empty for an uncategorized project.
+   */
+  categories: Category[];
 }
 /**
  * One spelling of "alphabetical" for anything a person typed: case- and accent-insensitive,
@@ -155,6 +161,20 @@ export const normalizeTagName = (value: string) => value.trim().replace(/\s+/g, 
 /** True when two names refer to the same global tag, ignoring case and extra whitespace. */
 export const sameTagName = (a: string, b: string) =>
   normalizeTagName(a).toLowerCase() === normalizeTagName(b).toLowerCase();
+/**
+ * A project category: the same shape as a tag, and deliberately the same spelling rule, so
+ * `Client Work` typed on one project and `client work` typed on another are one category
+ * rather than two. Categories label projects; tags label tasks. They are separate lists on
+ * purpose — a workspace organizes its projects by different words than its tasks.
+ */
+export interface Category {
+  id: string;
+  name: string;
+  color?: string;
+}
+/** Categories follow the tag rule for names, aliased so call sites read in their own terms. */
+export const normalizeCategoryName = normalizeTagName;
+export const sameCategoryName = sameTagName;
 export interface Task {
   id: string;
   projectId: string;
