@@ -16,7 +16,10 @@
 - `npm run db:migrate`: initialize/upgrade SQLite
 - `npm run db:seed`: safe local demo data; never contacts Drive
 - `npm test`: unit/integration tests with mock Drive
-- `npm run test:e2e`: Playwright workflow
+- `npm run test:e2e`: Playwright workflows. Playwright starts and stops the API and Vite
+  itself, on ports 8788 and 5174, against `data/e2e.db`, which is deleted at the start of
+  every run. The command exits on its own, passing or failing; if it ever does not, something
+  it spawned outlived the run and that is the bug.
 - `npm run typecheck`, `npm run lint`, `npm run build`: required quality checks
 
 ## Conventions
@@ -51,3 +54,7 @@
 ## Definition of done
 
 A change is done when its user flow is complete, validation and error states are present, relevant unit/integration tests pass, TypeScript and lint pass, the production build succeeds, responsive behavior is preserved, and no secret or real-Drive side effect is introduced.
+
+Every gate in `.github/workflows/quality-gates.yml` blocks the merge, end-to-end included.
+
+**Every milestone adds at least one `e2e/` spec.** Not every card — a milestone. The suite is the only check that runs the real browser against the real server, and it earns that cost only if it keeps pace with the features. Cover the flow the milestone was about, in one spec, end to end; leave the branches and the error paths to unit tests. Specs share one server and one database and run one at a time, so scope any count assertion to rows the spec created, or read the number back from the API in the same run.

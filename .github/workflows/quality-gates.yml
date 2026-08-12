@@ -40,5 +40,21 @@ jobs:
       - name: Install Playwright browser
         run: npx playwright install --with-deps chrome
 
+      # Blocking, like every gate above it: a red E2E run fails the job and the pull request.
       - name: Run end-to-end tests
+        id: e2e
         run: npm run test:e2e
+        timeout-minutes: 10
+
+      # Only when the browser run itself failed, so an earlier gate going red does not attach
+      # an empty archive. A failed browser run is unreadable from a log alone; the report
+      # carries the traces and the error context files with it.
+      - name: Upload the Playwright report
+        if: failure() && steps.e2e.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

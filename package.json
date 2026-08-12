@@ -1,6 +1,6 @@
 {
   "name": "hybrid-command-center",
-  "version": "2.9.1",
+  "version": "2.10.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -17,8 +17,6 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "check:version-bump": "node --experimental-strip-types server/scripts/check-version-bump.ts",
-    "test:e2e:api": "cross-env PORT=8788 DATABASE_PATH=./data/e2e.db APP_ORIGIN=http://127.0.0.1:5174 node --experimental-strip-types e2e/start-server.ts",
-    "test:e2e:web": "cross-env API_PORT=8788 vite --host 127.0.0.1 --port 5174",
     "db:migrate": "node --experimental-strip-types server/scripts/migrate.ts",
     "db:seed": "node --experimental-strip-types server/scripts/seed.ts"
   },
@@ -53,7 +51,6 @@
     "@types/supertest": "^7.2.1",
     "@vitejs/plugin-react": "^6.0.5",
     "concurrently": "^10.0.4",
-    "cross-env": "^10.1.0",
     "eslint": "^10.8.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.3",
