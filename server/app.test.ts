@@ -726,4 +726,32 @@ describe('project activity', () => {
     expect(await recentIds()).toEqual([p.id, edited.id]);
     expect(stampsOf(p.id).updatedAt < stampsOf(edited.id).updatedAt).toBe(true);
   });
+
+  it('orders Recently updated by recency alone, breaking ties by name', async () => {
+    const { c, p } = await setup();
+    const app = createApp(db);
+    // Status and activity are set straight in SQLite: this test is about the ordering the
+    // dashboard applies, not about which endpoint reaches which status.
+    const make = async (name: string, status: string, activity: string) => {
+      const created = (await request(app).post('/api/projects').send({ clientId: c.id, name }))
+        .body;
+      db.prepare('UPDATE projects SET status=?, last_activity_at=? WHERE id=?').run(
+        status,
+        activity,
+        created.id,
+      );
+      return created;
+    };
+    // The active project is the stalest; two of the others share a timestamp.
+    backdate(p.id);
+    const held = await make('Zulu Retainer', 'ON_HOLD', '2026-05-02T00:00:00.000Z');
+    const planning = await make('Alpha Launch', 'PLANNING', '2026-05-02T00:00:00.000Z');
+    const archived = await make('Old Microsite', 'ARCHIVED', '2026-05-03T00:00:00.000Z');
+
+    const recent = (await request(app).get('/api/dashboard')).body.recentProjects as any[];
+
+    expect(recent.map((x) => x.id)).toEqual([archived.id, planning.id, held.id, p.id]);
+    // Nothing but the timestamps decided that: the only ACTIVE project came last.
+    expect(recent.at(-1).status).toBe('ACTIVE');
+  });
 });

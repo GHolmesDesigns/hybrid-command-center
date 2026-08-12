@@ -117,6 +117,17 @@ export interface Project {
    */
   lastActivityAt: string;
 }
+/** Case- and accent-insensitive name order, used on its own and as every sort's tie-break. */
+export const compareProjectNames = (a: Project, b: Project) =>
+  a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+/**
+ * "Recently updated": most recent activity first, ties broken by name so equal timestamps
+ * cannot reshuffle between renders. Status is deliberately not weighted — a PLANNING or
+ * ON_HOLD project touched a minute ago outranks an ACTIVE one touched last month. Shared
+ * so the dashboard's Momentum panel and the Projects page cannot disagree about the order.
+ */
+export const compareProjectActivity = (a: Project, b: Project) =>
+  b.lastActivityAt.localeCompare(a.lastActivityAt) || compareProjectNames(a, b);
 export interface ChecklistItem {
   id: string;
   taskId: string;

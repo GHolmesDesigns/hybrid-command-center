@@ -32,7 +32,9 @@ import {
   TASK_CHECKLIST_TEMPLATES,
   TASK_STATUSES,
   TASK_TYPES,
+  compareProjectActivity,
   normalizeTagName,
+  type Project,
 } from '../shared/types.ts';
 
 const id = () => crypto.randomUUID();
@@ -763,11 +765,9 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         open.filter((t) => isDueToday(t.dueDate) || isDueNextSevenDays(t.dueDate)),
       ),
       // Ordered by activity, not by `updatedAt`: the panel is asking where work is
-      // happening, and renaming a project is not work on it.
-      recentProjects: projects
-        .slice()
-        .sort((a: any, b: any) => b.lastActivityAt.localeCompare(a.lastActivityAt))
-        .slice(0, 5),
+      // happening, and renaming a project is not work on it. The comparator is shared with
+      // the Projects page so the two views cannot put the same projects in a different order.
+      recentProjects: (projects as Project[]).slice().sort(compareProjectActivity).slice(0, 5),
     });
   });
 
