@@ -4,11 +4,12 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { addDays, format } from 'date-fns';
 import { App } from './App';
-import { APP_VERSION } from '../../shared/branding';
+import { APP_VERSION, DEFAULT_BRANDING, type Branding } from '../../shared/branding';
 import type { Client, DashboardData, Project, Tag, Task } from '../../shared/types';
 import { sameTagName } from '../../shared/types';
 
 export {
+  DEFAULT_BRANDING,
   fireEvent,
   render,
   screen,
@@ -26,7 +27,7 @@ export {
   App,
   APP_VERSION,
 };
-export type { Client, DashboardData, Project, Tag, Task };
+export type { Branding, Client, DashboardData, Project, Tag, Task };
 
 export const emptyDashboard: DashboardData = {
   counts: {
@@ -43,11 +44,17 @@ export const emptyDashboard: DashboardData = {
   recentProjects: [],
 };
 
-export const branding = {
+export const branding: Branding = {
+  ...DEFAULT_BRANDING,
   mark: 'TC',
   title: 'Test Command Center',
   subtitle: 'Smoke test workspace',
   tagline: 'Offline',
+};
+
+/** Lets a suite serve branding of its own without rebuilding the whole fetch stub. */
+export const setBranding = (overrides: Partial<Branding>) => {
+  testState.brandingPayload = { ...branding, ...overrides };
 };
 
 export const client = (
@@ -121,6 +128,7 @@ export const testState = {
   tasksPayload: [] as Task[],
   tagsPayload: [] as Tag[],
   dashboardPayload: emptyDashboard as DashboardData,
+  brandingPayload: null as Branding | null,
   taskPatchError: null as string | null,
   dashboardFailures: 0,
 };
@@ -128,7 +136,8 @@ export const testState = {
 /** Serves the six endpoints App() requests on mount. */
 const payloadFor = (url: string) => {
   if (url.endsWith('/api/dashboard')) return testState.dashboardPayload;
-  if (url.endsWith('/api/settings/branding')) return { branding };
+  if (url.endsWith('/api/settings/branding'))
+    return { branding: testState.brandingPayload ?? branding };
   if (url.endsWith('/api/projects')) return testState.projectsPayload;
   if (url.endsWith('/api/clients')) return testState.clientsPayload;
   if (url.endsWith('/api/tasks')) return testState.tasksPayload;
@@ -237,6 +246,7 @@ beforeEach(() => {
   testState.tasksPayload = [];
   testState.tagsPayload = [];
   testState.dashboardPayload = emptyDashboard;
+  testState.brandingPayload = null;
   testState.taskPatchError = null;
   testState.dashboardFailures = 0;
   requests.length = 0;

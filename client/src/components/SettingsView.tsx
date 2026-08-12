@@ -2,20 +2,39 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import {
   AlertCircle,
   CalendarDays,
+  CheckCircle2,
   Clock3,
   ExternalLink,
   FileText,
   FolderKanban,
   Pencil,
   RefreshCw,
+  RotateCcw,
   Upload,
 } from 'lucide-react';
 import { api, send } from '../api';
 import type { Tag, Task } from '../../../shared/types';
-import { APP_VERSION, type Branding } from '../../../shared/branding';
-import { DriveBadge } from './Primitives';
+import {
+  APP_VERSION,
+  BRANDING_COLOR_FIELDS,
+  DEFAULT_BRANDING,
+  LOGO_URL_MAX,
+  brandingContrastReadings,
+  brandingIssues,
+  type Branding,
+  type BrandingColorField,
+} from '../../../shared/branding';
+import { normalizeHex } from '../../../shared/contrast';
+import { BrandMark, DriveBadge } from './Primitives';
 import { PageHead } from './Shell';
+import { brandStyle } from './ui-shared';
 import { TagsCard } from './TagsCard';
+
+const COLOR_LABEL: Record<BrandingColorField, string> = {
+  background: 'Sidebar background',
+  foreground: 'Sidebar text',
+  accent: 'Accent',
+};
 
 export function SettingsView({
   branding,
@@ -76,8 +95,16 @@ export function SettingsView({
     await load();
     flash('Google Drive disconnected.');
   };
+  const brandProblems = brandingIssues(brandForm),
+    contrast = brandingContrastReadings(brandForm),
+    logoProblems = brandProblems.filter(
+      (issue) => issue.field === 'logoUrl' || issue.field === 'logoAlt',
+    );
   const saveBranding = async (e: FormEvent) => {
     e.preventDefault();
+    // The server refuses these too. Stopping here is what makes the reason readable rather
+    // than a single validation message returned for whichever field failed first.
+    if (brandProblems.length) return flash(brandProblems[0].message, 'error');
     setBrandBusy(true);
     try {
       await send('/settings/branding', 'PUT', brandForm);
@@ -178,7 +205,7 @@ export function SettingsView({
             <span className="version-pill">v{APP_VERSION}</span>
           </div>
           <p>
-            Edit the mark, title, and tagline shown in the sidebar. Defaults also live in{' '}
+            Edit the wording, colours, and logo shown in the sidebar. Defaults also live in{' '}
             <code>shared/branding.ts</code> if you prefer changing them in code.
           </p>
           <form className="form brand-form" onSubmit={saveBranding}>
@@ -220,22 +247,107 @@ export function SettingsView({
                 required
               />
             </label>
-            <div className="brand-preview">
-              <div className="brand-mark">{brandForm.mark || 'HC'}</div>
-              <div>
-                <strong>{brandForm.title || 'Hybrid'}</strong>
-                <span>{brandForm.subtitle || 'Command Center'}</span>
-              </div>
+            <div className="color-row">
+              {BRANDING_COLOR_FIELDS.map((field) => (
+                <div className="color-field" key={field}>
+                  <label htmlFor={`brand-${field}`}>{COLOR_LABEL[field]}</label>
+                  <div className="color-input">
+                    <input
+                      id={`brand-${field}`}
+                      type="color"
+                      value={normalizeHex(brandForm[field]) || DEFAULT_BRANDING[field]}
+                      onChange={(e) => setBrandForm({ ...brandForm, [field]: e.target.value })}
+                    />
+                    <input
+                      aria-label={`${COLOR_LABEL[field]} hex value`}
+                      value={brandForm[field]}
+                      maxLength={7}
+                      spellCheck={false}
+                      onChange={(e) => setBrandForm({ ...brandForm, [field]: e.target.value })}
+                      required
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
-            <button className="submit" disabled={brandBusy}>
-              {brandBusy ? (
-                <>
-                  <RefreshCw className="spin" /> Saving…
-                </>
-              ) : (
-                'Save branding'
-              )}
-            </button>
+            <ul className="contrast-list">
+              {contrast.map((reading) => (
+                <li key={reading.field} className={reading.passes ? 'pass' : 'fail'}>
+                  {reading.passes ? <CheckCircle2 /> : <AlertCircle />}
+                  <span>{reading.label}</span>
+                  <strong>
+                    {reading.ratio}:1 · {reading.passes ? 'Passes AA' : 'Fails AA'}
+                  </strong>
+                </li>
+              ))}
+            </ul>
+            <label>
+              Logo address (optional)
+              <input
+                type="url"
+                value={brandForm.logoUrl}
+                maxLength={LOGO_URL_MAX}
+                placeholder="https://example.com/logo.png"
+                spellCheck={false}
+                onChange={(e) => setBrandForm({ ...brandForm, logoUrl: e.target.value })}
+              />
+            </label>
+            <label>
+              Logo alt text
+              <input
+                value={brandForm.logoAlt}
+                maxLength={120}
+                placeholder="Describe the logo, e.g. GHolmes Designs logo"
+                disabled={!brandForm.logoUrl}
+                onChange={(e) => setBrandForm({ ...brandForm, logoAlt: e.target.value })}
+                required={Boolean(brandForm.logoUrl)}
+              />
+            </label>
+            <p className="field-hint">
+              A logo is referenced by address, never uploaded or copied into this device's database.
+              Without one, the text mark is used.
+            </p>
+            {logoProblems.length > 0 && (
+              <div className="inline-warning" role="alert">
+                <AlertCircle />
+                <div>
+                  <strong>Logo needs one more thing</strong>
+                  <span>{logoProblems.map((issue) => issue.message).join(' ')}</span>
+                </div>
+              </div>
+            )}
+            <div className="brand-preview" style={brandStyle(brandForm)}>
+              <BrandMark branding={brandForm} />
+              <div>
+                <strong>{brandForm.title || DEFAULT_BRANDING.title}</strong>
+                <span>{brandForm.subtitle || DEFAULT_BRANDING.subtitle}</span>
+              </div>
+              <em>v{APP_VERSION}</em>
+            </div>
+            <div className="brand-actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setBrandForm({ ...DEFAULT_BRANDING })}
+                disabled={brandBusy}
+              >
+                <RotateCcw /> Reset to defaults
+              </button>
+              <button className="submit" disabled={brandBusy || brandProblems.length > 0}>
+                {brandBusy ? (
+                  <>
+                    <RefreshCw className="spin" /> Saving…
+                  </>
+                ) : (
+                  'Save branding'
+                )}
+              </button>
+            </div>
+            {brandProblems.length > 0 && (
+              <p className="field-hint" role="status">
+                Saving is blocked until every reading above passes AA.
+              </p>
+            )}
           </form>
         </section>
         <TagsCard tags={tags} tasks={tasks} refresh={refresh} flash={flash} />

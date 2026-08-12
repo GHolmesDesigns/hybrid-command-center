@@ -25,10 +25,12 @@ import { ClientDetail, Clients } from './Clients';
 import { Dashboard } from './Dashboard';
 import { Kanban } from './Kanban';
 import { ModalHost } from './Modals';
+import { BrandMark } from './Primitives';
 import { ProjectDetail } from './ProjectDetail';
 import { Projects } from './Projects';
 import { SettingsView } from './SettingsView';
 import { Nav } from './Shell';
+import { brandStyle } from './ui-shared';
 
 export type Modal =
   | { type: 'client'; value?: Client }
@@ -116,18 +118,19 @@ export function App() {
     : undefined;
   if (loading)
     return (
-      <div className="splash">
-        <div className="brand-mark">{branding.mark}</div>
+      <div className="splash" style={brandStyle(branding)}>
+        <BrandMark branding={branding} />
         <p>Organizing your command center…</p>
       </div>
     );
   return (
     <div className={`app-shell ${collapsed ? 'sidebar-collapsed' : ''}`}>
-      <aside className={`sidebar ${navOpen ? 'open' : ''} ${collapsed ? 'collapsed' : ''}`}>
+      <aside
+        className={`sidebar ${navOpen ? 'open' : ''} ${collapsed ? 'collapsed' : ''}`}
+        style={brandStyle(branding)}
+      >
         <div className="brand">
-          <div className="brand-mark" title={branding.title}>
-            {branding.mark}
-          </div>
+          <BrandMark branding={branding} />
           <div className="brand-copy">
             <strong>{branding.title}</strong>
             <span>{branding.subtitle}</span>

@@ -5,6 +5,7 @@ import { addDays, format, subDays } from 'date-fns';
 import { createDb, type Db } from './db.ts';
 import { createApp } from './app.ts';
 import { TASK_CHECKLIST_TEMPLATES } from '../shared/types.ts';
+import { DEFAULT_BRANDING } from '../shared/branding.ts';
 
 let db: Db;
 beforeEach(() => {
@@ -54,6 +55,10 @@ describe('command center API', () => {
     expect(policy).toContain("script-src-attr 'none'");
     expect(policy).toContain("style-src 'self' https://fonts.googleapis.com");
     expect(policy).toContain("style-src-attr 'unsafe-inline'");
+    // Images are the one directive that accepts a remote origin, because a Settings-set
+    // logo is referenced by address and its host cannot be known when this is written.
+    expect(policy).toContain("img-src 'self' data: https:");
+    expect(policy).toContain("connect-src 'self'");
     expect(policy).not.toContain('upgrade-insecure-requests');
   });
 
@@ -410,6 +415,102 @@ describe('command center API', () => {
     expect(saved.status).toBe(200);
     expect(saved.body.branding.mark).toBe('GH');
     expect((await request(app).get('/api/settings/branding')).body.branding.title).toBe('GHolmes');
+    // A payload from before colours existed is a full replacement like any other PUT, so it
+    // leaves the default palette behind rather than a half-written one.
+    expect(saved.body.branding.background).toBe(DEFAULT_BRANDING.background);
+    expect(saved.body.branding.logoUrl).toBe('');
+  });
+
+  describe('sidebar colours and logo', () => {
+    const branding = (overrides: Record<string, string> = {}) => ({
+      mark: 'GH',
+      title: 'GHolmes',
+      subtitle: 'Studio Desk',
+      tagline: 'Local only',
+      background: '#2b0f3a',
+      foreground: '#ffe9ff',
+      accent: '#f0c419',
+      logoUrl: 'https://cdn.example.com/logo.svg',
+      logoAlt: 'GHolmes Designs',
+      ...overrides,
+    });
+    const put = (body: Record<string, string>) =>
+      request(createApp(db)).put('/api/settings/branding').send(body);
+    const stored = async () =>
+      (await request(createApp(db)).get('/api/settings/branding')).body.branding;
+
+    it('keeps colours and the logo through a restart, normalizing what it stores', async () => {
+      const saved = await put(branding({ accent: '#F0C419', foreground: '#FFF' }));
+      expect(saved.status).toBe(200);
+      // A second app on the same database is what a restart looks like from here.
+      expect(await stored()).toMatchObject({
+        background: '#2b0f3a',
+        foreground: '#ffffff',
+        accent: '#f0c419',
+        logoUrl: 'https://cdn.example.com/logo.svg',
+        logoAlt: 'GHolmes Designs',
+      });
+    });
+
+    it('refuses colours that cannot be read, naming the field at fault', async () => {
+      const failing = await put(branding({ foreground: '#2f1741' }));
+      expect(failing.status).toBe(400);
+      expect(failing.body.error).toContain('4.5:1');
+      // Nothing was written, so the sidebar the user can still see is unchanged.
+      expect(await stored()).toMatchObject({ foreground: DEFAULT_BRANDING.foreground });
+    });
+
+    it('refuses a colour that is not a hex value', async () => {
+      expect((await put(branding({ background: 'black' }))).status).toBe(400);
+      expect((await put(branding({ background: '#12345' }))).status).toBe(400);
+    });
+
+    it('refuses a logo without alt text, or on a scheme the page cannot load', async () => {
+      expect((await put(branding({ logoAlt: '   ' }))).status).toBe(400);
+      const insecure = await put(branding({ logoUrl: 'http://cdn.example.com/logo.svg' }));
+      expect(insecure.status).toBe(400);
+      expect(insecure.body.error).toContain('https://');
+    });
+
+    it('drops alt text for a logo that is not set, so nothing describes nothing', async () => {
+      const saved = await put(branding({ logoUrl: '', logoAlt: 'Left over' }));
+      expect(saved.status).toBe(200);
+      expect(saved.body.branding.logoAlt).toBe('');
+    });
+
+    it('completes branding stored before colours existed', async () => {
+      db.prepare('INSERT OR REPLACE INTO settings(key,value,updated_at) VALUES(?,?,?)').run(
+        'branding',
+        JSON.stringify({
+          mark: 'V2',
+          title: 'Legacy',
+          subtitle: 'Older row',
+          tagline: 'Still here',
+        }),
+        BACKDATED,
+      );
+      expect(await stored()).toEqual({
+        mark: 'V2',
+        title: 'Legacy',
+        subtitle: 'Older row',
+        tagline: 'Still here',
+        background: DEFAULT_BRANDING.background,
+        foreground: DEFAULT_BRANDING.foreground,
+        accent: DEFAULT_BRANDING.accent,
+        logoUrl: '',
+        logoAlt: '',
+      });
+    });
+
+    it('falls back to the defaults when the stored row is unreadable branding', async () => {
+      // Only a hand-edited database reaches this state; the endpoint cannot write it.
+      db.prepare('INSERT OR REPLACE INTO settings(key,value,updated_at) VALUES(?,?,?)').run(
+        'branding',
+        JSON.stringify({ ...DEFAULT_BRANDING, foreground: '#1a221f' }),
+        BACKDATED,
+      );
+      expect(await stored()).toEqual(DEFAULT_BRANDING);
+    });
   });
   it('reports sync blocked when Drive is disconnected', async () => {
     await setup();

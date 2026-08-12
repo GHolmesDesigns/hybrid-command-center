@@ -8,12 +8,22 @@
   --muted: #6e746f;
   --line: #dedfd9;
   --paper: #fff;
-  --nav: #18201d;
   --blue: #315f79;
   --red: #b9473f;
   --amber: #b67521;
   --green: #34715b;
   --shadow: 0 14px 34px rgba(26, 35, 31, 0.08);
+  /* Sidebar palette. Settings overrides these per element via `sidebarPalette()`, which
+     derives the muted, surface, hairline, and focus values from the three chosen colours;
+     these defaults mirror DEFAULT_BRANDING so the sidebar is painted before it loads. */
+  --sidebar-bg: #18201d;
+  --sidebar-fg: #ffffff;
+  --sidebar-accent: #d7c5a2;
+  --sidebar-mark-ink: #18201d;
+  --sidebar-muted: #aeb8b3;
+  --sidebar-surface: #2c3934;
+  --sidebar-line: #414a46;
+  --sidebar-focus: #ffffff;
 }
 * {
   box-sizing: border-box;
@@ -110,12 +120,20 @@ button svg,
   position: fixed;
   inset: 0 auto 0 0;
   width: 250px;
-  background: var(--nav);
-  color: #fff;
+  background: var(--sidebar-bg);
+  color: var(--sidebar-fg);
   padding: 24px 16px;
   display: flex;
   flex-direction: column;
   z-index: 30;
+}
+/* The default ring is a translucent blue tuned for the light page background; against a
+   sidebar the user chose it could vanish. The foreground colour is already validated at
+   4.5:1 against that background, well past the 3:1 non-text minimum. */
+.sidebar :focus-visible,
+.brand-preview :focus-visible {
+  outline: 3px solid var(--sidebar-focus);
+  outline-offset: 2px;
 }
 .brand {
   display: flex;
@@ -128,13 +146,25 @@ button svg,
   place-items: center;
   width: 38px;
   height: 38px;
-  background: #d7c5a2;
-  color: #19211e;
+  background: var(--sidebar-accent);
+  color: var(--sidebar-mark-ink);
   border-radius: 10px;
   font-family: Manrope;
   font-weight: 800;
   font-size: 13px;
   letter-spacing: -0.5px;
+  flex: none;
+}
+.brand-logo {
+  width: auto;
+  max-width: 132px;
+  height: 38px;
+  object-fit: contain;
+  object-position: left center;
+  flex: none;
+}
+.sidebar.collapsed .brand-logo {
+  max-width: 46px;
 }
 .brand > div:nth-child(2) {
   display: flex;
@@ -144,7 +174,7 @@ button svg,
   font: 700 16px Manrope;
 }
 .brand span {
-  color: #aeb8b3;
+  color: var(--sidebar-muted);
   font-size: 10px;
   letter-spacing: 0.04em;
 }
@@ -158,7 +188,7 @@ button svg,
   display: flex;
   align-items: center;
   gap: 12px;
-  color: #aeb8b3;
+  color: var(--sidebar-muted);
   text-decoration: none;
   padding: 11px 12px;
   border-radius: 8px;
@@ -166,18 +196,18 @@ button svg,
   font-size: 14px;
 }
 .sidebar nav a:hover {
-  background: #232d29;
-  color: #fff;
+  background: var(--sidebar-surface);
+  color: var(--sidebar-fg);
 }
 .sidebar nav a.active {
-  color: #fff;
-  background: #2c3934;
+  color: var(--sidebar-fg);
+  background: var(--sidebar-surface);
 }
 .sidebar nav a.active:before {
   content: '';
   width: 3px;
   height: 20px;
-  background: #d7c5a2;
+  background: var(--sidebar-accent);
   border-radius: 3px;
   margin-left: -12px;
 }
@@ -189,7 +219,7 @@ button svg,
   opacity: 0.43;
 }
 .nav-divider {
-  border-top: 1px solid #303b37;
+  border-top: 1px solid var(--sidebar-line);
   margin: 16px 9px 7px;
   padding-top: 14px;
 }
@@ -197,11 +227,11 @@ button svg,
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  color: #6e7b75;
+  color: var(--sidebar-muted);
 }
 .sidebar-foot {
   margin-top: auto;
-  color: #d0d7d3;
+  color: var(--sidebar-muted);
   font-size: 12px;
   padding: 12px 8px 4px;
   display: flex;
@@ -214,16 +244,16 @@ button svg,
   gap: 10px;
   width: 100%;
   background: transparent;
-  color: #aeb8b3;
-  border: 1px solid #303b37;
+  color: var(--sidebar-muted);
+  border: 1px solid var(--sidebar-line);
   border-radius: 8px;
   padding: 9px 12px;
   font-weight: 500;
   font-size: 13px;
 }
 .collapse-btn:hover {
-  background: #232d29;
-  color: #fff;
+  background: var(--sidebar-surface);
+  color: var(--sidebar-fg);
 }
 .collapse-btn svg {
   width: 18px;
@@ -236,12 +266,12 @@ button svg,
   gap: 8px;
   flex-wrap: wrap;
   padding: 0 4px 8px;
-  color: #74827c;
+  color: var(--sidebar-muted);
   font-size: 11px;
 }
 .version-track strong {
   margin-left: auto;
-  color: #d7c5a2;
+  color: var(--sidebar-accent);
   font-family: Manrope;
   font-size: 11px;
   letter-spacing: 0.04em;
@@ -327,10 +357,10 @@ button svg,
   gap: 11px;
   align-items: center;
   padding: 12px;
-  border: 1px solid #303b37;
+  border: 1px solid var(--sidebar-line);
   border-radius: 10px;
-  background: #18201d;
-  color: #fff;
+  background: var(--sidebar-bg);
+  color: var(--sidebar-fg);
   margin: 4px 0;
 }
 .brand-preview strong {
@@ -338,9 +368,111 @@ button svg,
   font: 700 15px Manrope;
 }
 .brand-preview span {
-  color: #aeb8b3;
+  color: var(--sidebar-muted);
   font-size: 10px;
   letter-spacing: 0.04em;
+}
+.brand-preview em {
+  margin-left: auto;
+  color: var(--sidebar-accent);
+  font: 700 11px Manrope;
+  font-style: normal;
+  letter-spacing: 0.04em;
+}
+/* Three across when the card is wide enough for the hex value to be legible, and fewer
+   when it is not. The settings grid narrows this card well below its desktop width. */
+.color-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 10px;
+}
+.color-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.color-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 5px 8px;
+  background: var(--paper);
+}
+.color-input input[type='color'] {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: none;
+  cursor: pointer;
+}
+.color-input input:not([type='color']) {
+  border: 0;
+  padding: 0;
+  min-width: 0;
+  width: 100%;
+  font: 600 13px Manrope;
+  background: none;
+  color: var(--ink);
+}
+.color-input input:not([type='color']):focus-visible {
+  outline-offset: 4px;
+}
+.contrast-list {
+  list-style: none;
+  margin: 2px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.contrast-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+.contrast-list li strong {
+  margin-left: auto;
+  white-space: nowrap;
+}
+.contrast-list svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+/* The wording carries the verdict; the colour only reinforces it. */
+.contrast-list li.pass {
+  color: var(--green);
+  border-color: #cfe2d8;
+}
+.contrast-list li.fail {
+  color: var(--red);
+  border-color: #efcfc8;
+  background: #fff7f5;
+}
+.brand-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  align-items: center;
+}
+.field-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
 }
 .version-pill {
   font-size: 10px;
@@ -353,7 +485,7 @@ button svg,
   border-radius: 5px;
 }
 .sidebar-foot div {
-  color: #74827c;
+  color: var(--sidebar-muted);
   font-size: 11px;
   margin: 4px 0 0 15px;
 }
@@ -2124,6 +2256,12 @@ button.tag-chip.toggle.active {
   .root-form {
     align-items: stretch;
     flex-direction: column;
+  }
+  .contrast-list li {
+    flex-wrap: wrap;
+  }
+  .contrast-list li strong {
+    margin-left: 24px;
   }
 }
 @media (max-width: 460px) {

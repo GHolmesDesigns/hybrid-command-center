@@ -1,8 +1,33 @@
-import { type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { CalendarDays, FolderKanban, Search, X } from 'lucide-react';
 import type { DriveStatus, Priority, Task, TaskStatus, TaskType } from '../../../shared/types';
+import type { Branding } from '../../../shared/branding';
 import { formatDate } from './formatting';
 import { STATUS_LABEL, TASK_TYPE_LABEL } from './ui-shared';
+
+/**
+ * The logo when one is set, the text mark otherwise. A logo is a remote address, so it can
+ * fail to load long after it was saved; falling back to the mark keeps the brand present
+ * rather than leaving a broken image where it used to be.
+ */
+export function BrandMark({ branding }: { branding: Branding }) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [branding.logoUrl]);
+  if (branding.logoUrl && !failed)
+    return (
+      <img
+        className="brand-logo"
+        src={branding.logoUrl}
+        alt={branding.logoAlt}
+        onError={() => setFailed(true)}
+      />
+    );
+  return (
+    <div className="brand-mark" title={branding.title}>
+      {branding.mark}
+    </div>
+  );
+}
 
 export function SearchBox({
   value,

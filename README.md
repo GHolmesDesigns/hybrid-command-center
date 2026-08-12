@@ -20,7 +20,7 @@ The future Import module's versioned XLSX contract and example campaigns are doc
 - Task checklists, dependency blocking, circular-dependency prevention, **rename**, inline description/dates/notes, **record-only delete**, and explicit completion override
 - Optional **task type** for design-studio work — blog post, video, social post, graphics, scheduling, QA/brand pass, admin, or other — shown on the card and in the task detail
 - **Edit details** on a task, opening the full create/edit form from the task detail view
-- Collapsible sidebar with **version tracker** and Settings-editable branding (defaults also in `shared/branding.ts`)
+- Collapsible sidebar with **version tracker** and Settings-editable branding — wording, colours, and an optional logo, with **WCAG AA contrast enforced** and every field resettable to the defaults in `shared/branding.ts`
 - Reserved placeholders for the Calendar, Files, and campaign playbook **Import** modules — visible in the sidebar and Settings, not yet implemented
 - Server-only Google OAuth 2.0, encrypted token storage, configurable Drive root, and resumable/idempotent folder creation
 - Responsive desktop/tablet/mobile interface with empty, error, loading, disconnected, and confirmation states
@@ -48,7 +48,7 @@ The browser never receives Google tokens. UI code calls only the local API. Driv
 
 ### Data ownership
 
-- **SQLite:** clients, projects, tasks, board-card and project-tile positions, checklists, dependencies, due dates, notes, settings, branding, Drive IDs/URLs, provisioning steps, and timestamps.
+- **SQLite:** clients, projects, tasks, board-card and project-tile positions, checklists, dependencies, due dates, notes, settings, branding (including the sidebar palette and the logo's address, never the image itself), Drive IDs/URLs, provisioning steps, and timestamps.
 - **Google Drive:** every project file. The database stores references, never duplicate file contents. Deleting a project or task in the app does **not** delete Drive folders or files.
 
 Timestamps are stored as UTC ISO strings. Date-only deadlines are interpreted in the browser/server machine's local timezone and become overdue after their local calendar day has passed.
@@ -124,12 +124,37 @@ Production responses include a Content Security Policy. Scripts, API connections
 manifests, and workers are restricted to the application's own origin; objects and frames are
 disabled. The two external sources are limited to the existing Google Fonts stylesheet
 (`fonts.googleapis.com`) and font files (`fonts.gstatic.com`). Inline script is forbidden. Inline
-style attributes remain allowed because React renders the task-progress width and drag-and-drop
-transform as element styles. Automatic HTTP-to-HTTPS upgrading is disabled because the packaged
-app is served on loopback HTTP by default.
+style attributes remain allowed because React renders the task-progress width, the drag-and-drop
+transform, and the sidebar palette as element styles. Automatic HTTP-to-HTTPS upgrading is disabled
+because the packaged app is served on loopback HTTP by default.
+
+Images are the one directive that accepts a remote origin (`img-src 'self' data: https:`), because
+a sidebar logo is referenced by address and its host cannot be known in advance. See
+[Sidebar branding](#sidebar-branding).
 
 The policy is disabled during `npm run dev` because Vite's development client needs its hot-module
 reload runtime. This exception does not apply to `npm start` or `NODE_ENV=production`.
+
+### Sidebar branding
+
+Branding lives in the `settings` table under the `branding` key and is edited in Settings: the
+mark, title, subtitle, tagline, three colours, and an optional logo. Defaults are in
+`shared/branding.ts`, and every field resets to them.
+
+**Contrast is enforced, not suggested.** Sidebar text and the accent must each clear WCAG AA
+(4.5:1) against the sidebar background. The form shows a live ratio and a Passes/Fails reading in
+words for each pair and refuses to submit a failing one; `PUT /api/settings/branding` refuses it
+again with the same shared rule, so no client can store a sidebar its own text cannot be read
+against. Only those three colours are chosen. The mark's lettering, secondary label colour, hover
+fill, hairlines, and the sidebar's focus ring are derived from them, which is what keeps secondary
+text and the focus ring legible on any palette the API accepts.
+
+**A logo is a reference, not an upload.** The field takes an `https://` address — a CDN, a
+website, or a Drive image link — and the browser loads it directly. Nothing is uploaded, copied
+into the database, or backed up, so this app still stores no user files: no upload endpoint, no
+file-type or size validation, and no new material in the backup story. The cost is the CSP widening
+above and a page load that reaches the logo's host. A logo requires alt text, and when the address
+fails to load — or none is set — the text mark takes its place.
 
 ### Drive provisioning behavior
 
