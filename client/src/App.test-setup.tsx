@@ -14,6 +14,7 @@ import {
   type PlaybookPreview,
 } from '../../shared/playbook';
 import { DRIVE_FOLDER_MIME, type DriveFile, type DriveListing } from '../../shared/drive';
+import type { IntegrationEvent } from '../../shared/integration-log';
 
 export {
   DEFAULT_BRANDING,
@@ -38,6 +39,7 @@ export {
 export type { Branding, Category, Client, DashboardData, Project, Tag, Task };
 export type { ImportReceipt, PlaybookPreview };
 export type { DriveFile, DriveListing };
+export type { IntegrationEvent };
 
 export const emptyDashboard: DashboardData = {
   counts: {
@@ -148,6 +150,9 @@ export const testState = {
   importReceiptsPayload: [] as ImportReceipt[],
   importPreviewPayload: null as PlaybookPreview | null,
   importCommitPayload: null as { status: number; body: unknown } | null,
+  /** The integration activity log the Import page reads, or an error in its place. */
+  integrationActivityPayload: [] as IntegrationEvent[],
+  integrationActivityError: null as string | null,
   /**
    * What `GET /api/projects/:id/files` answers, per request, so a suite can vary the page
    * by folder and by cursor the way real Drive does. Unset means a Drive nobody connected.
@@ -194,6 +199,10 @@ const respondTo = (url: string, init?: RequestInit) => {
   }
   if (url.endsWith('/api/settings/drive') && testState.driveSettingsError)
     return reply(503, { error: testState.driveSettingsError });
+  if (url.includes('/api/integrations/activity'))
+    return testState.integrationActivityError
+      ? reply(503, { error: testState.integrationActivityError })
+      : testState.integrationActivityPayload;
   // The import routes answer with whatever the case set up: the dry run is a plain 200 even
   // when the playbook is unimportable, and a refused commit is a 409 carrying the reasons.
   if (url.endsWith('/api/import/playbook/preview') && method === 'POST')
@@ -201,8 +210,30 @@ const respondTo = (url: string, init?: RequestInit) => {
   if (url.endsWith('/api/import/playbook') && method === 'POST') {
     const answer = testState.importCommitPayload;
     if (!answer) return reply(400, { error: 'No commit was set up.' });
-    const receipt = (answer.body as { receipt?: ImportReceipt }).receipt;
-    if (receipt) testState.importReceiptsPayload = [receipt, ...testState.importReceiptsPayload];
+    const written = (answer.body as { receipt?: ImportReceipt }).receipt;
+    if (written) {
+      testState.importReceiptsPayload = [written, ...testState.importReceiptsPayload];
+      // The server writes the receipt and its activity row together, so the stub does too:
+      // reloading the page after a commit finds both, correlated.
+      testState.integrationActivityPayload = [
+        activityEvent({
+          id: `event-${written.id}`,
+          correlationId: written.id,
+          outcome: written.outcome === 'COMMITTED' ? 'SUCCESS' : 'FAILURE',
+          summary:
+            written.outcome === 'COMMITTED'
+              ? `Imported ${written.createdCount} records from a pasted playbook, skipping ${written.skippedCount} already here.`
+              : 'Refused a pasted playbook: nothing was written.',
+          entityCount: written.createdCount,
+          entities: written.created.map((created) => ({
+            type: 'client',
+            id: `${created.key}-id`,
+            label: created.label,
+          })),
+        }),
+        ...testState.integrationActivityPayload,
+      ];
+    }
     return reply(answer.status, answer.body);
   }
   const files = url.match(/\/api\/projects\/([^/?]+)\/files(?:\?(.*))?$/);
@@ -423,6 +454,20 @@ export const driveListing = (overrides: Partial<DriveListing> = {}): DriveListin
   ...overrides,
 });
 
+/** One activity-log row in the shape the server answers with, varied per case. */
+export const activityEvent = (overrides: Partial<IntegrationEvent> = {}): IntegrationEvent => ({
+  id: 'event-1',
+  source: 'campaign-playbook',
+  operation: 'playbook.import',
+  outcome: 'SUCCESS',
+  summary: 'Imported 4 records from a pasted playbook, skipping 0 already here.',
+  entities: [{ type: 'client', id: 'client-imported', label: 'Acme Studio' }],
+  entityCount: 1,
+  correlationId: 'receipt-1',
+  createdAt: '2026-03-01T15:04:00.000Z',
+  ...overrides,
+});
+
 /** A receipt in the shape the server answers with, varied per case. */
 export const receipt = (overrides: Partial<ImportReceipt> = {}): ImportReceipt => ({
   id: 'receipt-1',
@@ -456,6 +501,8 @@ beforeEach(() => {
   testState.importReceiptsPayload = [];
   testState.importPreviewPayload = null;
   testState.importCommitPayload = null;
+  testState.integrationActivityPayload = [];
+  testState.integrationActivityError = null;
   testState.driveListingPayload = null;
   requests.length = 0;
   vi.stubGlobal(

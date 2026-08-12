@@ -8,7 +8,7 @@ This manual is for the person who will install and use Hybrid Command Center on 
 
 Hybrid Command Center divides information between your computer and Google Drive:
 
-- Your computer stores clients, projects, tasks, deadlines, checklist items, dependencies, notes, and settings in a local SQLite database.
+- Your computer stores clients, projects, tasks, deadlines, checklist items, dependencies, notes, and settings in a local SQLite database, along with a bounded record of what each import or outside system has changed.
 - Google Drive stores the actual client and project files.
 - The application stores Drive folder IDs and links locally. It does not copy file contents into the database.
 
@@ -493,6 +493,18 @@ any part of it fails, none of it is kept.
 Every import — successful, refused, or failed — leaves a **receipt** on the Import page. It keeps
 the counts and every skipped or failed row, so you can still see what an import did after closing
 the modal, reloading the page, or restarting the application. The fifty most recent are kept.
+
+Below the receipts is **Integration activity**: one record for every operation an outside system
+has run against this workspace. Today that means imports; a calendar sync will appear here too.
+Each record says which integration it was, what it did, whether it succeeded, and — when you open
+it — the exact clients, projects, and tasks it left behind, by name and by internal id. That is
+the list to read when an import did not do what you expected: it is what actually landed, rather
+than what was asked for. A failed record carries the reason in its own words.
+
+Nothing on this list can be edited or removed from inside the application; records are only ever
+added, and the two hundred most recent are kept. If a record mentions more than a hundred affected
+records it lists the first hundred and tells you the real number. Credentials never appear here —
+passwords, keys, and access tokens are stripped out before a record is written.
 
 Importing never touches Google Drive. Imported clients and projects start as **Drive offline**;
 use **Sync to Folder** on the dashboard to create their folders when you are ready.

@@ -5,6 +5,7 @@ import request from 'supertest';
 import { createApp } from './app.ts';
 import { createDb, type Db } from './db.ts';
 import { commitPlaybook, listReceipts, previewPlaybook, readWorkspace } from './import.ts';
+import { listIntegrationEvents } from './integration-log.ts';
 import { buildXlsx } from './domain/workbook-fixture.ts';
 import { IMPORT_RECEIPT_LIMIT } from '../shared/playbook.ts';
 
@@ -436,6 +437,114 @@ describe('campaign playbook import', () => {
       const receipts = listReceipts(db, 200);
       expect(receipts).toHaveLength(IMPORT_RECEIPT_LIMIT);
       expect(receipts[0].createdCount).toBe(7);
+    });
+  });
+
+  /** C17: the audit half of an import — which integration wrote what, by id. */
+  describe('integration activity', () => {
+    it('records a committed import against the records it created, by id', () => {
+      const { receipt } = commitPlaybook(db, { text: playbookText(), filename: 'spring.xlsx' });
+
+      const [event, ...rest] = listIntegrationEvents(db);
+      expect(rest).toHaveLength(0);
+      expect(event).toMatchObject({
+        source: 'campaign-playbook',
+        operation: 'playbook.import',
+        outcome: 'SUCCESS',
+        correlationId: receipt.id,
+      });
+      expect(event.error).toBeUndefined();
+      expect(event.summary).toBe('Imported 7 records from spring.xlsx, skipping 0 already here.');
+      // Every client, project, and task the import wrote, findable in the workspace it wrote to.
+      expect(event.entities.map((entity) => `${entity.type}:${entity.label}`)).toEqual([
+        'client:Acme Studio',
+        'project:Spring Campaign',
+        'task:Week 1 blog post',
+        'task:Week 1 social set',
+      ]);
+      expect(event.entityCount).toBe(4);
+      const found = db
+        .prepare('SELECT name FROM clients WHERE id = ?')
+        .get(event.entities[0].id) as { name: string } | undefined;
+      expect(found?.name).toBe('Acme Studio');
+    });
+
+    it('records a refused import with the first row to fix and no entity at all', () => {
+      const { receipt } = commitPlaybook(db, {
+        text: playbookText({
+          tasks: ['TSK-1\tPRJ-A\tWeek 1 blog post\tBLOG_POST\tTODO\tHIGH\t\t2026-02-30'],
+          checklist: [],
+          dependencies: [],
+        }),
+      });
+      expect(receipt.outcome).toBe('REJECTED');
+
+      const [event] = listIntegrationEvents(db);
+      expect(event).toMatchObject({ outcome: 'FAILURE', correlationId: receipt.id });
+      expect(event.entities).toEqual([]);
+      expect(event.entityCount).toBe(0);
+      expect(event.summary).toMatch(/Refused a pasted playbook: 1 row failed validation/);
+      expect(event.error).toBe(
+        '1 row failed validation. First: Tasks · row 2 · H — due_date: that is not a real calendar date.',
+      );
+    });
+
+    it('records a rolled-back import, which is the record that says nothing landed', () => {
+      db.exec(`CREATE TRIGGER refuse_second_task BEFORE INSERT ON tasks
+               WHEN (SELECT COUNT(*) FROM tasks) >= 1
+               BEGIN SELECT RAISE(ABORT, 'disk is on fire'); END`);
+      expect(() => commitPlaybook(db, { text: playbookText() })).toThrow(/disk is on fire/);
+
+      const [event] = listIntegrationEvents(db);
+      const [receipt] = listReceipts(db);
+      expect(event).toMatchObject({ outcome: 'FAILURE', correlationId: receipt.id });
+      expect(event.summary).toMatch(/rolled back and nothing was written/);
+      expect(event.error).toMatch(/disk is on fire/);
+      // Nothing landed, so the log claims nothing landed.
+      expect(event.entities).toEqual([]);
+      expect(counts().clients).toBe(0);
+    });
+
+    it('answers the browser with the activity of one import, by the receipt it belongs to', async () => {
+      const app = createApp(db);
+      const commit = await request(app).post('/api/import/playbook').send({ text: playbookText() });
+      const receiptId = commit.body.receipt.id;
+
+      const response = await request(app).get(
+        `/api/integrations/activity?source=campaign-playbook&correlationId=${receiptId}`,
+      );
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveLength(1);
+      expect(response.body[0]).toMatchObject({
+        operation: 'playbook.import',
+        outcome: 'SUCCESS',
+        correlationId: receiptId,
+        entityCount: 4,
+      });
+    });
+
+    it('writes one event per import, so every import is accounted for', () => {
+      commitPlaybook(db, { text: playbookText() });
+      // The same playbook again: everything is skipped, and that is still an import that ran.
+      commitPlaybook(db, { text: playbookText() });
+      commitPlaybook(db, {
+        text: playbookText({
+          tasks: ['TSK-1\tPRJ-A\tBroken\t\tNOPE\tHIGH'],
+          checklist: [],
+          dependencies: [],
+        }),
+      });
+
+      const events = listIntegrationEvents(db);
+      expect(events).toHaveLength(3);
+      expect(events.map((event) => event.outcome)).toEqual(['FAILURE', 'SUCCESS', 'SUCCESS']);
+      expect(events[1].summary).toBe(
+        'Imported 0 records from a pasted playbook, skipping 7 already here.',
+      );
+      // Every event points at a receipt, and every receipt at an event.
+      expect(new Set(events.map((event) => event.correlationId))).toEqual(
+        new Set(listReceipts(db).map((receipt) => receipt.id)),
+      );
     });
   });
 

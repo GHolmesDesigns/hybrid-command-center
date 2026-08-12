@@ -1,7 +1,14 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, CheckCircle2, CircleAlert, Upload } from 'lucide-react';
 import { api } from '../api';
 import { PLAYBOOK_SHEETS, type ImportReceipt } from '../../../shared/playbook';
+import {
+  INTEGRATION_ENTITY_LABEL,
+  INTEGRATION_OPERATION_LABEL,
+  INTEGRATION_OUTCOME_LABEL,
+  INTEGRATION_SOURCE_LABEL,
+  type IntegrationEvent,
+} from '../../../shared/integration-log';
 import { formatDateTime } from './formatting';
 import { Empty } from './Primitives';
 import { PageHead } from './Shell';
@@ -12,6 +19,11 @@ import { PageHead } from './Shell';
  * The receipts are the reason this is a page and not only a modal. An import's counts and
  * reasons are stored server-side (`import_receipts`), so the answer to "what did that import
  * actually create, and what did it skip" survives closing the modal, a reload, and a restart.
+ *
+ * Beneath them is the integration activity log (`integration_events`), which answers the
+ * narrower question a receipt cannot: which records an integration actually left behind, by
+ * id. It lives here rather than only in the database because a half-finished import is
+ * diagnosed by whoever ran it.
  */
 export function ImportView({
   open,
@@ -23,17 +35,36 @@ export function ImportView({
 }) {
   const [receipts, setReceipts] = useState<ImportReceipt[]>([]);
   const [error, setError] = useState('');
+  const [events, setEvents] = useState<IntegrationEvent[]>([]);
+  const [activityError, setActivityError] = useState('');
   const load = useCallback(async () => {
+    // Two independent reads: a receipt list that fails must not hide the activity log, which
+    // is the more diagnostic of the two, and the reverse.
     try {
       setReceipts(await api<ImportReceipt[]>('/import/receipts'));
       setError('');
     } catch (problem) {
       setError((problem as Error).message);
     }
+    try {
+      setEvents(await api<IntegrationEvent[]>('/integrations/activity'));
+      setActivityError('');
+    } catch (problem) {
+      setActivityError((problem as Error).message);
+    }
   }, []);
   useEffect(() => {
     void load();
   }, [load, importedAt]);
+
+  /** An import's audit row, found by the receipt it was written with. */
+  const eventByReceipt = useMemo(
+    () =>
+      new Map(
+        events.flatMap((event) => (event.correlationId ? [[event.correlationId, event]] : [])),
+      ),
+    [events],
+  );
 
   return (
     <>
@@ -99,7 +130,43 @@ export function ImportView({
           <ul className="receipt-list">
             {receipts.map((receipt) => (
               <li key={receipt.id}>
-                <Receipt receipt={receipt} />
+                <Receipt receipt={receipt} event={eventByReceipt.get(receipt.id)} />
+              </li>
+            ))}
+          </ul>
+        </section>
+        <section className="panel import-activity">
+          <div className="section-title">
+            <div>
+              <span className="eyebrow">Append-only, newest first</span>
+              <h2>Integration activity</h2>
+            </div>
+          </div>
+          <p className="field-hint">
+            One record for every operation an integration ran against this workspace — what it was,
+            how it ended, and which clients, projects, and tasks it left behind. Nothing here can be
+            edited, and the most recent 200 records are kept.
+          </p>
+          {activityError && (
+            <div className="inline-warning" role="alert">
+              <AlertCircle />
+              <div>
+                <strong>Activity unavailable</strong>
+                <span>{activityError}</span>
+              </div>
+            </div>
+          )}
+          {!activityError && events.length === 0 && (
+            <Empty
+              compact
+              title="No integration activity yet"
+              body="Every import records what it changed here, successful or not, along with the records it created."
+            />
+          )}
+          <ul className="activity-list">
+            {events.map((event) => (
+              <li key={event.id}>
+                <ActivityRecord event={event} />
               </li>
             ))}
           </ul>
@@ -115,7 +182,7 @@ const OUTCOME_LABEL = {
   FAILED: 'Failed',
 } as const;
 
-function Receipt({ receipt }: { receipt: ImportReceipt }) {
+function Receipt({ receipt, event }: { receipt: ImportReceipt; event?: IntegrationEvent }) {
   const committed = receipt.outcome === 'COMMITTED';
   return (
     <details className="receipt">
@@ -191,6 +258,65 @@ function Receipt({ receipt }: { receipt: ImportReceipt }) {
           </ul>
         </section>
       )}
+      {/* The audit row this receipt was written with, so the two are read as one record. */}
+      {event && (
+        <p className="receipt-audit">
+          Recorded in integration activity as {INTEGRATION_OPERATION_LABEL[event.operation]} —{' '}
+          {INTEGRATION_OUTCOME_LABEL[event.outcome].toLowerCase()}, {event.entityCount}{' '}
+          {event.entityCount === 1 ? 'record' : 'records'} affected.
+        </p>
+      )}
     </details>
+  );
+}
+
+/**
+ * One row of the activity log. The entity list is collapsed because ids are for diagnosis, not
+ * for reading: the summary and the outcome are what the page is scanned for.
+ */
+function ActivityRecord({ event }: { event: IntegrationEvent }) {
+  const succeeded = event.outcome === 'SUCCESS';
+  return (
+    <div className="activity">
+      <div className="activity-head">
+        <span className={`receipt-badge ${event.outcome.toLowerCase()}`}>
+          {succeeded ? <CheckCircle2 /> : <CircleAlert />}
+          {INTEGRATION_OUTCOME_LABEL[event.outcome]}
+        </span>
+        <span className="activity-what">
+          <strong>{INTEGRATION_SOURCE_LABEL[event.source] ?? event.source}</strong> ·{' '}
+          {INTEGRATION_OPERATION_LABEL[event.operation] ?? event.operation}
+        </span>
+        <time dateTime={event.createdAt}>{formatDateTime(event.createdAt)}</time>
+      </div>
+      <p className="activity-summary">{event.summary}</p>
+      {event.error && (
+        <p className="receipt-error" role="note">
+          {event.error}
+        </p>
+      )}
+      {event.entityCount > 0 && (
+        <details className="import-list">
+          <summary>
+            {event.entityCount} {event.entityCount === 1 ? 'record' : 'records'} affected
+          </summary>
+          <ul>
+            {event.entities.map((entity) => (
+              <li key={entity.id}>
+                <span className="import-where">{INTEGRATION_ENTITY_LABEL[entity.type]}</span>
+                <span>
+                  <strong>{entity.label}</strong> <code>{entity.id}</code>
+                </span>
+              </li>
+            ))}
+          </ul>
+          {event.entities.length < event.entityCount && (
+            <p className="field-hint">
+              Listing the first {event.entities.length} of {event.entityCount}.
+            </p>
+          )}
+        </details>
+      )}
+    </div>
   );
 }
