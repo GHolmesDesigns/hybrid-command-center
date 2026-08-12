@@ -56,18 +56,40 @@ export function ModalHost({
         <TaskForm
           value={modal.value}
           defaultProject={modal.projectId}
-          projects={projects}
+          projects={projects.filter(
+            (project) =>
+              (project.status !== 'ARCHIVED' &&
+                !clients.some(
+                  (client) => client.id === project.clientId && client.status === 'ARCHIVED',
+                )) ||
+              project.id === modal.value?.projectId,
+          )}
           tags={tags}
           saved={saved}
         />
       </EntityModal>
     );
   const task = tasks.find((t) => t.id === modal.value.id) || modal.value;
+  const activeProjectIds = new Set(
+    projects
+      .filter(
+        (project) =>
+          project.status !== 'ARCHIVED' &&
+          !clients.some((client) => client.id === project.clientId && client.status === 'ARCHIVED'),
+      )
+      .map((project) => project.id),
+  );
+  const dependencyVisibleTasks = tasks.filter(
+    (candidate) =>
+      activeProjectIds.has(candidate.projectId) ||
+      candidate.id === task.id ||
+      task.dependencyIds.includes(candidate.id),
+  );
   return (
     <EntityModal title="Task details" wide close={close}>
       <TaskDetail
         task={task}
-        tasks={tasks}
+        tasks={dependencyVisibleTasks}
         tags={tags}
         close={close}
         edit={() => edit(task)}

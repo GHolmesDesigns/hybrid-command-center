@@ -261,6 +261,13 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     if (!result.changes) return res.status(404).json({ error: 'Client not found.' });
     res.json({ ok: true });
   });
+  app.post('/api/clients/:id/unarchive', (req, res) => {
+    const result = db
+      .prepare("UPDATE clients SET status='ACTIVE',updated_at=? WHERE id=?")
+      .run(now(), req.params.id);
+    if (!result.changes) return res.status(404).json({ error: 'Client not found.' });
+    res.json({ ok: true });
+  });
   app.post('/api/clients/:id/retry-drive', async (req, res, next) => {
     try {
       await provisionClient(db, req.params.id);
@@ -408,7 +415,12 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     try {
       const data = taskInput.parse(req.body);
       if (
-        !db.prepare("SELECT id FROM projects WHERE id=? AND status<>'ARCHIVED'").get(data.projectId)
+        !db
+          .prepare(
+            `SELECT p.id FROM projects p JOIN clients c ON c.id=p.client_id
+             WHERE p.id=? AND p.status<>'ARCHIVED' AND c.status='ACTIVE'`,
+          )
+          .get(data.projectId)
       )
         return res.status(400).json({ error: 'Choose an active project.' });
       const taskId = id();
@@ -728,6 +740,18 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
           error: 'That dependency would create a circular relationship.',
           code: 'CIRCULAR_DEPENDENCY',
         });
+      const activeTaskCount = (
+        db
+          .prepare(
+            `SELECT COUNT(*) count FROM tasks t
+             JOIN projects p ON p.id=t.project_id
+             JOIN clients c ON c.id=p.client_id
+             WHERE t.id IN (?,?) AND p.status<>'ARCHIVED' AND c.status='ACTIVE'`,
+          )
+          .get(req.params.id, data.dependencyId) as { count: number }
+      ).count;
+      if (activeTaskCount !== 2)
+        return res.status(400).json({ error: 'Choose tasks under active clients and projects.' });
       const stamp = now();
       transaction(db, () => {
         const result = db

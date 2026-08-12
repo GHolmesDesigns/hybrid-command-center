@@ -270,6 +270,47 @@ describe('command center API', () => {
     expect(board).toContain(shelved.id);
     expect(board).toContain(formerClients.id);
   });
+  it('keeps archived-client work reachable but blocks new work until the client is restored', async () => {
+    const app = createApp(db);
+    const active = await setup();
+    const formerClient = (await createClient('Former Client')).body;
+    const formerProject = (
+      await request(app)
+        .post('/api/projects')
+        .send({ clientId: formerClient.id, name: 'Legacy Campaign' })
+    ).body;
+    const formerTask = (
+      await request(app)
+        .post('/api/tasks')
+        .send({ projectId: formerProject.id, title: 'Existing archived work' })
+    ).body;
+    const activeTask = (
+      await request(app).post('/api/tasks').send({ projectId: active.p.id, title: 'Current work' })
+    ).body;
+
+    await request(app).post(`/api/clients/${formerClient.id}/archive`).expect(200);
+    await request(app)
+      .post('/api/tasks')
+      .send({ projectId: formerProject.id, title: 'New work must wait' })
+      .expect(400, { error: 'Choose an active project.' });
+    await request(app)
+      .post(`/api/tasks/${activeTask.id}/dependencies`)
+      .send({ dependencyId: formerTask.id })
+      .expect(400, { error: 'Choose tasks under active clients and projects.' });
+
+    const stillReachable = await request(app).get(`/api/tasks?projectId=${formerProject.id}`);
+    expect(stillReachable.body.map((task: any) => task.id)).toEqual([formerTask.id]);
+
+    await request(app).post(`/api/clients/${formerClient.id}/unarchive`).expect(200);
+    await request(app)
+      .post('/api/tasks')
+      .send({ projectId: formerProject.id, title: 'Work resumes' })
+      .expect(201);
+    await request(app)
+      .post(`/api/tasks/${activeTask.id}/dependencies`)
+      .send({ dependencyId: formerTask.id })
+      .expect(201);
+  });
   it('rejects malformed relationships', async () => {
     const response = await request(createApp(db))
       .post('/api/projects')

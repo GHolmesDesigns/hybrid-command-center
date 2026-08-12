@@ -833,6 +833,36 @@ button svg,
   color: #999;
   padding: 2px;
 }
+.client-tools {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.client-tools .search-box {
+  flex: 1;
+  margin-bottom: 0;
+}
+.segmented-control {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+.segmented-control button {
+  min-height: 35px;
+  padding: 7px 12px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+}
+.segmented-control button[aria-pressed='true'] {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #fff;
+  font-weight: 700;
+}
 .filterbar {
   display: flex;
   gap: 12px;
@@ -869,6 +899,21 @@ button svg,
 }
 .entity-card.muted {
   opacity: 0.62;
+}
+.entity-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.archived-badge {
+  border: 1px solid #c7cbc8;
+  border-radius: 999px;
+  padding: 3px 8px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 .entity-top,
 .project-card-head {
@@ -1524,6 +1569,13 @@ button.tag-chip.toggle.active {
 .inline-warning.blocked {
   margin: 15px 0;
 }
+.archived-client-state {
+  align-items: center;
+  margin: 0 0 18px;
+}
+.archived-client-state > div {
+  flex: 1;
+}
 .root-form {
   margin: 20px 0;
   display: flex;
@@ -2032,6 +2084,19 @@ button.tag-chip.toggle.active {
   .filterbar,
   .board-filters {
     flex-direction: column;
+  }
+  .client-visibility {
+    display: flex;
+    width: 100%;
+  }
+  .client-visibility button {
+    flex: 1;
+  }
+  .client-tools {
+    flex-direction: column;
+  }
+  .client-tools > * {
+    width: 100%;
   }
   .filterbar > *:not(.search-box),
   .board-filters label {

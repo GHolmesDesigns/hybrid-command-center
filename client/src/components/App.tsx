@@ -237,7 +237,15 @@ export function App() {
             />
             <Route
               path="/clients/:id"
-              element={<ClientDetail clients={clients} projects={projects} open={setModal} />}
+              element={
+                <ClientDetail
+                  clients={clients}
+                  projects={projects}
+                  open={setModal}
+                  refresh={refresh}
+                  flash={flash}
+                />
+              }
             />
             <Route
               path="/projects"

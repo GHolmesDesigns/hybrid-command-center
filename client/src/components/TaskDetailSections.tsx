@@ -139,7 +139,11 @@ export function TaskDependencies({
           setDep('');
         }}
       >
-        <select value={dep} onChange={(event) => setDep(event.target.value)}>
+        <select
+          aria-label="Dependency task"
+          value={dep}
+          onChange={(event) => setDep(event.target.value)}
+        >
           <option value="">Choose a task…</option>
           {tasks
             .filter(
