@@ -57,10 +57,20 @@ export function SettingsView({
     } | null>(null),
     [root, setRoot] = useState(''),
     [brandForm, setBrandForm] = useState<Branding>(branding),
-    [brandBusy, setBrandBusy] = useState(false);
-  const load = useCallback(() => api<any>('/settings/drive').then(setState), []);
+    [brandBusy, setBrandBusy] = useState(false),
+    [driveError, setDriveError] = useState('');
+  const load = useCallback(async () => {
+    const next = await api<{
+      configured: boolean;
+      connected: boolean;
+      rootFolderId?: string;
+      rootFolderUrl?: string;
+    }>('/settings/drive');
+    setState(next);
+    setDriveError('');
+  }, []);
   useEffect(() => {
-    load();
+    void load().catch((error: unknown) => setDriveError((error as Error).message));
   }, [load]);
   useEffect(() => {
     setBrandForm(branding);
@@ -140,7 +150,16 @@ export function SettingsView({
             names never create projects. OAuth tokens stay encrypted locally and never reach the
             browser.
           </p>
-          {!state?.configured && (
+          {driveError && (
+            <div className="inline-warning" role="alert">
+              <AlertCircle />
+              <div>
+                <strong>Drive status unavailable</strong>
+                <span>{driveError}</span>
+              </div>
+            </div>
+          )}
+          {!driveError && !state?.configured && (
             <div className="inline-warning">
               <AlertCircle />
               <div>

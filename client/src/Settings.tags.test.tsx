@@ -32,6 +32,9 @@ describe('Tag deletion from Settings', () => {
       </MemoryRouter>,
     );
     expect(await screen.findByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
+    await waitFor(() =>
+      expect(requests.some((request) => request.url.endsWith('/api/settings/drive'))).toBe(true),
+    );
   };
   const deleteRequests = (confirmed: boolean) =>
     requests.filter(

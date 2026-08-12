@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components -- test helpers are intentionally shared across sliced suites */
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { addDays, format } from 'date-fns';
@@ -131,6 +131,7 @@ export const testState = {
   brandingPayload: null as Branding | null,
   taskPatchError: null as string | null,
   dashboardFailures: 0,
+  driveSettingsError: null as string | null,
 };
 
 /** Serves the six endpoints App() requests on mount. */
@@ -166,6 +167,8 @@ const respondTo = (url: string, init?: RequestInit) => {
     testState.dashboardFailures -= 1;
     return reply(503, { error: 'Dashboard refresh is temporarily unavailable.' });
   }
+  if (url.endsWith('/api/settings/drive') && testState.driveSettingsError)
+    return reply(503, { error: testState.driveSettingsError });
   if (url.endsWith('/api/projects/reorder')) {
     const order: string[] = body.orderedIds;
     testState.projectsPayload = [...testState.projectsPayload]
@@ -249,6 +252,7 @@ beforeEach(() => {
   testState.brandingPayload = null;
   testState.taskPatchError = null;
   testState.dashboardFailures = 0;
+  testState.driveSettingsError = null;
   requests.length = 0;
   vi.stubGlobal(
     'fetch',
@@ -265,6 +269,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  cleanup();
   vi.unstubAllGlobals();
   localStorage.clear();
 });
