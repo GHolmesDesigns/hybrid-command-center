@@ -1,6 +1,6 @@
 ﻿import type { Db } from './db.ts';
 import { blockingDependencies } from './domain/dependencies.ts';
-import { isOverdue } from './domain/deadlines.ts';
+import { isOverdue } from '../shared/deadlines.ts';
 import type { Tag, Task } from '../shared/types.ts';
 
 const camel = (row: any) =>
@@ -71,7 +71,7 @@ export function hydrateTask(db: Db, raw: any): Task {
     dependencyIds,
     blockingDependencies: blocking,
     blocked: blocking.length > 0,
-    overdue: isOverdue(task.dueDate, task.status),
+    overdue: isOverdue(task),
     checklistCompleted: checklist.filter((i) => i.completed).length,
     checklistTotal: checklist.length,
   } as Task;
@@ -88,4 +88,13 @@ export function listTasks(db: Db, where = '', params: (string | number | null)[]
 }
 export function getTask(db: Db, id: string) {
   return listTasks(db, 'WHERE t.id=?', [id])[0];
+}
+/**
+ * Work under a live client and a live project. This is dashboard scope, not a global
+ * filter: `GET /api/tasks`, the board, and a direct link to an archived project's task all
+ * stay unscoped, so archived work is still reachable — it just stops inflating the numbers
+ * on a page that claims to show what needs attention now.
+ */
+export function listActiveTasks(db: Db) {
+  return listTasks(db, "WHERE p.status<>'ARCHIVED' AND c.status<>'ARCHIVED'");
 }

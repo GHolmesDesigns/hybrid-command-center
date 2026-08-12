@@ -10,7 +10,7 @@ The future Import module's versioned XLSX contract and example campaigns are doc
 
 ## What is included
 
-- Deadline-led dashboard with overdue, due-today, seven-day, and project-health counts
+- Deadline-led dashboard with overdue, due-today, seven-day (today included), and project-health counts, scoped to unarchived work and calculated by the same rules the board filters by
 - **Sync to Folder** on the dashboard — provisions missing Drive folder skeletons for existing clients/projects; it uploads, downloads, and mirrors nothing, and never discovers projects from Drive
 - Client creation, editing, archival, detail views, and Drive status
 - Project creation, editing, archival, and **record-only delete** that cascades to tasks (Drive files untouched)

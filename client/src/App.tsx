@@ -69,7 +69,7 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { addDays, format, parseISO } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { api, send } from './api';
 import type {
   Client,
@@ -90,6 +90,7 @@ import {
   normalizeTagName,
   sameTagName,
 } from '../../shared/types';
+import { isDueNextSevenDays, isDueToday } from '../../shared/deadlines';
 import { APP_VERSION, DEFAULT_BRANDING, type Branding } from '../../shared/branding';
 
 const STATUS_LABEL: Record<TaskStatus, string> = {
@@ -463,6 +464,9 @@ function PageHead({
   );
 }
 
+/** The three deadline states the Deadlines panel can show, and the board filter behind each. */
+type DeadlineBucket = 'overdue' | 'today' | 'week';
+
 function Dashboard({
   dashboard,
   open,
@@ -478,8 +482,49 @@ function Dashboard({
 }) {
   const nav = useNavigate();
   const [syncing, setSyncing] = useState(false);
+  const [bucket, setBucket] = useState<DeadlineBucket>('overdue');
   if (!dashboard)
     return <Empty title="Dashboard unavailable" body="Refresh the page to try again." />;
+  const plural = (n: number) => (n === 1 ? '' : 's');
+  // Three deadline states, each with its own headline, list, and empty state. Overdue leads
+  // because it is the one that costs something; the other two are a click away rather than
+  // absent, which is what the panel used to be.
+  const deadlineBuckets = {
+    overdue: {
+      label: 'Overdue',
+      count: dashboard.counts.overdue,
+      tasks: dashboard.overdueTasks,
+      boardFilter: 'overdue',
+      heading: `${dashboard.counts.overdue} overdue task${plural(dashboard.counts.overdue)}`,
+      body: `Across ${dashboard.counts.projectsOverdue} project${plural(dashboard.counts.projectsOverdue)}. Start here.`,
+      emptyTitle: 'Nothing overdue',
+      emptyBody: 'You are caught up. Keep the momentum going.',
+      emptyHint: 'Work that slips past its due date collects here.',
+    },
+    today: {
+      label: 'Due today',
+      count: dashboard.counts.dueToday,
+      tasks: dashboard.dueTodayTasks,
+      boardFilter: 'today',
+      heading: `${dashboard.counts.dueToday} task${plural(dashboard.counts.dueToday)} due today`,
+      body: 'Everything with today’s date on it, finished work aside.',
+      emptyTitle: 'Nothing due today',
+      emptyBody: 'Today is clear. Keep an eye on the rest of the week.',
+      emptyHint: 'Work carrying today’s date is under Next 7 days too.',
+    },
+    week: {
+      label: 'Next 7 days',
+      count: dashboard.counts.dueNextSevenDays,
+      tasks: dashboard.upcomingTasks,
+      boardFilter: 'week',
+      heading: `${dashboard.counts.dueNextSevenDays} task${plural(dashboard.counts.dueNextSevenDays)} due in the next 7 days`,
+      body: 'Today through seven days out, today included.',
+      emptyTitle: 'A clear week ahead',
+      emptyBody: 'Nothing lands in the next seven days.',
+      emptyHint: 'Anything due today through seven days out collects here.',
+    },
+  } as const;
+  const shown = deadlineBuckets[bucket];
   const cards = [
     ['Active clients', dashboard.counts.activeClients, <Users />],
     ['Active projects', dashboard.counts.activeProjects, <BriefcaseBusiness />],
@@ -541,25 +586,29 @@ function Dashboard({
             <ShieldAlert />
           </div>
           <div>
-            <span className="eyebrow">Deadline watch</span>
-            <h2>
-              {dashboard.counts.overdue
-                ? `${dashboard.counts.overdue} overdue task${dashboard.counts.overdue === 1 ? '' : 's'}`
-                : 'Nothing overdue'}
-            </h2>
-            <p>
-              {dashboard.counts.overdue
-                ? `Across ${dashboard.counts.projectsOverdue} active project${dashboard.counts.projectsOverdue === 1 ? '' : 's'}. Start here.`
-                : 'You are caught up. Keep the momentum going.'}
-            </p>
+            <span className="eyebrow">Deadlines</span>
+            <h2>{shown.count ? shown.heading : shown.emptyTitle}</h2>
+            <p>{shown.count ? shown.body : shown.emptyBody}</p>
           </div>
-          <button className="secondary" onClick={() => nav('/kanban?filter=overdue')}>
+          <button className="secondary" onClick={() => nav(`/kanban?filter=${shown.boardFilter}`)}>
             Open board <ArrowRight />
           </button>
         </div>
-        {dashboard.overdueTasks.length > 0 && (
+        <div className="bucket-toggle" role="group" aria-label="Deadline state">
+          {(Object.keys(deadlineBuckets) as DeadlineBucket[]).map((key) => (
+            <button
+              key={key}
+              className="secondary"
+              aria-pressed={bucket === key}
+              onClick={() => setBucket(key)}
+            >
+              {deadlineBuckets[key].label} <span>{deadlineBuckets[key].count}</span>
+            </button>
+          ))}
+        </div>
+        {shown.tasks.length > 0 ? (
           <div className="urgent-list">
-            {dashboard.overdueTasks.slice(0, 5).map((t) => (
+            {shown.tasks.slice(0, 5).map((t) => (
               <button key={t.id} onClick={() => open({ type: 'taskDetail', value: t })}>
                 <span className="priority-stripe" data-priority={t.priority} />
                 <div>
@@ -573,6 +622,8 @@ function Dashboard({
               </button>
             ))}
           </div>
+        ) : (
+          <Empty compact title={shown.emptyTitle} body={shown.emptyHint} />
         )}
       </section>
       <div className="dashboard-grid">
@@ -1353,8 +1404,10 @@ function Kanban({
       (!flag ||
         (flag === 'overdue' && t.overdue) ||
         (flag === 'blocked' && t.blocked) ||
-        (flag === 'today' && dueWithinDays(t.dueDate, 0)) ||
-        (flag === 'week' && dueWithinDays(t.dueDate, 7)) ||
+        // The same rules the dashboard counts with, so a tile and the board it links to
+        // can never show different sets.
+        (flag === 'today' && isDueToday(t)) ||
+        (flag === 'week' && isDueNextSevenDays(t)) ||
         (flag === 'none' && !t.dueDate) ||
         (flag === 'completed' && t.status === 'COMPLETE')),
   );
@@ -2927,10 +2980,3 @@ const initials = (name: string) =>
     .slice(0, 2)
     .join('')
     .toUpperCase();
-/** True when a due date falls between today and `days` days from now, inclusive. Compares local calendar days as yyyy-MM-dd so it never drifts across timezones. */
-const dueWithinDays = (dueDate: string | undefined, days: number) => {
-  if (!dueDate) return false;
-  const day = (value: Date) => format(value, 'yyyy-MM-dd');
-  const due = day(parseISO(dueDate));
-  return due >= day(new Date()) && due <= day(addDays(new Date(), days));
-};

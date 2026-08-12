@@ -7,6 +7,14 @@ export default defineConfig({
     projects: [
       {
         test: {
+          name: 'shared',
+          environment: 'node',
+          include: ['shared/**/*.test.ts'],
+          setupFiles: ['./shared/test-setup.ts'],
+        },
+      },
+      {
+        test: {
           name: 'server',
           environment: 'node',
           include: ['server/**/*.test.ts'],

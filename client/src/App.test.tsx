@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { addDays, format } from 'date-fns';
 import { App } from './App';
 import { APP_VERSION } from '../../shared/branding';
 import type { Client, DashboardData, Project, Tag, Task } from '../../shared/types';
@@ -16,6 +17,7 @@ const emptyDashboard: DashboardData = {
     projectsOverdue: 0,
   },
   overdueTasks: [],
+  dueTodayTasks: [],
   upcomingTasks: [],
   recentProjects: [],
 };
@@ -230,6 +232,137 @@ describe('Dashboard momentum panel', () => {
     ).closest('section')!;
     expect(panel).toHaveTextContent('Mar 9, 2026');
     expect(panel).not.toHaveTextContent('Jan 5, 2026');
+  });
+});
+
+/** A due date `offset` days from today, so no fixture expires. */
+const day = (offset: number) => format(addDays(new Date(), offset), 'yyyy-MM-dd');
+
+describe('Dashboard deadlines panel', () => {
+  const overdueTask = task('t-late', 'Late artwork', { overdue: true, dueDate: day(-3) });
+  const todayTask = task('t-today', 'Ship the newsletter', { dueDate: day(0) });
+  const weekTask = task('t-week', 'Draft the recap', { dueDate: day(3) });
+
+  const renderDashboard = async (payload: Partial<DashboardData>) => {
+    dashboardPayload = { ...emptyDashboard, ...payload };
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    );
+    return (await screen.findByText('Deadlines')).closest('section')!;
+  };
+  const bucketButton = (name: RegExp) => screen.getByRole('button', { name });
+
+  it('shows each deadline state, its list, and its own empty state', async () => {
+    // Today's task is in both buckets, which is what "Next 7 days" including today means.
+    const panel = await renderDashboard({
+      counts: {
+        ...emptyDashboard.counts,
+        overdue: 1,
+        projectsOverdue: 1,
+        dueToday: 1,
+        dueNextSevenDays: 2,
+      },
+      overdueTasks: [overdueTask],
+      dueTodayTasks: [todayTask],
+      upcomingTasks: [todayTask, weekTask],
+    });
+
+    // Overdue leads, because it is the state that already cost something.
+    expect(panel).toHaveTextContent('1 overdue task');
+    expect(panel).toHaveTextContent('Late artwork');
+    expect(panel).not.toHaveTextContent('Draft the recap');
+
+    fireEvent.click(bucketButton(/^Due today 1$/));
+    expect(panel).toHaveTextContent('1 task due today');
+    expect(panel).toHaveTextContent('Ship the newsletter');
+    expect(panel).not.toHaveTextContent('Late artwork');
+
+    fireEvent.click(bucketButton(/^Next 7 days 2$/));
+    expect(panel).toHaveTextContent('2 tasks due in the next 7 days');
+    expect(panel).toHaveTextContent('Ship the newsletter');
+    expect(panel).toHaveTextContent('Draft the recap');
+  });
+
+  it('gives each empty bucket a message of its own', async () => {
+    const panel = await renderDashboard({});
+
+    expect(panel).toHaveTextContent('Nothing overdue');
+
+    fireEvent.click(bucketButton(/^Due today 0$/));
+    expect(panel).toHaveTextContent('Nothing due today');
+    expect(panel).not.toHaveTextContent('Nothing overdue');
+
+    fireEvent.click(bucketButton(/^Next 7 days 0$/));
+    expect(panel).toHaveTextContent('A clear week ahead');
+    expect(panel).not.toHaveTextContent('Nothing due today');
+  });
+
+  it('sends the Open board button to the bucket on screen', async () => {
+    tasksPayload = [weekTask];
+    await renderDashboard({
+      counts: { ...emptyDashboard.counts, dueNextSevenDays: 1 },
+      upcomingTasks: [weekTask],
+    });
+
+    fireEvent.click(bucketButton(/^Next 7 days 1$/));
+    fireEvent.click(screen.getByRole('button', { name: /open board/i }));
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Project Status' })).toBeVisible();
+    expect(screen.getByText('Draft the recap')).toBeVisible();
+  });
+
+  it('marks the selected state for assistive tech, not by color alone', async () => {
+    await renderDashboard({});
+
+    expect(bucketButton(/^Overdue 0$/)).toHaveAttribute('aria-pressed', 'true');
+    expect(bucketButton(/^Due today 0$/)).toHaveAttribute('aria-pressed', 'false');
+
+    fireEvent.click(bucketButton(/^Due today 0$/));
+    expect(bucketButton(/^Overdue 0$/)).toHaveAttribute('aria-pressed', 'false');
+    expect(bucketButton(/^Due today 0$/)).toHaveAttribute('aria-pressed', 'true');
+  });
+});
+
+describe('Board deadline filters', () => {
+  const renderBoard = async (filter: string) => {
+    render(
+      <MemoryRouter initialEntries={[`/kanban?filter=${filter}`]}>
+        <App />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('heading', { level: 1, name: 'Project Status' })).toBeVisible();
+  };
+
+  // Titles avoid the words on the filter dropdown, so a match means a card, not an option.
+  beforeEach(() => {
+    tasksPayload = [
+      task('b-today', 'Newsletter goes out', { dueDate: day(0) }),
+      task('b-week', 'Recap draft', { dueDate: day(3) }),
+      task('b-far', 'Retro deck', { dueDate: day(8) }),
+      task('b-done', 'Signed off already', { dueDate: day(0), status: 'COMPLETE' }),
+      task('b-none', 'Someday idea'),
+    ];
+  });
+
+  it('shows the same set the Next 7 days tile counts', async () => {
+    await renderBoard('week');
+
+    // Today counts, day 8 does not, and finished work is not pending work.
+    expect(screen.getByText('Newsletter goes out')).toBeVisible();
+    expect(screen.getByText('Recap draft')).toBeVisible();
+    expect(screen.queryByText('Retro deck')).toBeNull();
+    expect(screen.queryByText('Signed off already')).toBeNull();
+    expect(screen.queryByText('Someday idea')).toBeNull();
+  });
+
+  it('narrows the today filter to today, finished work aside', async () => {
+    await renderBoard('today');
+
+    expect(screen.getByText('Newsletter goes out')).toBeVisible();
+    expect(screen.queryByText('Recap draft')).toBeNull();
+    expect(screen.queryByText('Signed off already')).toBeNull();
   });
 });
 

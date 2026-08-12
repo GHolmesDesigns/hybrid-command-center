@@ -9,9 +9,17 @@ import { z } from 'zod';
 import type { Db } from './db.ts';
 import { getDb, transaction } from './db.ts';
 import { config } from './config.ts';
-import { getTag, getTask, listClients, listProjects, listTags, listTasks } from './repositories.ts';
+import {
+  getTag,
+  getTask,
+  listActiveTasks,
+  listClients,
+  listProjects,
+  listTags,
+  listTasks,
+} from './repositories.ts';
 import { wouldCreateCycle, blockingDependencies } from './domain/dependencies.ts';
-import { isDueNextSevenDays, isDueToday } from './domain/deadlines.ts';
+import { isDueNextSevenDays, isDueToday, isOverdue } from '../shared/deadlines.ts';
 import { buildClientSlug } from './domain/client-slugs.ts';
 import {
   driveProvider,
@@ -87,7 +95,7 @@ const nullableUrl = z
 /**
  * Optional calendar date. User-supplied dates are `YYYY-MM-DD` values interpreted in local
  * time, so the pattern is checked first and `isValid` then rejects real-looking impossibilities
- * such as `2026-02-30`. Without both, junk reaches `server/domain/deadlines.ts`, where
+ * such as `2026-02-30`. Without both, junk reaches `shared/deadlines.ts`, where
  * `parseISO` yields an `Invalid Date` and every deadline rule silently answers `false`.
  * Server-generated timestamps (`created_at`, `updated_at`, `completed_at`) are full ISO
  * strings and never pass through here.
@@ -747,23 +755,30 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   });
 
   app.get('/api/dashboard', (_req, res) => {
-    const tasks = listTasks(db);
+    // Active scope only: tasks under an archived project or an archived client are still
+    // reachable everywhere else, but they are not work that needs attention now, so they
+    // belong in none of these counts or lists.
+    const tasks = listActiveTasks(db);
     const projects = listProjects(db);
-    const open = tasks.filter((t) => t.status !== 'COMPLETE');
-    const overdue = open.filter((t) => t.overdue);
+    // Each bucket filters COMPLETE out for itself, so a task that is finished cannot reach
+    // a list through one of them.
+    const overdue = tasks.filter((t) => isOverdue(t));
+    const dueToday = tasks.filter((t) => isDueToday(t));
+    // Includes today: a task due in the next few hours is the most urgent thing in the
+    // window, not something the window has already passed. `dueToday` is a subset of it.
+    const dueNextSevenDays = tasks.filter((t) => isDueNextSevenDays(t));
     res.json({
       counts: {
         activeClients: listClients(db).filter((c: any) => c.status === 'ACTIVE').length,
         activeProjects: projects.filter((p: any) => p.status === 'ACTIVE').length,
-        dueToday: open.filter((t) => isDueToday(t.dueDate)).length,
-        dueNextSevenDays: open.filter((t) => isDueNextSevenDays(t.dueDate)).length,
+        dueToday: dueToday.length,
+        dueNextSevenDays: dueNextSevenDays.length,
         overdue: overdue.length,
         projectsOverdue: new Set(overdue.map((t) => t.projectId)).size,
       },
       overdueTasks: urgent(overdue),
-      upcomingTasks: urgent(
-        open.filter((t) => isDueToday(t.dueDate) || isDueNextSevenDays(t.dueDate)),
-      ),
+      dueTodayTasks: urgent(dueToday),
+      upcomingTasks: urgent(dueNextSevenDays),
       // Ordered by activity, not by `updatedAt`: the panel is asking where work is
       // happening, and renaming a project is not work on it. The comparator is shared with
       // the Projects page so the two views cannot put the same projects in a different order.
