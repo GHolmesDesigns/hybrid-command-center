@@ -21,7 +21,8 @@ CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY, client_id TEXT NOT NULL REFERENCES clients(id), name TEXT NOT NULL, description TEXT,
   status TEXT NOT NULL DEFAULT 'ACTIVE', start_date TEXT, target_deadline TEXT, priority TEXT NOT NULL DEFAULT 'MEDIUM',
   notes TEXT, position INTEGER NOT NULL DEFAULT 0, drive_folder_id TEXT, drive_folder_url TEXT,
-  drive_status TEXT NOT NULL DEFAULT 'DISCONNECTED', drive_error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+  drive_status TEXT NOT NULL DEFAULT 'DISCONNECTED', drive_error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+  last_activity_at TEXT
 );
 CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), title TEXT NOT NULL, description TEXT,
@@ -218,6 +219,31 @@ export function applyAdditiveMigrations(db: Db, referenceSchema = schema): strin
   return statements;
 }
 
+/**
+ * Gives every project a `last_activity_at`, taking it from the `updated_at` the
+ * row already carries, and returns how many rows it filled.
+ *
+ * Activity is deliberately a separate field from `updated_at` (see
+ * `touchProjectActivity` in `server/app.ts`), but on a database migrated from a
+ * release that had no activity column the only timestamp available is
+ * `updated_at`, so it is the honest starting point: every project keeps the
+ * position in Recently updated it had before the migration.
+ *
+ * Runs on every boot rather than only when the column was just added. The
+ * `ALTER TABLE` and this backfill are separate statements, so a crash between
+ * them would otherwise leave those rows with no activity for good. Idempotent —
+ * with nothing left to fill it writes nothing.
+ */
+export function backfillProjectActivity(db: Db): number {
+  const result = db
+    .prepare(
+      `UPDATE projects SET last_activity_at = updated_at
+       WHERE last_activity_at IS NULL OR last_activity_at = ''`,
+    )
+    .run();
+  return Number(result.changes);
+}
+
 export function createDb(
   filename = config.databasePath,
   onMigration?: (statements: readonly string[]) => void,
@@ -226,6 +252,7 @@ export function createDb(
   const db = new DatabaseSync(filename);
   db.exec(tableSchema);
   const applied = applyAdditiveMigrations(db);
+  backfillProjectActivity(db);
   db.exec(indexSchema);
   db.exec('PRAGMA optimize');
   onMigration?.(applied);

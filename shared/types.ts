@@ -108,7 +108,14 @@ export interface Project {
   driveStatus: DriveStatus;
   driveError?: string;
   createdAt: string;
+  /** When the project record itself was last edited. Tile drags and Drive retries do not move it. */
   updatedAt: string;
+  /**
+   * When work last happened on this project: its own edits plus every write to its
+   * children — tasks, checklists, task tags, dependencies. This is what the dashboard's
+   * Momentum panel orders by and displays; `updatedAt` deliberately stays narrower.
+   */
+  lastActivityAt: string;
 }
 export interface ChecklistItem {
   id: string;

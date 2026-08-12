@@ -85,7 +85,7 @@ const projects = [
   },
 ];
 const projectStmt = db.prepare(
-  `INSERT INTO projects(id,client_id,name,description,status,start_date,target_deadline,priority,drive_status,created_at,updated_at) VALUES(?,?,?,?,'ACTIVE',?, ?,?,'DISCONNECTED',?,?)`,
+  `INSERT INTO projects(id,client_id,name,description,status,start_date,target_deadline,priority,drive_status,created_at,updated_at,last_activity_at) VALUES(?,?,?,?,'ACTIVE',?, ?,?,'DISCONNECTED',?,?,?)`,
 );
 projects.forEach((p) =>
   projectStmt.run(
@@ -96,6 +96,7 @@ projects.forEach((p) =>
     day(subDays(new Date(), 12)),
     p.deadline,
     p.priority,
+    stamp,
     stamp,
     stamp,
   ),

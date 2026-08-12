@@ -21,6 +21,25 @@ async function setup() {
   ).body;
   return { c, p };
 }
+
+/**
+ * A stamp far enough in the past that any write the server makes is unambiguously
+ * newer, so activity assertions never hinge on two calls landing in different
+ * milliseconds.
+ */
+const BACKDATED = '2020-01-01T00:00:00.000Z';
+/** Pushes a project's edit and activity stamps into the past, together. */
+const backdate = (projectId: string, stamp = BACKDATED) =>
+  db
+    .prepare('UPDATE projects SET updated_at=?, last_activity_at=? WHERE id=?')
+    .run(stamp, stamp, projectId);
+/** Reads both stamps straight from SQLite, so the API cannot paper over one of them. */
+const stampsOf = (projectId: string) =>
+  db
+    .prepare(
+      'SELECT updated_at updatedAt, last_activity_at lastActivityAt FROM projects WHERE id=?',
+    )
+    .get(projectId) as { updatedAt: string; lastActivityAt: string };
 describe('command center API', () => {
   it('enables the documented CSP only for production responses', async () => {
     const development = await request(createApp(db, { production: false })).get('/api/health');
@@ -488,6 +507,25 @@ describe('command center API', () => {
     expect(stored.dueDate).toBe('2026-08-10');
   });
 
+  it('does not stamp last_activity_at when tiles are rearranged', async () => {
+    const { c, p } = await setup();
+    const app = createApp(db);
+    const second = (
+      await request(app).post('/api/projects').send({ clientId: c.id, name: 'Brand System' })
+    ).body;
+    backdate(p.id);
+    backdate(second.id);
+
+    await request(app)
+      .post('/api/projects/reorder')
+      .send({ orderedIds: [second.id, p.id] })
+      .expect(200);
+
+    // Rearranging tiles is neither an edit nor work, so neither stamp may move.
+    expect(stampsOf(p.id)).toEqual({ updatedAt: BACKDATED, lastActivityAt: BACKDATED });
+    expect(stampsOf(second.id)).toEqual({ updatedAt: BACKDATED, lastActivityAt: BACKDATED });
+  });
+
   it('rejects project dates that are not real YYYY-MM-DD calendar dates', async () => {
     const { c } = await setup();
     const app = createApp(db);
@@ -505,5 +543,187 @@ describe('command center API', () => {
       .patch(`/api/projects/${project.id}`)
       .send({ targetDeadline: '2026-02-30' })
       .expect(400);
+  });
+});
+
+describe('project activity', () => {
+  it('gives a new project an activity stamp from the moment it is created', async () => {
+    const { p } = await setup();
+
+    expect(p.lastActivityAt).toBe(p.createdAt);
+    expect(stampsOf(p.id)).toEqual({ updatedAt: p.updatedAt, lastActivityAt: p.updatedAt });
+  });
+
+  it('stamps activity alongside updated_at when the project record itself is edited', async () => {
+    const { p } = await setup();
+    backdate(p.id);
+
+    await request(createApp(db))
+      .patch(`/api/projects/${p.id}`)
+      .send({ notes: 'Kickoff moved to Monday' })
+      .expect(200);
+
+    const after = stampsOf(p.id);
+    expect(after.updatedAt > BACKDATED).toBe(true);
+    expect(after.lastActivityAt).toBe(after.updatedAt);
+  });
+
+  it('moves the parent project on every child write, without touching updated_at', async () => {
+    const { p } = await setup();
+    const app = createApp(db);
+    const newTask = async (title: string) =>
+      (await request(app).post('/api/tasks').send({ projectId: p.id, title }).expect(201)).body;
+    const newChecklistItem = async (taskId: string, text: string) =>
+      (
+        await request(app).post(`/api/tasks/${taskId}/checklist`).send({ text }).expect(201)
+      ).body.checklist.find((item: any) => item.text === text).id;
+
+    const task = await newTask('Anchor task');
+    const disposable = await newTask('Disposable task');
+    const blocker = await newTask('Blocking task');
+    const tag = (await request(app).post('/api/tags').send({ name: 'Campaign' })).body;
+    const tickable = await newChecklistItem(task.id, 'Tick me');
+    const removable = await newChecklistItem(task.id, 'Remove me');
+
+    // Every write a user can make to a project's children, in an order where each is valid.
+    const writes: { label: string; write: () => Promise<unknown> }[] = [
+      {
+        label: 'task create',
+        write: () => newTask('Fresh task'),
+      },
+      {
+        label: 'task patch',
+        write: () =>
+          request(app).patch(`/api/tasks/${task.id}`).send({ title: 'Anchor task v2' }).expect(200),
+      },
+      {
+        label: 'task status change',
+        write: () =>
+          request(app)
+            .post('/api/tasks/reorder')
+            .send({ taskId: task.id, status: 'IN_PROGRESS', orderedIds: [task.id] })
+            .expect(200),
+      },
+      {
+        label: 'task complete',
+        write: () =>
+          request(app).patch(`/api/tasks/${task.id}`).send({ status: 'COMPLETE' }).expect(200),
+      },
+      {
+        label: 'checklist create',
+        write: () => newChecklistItem(task.id, 'A later step'),
+      },
+      {
+        label: 'checklist tick',
+        write: () =>
+          request(app).patch(`/api/checklist/${tickable}`).send({ completed: true }).expect(200),
+      },
+      {
+        label: 'checklist delete',
+        write: () => request(app).delete(`/api/checklist/${removable}`).expect(200),
+      },
+      {
+        label: 'tag attach',
+        write: () =>
+          request(app).post(`/api/tasks/${task.id}/tags`).send({ tagId: tag.id }).expect(201),
+      },
+      {
+        label: 'tag detach',
+        write: () => request(app).delete(`/api/tasks/${task.id}/tags/${tag.id}`).expect(200),
+      },
+      {
+        label: 'dependency add',
+        write: () =>
+          request(app)
+            .post(`/api/tasks/${task.id}/dependencies`)
+            .send({ dependencyId: blocker.id })
+            .expect(201),
+      },
+      {
+        label: 'dependency remove',
+        write: () =>
+          request(app).delete(`/api/tasks/${task.id}/dependencies/${blocker.id}`).expect(200),
+      },
+      {
+        label: 'task delete',
+        write: () => request(app).delete(`/api/tasks/${disposable.id}`).expect(200),
+      },
+    ];
+
+    for (const { label, write } of writes) {
+      backdate(p.id);
+      await write();
+      const after = stampsOf(p.id);
+      expect(after.lastActivityAt > BACKDATED, `${label} must move project activity`).toBe(true);
+      expect(after.updatedAt, `${label} must leave updated_at alone`).toBe(BACKDATED);
+    }
+  });
+
+  it('does not count a child write that changed nothing as activity', async () => {
+    const { p } = await setup();
+    const app = createApp(db);
+    const task = (
+      await request(app).post('/api/tasks').send({ projectId: p.id, title: 'Tagged task' })
+    ).body;
+    const tag = (await request(app).post('/api/tags').send({ name: 'Campaign' })).body;
+    await request(app).post(`/api/tasks/${task.id}/tags`).send({ tagId: tag.id }).expect(201);
+    backdate(p.id);
+
+    // A repeat attach, and detaching a tag that is not there, both write nothing.
+    await request(app).post(`/api/tasks/${task.id}/tags`).send({ tagId: tag.id }).expect(200);
+    await request(app).delete(`/api/tasks/${task.id}/dependencies/${task.id}`).expect(200);
+
+    expect(stampsOf(p.id)).toEqual({ updatedAt: BACKDATED, lastActivityAt: BACKDATED });
+  });
+
+  it('counts a task moved between projects as activity in both', async () => {
+    const { c, p } = await setup();
+    const app = createApp(db);
+    const destination = (
+      await request(app).post('/api/projects').send({ clientId: c.id, name: 'Brand System' })
+    ).body;
+    const task = (
+      await request(app).post('/api/tasks').send({ projectId: p.id, title: 'Moving task' })
+    ).body;
+    backdate(p.id);
+    backdate(destination.id);
+
+    await request(app)
+      .patch(`/api/tasks/${task.id}`)
+      .send({ projectId: destination.id })
+      .expect(200);
+
+    // One project lost the work, the other gained it.
+    expect(stampsOf(p.id).lastActivityAt > BACKDATED).toBe(true);
+    expect(stampsOf(destination.id).lastActivityAt > BACKDATED).toBe(true);
+    expect(stampsOf(p.id).updatedAt).toBe(BACKDATED);
+    expect(stampsOf(destination.id).updatedAt).toBe(BACKDATED);
+  });
+
+  it('orders Recently updated by activity rather than by the project record edit', async () => {
+    const { c, p } = await setup();
+    const app = createApp(db);
+    const edited = (
+      await request(app).post('/api/projects').send({ clientId: c.id, name: 'Brand System' })
+    ).body;
+    const task = (await request(app).post('/api/tasks').send({ projectId: p.id, title: 'Tick me' }))
+      .body;
+    const item = (
+      await request(app).post(`/api/tasks/${task.id}/checklist`).send({ text: 'One step' })
+    ).body.checklist[0];
+    const recentIds = async () =>
+      ((await request(app).get('/api/dashboard')).body.recentProjects as any[]).map((x) => x.id);
+
+    // `edited` was touched later than any work on `p`, so it leads to begin with.
+    backdate(p.id);
+    backdate(edited.id, '2020-06-01T00:00:00.000Z');
+    expect(await recentIds()).toEqual([edited.id, p.id]);
+
+    await request(app).patch(`/api/checklist/${item.id}`).send({ completed: true }).expect(200);
+
+    // Ticking one checklist item is enough to put the project back on top, and it got
+    // there on activity alone — `p.updated_at` is still the older of the two.
+    expect(await recentIds()).toEqual([p.id, edited.id]);
+    expect(stampsOf(p.id).updatedAt < stampsOf(edited.id).updatedAt).toBe(true);
   });
 });

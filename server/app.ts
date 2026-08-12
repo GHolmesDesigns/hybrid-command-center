@@ -273,7 +273,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         db.prepare('SELECT COALESCE(MAX(position),-1)+1 next FROM projects').get() as any
       ).next;
       db.prepare(
-        `INSERT INTO projects(id,client_id,name,description,status,start_date,target_deadline,priority,notes,position,drive_status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO projects(id,client_id,name,description,status,start_date,target_deadline,priority,notes,position,drive_status,created_at,updated_at,last_activity_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       ).run(
         projectId,
         data.clientId,
@@ -286,6 +286,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         data.notes ?? null,
         position,
         'PENDING',
+        stamp,
         stamp,
         stamp,
       );
@@ -304,8 +305,10 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       const data = projectPatch.parse(req.body);
       const p = db.prepare('SELECT * FROM projects WHERE id=?').get(req.params.id) as any;
       if (!p) return res.status(404).json({ error: 'Project not found.' });
+      // Editing the project record is both an edit and activity, so it stamps both fields.
+      const stamp = now();
       db.prepare(
-        `UPDATE projects SET client_id=?,name=?,description=?,status=?,start_date=?,target_deadline=?,priority=?,notes=?,updated_at=? WHERE id=?`,
+        `UPDATE projects SET client_id=?,name=?,description=?,status=?,start_date=?,target_deadline=?,priority=?,notes=?,updated_at=?,last_activity_at=? WHERE id=?`,
       ).run(
         patch(data.clientId, p.client_id),
         patch(data.name, p.name),
@@ -315,7 +318,8 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         patch(data.targetDeadline, p.target_deadline),
         patch(data.priority, p.priority),
         patch(data.notes, p.notes),
-        now(),
+        stamp,
+        stamp,
         req.params.id,
       );
       res.json(listProjects(db).find((x: any) => x.id === req.params.id));
@@ -324,9 +328,10 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     }
   });
   app.post('/api/projects/:id/archive', (req, res) => {
+    const stamp = now();
     const r = db
-      .prepare("UPDATE projects SET status='ARCHIVED',updated_at=? WHERE id=?")
-      .run(now(), req.params.id);
+      .prepare("UPDATE projects SET status='ARCHIVED',updated_at=?,last_activity_at=? WHERE id=?")
+      .run(stamp, stamp, req.params.id);
     if (!r.changes) return res.status(404).json({ error: 'Project not found.' });
     res.json({ ok: true });
   });
@@ -352,8 +357,9 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       );
       if (data.orderedIds.some((projectId) => !known.has(projectId)))
         return res.status(404).json({ error: 'Project not found.' });
-      // `updated_at` is deliberately untouched: rearranging tiles is not an edit, and
-      // stamping it would reshuffle the Recently updated sort on the same screen.
+      // Neither `updated_at` nor `last_activity_at` is touched: rearranging tiles is
+      // neither an edit nor work on the project, and stamping either would reshuffle the
+      // Recently updated sort on the same screen.
       transaction(db, () => {
         const stmt = db.prepare('UPDATE projects SET position=? WHERE id=?');
         data.orderedIds.forEach((projectId, index) => stmt.run(index, projectId));
@@ -430,6 +436,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
             insertChecklistItem.run(id(), taskId, text, position),
           );
         }
+        touchProjectActivity(db, data.projectId, stamp);
       });
       res.status(201).json(getTask(db, taskId));
     } catch (e) {
@@ -452,33 +459,45 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
           code: 'TASK_BLOCKED',
           blockingDependencies: blockingDependencies(db, t.id),
         });
-      db.prepare(
-        `UPDATE tasks SET project_id=?,title=?,description=?,status=?,priority=?,task_type=?,due_date=?,start_date=?,notes=?,completed_at=?,updated_at=? WHERE id=?`,
-      ).run(
-        patch(data.projectId, t.project_id),
-        patch(data.title, t.title),
-        patch(data.description, t.description),
-        nextStatus,
-        patch(data.priority, t.priority),
-        patch(data.taskType, t.task_type),
-        patch(data.dueDate, t.due_date),
-        patch(data.startDate, t.start_date),
-        patch(data.notes, t.notes),
-        nextStatus === 'COMPLETE' ? t.completed_at || now() : null,
-        now(),
-        t.id,
-      );
+      const stamp = now();
+      const nextProjectId = patch(data.projectId, t.project_id);
+      transaction(db, () => {
+        db.prepare(
+          `UPDATE tasks SET project_id=?,title=?,description=?,status=?,priority=?,task_type=?,due_date=?,start_date=?,notes=?,completed_at=?,updated_at=? WHERE id=?`,
+        ).run(
+          nextProjectId,
+          patch(data.title, t.title),
+          patch(data.description, t.description),
+          nextStatus,
+          patch(data.priority, t.priority),
+          patch(data.taskType, t.task_type),
+          patch(data.dueDate, t.due_date),
+          patch(data.startDate, t.start_date),
+          patch(data.notes, t.notes),
+          nextStatus === 'COMPLETE' ? t.completed_at || stamp : null,
+          stamp,
+          t.id,
+        );
+        touchProjectActivity(db, t.project_id, stamp);
+        // Moving a task between projects is activity in both: one lost the work, one gained it.
+        if (nextProjectId !== t.project_id) touchProjectActivity(db, nextProjectId, stamp);
+      });
       res.json(getTask(db, t.id));
     } catch (e) {
       next(e);
     }
   });
   app.delete('/api/tasks/:id', (req, res) => {
-    const task = db.prepare('SELECT id, title FROM tasks WHERE id=?').get(req.params.id) as
-      { id: string; title: string } | undefined;
+    const task = db
+      .prepare('SELECT id, title, project_id FROM tasks WHERE id=?')
+      .get(req.params.id) as { id: string; title: string; project_id: string } | undefined;
     if (!task) return res.status(404).json({ error: 'Task not found.' });
+    const stamp = now();
     // Checklist/deps cascade in SQLite. Drive files are never touched.
-    db.prepare('DELETE FROM tasks WHERE id=?').run(task.id);
+    transaction(db, () => {
+      db.prepare('DELETE FROM tasks WHERE id=?').run(task.id);
+      touchProjectActivity(db, task.project_id, stamp);
+    });
     res.json({ ok: true, deleted: 'task', title: task.title, driveTouched: false });
   });
 
@@ -556,15 +575,19 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
           code: 'TASK_BLOCKED',
           blockingDependencies: t.blockingDependencies,
         });
+      const stamp = now();
       transaction(db, () => {
         db.prepare('UPDATE tasks SET status=?,completed_at=?,updated_at=? WHERE id=?').run(
           data.status,
-          data.status === 'COMPLETE' ? t.completedAt || now() : null,
-          now(),
+          data.status === 'COMPLETE' ? t.completedAt || stamp : null,
+          stamp,
           data.taskId,
         );
         const stmt = db.prepare('UPDATE tasks SET position=? WHERE id=? AND status=?');
         data.orderedIds.forEach((taskId, index) => stmt.run(index, taskId, data.status));
+        // Only the moved task's project: the siblings shifting position around it did not
+        // themselves change, and this endpoint carries every status change off the board.
+        touchProjectActivity(db, t.projectId, stamp);
       });
       res.json(getTask(db, data.taskId));
     } catch (e) {
@@ -575,20 +598,25 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   app.post('/api/tasks/:id/checklist', (req, res, next) => {
     try {
       const data = z.object({ text: z.string().trim().min(1).max(300) }).parse(req.body);
-      if (!db.prepare('SELECT id FROM tasks WHERE id=?').get(req.params.id))
-        return res.status(404).json({ error: 'Task not found.' });
+      const task = db.prepare('SELECT project_id FROM tasks WHERE id=?').get(req.params.id) as
+        { project_id: string } | undefined;
+      if (!task) return res.status(404).json({ error: 'Task not found.' });
       const itemId = id();
+      const stamp = now();
       const pos = (
         db
           .prepare('SELECT COALESCE(MAX(position),-1)+1 next FROM checklist_items WHERE task_id=?')
           .get(req.params.id) as any
       ).next;
-      db.prepare('INSERT INTO checklist_items(id,task_id,text,position) VALUES(?,?,?,?)').run(
-        itemId,
-        req.params.id,
-        data.text,
-        pos,
-      );
+      transaction(db, () => {
+        db.prepare('INSERT INTO checklist_items(id,task_id,text,position) VALUES(?,?,?,?)').run(
+          itemId,
+          req.params.id,
+          data.text,
+          pos,
+        );
+        touchProjectActivity(db, task.project_id, stamp);
+      });
       res.status(201).json(getTask(db, req.params.id));
     } catch (e) {
       next(e);
@@ -603,14 +631,25 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
           position: z.number().int().min(0).optional(),
         })
         .parse(req.body);
-      const item = db.prepare('SELECT * FROM checklist_items WHERE id=?').get(req.params.id) as any;
+      // The parent project comes along for the activity stamp, so ticking an item costs
+      // one query rather than walking checklist item to task to project.
+      const item = db
+        .prepare(
+          `SELECT c.*, t.project_id FROM checklist_items c JOIN tasks t ON t.id=c.task_id
+           WHERE c.id=?`,
+        )
+        .get(req.params.id) as any;
       if (!item) return res.status(404).json({ error: 'Checklist item not found.' });
-      db.prepare('UPDATE checklist_items SET text=?,completed=?,position=? WHERE id=?').run(
-        data.text ?? item.text,
-        data.completed === undefined ? item.completed : Number(data.completed),
-        data.position ?? item.position,
-        item.id,
-      );
+      const stamp = now();
+      transaction(db, () => {
+        db.prepare('UPDATE checklist_items SET text=?,completed=?,position=? WHERE id=?').run(
+          data.text ?? item.text,
+          data.completed === undefined ? item.completed : Number(data.completed),
+          data.position ?? item.position,
+          item.id,
+        );
+        touchProjectActivity(db, item.project_id, stamp);
+      });
       res.json(getTask(db, item.task_id));
     } catch (e) {
       next(e);
@@ -618,34 +657,52 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   });
   app.delete('/api/checklist/:id', (req, res) => {
     const item = db
-      .prepare('SELECT task_id FROM checklist_items WHERE id=?')
+      .prepare(
+        `SELECT c.task_id, t.project_id FROM checklist_items c JOIN tasks t ON t.id=c.task_id
+         WHERE c.id=?`,
+      )
       .get(req.params.id) as any;
     if (!item) return res.status(404).json({ error: 'Checklist item not found.' });
-    db.prepare('DELETE FROM checklist_items WHERE id=?').run(req.params.id);
+    const stamp = now();
+    transaction(db, () => {
+      db.prepare('DELETE FROM checklist_items WHERE id=?').run(req.params.id);
+      touchProjectActivity(db, item.project_id, stamp);
+    });
     res.json(getTask(db, item.task_id));
   });
   app.post('/api/tasks/:id/tags', (req, res, next) => {
     try {
       const data = z.object({ tagId: z.string().uuid() }).parse(req.body);
-      if (!db.prepare('SELECT id FROM tasks WHERE id=?').get(req.params.id))
-        return res.status(404).json({ error: 'Task not found.' });
+      const task = db.prepare('SELECT project_id FROM tasks WHERE id=?').get(req.params.id) as
+        { project_id: string } | undefined;
+      if (!task) return res.status(404).json({ error: 'Task not found.' });
       if (!db.prepare('SELECT id FROM tags WHERE id=?').get(data.tagId))
         return res.status(404).json({ error: 'Tag not found.' });
-      const result = db
-        .prepare('INSERT OR IGNORE INTO task_tags(task_id,tag_id) VALUES(?,?)')
-        .run(req.params.id, data.tagId);
-      res.status(result.changes ? 201 : 200).json(getTask(db, req.params.id));
+      const stamp = now();
+      const attached = transaction(db, () => {
+        const result = db
+          .prepare('INSERT OR IGNORE INTO task_tags(task_id,tag_id) VALUES(?,?)')
+          .run(req.params.id, data.tagId);
+        // Re-attaching a tag the task already carries changes nothing, so it is not activity.
+        if (result.changes) touchProjectActivity(db, task.project_id, stamp);
+        return result.changes;
+      });
+      res.status(attached ? 201 : 200).json(getTask(db, req.params.id));
     } catch (error) {
       next(error);
     }
   });
   app.delete('/api/tasks/:id/tags/:tagId', (req, res) => {
-    if (!db.prepare('SELECT id FROM tasks WHERE id=?').get(req.params.id))
-      return res.status(404).json({ error: 'Task not found.' });
-    db.prepare('DELETE FROM task_tags WHERE task_id=? AND tag_id=?').run(
-      req.params.id,
-      req.params.tagId,
-    );
+    const task = db.prepare('SELECT project_id FROM tasks WHERE id=?').get(req.params.id) as
+      { project_id: string } | undefined;
+    if (!task) return res.status(404).json({ error: 'Task not found.' });
+    const stamp = now();
+    transaction(db, () => {
+      const result = db
+        .prepare('DELETE FROM task_tags WHERE task_id=? AND tag_id=?')
+        .run(req.params.id, req.params.tagId);
+      if (result.changes) touchProjectActivity(db, task.project_id, stamp);
+    });
     res.json(getTask(db, req.params.id));
   });
   app.post('/api/tasks/:id/dependencies', (req, res, next) => {
@@ -661,20 +718,29 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
           error: 'That dependency would create a circular relationship.',
           code: 'CIRCULAR_DEPENDENCY',
         });
-      db.prepare('INSERT OR IGNORE INTO task_dependencies(task_id,dependency_id) VALUES(?,?)').run(
-        req.params.id,
-        data.dependencyId,
-      );
+      const stamp = now();
+      transaction(db, () => {
+        const result = db
+          .prepare('INSERT OR IGNORE INTO task_dependencies(task_id,dependency_id) VALUES(?,?)')
+          .run(req.params.id, data.dependencyId);
+        // The dependent task's project only. The task being depended on is unchanged.
+        if (result.changes) touchProjectActivity(db, task.project_id, stamp);
+      });
       res.status(201).json(getTask(db, req.params.id));
     } catch (e) {
       next(e);
     }
   });
   app.delete('/api/tasks/:id/dependencies/:dependencyId', (req, res) => {
-    db.prepare('DELETE FROM task_dependencies WHERE task_id=? AND dependency_id=?').run(
-      req.params.id,
-      req.params.dependencyId,
-    );
+    const task = db.prepare('SELECT project_id FROM tasks WHERE id=?').get(req.params.id) as
+      { project_id: string } | undefined;
+    const stamp = now();
+    transaction(db, () => {
+      const result = db
+        .prepare('DELETE FROM task_dependencies WHERE task_id=? AND dependency_id=?')
+        .run(req.params.id, req.params.dependencyId);
+      if (task && result.changes) touchProjectActivity(db, task.project_id, stamp);
+    });
     res.json(getTask(db, req.params.id));
   });
 
@@ -696,9 +762,11 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       upcomingTasks: urgent(
         open.filter((t) => isDueToday(t.dueDate) || isDueNextSevenDays(t.dueDate)),
       ),
+      // Ordered by activity, not by `updatedAt`: the panel is asking where work is
+      // happening, and renaming a project is not work on it.
       recentProjects: projects
         .slice()
-        .sort((a: any, b: any) => b.updatedAt.localeCompare(a.updatedAt))
+        .sort((a: any, b: any) => b.lastActivityAt.localeCompare(a.lastActivityAt))
         .slice(0, 5),
     });
   });
@@ -820,6 +888,24 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   return app;
 }
 
+/**
+ * Records that work happened on a project, which is what the dashboard's Momentum
+ * panel orders by. Every write to a project's children — tasks, checklists, task
+ * tags, dependencies — calls this from inside its own transaction, so the child row
+ * and the parent's activity land together or not at all.
+ *
+ * It deliberately leaves `projects.updated_at` alone. That field means "the project
+ * record itself was edited", every existing consumer reads it that way, and two
+ * distinct questions ("when was this project last edited" and "when was work last
+ * done on it") need two fields to stay answerable. Direct edits to a project stamp
+ * both; rearranging tiles and background Drive provisioning stamp neither.
+ *
+ * Callers pass the stamp they are already writing to the child row so one request
+ * produces one timestamp throughout.
+ */
+function touchProjectActivity(db: Db, projectId: string, stamp: string) {
+  db.prepare('UPDATE projects SET last_activity_at=? WHERE id=?').run(stamp, projectId);
+}
 function parseFolderId(value: string) {
   const match = value.match(/folders\/([a-zA-Z0-9_-]+)/);
   return match?.[1] || value;

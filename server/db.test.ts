@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { applyAdditiveMigrations, createDb, type Db } from './db.ts';
+import { applyAdditiveMigrations, backfillProjectActivity, createDb, type Db } from './db.ts';
 
 /**
  * A database shaped like an earlier release: `projects` and `tasks` are missing
@@ -96,6 +96,7 @@ describe('additive schema migration', () => {
         'drive_folder_url',
         'drive_status',
         'drive_error',
+        'last_activity_at',
       ]),
     );
     expect(columnsOf(db, 'tasks')).toEqual(
@@ -178,6 +179,45 @@ describe('additive schema migration', () => {
     expect(applied).toEqual([]);
     expect(columnsOf(db, 'tasks')).toContain('position');
     expect(rows(db, 'PRAGMA integrity_check')).toEqual([{ integrity_check: 'ok' }]);
+  });
+
+  it('backfills project activity from the updated_at an older row already carried', () => {
+    const file = scratch('legacy.db');
+    seedLegacyDatabase(file);
+    const db = track(createDb(file));
+
+    // Every project keeps the place in Recently updated it had before the migration.
+    expect(rows(db, 'SELECT id, last_activity_at FROM projects')).toEqual([
+      { id: 'p1', last_activity_at: NOW },
+    ]);
+    expect(
+      rows(
+        db,
+        `SELECT COUNT(*) AS unfilled FROM projects
+         WHERE last_activity_at IS NULL OR last_activity_at = ''`,
+      ),
+    ).toEqual([{ unfilled: 0 }]);
+  });
+
+  it('never overwrites an activity stamp that is already there', () => {
+    const file = scratch('legacy.db');
+    seedLegacyDatabase(file);
+    const migrated = track(createDb(file));
+    const later = '2026-08-12T09:30:00.000Z';
+    migrated.prepare('UPDATE projects SET last_activity_at=? WHERE id=?').run(later, 'p1');
+
+    // Idempotent: a boot with nothing left to fill writes nothing and leaves activity alone.
+    expect(backfillProjectActivity(migrated)).toBe(0);
+    expect(rows(migrated, 'SELECT last_activity_at FROM projects')).toEqual([
+      { last_activity_at: later },
+    ]);
+
+    migrated.close();
+    open.pop();
+    const reopened = track(createDb(file));
+    expect(rows(reopened, 'SELECT last_activity_at FROM projects')).toEqual([
+      { last_activity_at: later },
+    ]);
   });
 
   it('keeps foreign key enforcement on through the migration', () => {
