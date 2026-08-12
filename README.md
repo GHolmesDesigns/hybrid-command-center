@@ -156,11 +156,13 @@ npm test
 npm run typecheck
 npm run lint
 npm run build
-npx playwright install chromium  # once per machine
+npx playwright install chrome  # once per machine; the config runs the Chrome channel
 npm run test:e2e
 ```
 
-The tests use an in-memory SQLite database and a mock Drive provider. They never contact or modify a real Google Drive account. Coverage includes client/project/task creation, status movement and ordering, local-time deadline rules, checklist progress, dependency blocking and cycle prevention, hierarchy naming, idempotency, partial failure recovery, and dashboard counts. Playwright exercises the visible create-client → create-project → create-task → checklist workflow; API integration coverage exercises dependency blocking and dashboard updates deterministically.
+Every one of these runs as a blocking gate in `.github/workflows/quality-gates.yml`. `npm run test:e2e` starts and stops its own API and Vite servers, on ports 8788 and 5174, against `data/e2e.db`, which is deleted at the start of every run; it exits on its own whether the suite passes or fails.
+
+The tests use an in-memory SQLite database and a mock Drive provider. They never contact or modify a real Google Drive account. Coverage includes client/project/task creation, status movement and ordering, local-time deadline rules, checklist progress, dependency blocking and cycle prevention, hierarchy naming, idempotency, partial failure recovery, and dashboard counts. Playwright exercises the visible create-client → create-project → create-task → checklist workflow, and the dashboard deadline tiles round trip: clicking one opens the board filtered to exactly the tasks that tile counted. API integration coverage exercises dependency blocking and dashboard updates deterministically.
 
 ## Backup and recovery
 
