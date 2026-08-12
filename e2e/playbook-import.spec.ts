@@ -51,6 +51,22 @@ test('a campaign playbook previews, imports once, and refuses to duplicate itsel
       }[]
     ).filter((task) => task.projectName === projectName);
 
+  /** The activity rows this run wrote, read back through the API the page reads. */
+  const activityFor = async (receiptId: string) =>
+    (await (
+      await page.request.get(
+        `/api/integrations/activity?source=campaign-playbook&correlationId=${receiptId}`,
+      )
+    ).json()) as {
+      operation: string;
+      outcome: string;
+      summary: string;
+      entityCount: number;
+      entities: { type: string; id: string; label: string }[];
+    }[];
+  const newestReceiptId = async () =>
+    ((await (await page.request.get('/api/import/receipts')).json()) as { id: string }[])[0].id;
+
   await page.goto('/import');
   await expect(page.getByRole('heading', { level: 1, name: 'Import' })).toBeVisible();
   await expect(page.getByText('No imports yet')).toBeVisible();
@@ -83,6 +99,23 @@ test('a campaign playbook previews, imports once, and refuses to duplicate itsel
   await page.reload();
   const receipt = page.getByText('7 created · 0 skipped · 0 failed').first();
   await expect(receipt).toBeVisible();
+
+  // C17: the import also left an audit record, on the page and naming what it created by id.
+  const receiptId = await newestReceiptId();
+  const [record] = await activityFor(receiptId);
+  expect(record).toMatchObject({ operation: 'playbook.import', outcome: 'SUCCESS' });
+  // Four addressable records: the client, the project, and the two tasks.
+  expect(record.entityCount).toBe(4);
+  expect(record.entities.map((entity) => entity.label).sort()).toEqual(
+    [clientName, projectName, firstTask, secondTask].sort(),
+  );
+  const [importedClient] = record.entities.filter((entity) => entity.type === 'client');
+  expect(importedClient.id).toBe(client.id);
+  await expect(page.getByText(record.summary).first()).toBeVisible();
+  await receipt.click();
+  await expect(
+    page.getByText(/Recorded in integration activity as Playbook import — succeeded/).first(),
+  ).toBeVisible();
 
   // The same playbook again: every row matches something already here, so nothing is created.
   await page.getByRole('button', { name: /Import a playbook/ }).click();

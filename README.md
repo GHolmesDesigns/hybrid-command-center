@@ -24,6 +24,7 @@ The Import module's versioned XLSX contract, pasted text form, and example campa
 - Collapsible sidebar with **version tracker** and Settings-editable branding — wording, colours, and an optional logo, with **WCAG AA contrast enforced** and every field resettable to the defaults in `shared/branding.ts`
 - **Campaign playbook import** — an .xlsx workbook or pasted tabs creating a client, its projects, their tasks, checklists, and dependencies in one confirmed transaction, previewed first, duplicates skipped and reported, with a persisted receipt and no Drive side effect
 - **Files** — read-only browsing of a project's Drive folder and its provisioned subfolders: paginated listing, type/size/modified for every item, and "Open in Drive" on every row. It uploads, downloads, moves, renames, and deletes nothing, and every Drive failure mode has its own state and next step
+- **Integration activity** — an append-only record of what each integration changed, when, and how it ended, naming the affected clients, projects, and tasks by id, bounded to the most recent 200 rows, credential-scrubbed, and shown on the Import page beside the receipt it belongs to
 - Reserved placeholder for the Calendar module — visible in the sidebar and Settings, not yet implemented
 - Server-only Google OAuth 2.0, encrypted token storage, configurable Drive root, and resumable/idempotent folder creation
 - Responsive desktop/tablet/mobile interface with empty, error, loading, disconnected, and confirmation states
@@ -41,6 +42,8 @@ server/                    Express local API
                            and read-only project folder browsing (browse.ts)
   scripts/                 migration, demo seed, backup, restore, and rehearsal
   backup.ts                SQLite online backup / restore helpers
+  import.ts                campaign playbook import: plan, one transaction, receipt
+  integration-log.ts       append-only integration activity records
   app.ts                   validated HTTP endpoints
   db.ts                    SQLite schema and transaction helper
 shared/                    cross-layer types, workflow constants, branding defaults
@@ -52,7 +55,7 @@ The browser never receives Google tokens. UI code calls only the local API. Driv
 
 ### Data ownership
 
-- **SQLite:** clients, projects, tasks, board-card and project-tile positions, checklists, dependencies, due dates, notes, task tags, project categories, settings, branding (including the sidebar palette and the logo's address, never the image itself), Drive IDs/URLs, provisioning steps, and timestamps.
+- **SQLite:** clients, projects, tasks, board-card and project-tile positions, checklists, dependencies, due dates, notes, task tags, project categories, settings, branding (including the sidebar palette and the logo's address, never the image itself), Drive IDs/URLs, provisioning steps, import receipts, integration activity records, and timestamps.
 - **Google Drive:** every project file. The database stores references, never duplicate file contents. Deleting a project or task in the app does **not** delete Drive folders or files.
 
 Timestamps are stored as UTC ISO strings. Date-only deadlines are interpreted in the browser/server machine's local timezone and become overdue after their local calendar day has passed.
@@ -207,6 +210,8 @@ with a sample workbook in `docs/examples/`.
   and failed, with every reason — listed on the Import page after the modal closes and pruned to
   the most recent 50. A failed write rolls back; its receipt is written outside the transaction
   so the failure stays diagnosable.
+- **Every import is audited.** The same write leaves one `integration_events` row naming the
+  records it created by id — see **Integration activity** below.
 - **No Drive side effect.** Imported clients and projects are stored `DISCONNECTED` and are
   provisioned the next time **Sync to Folder** runs.
 
@@ -215,6 +220,37 @@ XLSX with `node:zlib` and reads the small subset of SpreadsheetML the format all
 macros, encryption, formulas, merged data cells, hidden rows, and Excel date serials. The rules
 themselves are database-free in `server/domain/playbook.ts`, so the same plan builds the preview
 and the write. The migration is additive: an existing database gains one empty table.
+
+### Integration activity
+
+`integration_events` is the audit half of every integration: one row per operation an integration
+ran against local data, so a partial import or a failed sync is diagnosable without opening the
+database. The importer writes it today; a calendar sync will write it next. It is listed on the
+Import page under **Integration activity**, and each import receipt names the record it was
+written with.
+
+- **What a row holds.** The source (`campaign-playbook`, later `signal-campaign` or
+  `google-drive`), the operation (`playbook.import`, `calendar.sync`, `drive.sync`), the outcome
+  — `SUCCESS`, `PARTIAL`, or `FAILURE` — a one-line summary in counts, the ids and labels of the
+  clients, projects, and tasks it affected, the error text when it failed, and the id of the
+  record it explains (`correlation_id`, an import receipt today).
+- **Append-only.** `server/integration-log.ts` has one `INSERT` and the retention `DELETE` in it,
+  and no update. `GET /api/integrations/activity?source=&correlationId=&limit=` is the only route
+  that touches the table; nothing writes it from the browser. Rows come from the services doing
+  the work.
+- **`PARTIAL` is the point.** An operation that writes in steps has to be able to say that some
+  of it landed and name which — that is what makes a half-finished operation diagnosable. An
+  import cannot report it, because it is one transaction: a refused or rolled-back import is a
+  `FAILURE` that left nothing, and its error text says which row or which write refused.
+- **Bounded, and documented as such.** The newest **200 rows** are kept, older ones pruned as new
+  ones are written; one row lists at most **100 affected records**, with the true number kept in
+  `entity_count`. An `error` is scrubbed of anything credential-shaped and truncated to 500
+  characters, so no token, key, or password can reach a table the app treats as readable.
+- **No foreign keys, on purpose.** An event has to stay readable after the client, project, or
+  task it names is deleted, which is exactly the case it exists for — so it stores the label the
+  record carried alongside its id.
+
+The migration is additive: an existing database gains one empty table and two indexes.
 
 ### Drive provisioning behavior
 
@@ -322,11 +358,12 @@ If `.env` sets `DATABASE_PATH`, pass the same path with `--database`. Write back
 - The file browser is read-only by decision, not by omission: it lists and opens, and there is no upload, download, move, rename, or delete in the UI or in the API surface behind it. A project is browsable only at its own Drive folder and the subfolders provisioning recorded for it; anything deeper opens in Drive
 - Calendar views are intentionally not implemented
 - Playbook import is create-only: it never edits or merges into a record that already exists, and there is no in-app undo of an import beyond deleting what it created
+- Integration activity is bounded rather than permanent: the newest 200 records are kept and each lists at most 100 affected records, so it is a diagnostic log, not a compliance archive. Keep a database backup if a longer history matters
 - Checklist reordering is supported by the API/data model; the current UI focuses on add, edit-by-state, and removal
 
 ## Planned extension points
 
-**Calendar:** add `/calendar` and a calendar service that consumes task due dates and project milestones through the existing deadline domain functions. Month, week, and agenda components should remain clients of that service. Optional Google Calendar sync belongs in a separate provider beside Drive, not in task components.
+**Calendar:** add `/calendar` and a calendar service that consumes task due dates and project milestones through the existing deadline domain functions. Month, week, and agenda components should remain clients of that service. Optional Google Calendar sync belongs in a separate provider beside Drive, not in task components. Every sync attempt should record to `integration_events` through `recordIntegrationEvent` — a sync that reads some sources and fails on one is the `PARTIAL` case the log was shaped for.
 
 **Files:** `/files` has shipped read-only — `DriveProvider.listFiles` plus `server/drive/browse.ts` and the `GET /api/projects/:id/files` boundary. Extending it means adding upload/download/move/rename/search methods to the provider and a write path beside `browse.ts`, which stays read-only; a mutation belongs in its own module with its own confirmation flow. Continue storing only Drive IDs and metadata locally. UI components should never import `googleapis`.
 

@@ -44,6 +44,8 @@ import {
   playbookInput,
   previewPlaybook,
 } from './import.ts';
+import { listIntegrationEvents } from './integration-log.ts';
+import { INTEGRATION_EVENT_PAGE_MAX, INTEGRATION_SOURCES } from '../shared/integration-log.ts';
 import {
   APP_VERSION,
   BRANDING_SETTING_KEY,
@@ -1082,6 +1084,27 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     const receipt = getReceipt(db, req.params.id);
     if (!receipt) return res.status(404).json({ error: 'Import receipt not found.' });
     res.json(receipt);
+  });
+
+  /**
+   * The integration activity log, read-only by construction: this is the only route that
+   * touches `integration_events`, and there is no route that writes, edits, or deletes one.
+   * Rows arrive from the services that do the work — the importer today, a calendar sync
+   * later — never from the browser.
+   */
+  app.get('/api/integrations/activity', (req, res, next) => {
+    try {
+      const query = z
+        .object({
+          source: z.enum(INTEGRATION_SOURCES).optional(),
+          correlationId: z.string().trim().max(64).optional(),
+          limit: z.coerce.number().int().min(1).max(INTEGRATION_EVENT_PAGE_MAX).optional(),
+        })
+        .parse(req.query);
+      res.json(listIntegrationEvents(db, query));
+    } catch (error) {
+      next(error);
+    }
   });
 
   app.post('/api/drive/sync', async (req, res, next) => {

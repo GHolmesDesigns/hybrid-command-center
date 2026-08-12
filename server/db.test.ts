@@ -146,8 +146,12 @@ describe('additive schema migration', () => {
         'project_categories',
         'settings',
         'drive_steps',
+        'import_receipts',
+        'integration_events',
       ]),
     );
+    // The integration activity log arrives empty: a migration invents no history.
+    expect(rows(db, 'SELECT COUNT(*) AS total FROM integration_events')).toEqual([{ total: 0 }]);
   });
 
   it('opens an existing database with every project intact and uncategorized', () => {

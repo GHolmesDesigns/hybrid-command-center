@@ -1,5 +1,6 @@
 import {
   MemoryRouter,
+  activityEvent,
   branding,
   describe,
   emptyCounts,
@@ -207,6 +208,106 @@ describe('Import module', () => {
     expect(within(dialog).getByText('name: needs at least 2 characters.')).toBeVisible();
     expect(within(dialog).queryByText(/^Imported /)).toBeNull();
     expect(within(dialog).getByRole('button', { name: /Fix 1 row first/ })).toBeDisabled();
+  });
+
+  it('shows the integration activity behind an import, with the records it left behind', async () => {
+    testState.importReceiptsPayload = [receipt({ filename: 'spring.xlsx' })];
+    testState.integrationActivityPayload = [
+      activityEvent({
+        entities: [
+          { type: 'client', id: 'client-77', label: 'Acme Studio' },
+          { type: 'project', id: 'project-88', label: 'Spring Campaign' },
+        ],
+        entityCount: 2,
+      }),
+    ];
+    render(
+      <MemoryRouter initialEntries={['/import']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    const summary = await screen.findByText(/Imported 4 records from a pasted playbook/);
+    const panel = summary.closest('section')!;
+    expect(
+      within(panel).getByRole('heading', { level: 2, name: 'Integration activity' }),
+    ).toBeVisible();
+    expect(within(panel).getByText('Succeeded')).toBeVisible();
+    expect(within(panel).getByText('Campaign playbook')).toBeVisible();
+    // The ids are the diagnosis, so they are on the page rather than only in the database.
+    const affected = within(panel).getByText('2 records affected');
+    fireEvent.click(affected);
+    expect(within(panel).getByText('client-77')).toBeVisible();
+    expect(within(panel).getByText('project-88')).toBeVisible();
+
+    // And the receipt says which audit record it was written with.
+    fireEvent.click(screen.getByText('spring.xlsx'));
+    expect(
+      screen.getByText(/Recorded in integration activity as Playbook import — succeeded/),
+    ).toBeVisible();
+  });
+
+  it('reports a failed operation in the log with the reason, not as an empty success', async () => {
+    testState.integrationActivityPayload = [
+      activityEvent({
+        outcome: 'FAILURE',
+        summary: 'Failed part way through a workbook; the import rolled back.',
+        entities: [],
+        entityCount: 0,
+        error: '1 row failed validation. First: Tasks · row 2 · H — that is not a real date.',
+      }),
+    ];
+    render(
+      <MemoryRouter initialEntries={['/import']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('Failed')).toBeVisible();
+    expect(screen.getByText(/1 row failed validation/)).toBeVisible();
+    // Nothing landed, so there is no record list to open.
+    expect(screen.queryByText(/records affected/)).toBeNull();
+  });
+
+  it('keeps the receipts readable when the activity log itself cannot be read', async () => {
+    testState.importReceiptsPayload = [receipt({ filename: 'spring.xlsx' })];
+    testState.integrationActivityError = 'Integration activity is temporarily unavailable.';
+    render(
+      <MemoryRouter initialEntries={['/import']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('spring.xlsx')).toBeVisible();
+    expect(screen.getByText('Activity unavailable')).toBeVisible();
+    expect(screen.getByText('Integration activity is temporarily unavailable.')).toBeVisible();
+  });
+
+  it('records the import that just ran, without a reload', async () => {
+    testState.importPreviewPayload = preview();
+    testState.importCommitPayload = {
+      status: 201,
+      body: { receipt: receipt({ filename: 'spring.xlsx' }), preview: preview() },
+    };
+    const dialog = await openImportModal();
+    await pasteAndCheck(dialog);
+    fireEvent.click(await within(dialog).findByRole('button', { name: /Import 4 records/ }));
+    expect(await within(dialog).findByText('Imported 4 records')).toBeVisible();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Done' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    expect(await screen.findByText(/Imported 4 records from a pasted playbook/)).toBeVisible();
+    expect(screen.getByText('4 records affected')).toBeVisible();
+  });
+
+  it('says so plainly when no integration has done anything yet', async () => {
+    render(
+      <MemoryRouter initialEntries={['/import']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('No integration activity yet')).toBeVisible();
   });
 
   it('keeps a past import readable after the modal is gone', async () => {

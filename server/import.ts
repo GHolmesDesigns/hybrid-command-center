@@ -10,7 +10,9 @@
  *   preview, against the workspace as it stands at the moment of the write.
  * - **One transaction.** Every client, project, task, checklist item, and dependency of an
  *   import lands together or not at all. The receipt is written outside that transaction, on
- *   purpose: a rolled-back import still has to leave the record that says so.
+ *   purpose: a rolled-back import still has to leave the record that says so. The integration
+ *   activity event is written with the receipt, inside one transaction of its own, so a receipt
+ *   never exists without the audit row that names the records it left behind.
  *
  * No Drive call happens here. Imported clients and projects are stored `DISCONNECTED`, which
  * is what `POST /api/drive/sync` later provisions from, so importing a playbook never creates,
@@ -39,6 +41,7 @@ import {
   WorkbookError,
   type Workbook,
 } from './domain/workbook.ts';
+import { recordIntegrationEvent } from './integration-log.ts';
 import {
   IMPORT_RECEIPT_LIMIT,
   PLAYBOOK_SOURCE,
@@ -50,6 +53,7 @@ import {
   type PlaybookInputKind,
   type PlaybookPreview,
 } from '../shared/playbook.ts';
+import type { IntegrationEntity, IntegrationOutcome } from '../shared/integration-log.ts';
 import { TASK_CHECKLIST_TEMPLATES } from '../shared/types.ts';
 
 const id = () => crypto.randomUUID();
@@ -174,18 +178,28 @@ export function commitPlaybook(
   if (!planIsClean(plan))
     return {
       preview,
-      receipt: writeReceipt(db, parsed, 'REJECTED', preview, emptyCounts()),
+      receipt: writeReceipt(db, parsed, 'REJECTED', preview, emptyCounts(), []),
     };
   try {
-    const created = transaction(db, () => applyPlan(db, plan));
-    return { preview, receipt: writeReceipt(db, parsed, 'COMMITTED', preview, created) };
+    const applied = transaction(db, () => applyPlan(db, plan));
+    return {
+      preview,
+      receipt: writeReceipt(db, parsed, 'COMMITTED', preview, applied.counts, applied.entities),
+    };
   } catch (error) {
     // The transaction rolled back, so nothing this import would have created is in the
     // database. The receipt is written afterwards, outside it, or it would roll back too.
     const message = error instanceof Error ? error.message : 'Unexpected error';
-    writeReceipt(db, parsed, 'FAILED', preview, emptyCounts(), message);
+    writeReceipt(db, parsed, 'FAILED', preview, emptyCounts(), [], message);
     throw error;
   }
+}
+
+/** What one committed plan wrote: the counts for the receipt, the ids for the activity log. */
+interface AppliedPlan {
+  counts: PlaybookCounts;
+  /** Every client, project, and task the import created, in hierarchy order. */
+  entities: IntegrationEntity[];
 }
 
 /**
@@ -196,9 +210,11 @@ export function commitPlaybook(
  * tasks, checklist items, dependencies. Keys the plan resolved to records that already exist
  * contribute no insert and are simply the id a child attaches to.
  */
-function applyPlan(db: Db, plan: PlaybookPlan): PlaybookCounts {
+function applyPlan(db: Db, plan: PlaybookPlan): AppliedPlan {
   const stamp = now();
   const counts = emptyCounts();
+  /** The records this import created, named as the activity log records them. */
+  const entities: IntegrationEntity[] = [];
   const clientIds = new Map<string, string>();
   const projectIds = new Map<string, string>();
   const taskIds = new Map<string, string>();
@@ -235,6 +251,7 @@ function applyPlan(db: Db, plan: PlaybookPlan): PlaybookCounts {
       stamp,
     );
     clientIds.set(client.key, clientId);
+    entities.push({ type: 'client', id: clientId, label: client.name });
     counts.Clients++;
   }
 
@@ -260,6 +277,7 @@ function applyPlan(db: Db, plan: PlaybookPlan): PlaybookCounts {
       stamp,
     );
     projectIds.set(project.key, projectId);
+    entities.push({ type: 'project', id: projectId, label: project.name });
     counts.Projects++;
   }
 
@@ -294,6 +312,7 @@ function applyPlan(db: Db, plan: PlaybookPlan): PlaybookCounts {
       stamp,
     );
     taskIds.set(task.key, taskId);
+    entities.push({ type: 'task', id: taskId, label: task.title });
     touched.add(projectId);
     counts.Tasks++;
     // The type's default checklist seeds only a task the workbook left without one, so an
@@ -335,7 +354,7 @@ function applyPlan(db: Db, plan: PlaybookPlan): PlaybookCounts {
   }
 
   for (const projectId of touched) touchProjectActivity(db, projectId, stamp);
-  return counts;
+  return { counts, entities };
 }
 
 // ---------------------------------------------------------------------------
@@ -358,8 +377,9 @@ interface ReceiptRow {
 }
 
 /**
- * Records what an import did. Written outside the import transaction, so a failure that
- * rolled the import back still leaves the row that explains it.
+ * Records what an import did — as a receipt, and as one row in the integration activity log.
+ * Written outside the import transaction, so a failure that rolled the import back still
+ * leaves the rows that explain it.
  *
  * `detail` holds the preview's own lists — what was created, what was skipped and why, and
  * every validation issue — as JSON, because a receipt is read as a whole and never queried
@@ -372,6 +392,8 @@ function writeReceipt(
   outcome: ImportOutcome,
   preview: PlaybookPreview,
   created: PlaybookCounts,
+  /** The records the import created. Empty for anything but a committed import. */
+  entities: readonly IntegrationEntity[],
   error?: string,
 ): ImportReceipt {
   const receipt: ImportReceipt = {
@@ -422,8 +444,57 @@ function writeReceipt(
          SELECT id FROM import_receipts ORDER BY created_at DESC, id DESC LIMIT ?
        )`,
     ).run(IMPORT_RECEIPT_LIMIT);
+    // Inside the same transaction as the receipt: an import that left a receipt always left
+    // the audit row that names what it wrote, and the reverse.
+    const why = eventError(receipt);
+    recordIntegrationEvent(db, {
+      source: PLAYBOOK_SOURCE,
+      operation: 'playbook.import',
+      outcome: EVENT_OUTCOME[outcome],
+      summary: eventSummary(receipt),
+      entities,
+      correlationId: receipt.id,
+      ...(why ? { error: why } : {}),
+    });
   });
   return receipt;
+}
+
+/**
+ * An import is one transaction, so it cannot end up `PARTIAL`: it committed, or the workspace
+ * is exactly as it was. A refused playbook and a rolled-back write are both failures — nothing
+ * landed either way — and what separates them is the event's own error text.
+ */
+const EVENT_OUTCOME: Record<ImportOutcome, IntegrationOutcome> = {
+  COMMITTED: 'SUCCESS',
+  REJECTED: 'FAILURE',
+  FAILED: 'FAILURE',
+};
+
+/** The log's one-line answer to "what did that import do", in the receipt's own numbers. */
+function eventSummary(receipt: ImportReceipt): string {
+  const what =
+    receipt.filename ?? (receipt.inputKind === 'text' ? 'a pasted playbook' : 'a workbook');
+  if (receipt.outcome === 'COMMITTED')
+    return `Imported ${receipt.createdCount} record${receipt.createdCount === 1 ? '' : 's'} from ${what}, skipping ${receipt.skippedCount} already here.`;
+  if (receipt.outcome === 'REJECTED')
+    return `Refused ${what}: ${receipt.failedCount} row${receipt.failedCount === 1 ? '' : 's'} failed validation, so nothing was written.`;
+  return `Failed part way through ${what}; the import rolled back and nothing was written.`;
+}
+
+/**
+ * Why it failed, in enough detail to act on without opening the receipt: the write's own error
+ * for a rolled-back import, and the first validation issue for a refused one.
+ */
+function eventError(receipt: ImportReceipt): string | undefined {
+  if (receipt.error) return receipt.error;
+  if (receipt.outcome !== 'REJECTED') return undefined;
+  const [first] = receipt.issues;
+  if (!first) return 'The playbook was refused with no reason recorded.';
+  const where = [first.sheet, first.row ? `row ${first.row}` : '', first.column ?? '']
+    .filter(Boolean)
+    .join(' · ');
+  return `${receipt.failedCount} row${receipt.failedCount === 1 ? '' : 's'} failed validation. First: ${where} — ${first.message}`;
 }
 
 function toReceipt(row: ReceiptRow): ImportReceipt {

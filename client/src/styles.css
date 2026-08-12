@@ -2113,9 +2113,14 @@ button.tag-chip.toggle.active {
   align-items: start;
 }
 .import-about h2,
-.import-receipts h2 {
+.import-receipts h2,
+.import-activity h2 {
   font: 700 17px Manrope;
   margin: 0 0 10px;
+}
+/* The activity log is a wide list of one-line records, so it spans both columns. */
+.import-activity {
+  grid-column: 1 / -1;
 }
 .import-about ul {
   margin: 0 0 12px;
@@ -2302,6 +2307,65 @@ button.tag-chip.toggle.active {
 .receipt .import-counts,
 .receipt .import-list {
   margin-top: 12px;
+}
+.receipt-audit {
+  margin: 12px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+/* Integration activity: the append-only log, shown where the operations live. */
+.activity-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.activity {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.activity-head {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 6px 12px;
+  align-items: center;
+}
+.activity-head time {
+  font-size: 11px;
+  color: var(--muted);
+}
+.activity-what {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.activity-summary {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.activity .import-list {
+  margin-top: 10px;
+}
+.activity code {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  font-size: 11px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.receipt-badge.success {
+  background: #eaf5ef;
+  color: #245743;
+}
+.receipt-badge.partial {
+  background: #fdf3e3;
+  color: #7a4f10;
+}
+.receipt-badge.failure {
+  background: #fdecea;
+  color: var(--red);
 }
 /* Files: the read-only Drive listing. */
 .files-note {

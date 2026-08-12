@@ -7,6 +7,7 @@
 - `server/drive/`: all Drive and OAuth behavior behind `DriveProvider`. `browse.ts` is the
   read-only half and must stay that way; writes live in `service.ts`.
 - `server/import.ts`: campaign playbook import — workspace snapshot, transactional commit, receipts.
+- `server/integration-log.ts`: the append-only integration activity records every integration writes.
 - `server/app.ts`: validated HTTP boundary; keep data writes transaction-safe.
 - `server/db.ts`: local SQLite schema and indexes.
 - `shared/`: stable cross-layer types and workflow constants.
@@ -36,6 +37,7 @@
 - Labels are normalized joins, never packed columns: tags label tasks, categories label projects, and both match names case-insensitively through one shared rule in `shared/types.ts`. Renaming a label is one write; deleting one detaches it and never deletes what it was attached to.
 - Sidebar branding defaults live in `shared/branding.ts`; runtime overrides are stored in the `settings` table under key `branding`. Its colour rules (`brandingIssues`, `sidebarPalette`, `shared/contrast.ts`) are enforced by the API and the form from the same functions — never validate branding on one side only. A logo is an `https:` reference; this app stores no user files.
 - An import previews before it writes, plans from the same code twice — once for the preview, once against the workspace as it stands at the commit — and writes the whole hierarchy in one transaction. It skips a record the workspace already has, reports the rule that matched, and never edits one. The format is specified in `docs/campaign-playbook-import-format.md`; changing what the importer does means changing that document in the same branch.
+- Every integration operation that changes local data records one `integration_events` row through `recordIntegrationEvent`, in the same transaction as whatever else it persists about the operation. The log is append-only: that module holds the only `INSERT` and the only `DELETE` — retention, keeping the newest 200 rows — and nothing updates a row, so a new integration adds a source and an operation to `shared/integration-log.ts` rather than a column or a write path. Report `PARTIAL` whenever some of an operation landed and some did not, and name what landed; an all-or-nothing operation reports `SUCCESS` or `FAILURE`. Never write a credential to it: pass structured fields, not a dump of a request or a provider response, and let `redactSecrets` scrub the one free-text field an external failure reaches.
 - The Files module reads and nothing else. It browses a project only at its own Drive folder and the subfolders `drive_steps` recorded for it, matched by ID; any other folder ID is refused rather than fetched. Adding upload, download, move, rename, or delete means a new module beside `browse.ts` with its own confirmation flow, not a method on the browsing path — and it changes what `/files` promises, so the README and the user manual change in the same branch.
 - Pair visual status colors with text or icons and preserve visible keyboard focus.
 - Prefer small service/provider boundaries over generic abstractions.

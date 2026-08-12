@@ -62,6 +62,16 @@ CREATE TABLE IF NOT EXISTS import_receipts (
   skipped_count INTEGER NOT NULL DEFAULT 0, failed_count INTEGER NOT NULL DEFAULT 0,
   detail TEXT NOT NULL, error TEXT, created_at TEXT NOT NULL
 );
+-- The integration activity log. Append-only from the app's perspective: one INSERT in
+-- server/integration-log.ts writes it, retention deletes the oldest rows, and nothing updates
+-- one. It carries no foreign key to the records it names on purpose -- an event has to stay
+-- readable after the client, project, or task it mentions is deleted, which is exactly the
+-- case the log exists for.
+CREATE TABLE IF NOT EXISTS integration_events (
+  id TEXT PRIMARY KEY, source TEXT NOT NULL, operation TEXT NOT NULL, outcome TEXT NOT NULL,
+  summary TEXT NOT NULL, entities TEXT NOT NULL DEFAULT '[]', entity_count INTEGER NOT NULL DEFAULT 0,
+  correlation_id TEXT, error TEXT, created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS drive_steps (
   entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, step_key TEXT NOT NULL, folder_id TEXT NOT NULL,
   folder_url TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(entity_type, entity_id, step_key)
@@ -81,6 +91,8 @@ CREATE INDEX IF NOT EXISTS idx_dependencies_task ON task_dependencies(task_id);
 CREATE INDEX IF NOT EXISTS idx_task_tags_tag ON task_tags(tag_id);
 CREATE INDEX IF NOT EXISTS idx_project_categories_category ON project_categories(category_id);
 CREATE INDEX IF NOT EXISTS idx_import_receipts_created ON import_receipts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_integration_events_created ON integration_events(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_integration_events_correlation ON integration_events(correlation_id);
 `;
 
 const schema = `${tableSchema}${indexSchema}`;
