@@ -24,7 +24,14 @@ export function listProjects(db: Db) {
     ORDER BY p.position, CASE p.status WHEN 'ACTIVE' THEN 0 ELSE 1 END, p.updated_at DESC`,
       )
       .all() as any[]
-  ).map(camel);
+  ).map((row) => ({
+    ...camel(row),
+    // `last_activity_at` is nullable in SQLite because an existing table cannot take a
+    // NOT NULL column, and `backfillProjectActivity` fills it on boot. Falling back here
+    // too keeps `Project.lastActivityAt` a string for every consumer, so a row written
+    // by anything that missed the column can never crash a sort or a date format.
+    lastActivityAt: row.last_activity_at || row.updated_at,
+  }));
 }
 export function listTags(db: Db): Tag[] {
   return (

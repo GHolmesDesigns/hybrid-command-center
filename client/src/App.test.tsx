@@ -43,6 +43,7 @@ const project = (
   driveStatus: 'DISCONNECTED',
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
+  lastActivityAt: '2026-01-01T00:00:00.000Z',
   ...overrides,
 });
 
@@ -79,10 +80,11 @@ let projectsPayload = projects;
 let clientsPayload: Client[] = [];
 let tasksPayload: Task[] = [];
 let tagsPayload: Tag[] = [];
+let dashboardPayload: DashboardData = emptyDashboard;
 
 /** Serves the six endpoints App() requests on mount. */
 const payloadFor = (url: string) => {
-  if (url.endsWith('/api/dashboard')) return emptyDashboard;
+  if (url.endsWith('/api/dashboard')) return dashboardPayload;
   if (url.endsWith('/api/settings/branding')) return { branding };
   if (url.endsWith('/api/projects')) return projectsPayload;
   if (url.endsWith('/api/clients')) return clientsPayload;
@@ -157,6 +159,7 @@ beforeEach(() => {
   clientsPayload = [];
   tasksPayload = [];
   tagsPayload = [];
+  dashboardPayload = emptyDashboard;
   requests.length = 0;
   vi.stubGlobal(
     'fetch',
@@ -201,6 +204,32 @@ describe('App', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Project Status' })).toBeVisible();
     expect(screen.queryByText(/kanban/i)).toBeNull();
+  });
+});
+
+describe('Dashboard momentum panel', () => {
+  // Midday UTC, so the rendered day is the same one either side of the date line.
+  const EDITED = '2026-01-05T12:00:00.000Z';
+  const WORKED = '2026-03-09T12:00:00.000Z';
+
+  it('dates each project by its activity, not by the last edit to its record', async () => {
+    dashboardPayload = {
+      ...emptyDashboard,
+      recentProjects: [
+        project('p1', 'Site refresh', 'ACTIVE', { updatedAt: EDITED, lastActivityAt: WORKED }),
+      ],
+    };
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    const panel = (
+      await screen.findByRole('heading', { level: 2, name: 'Recently updated' })
+    ).closest('section')!;
+    expect(panel).toHaveTextContent('Mar 9, 2026');
+    expect(panel).not.toHaveTextContent('Jan 5, 2026');
   });
 });
 

@@ -610,7 +610,7 @@ function Dashboard({
                 <div>
                   <strong>{p.name}</strong>
                   <span>
-                    {p.clientName} · {formatDate(p.updatedAt)}
+                    {p.clientName} · {formatDate(p.lastActivityAt)}
                   </span>
                 </div>
                 <ChevronRight />

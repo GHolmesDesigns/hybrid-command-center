@@ -370,6 +370,8 @@ Use Dashboard as the start of each working session. It shows:
 
 The overdue area is intentionally prominent. Select a listed task to open its details, or select a recent project to open the project page.
 
+Recently updated follows the work, not the paperwork. Anything you do inside a project moves it to the top of that list: adding, editing, completing, or deleting a task, ticking a checklist item, or changing a task's tags or dependencies. The date shown beside each project is when that work last happened. Rearranging project tiles is not work, so dragging them changes nothing about the order of this list.
+
 Completed tasks are never counted as overdue.
 
 ### Clients
