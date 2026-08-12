@@ -152,6 +152,9 @@ export function App() {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null),
     [loading, setLoading] = useState(true),
     [modal, setModal] = useState<Modal>(null);
+  const [dashboardRefreshedAt, setDashboardRefreshedAt] = useState<number | null>(null),
+    [dashboardRefreshError, setDashboardRefreshError] = useState<string | null>(null),
+    [refreshing, setRefreshing] = useState(false);
   const [notice, setNotice] = useState<{ tone: 'success' | 'error'; text: string } | null>(null),
     [navOpen, setNavOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === '1');
@@ -161,6 +164,7 @@ export function App() {
   const [branding, setBranding] = useState<Branding>(DEFAULT_BRANDING);
   const location = useLocation();
   const refresh = useCallback(async () => {
+    setRefreshing(true);
     try {
       const [c, p, t, d, b, g] = await Promise.all([
         api<Client[]>('/clients'),
@@ -174,11 +178,16 @@ export function App() {
       setProjects(p);
       setTasks(t);
       setDashboard(d);
+      setDashboardRefreshedAt(Date.now());
+      setDashboardRefreshError(null);
       setBranding(b.branding);
       setTags(g);
     } catch (e) {
-      setNotice({ tone: 'error', text: (e as Error).message });
+      const message = (e as Error).message;
+      setDashboardRefreshError(message);
+      setNotice({ tone: 'error', text: message });
     } finally {
+      setRefreshing(false);
       setLoading(false);
     }
   }, []);
@@ -311,6 +320,9 @@ export function App() {
               element={
                 <Dashboard
                   dashboard={dashboard}
+                  refreshedAt={dashboardRefreshedAt}
+                  refreshError={dashboardRefreshError}
+                  refreshing={refreshing}
                   open={setModal}
                   defaultProject={defaultProject}
                   refresh={refresh}
@@ -469,12 +481,18 @@ type DeadlineBucket = 'overdue' | 'today' | 'week';
 
 function Dashboard({
   dashboard,
+  refreshedAt,
+  refreshError,
+  refreshing,
   open,
   defaultProject,
   refresh,
   flash,
 }: {
   dashboard: DashboardData | null;
+  refreshedAt: number | null;
+  refreshError: string | null;
+  refreshing: boolean;
   open: (m: Modal) => void;
   defaultProject?: string;
   refresh: () => Promise<void>;
@@ -483,8 +501,49 @@ function Dashboard({
   const nav = useNavigate();
   const [syncing, setSyncing] = useState(false);
   const [bucket, setBucket] = useState<DeadlineBucket>('overdue');
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const dataAge = refreshedAt === null ? null : formatDataAge(now - refreshedAt);
+  const refreshStatus = (
+    <div
+      className={`refresh-status ${refreshError ? 'has-error' : ''}`}
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      <div>
+        {refreshError ? <ShieldAlert aria-hidden="true" /> : <RefreshCw aria-hidden="true" />}
+        <span>
+          {refreshError
+            ? dataAge
+              ? `Refresh failed. Showing data from ${dataAge}.`
+              : 'Refresh failed. Dashboard data is unavailable.'
+            : refreshing
+              ? 'Refreshing dashboard…'
+              : dataAge
+                ? `Last refreshed ${dataAge}`
+                : 'Dashboard has not refreshed yet.'}
+        </span>
+      </div>
+      {refreshError && <span className="refresh-error-detail">{refreshError}</span>}
+      {refreshError && (
+        <button className="secondary" onClick={refresh} disabled={refreshing}>
+          <RefreshCw className={refreshing ? 'spin' : undefined} aria-hidden="true" />
+          {refreshing ? 'Retrying…' : 'Retry'}
+        </button>
+      )}
+    </div>
+  );
   if (!dashboard)
-    return <Empty title="Dashboard unavailable" body="Refresh the page to try again." />;
+    return (
+      <>
+        {refreshStatus}
+        <Empty title="Dashboard unavailable" body="Retry when you are ready." />
+      </>
+    );
   const plural = (n: number) => (n === 1 ? '' : 's');
   // Three deadline states, each with its own headline, list, and empty state. Overdue leads
   // because it is the one that costs something; the other two are a click away rather than
@@ -575,6 +634,7 @@ function Dashboard({
           </div>
         }
       />
+      {refreshStatus}
       <section className="metric-grid">
         {cards.map(([label, value, icon, to]) => (
           // A real anchor, so the browser's own click, Enter, middle-click, and
@@ -3258,6 +3318,14 @@ const formatDate = (value: string) => {
   } catch {
     return value;
   }
+};
+const formatDataAge = (elapsedMs: number) => {
+  const minutes = Math.max(0, Math.floor(elapsedMs / 60_000));
+  if (minutes < 1) return 'just now';
+  if (minutes === 1) return '1 minute ago';
+  if (minutes < 60) return `${minutes} minutes ago`;
+  const hours = Math.floor(minutes / 60);
+  return hours === 1 ? '1 hour ago' : `${hours} hours ago`;
 };
 const dateInput = (value?: string) => value?.slice(0, 10) || '';
 const initials = (name: string) =>
