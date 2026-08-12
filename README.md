@@ -17,7 +17,7 @@ The future Import module's versioned XLSX contract and example campaigns are doc
 - Projects view with search, client filter, and seven sort modes, including a **Custom order** where tiles are rearranged by drag or keyboard and the arrangement persists
 - Five-stage **Status** board with persistent ordering, drag-and-drop, filters, tag filtering, title/tag search, and keyboard status controls
 - Shared **task tags** created straight from a task, reused case-insensitively, shown as named chips on cards, and deleted from Settings with an affected-task count
-- Task checklists, dependency blocking, circular-dependency prevention, **rename**, **record-only delete**, and explicit completion override
+- Task checklists, dependency blocking, circular-dependency prevention, **rename**, inline description/dates/notes, **record-only delete**, and explicit completion override
 - Optional **task type** for design-studio work — blog post, video, social post, graphics, scheduling, QA/brand pass, admin, or other — shown on the card and in the task detail
 - **Edit details** on a task, opening the full create/edit form from the task detail view
 - Collapsible sidebar with **version tracker** and Settings-editable branding (defaults also in `shared/branding.ts`)

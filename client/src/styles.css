@@ -1653,12 +1653,51 @@ button.tag-chip.toggle.active {
   line-height: 1.55;
   font-size: 13px;
 }
-.detail-chips {
+.inline-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 8px 0 0;
+}
+.inline-field p {
+  flex: 1;
+  margin: 0;
+  color: #58605c;
+  line-height: 1.55;
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+.inline-empty {
+  margin-top: 8px;
+  font-size: 13px;
+}
+.inline-edit {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+.inline-edit textarea {
+  width: 100%;
+  min-height: 88px;
+  border: 1px solid #d7d9d4;
+  border-radius: 8px;
+  padding: 10px;
+  font: 13px/1.5 inherit;
+  resize: vertical;
+}
+.inline-edit-actions {
   display: flex;
   gap: 8px;
-  margin-top: 13px;
 }
-.detail-chips > span {
+.detail-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 13px;
+  align-items: center;
+}
+.detail-chips > span,
+.chip-toggle {
   display: flex;
   align-items: center;
   gap: 5px;
@@ -1667,8 +1706,43 @@ button.tag-chip.toggle.active {
   border-radius: 7px;
   font-size: 10px;
 }
-.detail-chips svg {
+.chip-toggle {
+  border: 1px solid transparent;
+  color: var(--ink);
+  font-weight: 600;
+}
+.chip-toggle:hover {
+  filter: none;
+  background: #e8e9e4;
+}
+.chip-toggle.muted {
+  color: var(--muted);
+}
+.detail-chips svg,
+.chip-toggle svg {
   width: 13px;
+  height: 13px;
+}
+.chip-edit-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+}
+.chip-edit-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.chip-edit-form input[type='date'] {
+  border: 1px solid #d7d9d4;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--ink);
 }
 .task-detail section {
   border-top: 1px solid #eee;
