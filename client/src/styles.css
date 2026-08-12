@@ -383,26 +383,67 @@ button svg,
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   padding: 0 34px;
   position: sticky;
   top: 0;
   z-index: 20;
 }
 .crumb {
-  display: flex;
-  gap: 8px;
-  align-items: center;
+  flex: 1;
+  min-width: 0;
   font-size: 13px;
   color: var(--muted);
 }
+.crumb ol {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+.crumb li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 14rem;
+  flex: 0 1 auto;
+}
+.crumb li:last-child {
+  max-width: 16rem;
+}
 .crumb svg {
   width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
-.crumb strong {
+.crumb a,
+.crumb [aria-current='page'] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.crumb a {
+  color: var(--muted);
+  text-decoration: none;
+}
+.crumb a:hover {
   color: var(--ink);
+  text-decoration: underline;
+}
+.crumb [aria-current='page'] {
+  color: var(--ink);
+  font-weight: 700;
 }
 .top-action {
   padding: 9px 13px;
+  flex-shrink: 0;
 }
 .page-wrap {
   max-width: 1500px;
@@ -1927,6 +1968,9 @@ button.tag-chip.toggle.active {
   .menu-btn {
     display: inline-flex;
   }
+  .menu-btn {
+    flex-shrink: 0;
+  }
   .mobile-close {
     margin-left: auto;
     color: #fff;
@@ -1940,10 +1984,13 @@ button.tag-chip.toggle.active {
   }
   .topbar {
     padding: 0 18px;
+    flex-wrap: nowrap;
   }
-  .crumb span,
-  .crumb svg {
-    display: none;
+  .crumb li {
+    max-width: 8rem;
+  }
+  .crumb li:last-child {
+    max-width: 10rem;
   }
   .page-wrap {
     padding: 26px 18px 60px;
@@ -2015,6 +2062,12 @@ button.tag-chip.toggle.active {
   }
 }
 @media (max-width: 460px) {
+  .crumb li {
+    max-width: 6.5rem;
+  }
+  .crumb li:last-child {
+    max-width: 8rem;
+  }
   .top-action {
     font-size: 0;
   }
