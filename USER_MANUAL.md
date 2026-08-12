@@ -368,6 +368,8 @@ Use Dashboard as the start of each working session. It shows:
 - Recently updated projects
 - Quick actions for common work
 
+The four counts at the top are links. Select **Active clients** or **Active projects** to open that list, or **Due today** or **Next 7 days** to open the Status board filtered to the tasks behind the number. They work with the keyboard as well as the mouse: Tab moves between them, Enter opens the one in focus.
+
 The **Deadlines** panel covers all three deadline states. It opens on Overdue, which is intentionally prominent, and the buttons beside it switch to Due today or Next 7 days; each state has its own list and its own message when nothing is in it. **Open board** takes you to the Status board filtered to whichever state is on screen. Select a listed task to open its details, or select a recent project to open the project page.
 
 Next 7 days counts today as one of the seven, so a task due today appears under both Due today and Next 7 days. The counts on the dashboard and the tasks the board shows for the same filter are calculated by one shared rule, so they always match.
