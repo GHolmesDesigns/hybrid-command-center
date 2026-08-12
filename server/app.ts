@@ -34,8 +34,11 @@ import {
   APP_VERSION,
   BRANDING_SETTING_KEY,
   DEFAULT_BRANDING,
+  LOGO_URL_MAX,
+  brandingIssues,
   type Branding,
 } from '../shared/branding.ts';
+import { normalizeHex } from '../shared/contrast.ts';
 import {
   TASK_CHECKLIST_TEMPLATES,
   TASK_STATUSES,
@@ -59,7 +62,11 @@ const productionContentSecurityPolicy = {
     formAction: ["'self'"],
     frameAncestors: ["'none'"],
     frameSrc: ["'none'"],
-    imgSrc: ["'self'", 'data:'],
+    // `https:` is what makes a Settings-supplied logo load. Branding references a logo by
+    // address rather than storing an uploaded file (README, "Sidebar branding"), so the
+    // policy has to permit the host the user names, and the host is not known in advance.
+    // Only images widen: no other directive accepts a remote origin.
+    imgSrc: ["'self'", 'data:', 'https:'],
     manifestSrc: ["'self'"],
     mediaSrc: ["'self'"],
     objectSrc: ["'none'"],
@@ -175,6 +182,44 @@ const taskInput = z.object({
 const taskPatch = z
   .object({ ...taskFields, status: z.enum(TASK_STATUSES), priority: z.enum(PRIORITIES) })
   .partial();
+
+/**
+ * A `#rrggbb` colour, accepting `#RGB` and uppercase on the way in and storing one shape.
+ * Colours and logo fields carry defaults because this is a PUT of the whole resource: a
+ * payload that names only the text fields — the shape every client sent before colours
+ * existed — replaces the branding with the default palette rather than being refused.
+ */
+const hexColor = (fallback: string) =>
+  z
+    .string()
+    .trim()
+    .default(fallback)
+    .transform((value) => normalizeHex(value) ?? value)
+    .pipe(z.string().regex(/^#[0-9a-f]{6}$/, 'Expected a hex colour such as #18201d'));
+
+/**
+ * Contrast is enforced here, not only in the form, so no client can store a sidebar its
+ * own text cannot be read against (issue #71). `brandingIssues()` is the same function the
+ * Settings form warns with, so the two cannot disagree about what is allowed.
+ */
+const brandingInput = z
+  .object({
+    mark: z.string().trim().min(1).max(4),
+    title: z.string().trim().min(1).max(40),
+    subtitle: z.string().trim().min(1).max(60),
+    tagline: z.string().trim().min(1).max(80),
+    background: hexColor(DEFAULT_BRANDING.background),
+    foreground: hexColor(DEFAULT_BRANDING.foreground),
+    accent: hexColor(DEFAULT_BRANDING.accent),
+    logoUrl: z.string().trim().max(LOGO_URL_MAX).default(''),
+    logoAlt: z.string().trim().max(120).default(''),
+  })
+  // Alt text describes a logo, so without one there is nothing for it to describe.
+  .transform((branding) => ({ ...branding, logoAlt: branding.logoUrl ? branding.logoAlt : '' }))
+  .superRefine((branding, ctx) => {
+    for (const issue of brandingIssues(branding))
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [issue.field], message: issue.message });
+  });
 
 const normalizedTagName = z.string().transform(normalizeTagName).pipe(z.string().min(1).max(60));
 const tagColor = z
@@ -815,14 +860,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   );
   app.put('/api/settings/branding', (req, res, next) => {
     try {
-      const data = z
-        .object({
-          mark: z.string().trim().min(1).max(4),
-          title: z.string().trim().min(1).max(40),
-          subtitle: z.string().trim().min(1).max(60),
-          tagline: z.string().trim().min(1).max(80),
-        })
-        .parse(req.body);
+      const data = brandingInput.parse(req.body);
       setSetting(db, BRANDING_SETTING_KEY, JSON.stringify(data));
       res.json({ version: APP_VERSION, branding: data });
     } catch (error) {
@@ -958,17 +996,23 @@ function urgent(tasks: any[]) {
       rank[a.priority] - rank[b.priority],
   );
 }
+/**
+ * Branding as stored, completed from the defaults. Rows written before colours and logos
+ * existed carry only the four text fields, so every key falls back individually and the
+ * saved wording survives the upgrade. A row that still fails validation after that — hand
+ * edited, or from a future shape this build does not understand — is not worth guessing at
+ * one field at a time, so the whole thing reverts to a palette known to be readable.
+ */
 function readBranding(db: Db): Branding {
   const raw = getSetting(db, BRANDING_SETTING_KEY);
   if (!raw) return { ...DEFAULT_BRANDING };
   try {
-    const parsed = JSON.parse(raw) as Partial<Branding>;
-    return {
-      mark: String(parsed.mark || DEFAULT_BRANDING.mark).slice(0, 4),
-      title: String(parsed.title || DEFAULT_BRANDING.title).slice(0, 40),
-      subtitle: String(parsed.subtitle || DEFAULT_BRANDING.subtitle).slice(0, 60),
-      tagline: String(parsed.tagline || DEFAULT_BRANDING.tagline).slice(0, 80),
-    };
+    const stored = JSON.parse(raw) as Partial<Record<keyof Branding, unknown>>;
+    const merged = { ...DEFAULT_BRANDING };
+    for (const key of Object.keys(DEFAULT_BRANDING) as (keyof Branding)[])
+      if (typeof stored[key] === 'string') merged[key] = stored[key];
+    const parsed = brandingInput.safeParse(merged);
+    return parsed.success ? parsed.data : { ...DEFAULT_BRANDING };
   } catch {
     return { ...DEFAULT_BRANDING };
   }

@@ -459,7 +459,7 @@ Deleting cannot be undone from inside the application. Recover a mistake by rest
 Settings contains:
 
 - Google Drive connection and root-folder setup
-- Sidebar branding — the mark, title, subtitle, and tagline shown in the left navigation
+- Sidebar branding — the mark, title, subtitle, tagline, colours, and logo shown in the left navigation
 - **Task tags** — every tag in the workspace, with how many tasks carry it, and the only place a tag is deleted
 - The current application version
 - Detected local timezone
@@ -468,6 +468,24 @@ Settings contains:
 Deleting a tag that is still attached asks first and tells you how many tasks are affected; a tag no task carries is removed straight away. Tags are created from tasks, not here.
 
 Branding edits save immediately and apply to the sidebar without a restart. The defaults also live in `shared/branding.ts` if you prefer to change them in code. The version appears both beside the Branding heading and at the bottom of the sidebar.
+
+#### Sidebar colours
+
+Three colours are yours to choose: the **sidebar background**, the **sidebar text**, and an **accent** used for the mark, the marker beside the current page, and the version number. Pick each one from the swatch or type a hex value such as `#18201d`.
+
+Under the colours, a reading for each pair shows its contrast ratio and says in words whether it **Passes AA** or **Fails AA**. A failing combination cannot be saved — the Save button is disabled, and the application refuses the same combination if it arrives any other way. This is deliberate: a sidebar whose own text you cannot read is not a preference, it is a lockout. Everything else the sidebar draws — quieter labels, the hover shading, the outline that shows which control the keyboard is on — is worked out from your three colours, so it stays readable whichever palette you choose.
+
+#### Sidebar logo
+
+The **logo address** field takes a web address beginning with `https://` — an image on your website, a content delivery network, or a shared Google Drive image link. The image is not uploaded or copied into this device's database; the application only stores the address and the browser loads the picture from there. That means an internet connection is needed to see it, and the site hosting the image can tell that the picture was requested.
+
+**Logo alt text** is required whenever an address is set. It describes the logo for screen readers and appears if the image cannot be shown.
+
+Leave the address empty to use the text mark instead. The text mark also returns on its own if the address ever stops working, so the sidebar never shows a broken image.
+
+#### Resetting
+
+**Reset to defaults** restores every branding field — wording, colours, and logo — to the values the application shipped with. The reset fills the form; press **Save branding** to apply it.
 
 Calendar, the embedded file browser, and campaign playbook import are not available in this version. They appear as dimmed placeholders in the sidebar. Use **Open Drive** links to manage project files directly in Google Drive.
 

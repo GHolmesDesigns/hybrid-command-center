@@ -1,0 +1,150 @@
+import {
+  DEFAULT_BRANDING,
+  MemoryRouter,
+  App,
+  afterEach,
+  describe,
+  expect,
+  fireEvent,
+  it,
+  render,
+  screen,
+  setBranding,
+  vi,
+  waitFor,
+  requests,
+} from './App.test-setup';
+import { meetsAaText } from '../../shared/contrast';
+
+const renderSettings = async () => {
+  render(
+    <MemoryRouter initialEntries={['/settings']}>
+      <App />
+    </MemoryRouter>,
+  );
+  expect(await screen.findByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
+};
+
+const sidebar = () => document.querySelector('aside.sidebar') as HTMLElement;
+const paletteOf = (element: HTMLElement, property: string) =>
+  element.style.getPropertyValue(property).trim();
+const saveButton = () => screen.getByRole('button', { name: 'Save branding' });
+const brandingPuts = () =>
+  requests.filter((r) => r.method === 'PUT' && r.url.endsWith('/api/settings/branding'));
+const type = (label: string | RegExp, value: string) =>
+  fireEvent.change(screen.getByLabelText(label), { target: { value } });
+
+afterEach(() => vi.restoreAllMocks());
+
+describe('sidebar branding', () => {
+  it('paints the sidebar with the stored colours and their derived values', async () => {
+    setBranding({ background: '#2b0f3a', foreground: '#ffe9ff', accent: '#f0c419' });
+    await renderSettings();
+
+    const aside = sidebar();
+    expect(paletteOf(aside, '--sidebar-bg')).toBe('#2b0f3a');
+    expect(paletteOf(aside, '--sidebar-fg')).toBe('#ffe9ff');
+    expect(paletteOf(aside, '--sidebar-accent')).toBe('#f0c419');
+    // The mark's lettering and secondary labels are derived, never chosen, so no palette
+    // can produce a sidebar whose own text fails AA.
+    expect(paletteOf(aside, '--sidebar-mark-ink')).toBe('#2b0f3a');
+    expect(meetsAaText(paletteOf(aside, '--sidebar-muted'), '#2b0f3a')).toBe(true);
+  });
+
+  it('shows the logo with its alt text, and keeps the mark when none is set', async () => {
+    setBranding({ logoUrl: 'https://cdn.example.com/logo.svg', logoAlt: 'GHolmes Designs' });
+    await renderSettings();
+
+    const logo = screen.getAllByRole('img', { name: 'GHolmes Designs' })[0];
+    expect(logo).toHaveAttribute('src', 'https://cdn.example.com/logo.svg');
+    expect(sidebar().querySelector('.brand-mark')).toBeNull();
+  });
+
+  it('falls back to the text mark when the logo address stops loading', async () => {
+    setBranding({ logoUrl: 'https://cdn.example.com/gone.svg', logoAlt: 'GHolmes Designs' });
+    await renderSettings();
+
+    fireEvent.error(sidebar().querySelector('.brand-logo')!);
+
+    expect(sidebar().querySelector('.brand-mark')).toHaveTextContent('TC');
+    expect(sidebar().querySelector('.brand-logo')).toBeNull();
+  });
+
+  it('renders the text mark when no logo is set', async () => {
+    await renderSettings();
+
+    expect(sidebar().querySelector('.brand-mark')).toHaveTextContent('TC');
+    expect(sidebar().querySelector('.brand-logo')).toBeNull();
+  });
+});
+
+describe('branding settings form', () => {
+  it('reports each contrast pair in words and blocks a failing save', async () => {
+    await renderSettings();
+
+    type('Sidebar text hex value', '#2a3330');
+
+    const failing = screen.getByText('Sidebar text on the sidebar background').closest('li')!;
+    expect(failing).toHaveTextContent('Fails AA');
+    expect(screen.getByText('Accent on the sidebar background').closest('li')).toHaveTextContent(
+      'Passes AA',
+    );
+    expect(saveButton()).toBeDisabled();
+    expect(screen.getByText(/Saving is blocked/)).toBeVisible();
+    // Blocked in the form and never attempted, so the stored sidebar is untouched.
+    fireEvent.submit(failing.closest('form')!);
+    expect(await screen.findByText(/WCAG AA needs 4.5:1/)).toBeVisible();
+    expect(brandingPuts()).toEqual([]);
+  });
+
+  it('saves colours and a logo once every reading passes', async () => {
+    await renderSettings();
+
+    type('Sidebar background hex value', '#FFFFFF');
+    type('Sidebar text hex value', '#202522');
+    type('Accent hex value', '#315f79');
+    type(/Logo address/, 'https://cdn.example.com/logo.svg');
+    type(/Logo alt text/, 'GHolmes Designs');
+    expect(saveButton()).toBeEnabled();
+    fireEvent.click(saveButton());
+
+    await waitFor(() => expect(brandingPuts()).toHaveLength(1));
+    expect(brandingPuts()[0].body).toMatchObject({
+      background: '#FFFFFF',
+      foreground: '#202522',
+      accent: '#315f79',
+      logoUrl: 'https://cdn.example.com/logo.svg',
+      logoAlt: 'GHolmes Designs',
+    });
+  });
+
+  it('will not save a logo nobody could hear described', async () => {
+    await renderSettings();
+
+    type(/Logo address/, 'https://cdn.example.com/logo.svg');
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Describe the logo');
+    expect(saveButton()).toBeDisabled();
+    expect(brandingPuts()).toEqual([]);
+  });
+
+  it('restores every field to the defaults', async () => {
+    await renderSettings();
+
+    type('Sidebar background hex value', '#2b0f3a');
+    type(/Logo address/, 'https://cdn.example.com/logo.svg');
+    fireEvent.click(screen.getByRole('button', { name: /reset to defaults/i }));
+
+    expect(screen.getByLabelText('Sidebar background hex value')).toHaveValue(
+      DEFAULT_BRANDING.background,
+    );
+    expect(screen.getByLabelText('Accent hex value')).toHaveValue(DEFAULT_BRANDING.accent);
+    expect(screen.getByLabelText(/Logo address/)).toHaveValue('');
+    expect(screen.getByLabelText('Mark')).toHaveValue(DEFAULT_BRANDING.mark);
+    expect(screen.getByLabelText('Tagline')).toHaveValue(DEFAULT_BRANDING.tagline);
+
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(brandingPuts()).toHaveLength(1));
+    expect(brandingPuts()[0].body).toEqual(DEFAULT_BRANDING);
+  });
+});

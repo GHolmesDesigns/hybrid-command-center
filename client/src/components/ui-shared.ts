@@ -1,6 +1,14 @@
+import type { CSSProperties } from 'react';
 import { send } from '../api';
 import type { Tag, TaskStatus, TaskType } from '../../../shared/types';
 import { normalizeTagName } from '../../../shared/types';
+import { sidebarPalette, type Branding } from '../../../shared/branding';
+
+/**
+ * The chosen and derived sidebar colours, as custom properties for anything painted in the
+ * sidebar's palette — the sidebar itself, the loading splash, and the Settings preview.
+ */
+export const brandStyle = (branding: Branding) => sidebarPalette(branding) as CSSProperties;
 
 export const STATUS_LABEL: Record<TaskStatus, string> = {
   BACKLOG: 'Backlog',
