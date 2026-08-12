@@ -10,6 +10,7 @@ import {
   render,
   screen,
   setBranding,
+  testState,
   vi,
   waitFor,
   requests,
@@ -23,6 +24,9 @@ const renderSettings = async () => {
     </MemoryRouter>,
   );
   expect(await screen.findByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
+  await waitFor(() =>
+    expect(requests.some((request) => request.url.endsWith('/api/settings/drive'))).toBe(true),
+  );
 };
 
 const sidebar = () => document.querySelector('aside.sidebar') as HTMLElement;
@@ -66,8 +70,10 @@ describe('sidebar branding', () => {
 
     fireEvent.error(sidebar().querySelector('.brand-logo')!);
 
-    expect(sidebar().querySelector('.brand-mark')).toHaveTextContent('TC');
-    expect(sidebar().querySelector('.brand-logo')).toBeNull();
+    await waitFor(() => {
+      expect(sidebar().querySelector('.brand-mark')).toHaveTextContent('TC');
+      expect(sidebar().querySelector('.brand-logo')).toBeNull();
+    });
   });
 
   it('renders the text mark when no logo is set', async () => {
@@ -79,6 +85,17 @@ describe('sidebar branding', () => {
 });
 
 describe('branding settings form', () => {
+  it('reports when Drive status cannot be loaded', async () => {
+    testState.driveSettingsError = 'Drive settings are temporarily unavailable.';
+
+    await renderSettings();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Drive status unavailable');
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Drive settings are temporarily unavailable.',
+    );
+  });
+
   it('reports each contrast pair in words and blocks a failing save', async () => {
     await renderSettings();
 
