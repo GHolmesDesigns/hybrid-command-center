@@ -57,6 +57,11 @@ describe('command center API', () => {
     expect(policy).not.toContain('upgrade-insecure-requests');
   });
 
+  it('does not expose the E2E cooperative-stop route', async () => {
+    const response = await request(createApp(db)).post('/__e2e/stop');
+    expect(response.status).toBe(404);
+  });
+
   it('creates clients and projects without pretending disconnected Drive is ready', async () => {
     const { c, p } = await setup();
     expect(c.slug).toBe(`acme-studio-${c.id.slice(0, 6)}`);

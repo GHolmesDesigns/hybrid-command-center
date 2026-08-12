@@ -1,8 +1,8 @@
 import { defineConfig } from '@playwright/test';
+import { E2E_API_PORT, E2E_WEB_PORT, e2eApiOrigin, e2eWebOrigin } from './e2e/endpoints.ts';
 
-const API_PORT = '8788';
-const WEB_PORT = '5174';
-const WEB_ORIGIN = `http://127.0.0.1:${WEB_PORT}`;
+const API_PORT = String(E2E_API_PORT);
+const WEB_PORT = String(E2E_WEB_PORT);
 // Ignored on Windows, which has no signals, but on POSIX and in CI it gives the API server the
 // chance to close its sockets and its database rather than being killed mid-write.
 const gracefulShutdown = { signal: 'SIGTERM', timeout: 5_000 } as const;
@@ -21,18 +21,24 @@ export default defineConfig({
   // report on failure, and opening it starts a web server that blocks until someone closes
   // it — the difference between a suite that finishes and a command that never returns.
   reporter: [['list'], ['html', { open: 'never' }]],
-  use: { baseURL: WEB_ORIGIN, trace: 'on-first-retry', channel: 'chrome' },
+  use: { baseURL: e2eWebOrigin, trace: 'on-first-retry', channel: 'chrome' },
+  // Runs before Playwright's webServer plugin teardown, so both children can exit themselves
+  // and skip the Windows `taskkill` path that otherwise deadlocks the runner.
+  globalTeardown: './e2e/teardown.ts',
   webServer: [
     {
       name: 'api',
       // Spawned directly rather than through `npm run`: each layer between Playwright and
       // node is one more process that can survive the kill and keep the port held.
       command: 'node --experimental-strip-types e2e/start-server.ts',
-      env: { PORT: API_PORT, DATABASE_PATH: './data/e2e.db', APP_ORIGIN: WEB_ORIGIN },
-      url: `http://127.0.0.1:${API_PORT}/api/health`,
+      env: { PORT: API_PORT, DATABASE_PATH: './data/e2e.db', APP_ORIGIN: e2eWebOrigin },
+      url: `${e2eApiOrigin}/api/health`,
       reuseExistingServer: false,
       timeout: 120_000,
       gracefulShutdown,
+      // A full stdout pipe plus `taskkill` is how a passing Windows run used to hang. The
+      // servers still log on stderr, which Playwright forwards.
+      stdout: 'ignore',
     },
     {
       name: 'web',
@@ -41,10 +47,11 @@ export default defineConfig({
       // an interrupted run that leaves it holding 5174 blocks every run after it.
       command: 'node --experimental-strip-types e2e/start-web.ts',
       env: { API_PORT, WEB_HOST: '127.0.0.1', WEB_PORT },
-      url: WEB_ORIGIN,
+      url: e2eWebOrigin,
       reuseExistingServer: false,
       timeout: 120_000,
       gracefulShutdown,
+      stdout: 'ignore',
     },
   ],
 });

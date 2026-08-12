@@ -1,7 +1,9 @@
+import type { Server } from 'node:http';
 import { createApp } from '../server/app.ts';
 import { config } from '../server/config.ts';
 import { getDb } from '../server/db.ts';
 import { resetE2eDatabase } from './database.ts';
+import { handleE2eStopRequest } from './endpoints.ts';
 import { stopWhenTheRunEnds } from './shutdown.ts';
 
 const databasePath = resetE2eDatabase();
@@ -12,11 +14,12 @@ console.log(`Reset E2E database at ${databasePath}`);
 // to close; the production static-file branch in that module is not wanted anyway, since Vite
 // serves the client during E2E.
 const db = getDb();
-const server = createApp(db).listen(config.port, config.host, () =>
+const app = createApp(db);
+const server: Server = app.listen(config.port, config.host, () =>
   console.log(`Command Center E2E API ready at http://${config.host}:${config.port}`),
 );
 
-stopWhenTheRunEnds(
+const stop = stopWhenTheRunEnds(
   'API',
   () =>
     new Promise<void>((resolve) => {
@@ -30,3 +33,7 @@ stopWhenTheRunEnds(
       });
     }),
 );
+
+app.use((req, res, next) => {
+  if (!handleE2eStopRequest(req, res, stop)) next();
+});
