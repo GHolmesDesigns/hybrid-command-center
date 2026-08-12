@@ -9,6 +9,10 @@ const gracefulShutdown = { signal: 'SIGTERM', timeout: 5_000 } as const;
 
 export default defineConfig({
   testDir: './e2e',
+  // Playwright's default also collects `*.test.ts`, which would hand it the Vitest files
+  // that sit beside the helpers they cover. `.spec.ts` is Playwright's, `.test.ts` is
+  // Vitest's, and nothing has to live away from what it tests to keep the two apart.
+  testMatch: '**/*.spec.ts',
   // One worker: every spec shares one API server and one SQLite file that is reset once per
   // run, so a second worker would let one spec's rows land in another spec's counts.
   workers: 1,
@@ -32,10 +36,11 @@ export default defineConfig({
     },
     {
       name: 'web',
-      // `--strictPort` so a busy port fails here and says so, rather than moving Vite to
-      // 5175 and leaving Playwright to wait out its two-minute timeout on the old one.
-      command: `node node_modules/vite/bin/vite.js --host 127.0.0.1 --port ${WEB_PORT} --strictPort`,
-      env: { API_PORT },
+      // Vite through its own API rather than its CLI, for the reason the API server is
+      // started the same way: the CLI has no reason to stop when Playwright goes away, and
+      // an interrupted run that leaves it holding 5174 blocks every run after it.
+      command: 'node --experimental-strip-types e2e/start-web.ts',
+      env: { API_PORT, WEB_HOST: '127.0.0.1', WEB_PORT },
       url: WEB_ORIGIN,
       reuseExistingServer: false,
       timeout: 120_000,

@@ -15,6 +15,11 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          # Full history so `origin/main` resolves. The version-bump gate compares against
+          # the base branch tip, and a shallow checkout has no such ref to compare against —
+          # the check would skip itself and report success without having looked.
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -30,6 +35,17 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+      # Prettier is the house format and `npm run format` rewrites to it, but nothing was
+      # checking that it had been run.
+      - name: Check formatting
+        run: npm run format:check
+
+      # "Every merged card ships a version bump" was a rule with no enforcement: the script
+      # that checks it existed and ran nowhere. Two cards cut from the same commit can both
+      # bump correctly and both land on the same number, and only this catches the second.
+      - name: Check the version was bumped
+        run: npm run check:version-bump
 
       - name: Run unit and integration tests
         run: npm test
