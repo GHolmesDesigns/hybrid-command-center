@@ -82,7 +82,14 @@ import type {
   TaskStatus,
   TaskType,
 } from '../../shared/types';
-import { TASK_STATUSES, TASK_TYPES, normalizeTagName, sameTagName } from '../../shared/types';
+import {
+  TASK_STATUSES,
+  TASK_TYPES,
+  compareProjectActivity,
+  compareProjectNames,
+  normalizeTagName,
+  sameTagName,
+} from '../../shared/types';
 import { APP_VERSION, DEFAULT_BRANDING, type Branding } from '../../shared/branding';
 
 const STATUS_LABEL: Record<TaskStatus, string> = {
@@ -856,15 +863,9 @@ const PROJECT_PRIORITY_ORDER: Record<Priority, number> = {
   LOW: 3,
 };
 
-const compareProjectNames = (a: Project, b: Project) =>
-  a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
-
 function projectComparator(sortBy: ProjectSort) {
   return (a: Project, b: Project) => {
-    if (sortBy === 'recently-updated') {
-      const activeGroup = Number(a.status !== 'ACTIVE') - Number(b.status !== 'ACTIVE');
-      return activeGroup || b.updatedAt.localeCompare(a.updatedAt);
-    }
+    if (sortBy === 'recently-updated') return compareProjectActivity(a, b);
     if (sortBy === 'recently-created') {
       return b.createdAt.localeCompare(a.createdAt) || compareProjectNames(a, b);
     }

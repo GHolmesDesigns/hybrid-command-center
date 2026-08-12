@@ -241,6 +241,7 @@ describe('Projects sorting', () => {
       priority: 'LOW',
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-03T00:00:00.000Z',
+      lastActivityAt: '2026-01-03T00:00:00.000Z',
     }),
     project('sort-alpha', 'Alpha', 'ACTIVE', {
       clientId: 'client-two',
@@ -249,7 +250,10 @@ describe('Projects sorting', () => {
       targetDeadline: '2026-02-01',
       createdAt: '2026-01-03T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
+      lastActivityAt: '2026-01-01T00:00:00.000Z',
     }),
+    // Archived, and worked on more recently than the active Alpha: Recently updated ranks
+    // it above Alpha, which the old ACTIVE-first grouping made impossible.
     project('sort-middle', 'Middle', 'ARCHIVED', {
       clientId: 'client-one',
       clientName: 'Acme',
@@ -257,6 +261,7 @@ describe('Projects sorting', () => {
       targetDeadline: '2026-01-01',
       createdAt: '2026-01-02T00:00:00.000Z',
       updatedAt: '2026-01-02T00:00:00.000Z',
+      lastActivityAt: '2026-01-02T00:00:00.000Z',
     }),
   ];
   const sortableClients: Client[] = [
@@ -298,7 +303,7 @@ describe('Projects sorting', () => {
     const sort = screen.getByRole('combobox', { name: 'Sort projects by' });
 
     expect(sort).toHaveValue('recently-updated');
-    expect(renderedProjectNames()).toEqual(['Zulu', 'Alpha', 'Middle']);
+    expect(renderedProjectNames()).toEqual(['Zulu', 'Middle', 'Alpha']);
 
     fireEvent.change(sort, { target: { value: 'recently-created' } });
     expect(renderedProjectNames()).toEqual(['Alpha', 'Middle', 'Zulu']);
@@ -316,7 +321,69 @@ describe('Projects sorting', () => {
     expect(renderedProjectNames()).toEqual(['Alpha', 'Middle', 'Zulu']);
 
     fireEvent.change(sort, { target: { value: 'recently-updated' } });
-    expect(renderedProjectNames()).toEqual(['Zulu', 'Alpha', 'Middle']);
+    expect(renderedProjectNames()).toEqual(['Zulu', 'Middle', 'Alpha']);
+  });
+
+  it('ranks every status purely by recency under Recently updated', async () => {
+    projectsPayload = [
+      project('rank-active', 'Active long ago', 'ACTIVE', {
+        lastActivityAt: '2026-01-01T00:00:00.000Z',
+      }),
+      project('rank-hold', 'On hold yesterday', 'ON_HOLD', {
+        lastActivityAt: '2026-03-01T00:00:00.000Z',
+      }),
+      project('rank-planning', 'Planning today', 'PLANNING', {
+        lastActivityAt: '2026-03-02T00:00:00.000Z',
+      }),
+    ];
+    clientsPayload = sortableClients;
+    render(
+      <MemoryRouter initialEntries={['/projects']}>
+        <App />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
+
+    expect(renderedProjectNames()).toEqual([
+      'Planning today',
+      'On hold yesterday',
+      'Active long ago',
+    ]);
+  });
+
+  it('breaks equal activity timestamps by name and keeps that order across re-renders', async () => {
+    const tied = '2026-02-02T00:00:00.000Z';
+    projectsPayload = [
+      project('tied-c', 'Cobalt', 'ACTIVE', { lastActivityAt: tied }),
+      project('tied-a', 'Amber', 'ON_HOLD', { lastActivityAt: tied }),
+      project('tied-b', 'Beryl', 'PLANNING', { lastActivityAt: tied }),
+    ];
+    clientsPayload = sortableClients;
+    render(
+      <MemoryRouter initialEntries={['/projects']}>
+        <App />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
+
+    expect(renderedProjectNames()).toEqual(['Amber', 'Beryl', 'Cobalt']);
+
+    // Re-render through a state change that does not touch the data: the order must hold.
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search' }), { target: { value: '' } });
+    expect(renderedProjectNames()).toEqual(['Amber', 'Beryl', 'Cobalt']);
+  });
+
+  it('renders a single-project list under Recently updated', async () => {
+    projectsPayload = [project('only', 'Lone project', 'ON_HOLD')];
+    clientsPayload = sortableClients;
+    render(
+      <MemoryRouter initialEntries={['/projects']}>
+        <App />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
+
+    expect(renderedProjectNames()).toEqual(['Lone project']);
   });
 
   it('composes sorting with search and client filters', async () => {
