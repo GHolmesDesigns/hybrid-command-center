@@ -2,8 +2,8 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import pinoHttp from 'pino-http';
-import { google } from 'googleapis';
+import pinoHttp, { stdSerializers } from 'pino-http';
+import type { DestinationStream } from 'pino';
 import { isValid, parseISO } from 'date-fns';
 import { z } from 'zod';
 import type { Db } from './db.ts';
@@ -34,6 +34,14 @@ import {
 } from './drive/service.ts';
 import { DriveScopeError, driveConfigured, listProjectFiles } from './drive/browse.ts';
 import type { DriveProvider } from './drive/provider.ts';
+import {
+  OAuthStateError,
+  beginAuthorization,
+  consumeAuthorization,
+  createGoogleOAuthClient,
+  type OAuthAuthorizationClient,
+  type OAuthCredentials,
+} from './drive/oauth.ts';
 import { encryptJson } from './drive/tokens.ts';
 import { DRIVE_PAGE_SIZE, DRIVE_PAGE_SIZE_MAX } from '../shared/drive.ts';
 import {
@@ -97,7 +105,7 @@ const productionContentSecurityPolicy = {
   },
 } as const;
 
-type AppOptions = {
+export type AppOptions = {
   production?: boolean;
   /**
    * The Drive provider the read-only browsing routes use. Tests supply a mock one so a
@@ -105,7 +113,62 @@ type AppOptions = {
    * every other case this resolves to the encrypted-token provider as usual.
    */
   drive?: (db: Db) => DriveProvider;
+  /**
+   * The authorization server the OAuth routes talk to. Tests supply `MockOAuthClient` so a
+   * whole connect — authorization URL, callback, token exchange — runs without credentials
+   * and without contacting Google.
+   */
+  oauth?: (credentials: OAuthCredentials) => OAuthAuthorizationClient;
+  /**
+   * The clock the OAuth state lifetime is measured against, so an expired state can be
+   * exercised on a fixed one rather than by waiting ten minutes.
+   */
+  now?: () => Date;
+  /**
+   * Where request logs are written. Tests capture the stream to assert what a connect does
+   * *not* log — an authorization code, an `Authorization` header, a `Cookie` header — which
+   * is not something reading the configuration can establish.
+   */
+  logStream?: DestinationStream;
 };
+
+/** Query strings carry the authorization code, so the path is all a request log keeps. */
+const pathOnly = (url: string | undefined) => (url ?? '').split('?')[0];
+
+/**
+ * The request logger.
+ *
+ * Registered with no options, `pinoHttp()` logs the request's query string and its full header
+ * set — so every Drive connect wrote a live `code=4/0A…` to stdout, the one place
+ * `redactSecrets` cannot reach because it never sees the request. Three things fix that: the
+ * level comes from `LOG_LEVEL`, so the variable `.env.example` documents is the one in use; the
+ * two credential-bearing headers are redacted; and the request is serialized down to fields
+ * that cannot carry a query.
+ *
+ * The serializer names the fields it keeps rather than deleting the ones it does not, because
+ * the query reaches the log by more than one route — `url` carries it as text and pino-http
+ * parses it again into `query` — and an allowlist is what keeps a field added by a future
+ * version of the serializer from quietly putting it back a third way.
+ */
+function requestLogger(stream?: DestinationStream) {
+  return pinoHttp(
+    {
+      level: config.logLevel,
+      redact: {
+        paths: ['req.headers.authorization', 'req.headers.cookie'],
+        censor: '[redacted]',
+      },
+      serializers: {
+        req(request) {
+          const { id, method, url, headers, remoteAddress, remotePort } =
+            stdSerializers.req(request);
+          return { id, method, url: pathOnly(url), headers, remoteAddress, remotePort };
+        },
+      },
+    },
+    stream,
+  );
+}
 
 /**
  * Optional text field. An omitted key stays `undefined` so a PATCH keeps the stored
@@ -269,6 +332,8 @@ const categoryPatch = categoryInput.partial().refine((value) => Object.keys(valu
 export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   const app = express();
   const production = options.production ?? isProductionRuntime();
+  const clock = options.now ?? (() => new Date());
+  const oauthClient = options.oauth ?? createGoogleOAuthClient;
   app.use(
     helmet({
       // Vite's development client needs a relaxed policy for HMR. The built client does not.
@@ -288,7 +353,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
    */
   app.use('/api/import', express.json({ limit: '16mb' }));
   app.use(express.json({ limit: '1mb' }));
-  app.use(pinoHttp());
+  app.use(requestLogger(options.logStream));
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
   app.get('/api/clients', (_req, res) => res.json(listClients(db)));
@@ -1127,37 +1192,31 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     try {
       if (!config.google.clientId || !config.google.clientSecret || !config.google.encryptionKey)
         throw new Error('Add Google OAuth credentials and an encryption key to .env first.');
-      const oauth = new google.auth.OAuth2(
-        config.google.clientId,
-        config.google.clientSecret,
-        config.google.redirectUri,
-      );
-      const state = id();
-      setSetting(db, 'oauth_state', state);
-      res.json({
-        url: oauth.generateAuthUrl({
-          access_type: 'offline',
-          prompt: 'consent',
-          scope: ['https://www.googleapis.com/auth/drive'],
-          state,
-        }),
-      });
+      const { state, challenge } = beginAuthorization(db, clock());
+      res.json({ url: oauthClient(config.google).authorizationUrl({ state, challenge }) });
     } catch (e) {
       next(e);
     }
   });
   app.get('/api/drive/oauth/callback', async (req, res, next) => {
     try {
-      if (String(req.query.state) !== getSetting(db, 'oauth_state'))
+      /**
+       * The state is consumed before anything is exchanged, so this request is the only one
+       * that can ever use it. Every refusal answers the same way it always has — a bare 400
+       * that names nothing — while the reason goes to the log, where the operator can see it
+       * and the caller cannot.
+       */
+      let verifier: string;
+      try {
+        ({ verifier } = consumeAuthorization(db, req.query.state, clock()));
+      } catch (error) {
+        if (!(error instanceof OAuthStateError)) throw error;
+        req.log.warn({ reason: error.message }, 'Rejected a Drive OAuth callback');
         return res.status(400).send('Invalid OAuth state.');
-      const oauth = new google.auth.OAuth2(
-        config.google.clientId,
-        config.google.clientSecret,
-        config.google.redirectUri,
-      );
-      const { tokens } = await oauth.getToken(String(req.query.code));
+      }
+      const code = z.string().min(1).max(2048).parse(req.query.code);
+      const tokens = await oauthClient(config.google).exchange({ code, verifier });
       setSetting(db, 'google_tokens', encryptJson(tokens, config.google.encryptionKey));
-      setSetting(db, 'oauth_state', 'used');
       const returnOrigin = process.argv.includes('--production')
         ? `http://localhost:${config.port}`
         : config.appOrigin;

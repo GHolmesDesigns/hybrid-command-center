@@ -121,9 +121,30 @@ Required environment variables:
 | `GOOGLE_CLIENT_SECRET` | OAuth web client secret |
 | `GOOGLE_REDIRECT_URI` | Must match the Cloud Console URI exactly |
 | `GOOGLE_TOKEN_ENCRYPTION_KEY` | Local token-encryption secret |
-| `LOG_LEVEL` | Structured API/Drive logging level |
+| `LOG_LEVEL` | Structured API/Drive logging level: `fatal`, `error`, `warn`, `info` (default), `debug`, `trace`, or `silent`. An unrecognized value falls back to `info` |
 
 Secrets, tokens, local databases, logs, and test artifacts are excluded by `.gitignore`.
+
+### OAuth callback security
+
+`GET /api/drive/oauth/callback` is single-use. Connecting Drive mints a `state` and stores it
+with the moment it was issued; the callback consumes it by **deleting** the stored row before it
+exchanges anything. A consumed state is therefore absent rather than marked, so replaying a
+callback that already succeeded is refused — and so is any invented value, because there is
+nothing left for it to match. A state is also refused once it is more than ten minutes old.
+
+The exchange uses PKCE (`S256`). The verifier is minted beside the state, never leaves the
+server, and is sent with the authorization code, so a code on its own cannot be redeemed.
+
+Every refusal answers with the same bare `400` and names nothing about why; the reason goes to
+the server log. Refusing does not disturb a connect already in flight — a callback whose state
+does not match leaves the pending authorization alone, so a stray request cannot cancel the one
+the browser is still coming back from.
+
+Request logs carry no credentials. The authorization code arrives in a query string, so requests
+are logged by path only, with the query dropped rather than redacted, and the `Authorization` and
+`Cookie` headers are redacted. What the log does hold about an integration failure is scrubbed
+separately — see [Integration activity](#integration-activity).
 
 ### Production Content Security Policy
 

@@ -1,13 +1,14 @@
 ﻿import crypto from 'node:crypto';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { addDays, format, subDays } from 'date-fns';
 import { createDb, type Db } from './db.ts';
-import { createApp } from './app.ts';
-import { PROJECT_SUBFOLDERS } from './config.ts';
+import { createApp, type AppOptions } from './app.ts';
+import { PROJECT_SUBFOLDERS, config } from './config.ts';
 import { projectScopes } from './drive/browse.ts';
-import { MockDriveProvider, mockDriveFile } from './drive/mock-provider.ts';
-import { provisionProject, setSetting } from './drive/service.ts';
+import { MockDriveProvider, MockOAuthClient, mockDriveFile } from './drive/mock-provider.ts';
+import { OAUTH_STATE_KEY, OAUTH_STATE_TTL_MS } from './drive/oauth.ts';
+import { getSetting, provisionProject, setSetting } from './drive/service.ts';
 import { TASK_CHECKLIST_TEMPLATES } from '../shared/types.ts';
 import { DEFAULT_BRANDING } from '../shared/branding.ts';
 
@@ -1261,5 +1262,225 @@ describe('project activity', () => {
     expect(recent.map((x) => x.id)).toEqual([archived.id, planning.id, held.id, p.id]);
     // Nothing but the timestamps decided that: the only ACTIVE project came last.
     expect(recent.at(-1).status).toBe('ACTIVE');
+  });
+});
+
+/**
+ * The Drive connect, end to end against a mock authorization server. Real Google is never
+ * contacted from a test (`AGENTS.md`), and the two defects this block exists for — a state
+ * that could be replayed, and an authorization code written to the request log — are both
+ * only observable from outside the route, so both are asserted from here.
+ */
+describe('Drive OAuth connect', () => {
+  const CREDENTIALS = {
+    clientId: 'test-client-id',
+    clientSecret: 'test-client-secret',
+    redirectUri: 'http://localhost:8787/api/drive/oauth/callback',
+    encryptionKey: 'test-encryption-key',
+  };
+  const original = { google: { ...config.google }, logLevel: config.logLevel };
+  beforeEach(() => {
+    // `config` is read once at import, so the routes are given credentials here rather than
+    // through the environment — and a developer's own LOG_LEVEL must not decide what is logged.
+    Object.assign(config.google, CREDENTIALS);
+    config.logLevel = 'info';
+  });
+  afterEach(() => {
+    Object.assign(config.google, original.google);
+    config.logLevel = original.logLevel;
+  });
+
+  /** A fixed clock, so the state window is exercised by arithmetic rather than by waiting. */
+  const MINTED_AT = new Date('2026-05-01T12:00:00.000Z');
+  /** A code shaped like Google's, so a leak of it into a log is recognizable in the assertion. */
+  const CODE = '4/0AeanS0b-authorization-code';
+
+  /** Collects what the request logger writes, which is the only way to assert what it did not. */
+  const captureLogs = () => {
+    const lines: string[] = [];
+    return {
+      lines,
+      stream: {
+        write(line: string) {
+          lines.push(line);
+        },
+      },
+    };
+  };
+
+  const connect = (overrides: AppOptions = {}) => {
+    const oauth = new MockOAuthClient();
+    const app = createApp(db, { oauth: () => oauth, now: () => MINTED_AT, ...overrides });
+    return { oauth, app };
+  };
+
+  /** Runs `/start` and returns the `state` it put on the authorization URL. */
+  const start = async (app: ReturnType<typeof createApp>) => {
+    const { url } = (await request(app).get('/api/drive/oauth/start').expect(200)).body;
+    return String(new URL(url).searchParams.get('state'));
+  };
+
+  it('carries a PKCE challenge on the authorization URL and the verifier on the exchange', async () => {
+    const { oauth, app } = connect();
+
+    const state = await start(app);
+    await request(app).get('/api/drive/oauth/callback').query({ state, code: CODE }).expect(302);
+
+    expect(oauth.exchanges).toEqual([{ code: CODE, verifier: expect.any(String) }]);
+    // The exchange is bound to the request that started it: the verifier hashes to the
+    // challenge that went out, so an intercepted code on its own could not be redeemed.
+    expect(
+      crypto.createHash('sha256').update(oauth.exchanges[0].verifier).digest('base64url'),
+    ).toBe(oauth.authorizations[0].challenge);
+    expect(oauth.authorizations[0].state).toBe(state);
+  });
+
+  it('stores the tokens encrypted and never returns them to the browser', async () => {
+    const { app } = connect();
+    const state = await start(app);
+
+    const response = await request(app)
+      .get('/api/drive/oauth/callback')
+      .query({ state, code: CODE })
+      .expect(302);
+
+    const stored = getSetting(db, 'google_tokens');
+    expect(stored).toBeDefined();
+    expect(stored).not.toContain('mock-access-token');
+    expect(JSON.stringify(response.headers) + response.text).not.toContain('mock-access-token');
+  });
+
+  it('rejects a replay of a callback that already succeeded, and exchanges nothing twice', async () => {
+    const { oauth, app } = connect();
+    const state = await start(app);
+    await request(app).get('/api/drive/oauth/callback').query({ state, code: CODE }).expect(302);
+
+    await request(app)
+      .get('/api/drive/oauth/callback')
+      .query({ state, code: 'attacker-code' })
+      .expect(400);
+
+    // One exchange, from the first callback. The replay never reached the provider.
+    expect(oauth.exchanges).toHaveLength(1);
+    expect(oauth.exchanges[0].code).toBe(CODE);
+  });
+
+  /**
+   * The defect in the shape it shipped as. The old callback overwrote the stored state with
+   * `used` on success, so this request connected the app to whatever account the code came
+   * from — invisibly, because Settings shows a connection either way.
+   */
+  it.each(['used', 'undefined', 'null', 'anything-at-all'])(
+    'rejects the invented state %j after a successful connect',
+    async (invented) => {
+      const { oauth, app } = connect();
+      const state = await start(app);
+      await request(app).get('/api/drive/oauth/callback').query({ state, code: CODE }).expect(302);
+      const connected = getSetting(db, 'google_tokens');
+
+      await request(app)
+        .get('/api/drive/oauth/callback')
+        .query({ state: invented, code: 'attacker-code' })
+        .expect(400);
+
+      expect(oauth.exchanges).toHaveLength(1);
+      // The tokens on record are still the ones the user's own connect wrote.
+      expect(getSetting(db, 'google_tokens')).toBe(connected);
+    },
+  );
+
+  it('rejects a callback carrying no state at all', async () => {
+    const { oauth, app } = connect();
+    await start(app);
+
+    await request(app).get('/api/drive/oauth/callback').query({ code: CODE }).expect(400);
+
+    expect(oauth.exchanges).toEqual([]);
+  });
+
+  it('rejects a state older than the window, on a fixed clock', async () => {
+    const oauth = new MockOAuthClient();
+    let clock = MINTED_AT;
+    const app = createApp(db, { oauth: () => oauth, now: () => clock });
+    const state = await start(app);
+
+    clock = new Date(MINTED_AT.getTime() + OAUTH_STATE_TTL_MS + 1);
+    await request(app).get('/api/drive/oauth/callback').query({ state, code: CODE }).expect(400);
+
+    expect(oauth.exchanges).toEqual([]);
+    expect(getSetting(db, 'google_tokens')).toBeUndefined();
+  });
+
+  it('names nothing about why a callback was refused', async () => {
+    const { app } = connect();
+    await start(app);
+
+    const response = await request(app)
+      .get('/api/drive/oauth/callback')
+      .query({ state: 'used', code: CODE })
+      .expect(400);
+
+    expect(response.text).toBe('Invalid OAuth state.');
+  });
+
+  /**
+   * Asserted against the captured stream rather than by reading the logger's configuration:
+   * the defect was that a live code reached stdout, so the test has to look at what was
+   * actually written.
+   */
+  it('logs no authorization code, Authorization header, or Cookie header during a connect', async () => {
+    const logs = captureLogs();
+    const { app } = connect({ logStream: logs.stream });
+    const state = await start(app);
+
+    await request(app)
+      .get('/api/drive/oauth/callback')
+      .query({ state, code: CODE })
+      .set('Authorization', 'Bearer ya29.a-live-access-token')
+      .set('Cookie', 'session=a-live-session')
+      .expect(302);
+
+    const written = logs.lines.join('');
+    expect(written).not.toBe('');
+    expect(written).not.toContain(CODE);
+    expect(written).not.toContain('4/0A');
+    expect(written).not.toContain('ya29.');
+    expect(written).not.toContain('a-live-session');
+    expect(written).not.toContain(state);
+    // The request is still logged — the path survives, and only the query is dropped.
+    expect(written).toContain('/api/drive/oauth/callback');
+
+    const requests = logs.lines
+      .map((line) => JSON.parse(line) as { req?: Record<string, unknown> })
+      .flatMap((entry) => (entry.req ? [entry.req] : []));
+    expect(requests).not.toHaveLength(0);
+    for (const logged of requests) {
+      // The serializer keeps named fields, so the parsed query pino-http offers is not one
+      // of them — the code cannot come back through a field nobody looked at.
+      expect(logged).not.toHaveProperty('query');
+      const headers = (logged.headers ?? {}) as Record<string, string>;
+      if ('authorization' in headers) expect(headers.authorization).toBe('[redacted]');
+      if ('cookie' in headers) expect(headers.cookie).toBe('[redacted]');
+    }
+  });
+
+  it('writes nothing when LOG_LEVEL silences the logger', async () => {
+    config.logLevel = 'silent';
+    const logs = captureLogs();
+    const { app } = connect({ logStream: logs.stream });
+    const state = await start(app);
+    await request(app).get('/api/drive/oauth/callback').query({ state, code: CODE }).expect(302);
+
+    expect(logs.lines).toEqual([]);
+  });
+
+  it('refuses to start a connect before credentials are configured', async () => {
+    Object.assign(config.google, { clientId: '', clientSecret: '', encryptionKey: '' });
+    const { app } = connect();
+
+    await request(app).get('/api/drive/oauth/start').expect(500);
+
+    // Nothing pending, so a callback invented against it has nothing to match either.
+    expect(getSetting(db, OAUTH_STATE_KEY)).toBeUndefined();
   });
 });

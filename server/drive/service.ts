@@ -15,6 +15,14 @@ export function setSetting(db: Db, key: string, value: string) {
     `INSERT INTO settings(key,value,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at`,
   ).run(key, value, now());
 }
+/**
+ * Removes a setting outright. A setting whose absence is the meaning — a pending OAuth
+ * authorization, which is consumed by ceasing to exist — cannot be expressed by writing a
+ * value, because any value written is a value a caller can send back.
+ */
+export function deleteSetting(db: Db, key: string) {
+  db.prepare('DELETE FROM settings WHERE key=?').run(key);
+}
 
 export function driveProvider(db: Db): DriveProvider {
   const encrypted = getSetting(db, 'google_tokens');
