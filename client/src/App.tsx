@@ -525,11 +525,15 @@ function Dashboard({
     },
   } as const;
   const shown = deadlineBuckets[bucket];
+  // Every tile goes somewhere that shows the rows behind its number. The two deadline
+  // tiles reach the board through the same filters the panel's Open board uses, and those
+  // filters are calculated by the rules the counts come from, so a tile and its
+  // destination cannot disagree.
   const cards = [
-    ['Active clients', dashboard.counts.activeClients, <Users />],
-    ['Active projects', dashboard.counts.activeProjects, <BriefcaseBusiness />],
-    ['Due today', dashboard.counts.dueToday, <Clock3 />],
-    ['Next 7 days', dashboard.counts.dueNextSevenDays, <CalendarDays />],
+    ['Active clients', dashboard.counts.activeClients, <Users />, '/clients'],
+    ['Active projects', dashboard.counts.activeProjects, <BriefcaseBusiness />, '/projects'],
+    ['Due today', dashboard.counts.dueToday, <Clock3 />, '/kanban?filter=today'],
+    ['Next 7 days', dashboard.counts.dueNextSevenDays, <CalendarDays />, '/kanban?filter=week'],
   ] as const;
   const syncFolders = async () => {
     setSyncing(true);
@@ -572,12 +576,16 @@ function Dashboard({
         }
       />
       <section className="metric-grid">
-        {cards.map(([label, value, icon]) => (
-          <article className="metric" key={label}>
+        {cards.map(([label, value, icon, to]) => (
+          // A real anchor, so the browser's own click, Enter, middle-click, and
+          // open-in-new-tab all work. The name is spelled out rather than left to the
+          // label and figure, which sit in adjacent grid cells with no whitespace between
+          // them and run together as "Active clients4"; this announces "Active clients: 4".
+          <Link className="metric" key={label} to={to} aria-label={`${label}: ${value}`}>
             <div className="metric-icon">{icon}</div>
             <span>{label}</span>
             <strong>{value}</strong>
-          </article>
+          </Link>
         ))}
       </section>
       <section className={`overdue-panel ${dashboard.counts.overdue ? 'has-overdue' : ''}`}>
