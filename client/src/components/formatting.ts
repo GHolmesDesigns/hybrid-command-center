@@ -1,13 +1,5 @@
 import { format, parseISO } from 'date-fns';
 
-export function pageName(path: string) {
-  if (path.startsWith('/clients')) return 'Clients';
-  if (path.startsWith('/projects')) return 'Projects';
-  if (path.startsWith('/kanban')) return 'Status';
-  if (path.startsWith('/settings')) return 'Settings';
-  return 'Dashboard';
-}
-
 export const formatDate = (value: string) => {
   try {
     return format(parseISO(value), 'MMM d, yyyy');

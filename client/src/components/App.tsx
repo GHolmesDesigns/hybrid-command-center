@@ -4,7 +4,6 @@ import {
   BriefcaseBusiness,
   CalendarDays,
   CheckCircle2,
-  ChevronRight,
   CircleAlert,
   FileText,
   FolderKanban,
@@ -21,9 +20,9 @@ import {
 import { api } from '../api';
 import type { Client, DashboardData, Project, Tag, Task } from '../../../shared/types';
 import { APP_VERSION, DEFAULT_BRANDING, type Branding } from '../../../shared/branding';
+import { BreadcrumbTrail } from './BreadcrumbTrail';
 import { ClientDetail, Clients } from './Clients';
 import { Dashboard } from './Dashboard';
-import { pageName } from './formatting';
 import { Kanban } from './Kanban';
 import { ModalHost } from './Modals';
 import { ProjectDetail } from './ProjectDetail';
@@ -199,11 +198,7 @@ export function App() {
           >
             <Menu />
           </button>
-          <div className="crumb">
-            <span>Command Center</span>
-            <ChevronRight />
-            <strong>{pageName(location.pathname)}</strong>
-          </div>
+          <BreadcrumbTrail clients={clients} projects={projects} />
           <button
             className="top-action"
             onClick={() => setModal({ type: 'task', projectId: defaultProject })}
