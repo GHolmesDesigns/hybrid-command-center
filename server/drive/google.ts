@@ -1,5 +1,6 @@
 ﻿import { google, drive_v3 } from 'googleapis';
-import type { DriveFolder, DriveProvider } from './provider.ts';
+import type { DriveFile } from '../../shared/drive.ts';
+import type { DriveFilePage, DriveFolder, DriveProvider } from './provider.ts';
 
 const escapeQuery = (value: string) => value.replace(/'/g, "\\'");
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -63,6 +64,38 @@ export class GoogleDriveProvider implements DriveProvider {
     };
   }
 
+  /**
+   * One page of a folder's contents. Folders sort ahead of files and then by the name
+   * order a person reads in, so paging through a folder walks it the way Drive shows it
+   * rather than in an order that changes between pages. Trashed items are excluded: they
+   * are not in the folder as far as anyone browsing it is concerned.
+   */
+  async listFiles({
+    folderId,
+    pageSize,
+    pageToken,
+  }: {
+    folderId: string;
+    pageSize: number;
+    pageToken?: string;
+  }): Promise<DriveFilePage> {
+    const result = await this.retry(() =>
+      this.drive.files.list({
+        q: `'${escapeQuery(folderId)}' in parents and trashed=false`,
+        fields: 'nextPageToken, files(id,name,mimeType,webViewLink,modifiedTime,size)',
+        orderBy: 'folder,name_natural',
+        pageSize,
+        pageToken,
+        spaces: 'drive',
+      }),
+    );
+    return {
+      files: (result.data.files ?? []).flatMap((file) => (file.id ? [toFile(file, file.id)] : [])),
+      // The SDK reports "no more pages" as an absent key; the API answers with null.
+      nextPageToken: result.data.nextPageToken ?? null,
+    };
+  }
+
   async getFolder(folderId: string): Promise<DriveFolder> {
     const result = await this.retry(() =>
       this.drive.files.get({ fileId: folderId, fields: 'id,name,webViewLink,mimeType' }),
@@ -75,6 +108,23 @@ export class GoogleDriveProvider implements DriveProvider {
       url: result.data.webViewLink || `https://drive.google.com/drive/folders/${result.data.id}`,
     };
   }
+}
+
+/**
+ * One Drive item as the app carries it. `size` arrives as a decimal string and is absent
+ * on folders and Google-native documents, which is not the same as zero bytes — the
+ * difference is preserved rather than flattened, so the UI can say so.
+ */
+function toFile(file: drive_v3.Schema$File, id: string): DriveFile {
+  const size = file.size === null || file.size === undefined ? NaN : Number(file.size);
+  return {
+    id,
+    name: file.name || 'Untitled',
+    mimeType: file.mimeType || 'application/octet-stream',
+    url: file.webViewLink || `https://drive.google.com/file/d/${id}/view`,
+    modifiedAt: file.modifiedTime || null,
+    size: Number.isFinite(size) ? size : null,
+  };
 }
 
 export function createGoogleProvider(

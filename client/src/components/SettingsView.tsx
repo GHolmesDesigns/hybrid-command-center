@@ -407,24 +407,23 @@ export function SettingsView({
           <div className="section-title">
             <div>
               <span className="eyebrow">Future modules</span>
-              <h2>Calendar & files</h2>
+              <h2>Calendar</h2>
             </div>
           </div>
           <p>
-            Route and service extension points are reserved. These modules can be added without
+            Route and service extension points are reserved. This module can be added without
             changing current task or project data.
           </p>
           <div className="future-list">
             <span>
               <CalendarDays /> Calendar views
             </span>
-            <span>
-              <FileText /> Embedded Drive browser
-            </span>
           </div>
           <p className="field-hint">
             Campaign playbook import has shipped — it lives in the sidebar under{' '}
-            <Link to="/import">Import</Link>.
+            <Link to="/import">Import</Link>. So has read-only Drive browsing, under{' '}
+            <Link to="/files">Files</Link>; it lists and opens files and never uploads, renames,
+            moves, or deletes one.
           </p>
         </section>
       </div>

@@ -23,6 +23,7 @@ import { APP_VERSION, DEFAULT_BRANDING, type Branding } from '../../../shared/br
 import { BreadcrumbTrail } from './BreadcrumbTrail';
 import { ClientDetail, Clients } from './Clients';
 import { Dashboard } from './Dashboard';
+import { FilesView } from './FilesView';
 import { ImportView } from './ImportView';
 import { Kanban } from './Kanban';
 import { ModalHost } from './Modals';
@@ -157,20 +158,16 @@ export function App() {
           <Nav icon={<BriefcaseBusiness />} to="/projects" label="Projects" collapsed={collapsed} />
           <Nav icon={<FolderKanban />} to="/kanban" label="Status" collapsed={collapsed} />
           <Nav icon={<Upload />} to="/import" label="Import" collapsed={collapsed} />
+          <Nav icon={<FileText />} to="/files" label="Files" collapsed={collapsed} />
           {!collapsed && (
             <div className="nav-divider">
               <span>Coming next</span>
             </div>
           )}
           {!collapsed && (
-            <>
-              <span className="nav-disabled">
-                <CalendarDays /> Calendar
-              </span>
-              <span className="nav-disabled">
-                <FileText /> Files
-              </span>
-            </>
+            <span className="nav-disabled">
+              <CalendarDays /> Calendar
+            </span>
           )}
           <Nav icon={<Settings />} to="/settings" label="Settings" collapsed={collapsed} />
         </nav>
@@ -304,6 +301,16 @@ export function App() {
               path="/import"
               element={
                 <ImportView open={() => setModal({ type: 'import' })} importedAt={importedAt} />
+              }
+            />
+            <Route
+              path="/files"
+              element={
+                <FilesView
+                  projects={projects}
+                  defaultProject={defaultProject}
+                  remember={setLastProjectId}
+                />
               }
             />
             <Route

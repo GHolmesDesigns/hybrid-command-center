@@ -2303,6 +2303,107 @@ button.tag-chip.toggle.active {
 .receipt .import-list {
   margin-top: 12px;
 }
+/* Files: the read-only Drive listing. */
+.files-note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 12px 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.files-note svg {
+  width: 14px;
+  flex: none;
+}
+.files-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.files-status svg {
+  width: 15px;
+}
+.files-state-action {
+  margin-top: 9px;
+}
+.files-state-action > * {
+  font-size: 12px;
+}
+/* A wide listing scrolls inside its own box rather than widening the page. */
+.files-table-wrap {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow-x: auto;
+  background: #fff;
+}
+.files-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 520px;
+}
+.files-table th,
+.files-table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+.files-table tbody tr:last-child th,
+.files-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.files-table thead th {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+.files-table tbody th {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.files-table tbody th .text-btn {
+  padding: 0;
+  text-align: left;
+  font: inherit;
+}
+.files-size {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.file-icon svg {
+  width: 16px;
+  color: var(--muted);
+}
+.file-icon.folder svg {
+  color: var(--blue);
+}
+.file-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.file-open svg {
+  width: 13px;
+}
+.files-more {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 14px 0 0;
+}
 @media (max-width: 1100px) {
   .card-grid,
   .project-cards {
