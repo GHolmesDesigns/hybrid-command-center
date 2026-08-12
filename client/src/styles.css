@@ -439,6 +439,42 @@ button svg,
   gap: 9px;
   flex-wrap: wrap;
 }
+.refresh-status {
+  display: flex;
+  align-items: center;
+  gap: 10px 14px;
+  min-height: 42px;
+  margin: -12px 0 18px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.65);
+  color: var(--muted);
+  font-size: 12px;
+}
+.refresh-status > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.refresh-status svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.refresh-status.has-error {
+  border-color: #efcfc8;
+  background: #fff6f3;
+  color: #8b3128;
+}
+.refresh-error-detail {
+  flex: 1;
+  color: var(--muted);
+}
+.refresh-status button {
+  padding: 7px 10px;
+  margin-left: auto;
+}
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -1915,6 +1951,14 @@ button.tag-chip.toggle.active {
   .page-head {
     align-items: flex-start;
     flex-direction: column;
+  }
+  .refresh-status {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .refresh-error-detail {
+    flex-basis: 100%;
+    padding-left: 24px;
   }
   .metric-grid,
   .card-grid,
