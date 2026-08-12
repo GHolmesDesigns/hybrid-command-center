@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import { send } from '../api';
-import type { Tag, TaskStatus, TaskType } from '../../../shared/types';
+import type { Category, Tag, TaskStatus, TaskType } from '../../../shared/types';
 import { normalizeTagName } from '../../../shared/types';
 import { sidebarPalette, type Branding } from '../../../shared/branding';
 
@@ -37,7 +37,10 @@ export const TASK_TYPE_LABEL: Record<TaskType, string> = {
   OTHER: 'Other',
 };
 
+/** A chip being chosen: an existing tag or category, or a name typed for one that is new. */
 export type TagDraft = { id?: string; name: string; color?: string };
+/** A saved tag or category, which is what the chip input can offer as a suggestion. */
+export type ChipOption = { id: string; name: string; color?: string };
 
 const TAG_ACCENTS = ['#2f6f52', '#315f79', '#7b4fa8', '#9b5f12', '#a33d63', '#4a6b8a'];
 
@@ -63,4 +66,32 @@ export async function syncTaskTags(taskId: string, next: TagDraft[], previous: T
   const had = new Set(previous.map((tag) => tag.id));
   for (const tag of resolved)
     if (!had.has(tag.id)) await send(`/tasks/${taskId}/tags`, 'POST', { tagId: tag.id });
+}
+
+/**
+ * Reconciles one project's categories against what the form was left holding, the way
+ * `syncTaskTags` does for a task: names typed for the first time become categories, then only
+ * the differences are attached and detached. Creating a name that already exists returns the
+ * category holding it, so two projects typed into separately still share the one row.
+ */
+export async function syncProjectCategories(
+  projectId: string,
+  next: TagDraft[],
+  previous: Category[],
+) {
+  const resolved: Category[] = [];
+  for (const draft of next)
+    resolved.push(
+      draft.id
+        ? { id: draft.id, name: draft.name, color: draft.color }
+        : await send<Category>('/categories', 'POST', { name: draft.name }),
+    );
+  const keep = new Set(resolved.map((category) => category.id));
+  for (const category of previous)
+    if (!keep.has(category.id))
+      await send(`/projects/${projectId}/categories/${category.id}`, 'DELETE');
+  const had = new Set(previous.map((category) => category.id));
+  for (const category of resolved)
+    if (!had.has(category.id))
+      await send(`/projects/${projectId}/categories`, 'POST', { categoryId: category.id });
 }

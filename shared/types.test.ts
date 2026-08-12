@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { compareTasksByProjectThenTitle, type Task } from './types.ts';
+import {
+  compareTasksByProjectThenTitle,
+  normalizeCategoryName,
+  sameCategoryName,
+  type Task,
+} from './types.ts';
 
 /** Only the four fields the order reads; the rest of a Task never enters the comparison. */
 const task = (id: string, projectId: string, projectName: string | undefined, title: string) =>
@@ -69,5 +74,19 @@ describe('task picker order', () => {
     expect(
       sorted([task('t1', 'p1', 'Acme', 'Brief'), task('t2', 'p0', undefined, 'Orphan')]),
     ).toEqual(['/Orphan', 'Acme/Brief']);
+  });
+});
+
+describe('category names', () => {
+  it('keeps the spelling and trims the noise around it', () => {
+    expect(normalizeCategoryName('  Client   Retainer ')).toBe('Client Retainer');
+    expect(normalizeCategoryName('   ')).toBe('');
+  });
+
+  it('treats case and spacing as the same category, and different words as different ones', () => {
+    // The rule the chip input matches with and the rule the API looks up with: one function,
+    // so a name typed in the browser resolves to the category the server would have found.
+    expect(sameCategoryName('Client Retainer', '  client   retainer ')).toBe(true);
+    expect(sameCategoryName('Retainer', 'Retainers')).toBe(false);
   });
 });

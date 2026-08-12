@@ -202,6 +202,163 @@ describe('command center API', () => {
     expect(db.prepare('SELECT COUNT(*) count FROM task_tags').get()).toEqual({ count: 0 });
     expect((await request(app).get('/api/tags')).body).toEqual([tag]);
   });
+  it('normalizes and reuses project categories while supporting CRUD', async () => {
+    const app = createApp(db);
+    const created = await request(app)
+      .post('/api/categories')
+      .send({ name: '  Client   Retainer ', color: '#335577' })
+      .expect(201);
+    expect(created.body).toMatchObject({ name: 'Client Retainer', color: '#335577' });
+
+    // A name already in the list picks that category rather than adding a second one.
+    const reused = await request(app)
+      .post('/api/categories')
+      .send({ name: 'client retainer' })
+      .expect(200);
+    expect(reused.body).toEqual(created.body);
+    expect((await request(app).get('/api/categories')).body).toEqual([created.body]);
+
+    const renamed = await request(app)
+      .patch(`/api/categories/${created.body.id}`)
+      .send({ name: '  Ongoing   Retainer ', color: '' })
+      .expect(200);
+    expect(renamed.body).toEqual({ id: created.body.id, name: 'Ongoing Retainer' });
+    await request(app).post('/api/categories').send({ name: '   ' }).expect(400);
+  });
+
+  it('refuses to rename a category onto a name another category already holds', async () => {
+    const app = createApp(db);
+    const retainer = (await request(app).post('/api/categories').send({ name: 'Retainer' })).body;
+    const campaign = (await request(app).post('/api/categories').send({ name: 'Campaign' })).body;
+
+    const refused = await request(app)
+      .patch(`/api/categories/${campaign.id}`)
+      .send({ name: 'retainer' })
+      .expect(409);
+    expect(refused.body).toMatchObject({ code: 'CATEGORY_NAME_TAKEN' });
+    expect((await request(app).get('/api/categories')).body).toEqual([campaign, retainer]);
+
+    // Renaming a category to the spelling it already has is not a clash with itself.
+    await request(app)
+      .patch(`/api/categories/${campaign.id}`)
+      .send({ name: 'campaign' })
+      .expect(200);
+  });
+
+  it('attaches and detaches project categories and includes them in project reads', async () => {
+    const { p } = await setup();
+    const app = createApp(db);
+    expect((await request(app).get('/api/projects')).body[0].categories).toEqual([]);
+    const category = (await request(app).post('/api/categories').send({ name: 'Retainer' })).body;
+
+    const attached = await request(app)
+      .post(`/api/projects/${p.id}/categories`)
+      .send({ categoryId: category.id })
+      .expect(201);
+    expect(attached.body.categories).toEqual([category]);
+    expect((await request(app).get('/api/projects')).body[0].categories).toEqual([category]);
+
+    // Attaching the same category twice is not an error and changes nothing.
+    const again = await request(app)
+      .post(`/api/projects/${p.id}/categories`)
+      .send({ categoryId: category.id })
+      .expect(200);
+    expect(again.body.categories).toEqual([category]);
+
+    const detached = await request(app)
+      .delete(`/api/projects/${p.id}/categories/${category.id}`)
+      .expect(200);
+    expect(detached.body.categories).toEqual([]);
+  });
+
+  it('renames a category once for every project carrying it', async () => {
+    const { c } = await setup();
+    const app = createApp(db);
+    const second = (
+      await request(app).post('/api/projects').send({ clientId: c.id, name: 'Brand Refresh' })
+    ).body;
+    const first = (await request(app).get('/api/projects')).body.find(
+      (project: any) => project.id !== second.id,
+    );
+    const category = (await request(app).post('/api/categories').send({ name: 'Retainer' })).body;
+    for (const project of [first, second])
+      await request(app)
+        .post(`/api/projects/${project.id}/categories`)
+        .send({ categoryId: category.id })
+        .expect(201);
+
+    await request(app)
+      .patch(`/api/categories/${category.id}`)
+      .send({ name: 'Ongoing retainer' })
+      .expect(200);
+
+    const projects = (await request(app).get('/api/projects')).body;
+    expect(projects.map((project: any) => project.categories.map((one: any) => one.name))).toEqual([
+      ['Ongoing retainer'],
+      ['Ongoing retainer'],
+    ]);
+  });
+
+  it('requires confirmation before deleting an attached category, and deletes no project', async () => {
+    const { p } = await setup();
+    const app = createApp(db);
+    const category = (await request(app).post('/api/categories').send({ name: 'Campaign' })).body;
+    await request(app)
+      .post(`/api/projects/${p.id}/categories`)
+      .send({ categoryId: category.id })
+      .expect(201);
+
+    const refused = await request(app).delete(`/api/categories/${category.id}`).expect(409);
+    expect(refused.body).toMatchObject({ code: 'CATEGORY_IN_USE', attachedProjectCount: 1 });
+    expect((await request(app).get('/api/projects')).body[0].categories).toEqual([category]);
+
+    const deleted = await request(app)
+      .delete(`/api/categories/${category.id}?confirm=true`)
+      .expect(200);
+    expect(deleted.body.detachedFromProjects).toBe(1);
+    const projects = (await request(app).get('/api/projects')).body;
+    expect(projects).toHaveLength(1);
+    expect(projects[0]).toMatchObject({ id: p.id, name: p.name, categories: [] });
+    expect(db.prepare('SELECT COUNT(*) count FROM project_categories').get()).toEqual({
+      count: 0,
+    });
+  });
+
+  it('deletes a category no project carries without asking, and refuses unknown ids', async () => {
+    const { p } = await setup();
+    const app = createApp(db);
+    const spare = (await request(app).post('/api/categories').send({ name: 'Unused' })).body;
+
+    await request(app).delete(`/api/categories/${spare.id}`).expect(200);
+    expect((await request(app).get('/api/categories')).body).toEqual([]);
+    await request(app).delete(`/api/categories/${spare.id}`).expect(404);
+    await request(app).patch(`/api/categories/${spare.id}`).send({ name: 'Back' }).expect(404);
+    await request(app)
+      .post(`/api/projects/${p.id}/categories`)
+      .send({ categoryId: crypto.randomUUID() })
+      .expect(404);
+    await request(app)
+      .post(`/api/projects/${crypto.randomUUID()}/categories`)
+      .send({ categoryId: spare.id })
+      .expect(404);
+  });
+
+  it('cascades project category links when a project is deleted, keeping the category', async () => {
+    const { p } = await setup();
+    const app = createApp(db);
+    const category = (await request(app).post('/api/categories').send({ name: 'Retainer' })).body;
+    await request(app)
+      .post(`/api/projects/${p.id}/categories`)
+      .send({ categoryId: category.id })
+      .expect(201);
+
+    await request(app).delete(`/api/projects/${p.id}`).expect(200);
+    expect(db.prepare('SELECT COUNT(*) count FROM project_categories').get()).toEqual({
+      count: 0,
+    });
+    expect((await request(app).get('/api/categories')).body).toEqual([category]);
+  });
+
   it('reports overdue and upcoming dashboard counts', async () => {
     const { p } = await setup();
     const app = createApp(db);
@@ -777,6 +934,41 @@ describe('project activity', () => {
     const after = stampsOf(p.id);
     expect(after.updatedAt > BACKDATED).toBe(true);
     expect(after.lastActivityAt).toBe(after.updatedAt);
+  });
+
+  it('treats categorizing a project as an edit of the project record', async () => {
+    const { p } = await setup();
+    const app = createApp(db);
+    const category = (await request(app).post('/api/categories').send({ name: 'Retainer' })).body;
+    backdate(p.id);
+
+    await request(app)
+      .post(`/api/projects/${p.id}/categories`)
+      .send({ categoryId: category.id })
+      .expect(201);
+
+    // How a project is described is the project record, not work done inside it, so both
+    // stamps move exactly as they do for a rename.
+    const attached = stampsOf(p.id);
+    expect(attached.updatedAt > BACKDATED).toBe(true);
+    expect(attached.lastActivityAt).toBe(attached.updatedAt);
+
+    backdate(p.id);
+    // Re-attaching what is already there wrote nothing, so it is not an edit either.
+    await request(app)
+      .post(`/api/projects/${p.id}/categories`)
+      .send({ categoryId: category.id })
+      .expect(200);
+    expect(stampsOf(p.id)).toEqual({ updatedAt: BACKDATED, lastActivityAt: BACKDATED });
+    await request(app)
+      .delete(`/api/projects/${p.id}/categories/${crypto.randomUUID()}`)
+      .expect(200);
+    expect(stampsOf(p.id)).toEqual({ updatedAt: BACKDATED, lastActivityAt: BACKDATED });
+
+    await request(app).delete(`/api/projects/${p.id}/categories/${category.id}`).expect(200);
+    const detached = stampsOf(p.id);
+    expect(detached.updatedAt > BACKDATED).toBe(true);
+    expect(detached.lastActivityAt).toBe(detached.updatedAt);
   });
 
   it('moves the parent project on every child write, without touching updated_at', async () => {

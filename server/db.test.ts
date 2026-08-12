@@ -142,10 +142,54 @@ describe('additive schema migration', () => {
         'task_dependencies',
         'tags',
         'task_tags',
+        'categories',
+        'project_categories',
         'settings',
         'drive_steps',
       ]),
     );
+  });
+
+  it('opens an existing database with every project intact and uncategorized', () => {
+    const file = scratch('legacy.db');
+    seedLegacyDatabase(file);
+    const db = track(createDb(file));
+
+    // The categories tables arrive empty: nothing invents a category for existing work,
+    // and no project row is rewritten to make room for one.
+    expect(rows(db, 'SELECT id, name FROM projects')).toEqual([
+      { id: 'p1', name: 'Identity System' },
+    ]);
+    expect(rows(db, 'SELECT COUNT(*) AS total FROM categories')).toEqual([{ total: 0 }]);
+    expect(rows(db, 'SELECT COUNT(*) AS total FROM project_categories')).toEqual([{ total: 0 }]);
+  });
+
+  it('drops a project’s category links when the project is deleted, keeping the categories', () => {
+    const db = track(createDb(scratch('cascade.db')));
+    db.exec(`
+      INSERT INTO clients (id, name, slug, created_at, updated_at)
+        VALUES ('c1', 'Acme', 'acme', '${NOW}', '${NOW}');
+      INSERT INTO projects (id, client_id, name, created_at, updated_at)
+        VALUES ('p1', 'c1', 'Identity System', '${NOW}', '${NOW}');
+      INSERT INTO categories (id, name) VALUES ('k1', 'Retainer');
+      INSERT INTO project_categories (project_id, category_id) VALUES ('p1', 'k1');
+    `);
+
+    db.prepare('DELETE FROM projects WHERE id=?').run('p1');
+
+    // The join cascades on its own, so no endpoint has to remember to clear it.
+    expect(rows(db, 'SELECT COUNT(*) AS total FROM project_categories')).toEqual([{ total: 0 }]);
+    expect(rows(db, 'SELECT name FROM categories')).toEqual([{ name: 'Retainer' }]);
+    expect(rows(db, 'PRAGMA foreign_key_check')).toEqual([]);
+  });
+
+  it('keeps category names unique regardless of capitalisation', () => {
+    const db = track(createDb(scratch('unique.db')));
+    db.prepare('INSERT INTO categories (id, name) VALUES (?, ?)').run('k1', 'Retainer');
+
+    expect(() =>
+      db.prepare('INSERT INTO categories (id, name) VALUES (?, ?)').run('k2', 'retainer'),
+    ).toThrow(/UNIQUE/i);
   });
 
   it('leaves the database consistent after migrating', () => {

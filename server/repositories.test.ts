@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { addDays, format, subDays } from 'date-fns';
 import { createDb, type Db } from './db.ts';
 import {
+  getCategory,
   getTask,
   hydrateTask,
   listActiveTasks,
+  listCategories,
   listClients,
   listProjects,
   listTags,
@@ -235,6 +237,48 @@ describe('scope and ordering', () => {
       'Zenith Works',
       'Beacon Co',
     ]);
+  });
+
+  it('lists categories without letting capitalisation decide the order', () => {
+    for (const [id, name] of [
+      ['k1', 'retainer'],
+      ['k2', 'Campaign'],
+      ['k3', 'internal'],
+    ] as const)
+      db.prepare('INSERT INTO categories (id, name, color) VALUES (?, ?, NULL)').run(id, name);
+    expect(listCategories(db).map((category) => category.name)).toEqual([
+      'Campaign',
+      'internal',
+      'retainer',
+    ]);
+    expect(getCategory(db, 'k2')).toEqual({ id: 'k2', name: 'Campaign' });
+    expect(getCategory(db, 'missing')).toBeUndefined();
+  });
+
+  it('attaches each project its own categories, in case-insensitive name order', () => {
+    addProject('p2', 'c1', 'Second Project');
+    for (const [id, name] of [
+      ['k1', 'retainer'],
+      ['k2', 'Campaign'],
+    ] as const)
+      db.prepare('INSERT INTO categories (id, name, color) VALUES (?, ?, NULL)').run(id, name);
+    for (const [projectId, categoryId] of [
+      ['p1', 'k1'],
+      ['p1', 'k2'],
+    ] as const)
+      db.prepare('INSERT INTO project_categories (project_id, category_id) VALUES (?, ?)').run(
+        projectId,
+        categoryId,
+      );
+
+    const byId = new Map(
+      (listProjects(db) as unknown as { id: string; categories: { name: string }[] }[]).map(
+        (project) => [project.id, project.categories],
+      ),
+    );
+    expect(byId.get('p1')?.map((category) => category.name)).toEqual(['Campaign', 'retainer']);
+    // Empty rather than absent, so no consumer has to guard before reading the list.
+    expect(byId.get('p2')).toEqual([]);
   });
 
   it('lists tags without letting capitalisation decide the order', () => {

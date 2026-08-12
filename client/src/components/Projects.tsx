@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   DndContext,
   KeyboardSensor,
@@ -25,14 +25,17 @@ import {
   GripVertical,
   Plus,
   Settings,
+  Tags as TagsIcon,
   Trash2,
 } from 'lucide-react';
 import { send } from '../api';
-import type { Client, Priority, Project, Task } from '../../../shared/types';
+import type { Category, Client, Priority, Project, Task } from '../../../shared/types';
 import { compareProjectActivity, compareProjectNames } from '../../../shared/types';
 import { type Modal } from './App';
 import { formatDate } from './formatting';
+import { TagChip } from './FormControls';
 import { DriveBadge, Empty, SearchBox } from './Primitives';
+import { tagAccent } from './ui-shared';
 import { PageHead } from './Shell';
 
 type ProjectSort =
@@ -81,6 +84,7 @@ export function Projects({
   projects,
   updateProjects,
   clients,
+  categories,
   tasks,
   open,
   refresh,
@@ -89,6 +93,7 @@ export function Projects({
   projects: Project[];
   updateProjects: (projects: Project[]) => void;
   clients: Client[];
+  categories: Category[];
   tasks: Task[];
   open: (m: Modal) => void;
   refresh: () => Promise<void>;
@@ -97,9 +102,22 @@ export function Projects({
   const [query, setQuery] = useState(''),
     [clientFilter, setClientFilter] = useState(''),
     [sortBy, setSortBy] = useState<ProjectSort>('recently-updated');
+  const [params, setParams] = useSearchParams();
+  // The category selection lives in the page address, as the board's filters do, so a
+  // filtered Projects view survives a reload and can be handed to someone else as a link.
+  const selectedCategoryIds = (params.get('categories') || '').split(',').filter(Boolean);
+  const setCategoryIds = (ids: string[]) => {
+    const next = new URLSearchParams(params);
+    if (ids.length) next.set('categories', ids.join(','));
+    else next.delete('categories');
+    setParams(next);
+  };
   const visible = projects.filter(
     (p) =>
       (!clientFilter || p.clientId === clientFilter) &&
+      // Every selected category must be present, so each chip narrows the list the way the
+      // selects beside it do rather than widening it.
+      selectedCategoryIds.every((id) => p.categories.some((category) => category.id === id)) &&
       `${p.name} ${p.clientName}`.toLowerCase().includes(query.toLowerCase()),
   );
   const sortedVisible = [...visible].sort(projectComparator(sortBy));
@@ -204,6 +222,45 @@ export function Projects({
           <option value="custom">Custom order</option>
         </select>
       </div>
+      {categories.length > 0 && (
+        <div className="tag-filter">
+          <span className="tag-filter-label" id="category-filter-label">
+            <TagsIcon /> Categories
+          </span>
+          <div role="group" aria-labelledby="category-filter-label">
+            {categories.map((category) => {
+              const active = selectedCategoryIds.includes(category.id);
+              return (
+                <button
+                  key={category.id}
+                  type="button"
+                  className={`tag-chip toggle ${active ? 'active' : ''}`}
+                  aria-pressed={active}
+                  style={{ borderColor: tagAccent(category) }}
+                  onClick={() =>
+                    setCategoryIds(
+                      active
+                        ? selectedCategoryIds.filter((id) => id !== category.id)
+                        : [...selectedCategoryIds, category.id],
+                    )
+                  }
+                >
+                  <span className="tag-dot" style={{ background: tagAccent(category) }} />
+                  {category.name}
+                </button>
+              );
+            })}
+          </div>
+          {selectedCategoryIds.length > 0 && (
+            <button type="button" className="text-btn" onClick={() => setCategoryIds([])}>
+              Clear categories
+            </button>
+          )}
+        </div>
+      )}
+      {selectedCategoryIds.length > 1 && (
+        <p className="filterbar-hint">Showing projects that carry every selected category.</p>
+      )}
       <p className="filterbar-hint">
         {rearrangeable
           ? 'Drag a tile by its grip, or use its position selector, to arrange projects by hand.'
@@ -281,6 +338,15 @@ function ProjectTile({
         <h2>{project.name}</h2>
         <p>{project.description || 'No project description yet.'}</p>
       </Link>
+      {project.categories.length > 0 && (
+        <ul className="tag-list" aria-label={`Categories on ${project.name}`}>
+          {project.categories.map((category) => (
+            <li key={category.id}>
+              <TagChip tag={category} />
+            </li>
+          ))}
+        </ul>
+      )}
       <div className="progress">
         <div>
           <span>Task progress</span>

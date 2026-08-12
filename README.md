@@ -14,7 +14,8 @@ The future Import module's versioned XLSX contract and example campaigns are doc
 - **Sync to Folder** on the dashboard — provisions missing Drive folder skeletons for existing clients/projects; it uploads, downloads, and mirrors nothing, and never discovers projects from Drive
 - Client creation, editing, archival, detail views, and Drive status
 - Project creation, editing, archival, and **record-only delete** that cascades to tasks (Drive files untouched)
-- Projects view with search, client filter, and seven sort modes, including a **Custom order** where tiles are rearranged by drag or keyboard and the arrangement persists
+- Projects view with search, client filter, category filter, and seven sort modes, including a **Custom order** where tiles are rearranged by drag or keyboard and the arrangement persists
+- Shared **project categories** — many per project, created from a project or from Settings, reused case-insensitively, filtered from the page address, renamed everywhere at once, and deleted with an affected-project count that never deletes a project
 - Five-stage **Status** board with persistent ordering, drag-and-drop, filters, tag filtering, title/tag search, and keyboard status controls
 - Shared **task tags** created straight from a task, reused case-insensitively, shown as named chips on cards, and deleted from Settings with an affected-task count
 - Task checklists, dependency blocking, circular-dependency prevention, **rename**, inline description/dates/notes, **record-only delete**, and explicit completion override
@@ -48,7 +49,7 @@ The browser never receives Google tokens. UI code calls only the local API. Driv
 
 ### Data ownership
 
-- **SQLite:** clients, projects, tasks, board-card and project-tile positions, checklists, dependencies, due dates, notes, settings, branding (including the sidebar palette and the logo's address, never the image itself), Drive IDs/URLs, provisioning steps, and timestamps.
+- **SQLite:** clients, projects, tasks, board-card and project-tile positions, checklists, dependencies, due dates, notes, task tags, project categories, settings, branding (including the sidebar palette and the logo's address, never the image itself), Drive IDs/URLs, provisioning steps, and timestamps.
 - **Google Drive:** every project file. The database stores references, never duplicate file contents. Deleting a project or task in the app does **not** delete Drive folders or files.
 
 Timestamps are stored as UTC ISO strings. Date-only deadlines are interpreted in the browser/server machine's local timezone and become overdue after their local calendar day has passed.
@@ -155,6 +156,31 @@ into the database, or backed up, so this app still stores no user files: no uplo
 file-type or size validation, and no new material in the backup story. The cost is the CSP widening
 above and a page load that reaches the logo's host. A logo requires alt text, and when the address
 fails to load — or none is set — the text mark takes its place.
+
+### Project categories
+
+Categories label projects the way tags label tasks, one level up: a shared workspace list, many
+per project, created by typing a name that is not there yet. They are normalized, not packed into
+a column — a `categories` table and a `project_categories` join — which is what makes a single
+rename reach every project carrying the category, and what keeps deletion a detachment rather
+than a cascade into anyone's work.
+
+- Names are matched case-insensitively and collapse inner whitespace, so `Retainer`,
+  `retainer`, and `  Retainer ` are one category. The stored spelling is the one first entered,
+  and the same rule (`normalizeCategoryName` in `shared/types.ts`) is used by the API and the
+  chip input, so a name typed in the browser resolves to the category the server would match.
+- The Projects page carries its category selection in the page address, as the board carries its
+  filters, so a filtered view survives a reload and can be shared as a link. Selecting more than
+  one category shows the projects carrying every one of them.
+- `DELETE /api/categories/:id` refuses with `409 CATEGORY_IN_USE` and an `attachedProjectCount`
+  while the category is attached; `?confirm=true` then detaches it everywhere. No project is
+  deleted or otherwise changed, and the join rows also cascade on their own if a project is
+  deleted.
+- Attaching or detaching a category counts as an edit of the project record — the same kind of
+  change as a rename — so it moves `updated_at` and `last_activity_at` together.
+
+The migration is additive: an existing database gains two empty tables and opens with every
+project intact and uncategorized.
 
 ### Drive provisioning behavior
 

@@ -47,6 +47,14 @@ CREATE TABLE IF NOT EXISTS task_tags (
   tag_id TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
   PRIMARY KEY (task_id, tag_id)
 );
+CREATE TABLE IF NOT EXISTS categories (
+  id TEXT PRIMARY KEY, name TEXT NOT NULL COLLATE NOCASE UNIQUE, color TEXT
+);
+CREATE TABLE IF NOT EXISTS project_categories (
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  category_id TEXT NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+  PRIMARY KEY (project_id, category_id)
+);
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS drive_steps (
   entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, step_key TEXT NOT NULL, folder_id TEXT NOT NULL,
@@ -65,6 +73,7 @@ CREATE INDEX IF NOT EXISTS idx_tasks_due_open ON tasks(due_date) WHERE status <>
 CREATE INDEX IF NOT EXISTS idx_checklist_task ON checklist_items(task_id, position);
 CREATE INDEX IF NOT EXISTS idx_dependencies_task ON task_dependencies(task_id);
 CREATE INDEX IF NOT EXISTS idx_task_tags_tag ON task_tags(tag_id);
+CREATE INDEX IF NOT EXISTS idx_project_categories_category ON project_categories(category_id);
 `;
 
 const schema = `${tableSchema}${indexSchema}`;

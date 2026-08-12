@@ -31,6 +31,7 @@
 - Keep timestamps as UTC ISO strings and due dates as `YYYY-MM-DD` values interpreted in local time.
 - Keep deadline rules and dependency rules out of React components.
 - Archive rather than permanently delete top-level **clients**. Projects and tasks may be hard-deleted from SQLite when the user confirms; never delete or modify Drive files as a side effect of those actions.
+- Labels are normalized joins, never packed columns: tags label tasks, categories label projects, and both match names case-insensitively through one shared rule in `shared/types.ts`. Renaming a label is one write; deleting one detaches it and never deletes what it was attached to.
 - Sidebar branding defaults live in `shared/branding.ts`; runtime overrides are stored in the `settings` table under key `branding`. Its colour rules (`brandingIssues`, `sidebarPalette`, `shared/contrast.ts`) are enforced by the API and the form from the same functions — never validate branding on one side only. A logo is an `https:` reference; this app stores no user files.
 - Pair visual status colors with text or icons and preserve visible keyboard focus.
 - Prefer small service/provider boundaries over generic abstractions.
