@@ -50,6 +50,22 @@ export const branding = {
   tagline: 'Offline',
 };
 
+export const client = (
+  id: string,
+  name: string,
+  status: Client['status'] = 'ACTIVE',
+  overrides: Partial<Client> = {},
+): Client => ({
+  id,
+  name,
+  slug: `${name.toLowerCase().replace(/\s+/g, '-')}-${id}`,
+  status,
+  driveStatus: 'DISCONNECTED',
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+  ...overrides,
+});
+
 export const project = (
   id: string,
   name: string,
@@ -147,6 +163,15 @@ const respondTo = (url: string, init?: RequestInit) => {
       .sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id))
       .map((p, position) => ({ ...p, position }));
     return testState.projectsPayload;
+  }
+  const clientStatus = url.match(/\/api\/clients\/([^/]+)\/(archive|unarchive)$/);
+  if (clientStatus && method === 'POST') {
+    testState.clientsPayload = testState.clientsPayload.map((current) =>
+      current.id === clientStatus[1]
+        ? { ...current, status: clientStatus[2] === 'archive' ? 'ARCHIVED' : 'ACTIVE' }
+        : current,
+    );
+    return { ok: true };
   }
   if (url.endsWith('/api/tasks') && method === 'POST') return task('created-task', body.title);
   if (method === 'PATCH' && /\/api\/tasks\/[^/]+$/.test(url)) {
