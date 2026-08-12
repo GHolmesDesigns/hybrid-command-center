@@ -485,18 +485,48 @@ Your application database is normally stored at:
 data\command-center.db
 ```
 
-That is the default. If `.env` sets `DATABASE_PATH`, the database lives at that path instead — check `.env` before backing up, and use whatever path it names in place of `data\command-center.db` below.
+That is the default. If `.env` sets `DATABASE_PATH`, the database lives at that path instead — check `.env` before backing up.
 
-To make a reliable backup:
+Do **not** copy `data\command-center.db` by hand while the application is running. SQLite may be using neighboring `-wal` and `-shm` files, and copying only the main file can produce a backup that will not open cleanly.
+
+### Back up
+
+From the application folder, run:
+
+```powershell
+npm run db:backup
+```
+
+You can run this while the application is open. It writes a timestamped snapshot to `data\backups\`. That folder stays out of git. Copy the snapshot somewhere private as well if you want an off-machine copy.
+
+Also back up your `.env` file or, at minimum, `GOOGLE_TOKEN_ENCRYPTION_KEY`. Encrypted Google connection data inside the database cannot be read without that key. Drive folder IDs and links in the database survive restore even without the key.
+
+Continue using Google Drive’s own retention or backup process for project files. This application does not copy Drive files into the local backup.
+
+### Restore
 
 1. Stop the application with `Ctrl+C`.
-2. Copy `data\command-center.db` to a private backup location.
-3. Back up your `.env` file or, at minimum, `GOOGLE_TOKEN_ENCRYPTION_KEY` separately and securely.
-4. Continue using Google Drive’s own retention or backup process for project files.
+2. Restore from a backup file:
 
-Do not copy only the database while the application is actively writing. SQLite may temporarily use neighboring `-wal` and `-shm` files.
+   ```powershell
+   npm run db:restore -- data\backups\command-center-YYYYMMDDThhmmssmmmZ.db --force
+   ```
 
-To restore, stop the application, replace `data\command-center.db` with the backup, restore the matching encryption key, and restart.
+3. If the backup is from an older version, run `npm run db:migrate`.
+4. Restore the matching `GOOGLE_TOKEN_ENCRYPTION_KEY` if Drive was connected.
+5. Start the application again.
+
+The restore command saves a safety copy of the database it is about to replace.
+
+### Rehearse before a schema change
+
+Before applying a new version that changes the database shape, run:
+
+```powershell
+npm run db:backup:rehearse
+```
+
+That backs up the live database, copies the backup, runs migrations against the copy only, and reports whether clients, projects, tasks, and Drive folder references are still intact. The live database is not modified.
 
 ## 11. Troubleshooting
 
