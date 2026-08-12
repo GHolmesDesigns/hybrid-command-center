@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { E2E_DATABASE_PATH, validateE2eDatabasePath } from '../e2e/database.ts';
+import { E2E_DATABASE_PATH, validateE2eDatabasePath } from './database.ts';
 
 describe('E2E database safety', () => {
   it('accepts only the dedicated E2E database path', () => {

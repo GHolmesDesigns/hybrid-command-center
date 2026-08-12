@@ -20,7 +20,10 @@
   itself, on ports 8788 and 5174, against `data/e2e.db`, which is deleted at the start of
   every run. The command exits on its own, passing or failing; if it ever does not, something
   it spawned outlived the run and that is the bug.
-- `npm run typecheck`, `npm run lint`, `npm run build`: required quality checks
+- `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build`: required quality checks
+- `npm run check:version-bump`: fails when the branch has not moved the version past
+  `origin/main`. Run it before opening a pull request — it is the only thing that catches a
+  second card landing on a version another card already shipped.
 
 ## Conventions
 
@@ -39,6 +42,7 @@
 - Keep the slug lowercase, hyphen-separated, and short enough to scan in a branch list. The issue number is the identifier; the slug is a reminder.
 - **Do not name branches after version numbers.** The version a card ships as is decided at merge time from milestone close order — the first card closed in a milestone takes the minor bump, the rest take patches — so it is unknowable when the branch is created. Several milestones carry four or five open cards at once.
 - Every merged card ships a version bump. Run `npm version <new-version> --no-git-tag-version` and set `APP_VERSION` in `shared/branding.ts` to the same value, so `package.json` and both `package-lock.json` values stay aligned. The full bump rule is stated on each issue.
+- The number is only settled once the branch merges. Cards run concurrently, so the minor a card claimed on the day it was cut may be taken by whichever card closes first — rebase, re-read `origin/main`, and take the next number rather than assuming the one already written is still free. `npm run check:version-bump` is what tells you, and it is a blocking CI gate.
 - Settle the branch name before opening a pull request. Renaming a head branch closes the open PR, and it cannot be reopened once the old ref is gone.
 
 ## Security and Drive rules

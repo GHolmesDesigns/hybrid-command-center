@@ -4,7 +4,10 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 
 export default tseslint.config(
-  { ignores: ['dist', 'node_modules', 'playwright-report', 'test-results'] },
+  // `.worktrees` holds git worktrees for other branches, each a second checkout of this
+  // repository. Linting into them makes every run report a second candidate tsconfig root
+  // and fail on every file, so a stray worktree breaks `npm run lint` for the branch in hand.
+  { ignores: ['dist', 'node_modules', 'playwright-report', 'test-results', '.worktrees'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
