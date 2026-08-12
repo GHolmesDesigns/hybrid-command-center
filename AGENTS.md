@@ -5,6 +5,7 @@
 - `client/`: React UI only; it never imports Google SDKs or reads secrets.
 - `server/domain/`: reusable, framework-free business rules.
 - `server/drive/`: all Drive and OAuth behavior behind `DriveProvider`.
+- `server/import.ts`: campaign playbook import — workspace snapshot, transactional commit, receipts.
 - `server/app.ts`: validated HTTP boundary; keep data writes transaction-safe.
 - `server/db.ts`: local SQLite schema and indexes.
 - `shared/`: stable cross-layer types and workflow constants.
@@ -33,6 +34,7 @@
 - Archive rather than permanently delete top-level **clients**. Projects and tasks may be hard-deleted from SQLite when the user confirms; never delete or modify Drive files as a side effect of those actions.
 - Labels are normalized joins, never packed columns: tags label tasks, categories label projects, and both match names case-insensitively through one shared rule in `shared/types.ts`. Renaming a label is one write; deleting one detaches it and never deletes what it was attached to.
 - Sidebar branding defaults live in `shared/branding.ts`; runtime overrides are stored in the `settings` table under key `branding`. Its colour rules (`brandingIssues`, `sidebarPalette`, `shared/contrast.ts`) are enforced by the API and the form from the same functions — never validate branding on one side only. A logo is an `https:` reference; this app stores no user files.
+- An import previews before it writes, plans from the same code twice — once for the preview, once against the workspace as it stands at the commit — and writes the whole hierarchy in one transaction. It skips a record the workspace already has, reports the rule that matched, and never edits one. The format is specified in `docs/campaign-playbook-import-format.md`; changing what the importer does means changing that document in the same branch.
 - Pair visual status colors with text or icons and preserve visible keyboard focus.
 - Prefer small service/provider boundaries over generic abstractions.
 

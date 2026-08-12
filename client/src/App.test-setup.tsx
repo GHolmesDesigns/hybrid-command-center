@@ -7,6 +7,12 @@ import { App } from './App';
 import { APP_VERSION, DEFAULT_BRANDING, type Branding } from '../../shared/branding';
 import type { Category, Client, DashboardData, Project, Tag, Task } from '../../shared/types';
 import { sameTagName } from '../../shared/types';
+import {
+  DUPLICATE_RULE,
+  emptyCounts,
+  type ImportReceipt,
+  type PlaybookPreview,
+} from '../../shared/playbook';
 
 export {
   DEFAULT_BRANDING,
@@ -26,8 +32,10 @@ export {
   format,
   App,
   APP_VERSION,
+  emptyCounts,
 };
 export type { Branding, Category, Client, DashboardData, Project, Tag, Task };
+export type { ImportReceipt, PlaybookPreview };
 
 export const emptyDashboard: DashboardData = {
   counts: {
@@ -134,10 +142,15 @@ export const testState = {
   taskPatchError: null as string | null,
   dashboardFailures: 0,
   driveSettingsError: null as string | null,
+  /** Receipts the Import page lists, and what its two writes answer with. */
+  importReceiptsPayload: [] as ImportReceipt[],
+  importPreviewPayload: null as PlaybookPreview | null,
+  importCommitPayload: null as { status: number; body: unknown } | null,
 };
 
 /** Serves the seven endpoints App() requests on mount. */
 const payloadFor = (url: string) => {
+  if (url.endsWith('/api/import/receipts')) return testState.importReceiptsPayload;
   if (url.endsWith('/api/dashboard')) return testState.dashboardPayload;
   if (url.endsWith('/api/settings/branding'))
     return { branding: testState.brandingPayload ?? branding };
@@ -174,6 +187,17 @@ const respondTo = (url: string, init?: RequestInit) => {
   }
   if (url.endsWith('/api/settings/drive') && testState.driveSettingsError)
     return reply(503, { error: testState.driveSettingsError });
+  // The import routes answer with whatever the case set up: the dry run is a plain 200 even
+  // when the playbook is unimportable, and a refused commit is a 409 carrying the reasons.
+  if (url.endsWith('/api/import/playbook/preview') && method === 'POST')
+    return testState.importPreviewPayload ?? reply(400, { error: 'No preview was set up.' });
+  if (url.endsWith('/api/import/playbook') && method === 'POST') {
+    const answer = testState.importCommitPayload;
+    if (!answer) return reply(400, { error: 'No commit was set up.' });
+    const receipt = (answer.body as { receipt?: ImportReceipt }).receipt;
+    if (receipt) testState.importReceiptsPayload = [receipt, ...testState.importReceiptsPayload];
+    return reply(answer.status, answer.body);
+  }
   if (url.endsWith('/api/projects/reorder')) {
     const order: string[] = body.orderedIds;
     testState.projectsPayload = [...testState.projectsPayload]
@@ -329,6 +353,44 @@ export const remembered = (id: string) =>
 /** A due date `offset` days from today, so no fixture expires. */
 export const day = (offset: number) => format(addDays(new Date(), offset), 'yyyy-MM-dd');
 
+/** A dry run in the shape the server answers with, varied per case. */
+export const preview = (overrides: Partial<PlaybookPreview> = {}): PlaybookPreview => ({
+  schemaVersion: 1,
+  ok: true,
+  creates: { ...emptyCounts(), Clients: 1, Projects: 1, Tasks: 2 },
+  skips: emptyCounts(),
+  failures: emptyCounts(),
+  created: [
+    { sheet: 'Clients', row: 2, key: 'CLI-A', label: 'Acme Studio' },
+    { sheet: 'Projects', row: 2, key: 'PRJ-A', label: 'Spring Campaign' },
+    { sheet: 'Tasks', row: 2, key: 'TSK-1', label: 'Week 1 blog post' },
+    { sheet: 'Tasks', row: 3, key: 'TSK-2', label: 'Week 1 social set' },
+  ],
+  skipped: [],
+  issues: [],
+  duplicateRule: DUPLICATE_RULE,
+  fingerprint: 'a'.repeat(64),
+  ...overrides,
+});
+
+/** A receipt in the shape the server answers with, varied per case. */
+export const receipt = (overrides: Partial<ImportReceipt> = {}): ImportReceipt => ({
+  id: 'receipt-1',
+  source: 'campaign-playbook',
+  inputKind: 'text',
+  outcome: 'COMMITTED',
+  createdCount: 4,
+  skippedCount: 0,
+  failedCount: 0,
+  creates: { ...emptyCounts(), Clients: 1, Projects: 1, Tasks: 2 },
+  skips: emptyCounts(),
+  created: [{ sheet: 'Clients', row: 2, key: 'CLI-A', label: 'Acme Studio' }],
+  skipped: [],
+  issues: [],
+  createdAt: '2026-03-01T15:04:00.000Z',
+  ...overrides,
+});
+
 beforeEach(() => {
   localStorage.clear();
   testState.projectsPayload = projects;
@@ -341,6 +403,9 @@ beforeEach(() => {
   testState.taskPatchError = null;
   testState.dashboardFailures = 0;
   testState.driveSettingsError = null;
+  testState.importReceiptsPayload = [];
+  testState.importPreviewPayload = null;
+  testState.importCommitPayload = null;
   requests.length = 0;
   vi.stubGlobal(
     'fetch',

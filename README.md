@@ -6,7 +6,7 @@ Built from Master Project Command Center (Codex) infrastructure, with Hybrid V2 
 
 For nontechnical installation and day-to-day instructions, see the [First-Time Setup and User Manual](USER_MANUAL.md).
 
-The future Import module's versioned XLSX contract and example campaigns are documented in the [Campaign Playbook Import Format](docs/campaign-playbook-import-format.md).
+The Import module's versioned XLSX contract, pasted text form, and example campaigns are documented in the [Campaign Playbook Import Format](docs/campaign-playbook-import-format.md).
 
 ## What is included
 
@@ -22,7 +22,8 @@ The future Import module's versioned XLSX contract and example campaigns are doc
 - Optional **task type** for design-studio work — blog post, video, social post, graphics, scheduling, QA/brand pass, admin, or other — shown on the card and in the task detail
 - **Edit details** on a task, opening the full create/edit form from the task detail view
 - Collapsible sidebar with **version tracker** and Settings-editable branding — wording, colours, and an optional logo, with **WCAG AA contrast enforced** and every field resettable to the defaults in `shared/branding.ts`
-- Reserved placeholders for the Calendar, Files, and campaign playbook **Import** modules — visible in the sidebar and Settings, not yet implemented
+- **Campaign playbook import** — an .xlsx workbook or pasted tabs creating a client, its projects, their tasks, checklists, and dependencies in one confirmed transaction, previewed first, duplicates skipped and reported, with a persisted receipt and no Drive side effect
+- Reserved placeholders for the Calendar and Files modules — visible in the sidebar and Settings, not yet implemented
 - Server-only Google OAuth 2.0, encrypted token storage, configurable Drive root, and resumable/idempotent folder creation
 - Responsive desktop/tablet/mobile interface with empty, error, loading, disconnected, and confirmation states
 - Optional realistic seed data that never contacts Drive unless explicitly requested
@@ -182,6 +183,37 @@ than a cascade into anyone's work.
 The migration is additive: an existing database gains two empty tables and opens with every
 project intact and uncategorized.
 
+### Campaign playbook import
+
+`/import` imports a campaign playbook — an .xlsx workbook, or the same tabs pasted as
+tab-separated text — into clients, projects, tasks, checklist items, and dependencies. The format
+is specified in [`docs/campaign-playbook-import-format.md`](docs/campaign-playbook-import-format.md),
+with a sample workbook in `docs/examples/`.
+
+- **Preview first.** `POST /api/import/playbook/preview` is read-only and reports what would be
+  created, what is already here, and every validation error with its tab, row, and column. The
+  confirm button is enabled only for a clean preview.
+- **One transaction.** `POST /api/import/playbook` re-reads the file, re-plans against the
+  workspace as it stands, and writes everything or nothing (`transaction(db, …)`). The commit
+  carries the fingerprint its preview returned, so a file edited in between is refused rather
+  than imported against a stale preview.
+- **Duplicates are skipped, never merged.** A client matches on name, a project on name within
+  its client, a task on title *and* due date within its project — all case-insensitively,
+  archived records included. Matched records are attached to, never edited, which is what makes
+  re-importing the same playbook create nothing the second time.
+- **Receipts persist.** Every import writes an `import_receipts` row — counts created, skipped,
+  and failed, with every reason — listed on the Import page after the modal closes and pruned to
+  the most recent 50. A failed write rolls back; its receipt is written outside the transaction
+  so the failure stays diagnosable.
+- **No Drive side effect.** Imported clients and projects are stored `DISCONNECTED` and are
+  provisioned the next time **Sync to Folder** runs.
+
+The workbook is read without a spreadsheet dependency: `server/domain/workbook.ts` unzips the
+XLSX with `node:zlib` and reads the small subset of SpreadsheetML the format allows, refusing
+macros, encryption, formulas, merged data cells, hidden rows, and Excel date serials. The rules
+themselves are database-free in `server/domain/playbook.ts`, so the same plan builds the preview
+and the write. The migration is additive: an existing database gains one empty table.
+
 ### Drive provisioning behavior
 
 Client creation ensures `[Root]/[Client Name]`. Project creation ensures the project folder and the five configured subfolders from `server/config.ts`:
@@ -261,6 +293,7 @@ If `.env` sets `DATABASE_PATH`, pass the same path with `--database`. Write back
 - **Sync to Folder** provisions folder skeletons only; there is no file-level Drive sync, and nothing is uploaded, downloaded, or mirrored
 - Google shared-drive-specific controls are not exposed
 - The file browser and calendar views are intentionally not implemented
+- Playbook import is create-only: it never edits or merges into a record that already exists, and there is no in-app undo of an import beyond deleting what it created
 - Checklist reordering is supported by the API/data model; the current UI focuses on add, edit-by-state, and removal
 
 ## Planned extension points

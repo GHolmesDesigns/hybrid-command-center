@@ -56,6 +56,12 @@ CREATE TABLE IF NOT EXISTS project_categories (
   PRIMARY KEY (project_id, category_id)
 );
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS import_receipts (
+  id TEXT PRIMARY KEY, source TEXT NOT NULL, input_kind TEXT NOT NULL, filename TEXT,
+  fingerprint TEXT NOT NULL, outcome TEXT NOT NULL, created_count INTEGER NOT NULL DEFAULT 0,
+  skipped_count INTEGER NOT NULL DEFAULT 0, failed_count INTEGER NOT NULL DEFAULT 0,
+  detail TEXT NOT NULL, error TEXT, created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS drive_steps (
   entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, step_key TEXT NOT NULL, folder_id TEXT NOT NULL,
   folder_url TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(entity_type, entity_id, step_key)
@@ -74,6 +80,7 @@ CREATE INDEX IF NOT EXISTS idx_checklist_task ON checklist_items(task_id, positi
 CREATE INDEX IF NOT EXISTS idx_dependencies_task ON task_dependencies(task_id);
 CREATE INDEX IF NOT EXISTS idx_task_tags_tag ON task_tags(tag_id);
 CREATE INDEX IF NOT EXISTS idx_project_categories_category ON project_categories(category_id);
+CREATE INDEX IF NOT EXISTS idx_import_receipts_created ON import_receipts(created_at DESC);
 `;
 
 const schema = `${tableSchema}${indexSchema}`;

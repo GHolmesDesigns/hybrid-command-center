@@ -8,6 +8,18 @@ export const formatDate = (value: string) => {
   }
 };
 
+/**
+ * A stored UTC timestamp as a local date and time. Used where *when* something happened
+ * matters to the minute — an import receipt — rather than only on which day.
+ */
+export const formatDateTime = (value: string) => {
+  try {
+    return format(parseISO(value), 'MMM d, yyyy · h:mm a');
+  } catch {
+    return value;
+  }
+};
+
 export const formatDataAge = (elapsedMs: number) => {
   const minutes = Math.max(0, Math.floor(elapsedMs / 60_000));
   if (minutes < 1) return 'just now';
