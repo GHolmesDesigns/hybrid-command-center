@@ -4,6 +4,10 @@ import request from 'supertest';
 import { addDays, format, subDays } from 'date-fns';
 import { createDb, type Db } from './db.ts';
 import { createApp } from './app.ts';
+import { PROJECT_SUBFOLDERS } from './config.ts';
+import { projectScopes } from './drive/browse.ts';
+import { MockDriveProvider, mockDriveFile } from './drive/mock-provider.ts';
+import { provisionProject, setSetting } from './drive/service.ts';
 import { TASK_CHECKLIST_TEMPLATES } from '../shared/types.ts';
 import { DEFAULT_BRANDING } from '../shared/branding.ts';
 
@@ -674,6 +678,107 @@ describe('command center API', () => {
     const sync = await request(createApp(db)).post('/api/drive/sync');
     expect(sync.status).toBe(200);
     expect(sync.body.connected).toBe(false);
+  });
+
+  describe('project files (read-only Drive browsing)', () => {
+    /** A project with a provisioned folder tree, browsed through the mock provider only. */
+    const browsable = async () => {
+      const drive = new MockDriveProvider();
+      const { p } = await setup();
+      setSetting(db, 'drive_root_id', 'root');
+      await provisionProject(db, p.id, drive);
+      const app = createApp(db, { drive: () => drive });
+      const scopes = projectScopes(db, p.id);
+      return { app, drive, project: p, scopes };
+    };
+
+    it('serves one page of a folder and the scopes the project may be browsed at', async () => {
+      const { app, drive, project, scopes } = await browsable();
+      drive.seed(scopes[0].id, [
+        [mockDriveFile('f1', 'Brief.pdf'), mockDriveFile('f2', 'Deck.key')],
+        [mockDriveFile('f3', 'Cut.mp4')],
+      ]);
+
+      const first = await request(app).get(`/api/projects/${project.id}/files?pageSize=2`);
+      expect(first.status).toBe(200);
+      expect(first.body.state).toBe('READY');
+      expect(first.body.files.map((file: { name: string }) => file.name)).toEqual([
+        'Brief.pdf',
+        'Deck.key',
+      ]);
+      expect(first.body.scopes).toHaveLength(1 + PROJECT_SUBFOLDERS.length);
+      expect(first.body.nextPageToken).toBeTruthy();
+
+      const second = await request(app).get(
+        `/api/projects/${project.id}/files?pageToken=${encodeURIComponent(first.body.nextPageToken)}`,
+      );
+      expect(second.body.files.map((file: { name: string }) => file.name)).toEqual(['Cut.mp4']);
+      expect(second.body.nextPageToken).toBeNull();
+    });
+
+    it('never returns a Drive credential or token to the browser', async () => {
+      const { app, drive, project, scopes } = await browsable();
+      drive.seed(scopes[0].id, [[mockDriveFile('f1', 'Brief.pdf')]]);
+      setSetting(db, 'google_tokens', 'encrypted-token-blob');
+
+      const listing = await request(app).get(`/api/projects/${project.id}/files`);
+      // Nothing the token table holds may travel, and the body is only ever the documented
+      // shape — so a credential cannot ride along on a field nobody looked at.
+      expect(JSON.stringify(listing.body)).not.toContain('encrypted-token-blob');
+      expect(Object.keys(listing.body).sort()).toEqual([
+        'error',
+        'files',
+        'folder',
+        'nextPageToken',
+        'projectId',
+        'projectName',
+        'scopes',
+        'state',
+      ]);
+      expect(Object.keys(listing.body.files[0]).sort()).toEqual([
+        'id',
+        'mimeType',
+        'modifiedAt',
+        'name',
+        'size',
+        'url',
+      ]);
+    });
+
+    it('refuses a folder outside the project and never asks Drive for it', async () => {
+      const { app, drive, project } = await browsable();
+      const refused = await request(app).get(
+        `/api/projects/${project.id}/files?folderId=someone-elses-folder`,
+      );
+      expect(refused.status).toBe(400);
+      expect(refused.body.error).toMatch(/not part of this project/);
+      expect(drive.listCalls).toHaveLength(0);
+    });
+
+    it('answers 404 for a project that does not exist', async () => {
+      const { app } = await browsable();
+      const missing = await request(app).get(`/api/projects/${crypto.randomUUID()}/files`);
+      expect(missing.status).toBe(404);
+    });
+
+    it('reports a disconnected Drive as a state rather than an error', async () => {
+      const { p } = await setup();
+      const listing = await request(createApp(db)).get(`/api/projects/${p.id}/files`);
+      expect(listing.status).toBe(200);
+      expect(['NOT_CONFIGURED', 'NOT_CONNECTED']).toContain(listing.body.state);
+      expect(listing.body.files).toEqual([]);
+    });
+
+    it('exposes no way to change Drive through the files route', async () => {
+      const { app, project } = await browsable();
+      for (const attempt of [
+        request(app).post(`/api/projects/${project.id}/files`).send({ name: 'x' }),
+        request(app).patch(`/api/projects/${project.id}/files`).send({ name: 'x' }),
+        request(app).delete(`/api/projects/${project.id}/files`),
+        request(app).delete(`/api/projects/${project.id}/files/f1`),
+      ])
+        expect((await attempt).status).toBe(404);
+    });
   });
 
   it('clears optional task fields when they are sent empty, and keeps them when omitted', async () => {

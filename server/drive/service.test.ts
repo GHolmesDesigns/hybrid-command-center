@@ -2,35 +2,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createDb, type Db } from '../db.ts';
 import { PROJECT_SUBFOLDERS } from '../config.ts';
-import type { DriveFolder, DriveProvider } from './provider.ts';
+import { MockDriveProvider } from './mock-provider.ts';
 import { provisionClient, provisionProject, setSetting } from './service.ts';
 
-class MockDrive implements DriveProvider {
-  connected = true;
-  folders = new Map<string, DriveFolder>();
-  calls: string[] = [];
-  failOn?: string;
-  failed = false;
-  async ensureFolder(input: { name: string; parentId: string; idempotencyKey: string }) {
-    this.calls.push(input.idempotencyKey);
-    if (this.failOn === input.name && !this.failed) {
-      this.failed = true;
-      throw new Error('Temporary Drive failure');
-    }
-    const existing = this.folders.get(input.idempotencyKey);
-    if (existing) return existing;
-    const folder = {
-      id: `folder-${this.folders.size + 1}`,
-      url: `https://drive.test/${this.folders.size + 1}`,
-      name: input.name,
-    };
-    this.folders.set(input.idempotencyKey, folder);
-    return folder;
-  }
-  async getFolder(id: string) {
-    return { id, url: `https://drive.test/${id}`, name: 'Root' };
-  }
-}
 let db: Db, clientId: string, projectId: string;
 beforeEach(() => {
   db = createDb(':memory:');
@@ -47,7 +21,7 @@ beforeEach(() => {
 });
 describe('Drive provisioning', () => {
   it('creates the configured hierarchy idempotently', async () => {
-    const drive = new MockDrive();
+    const drive = new MockDriveProvider();
     await provisionClient(db, clientId, drive);
     await provisionProject(db, projectId, drive);
     await provisionProject(db, projectId, drive);
@@ -58,7 +32,7 @@ describe('Drive provisioning', () => {
     ).toBe('CONNECTED');
   });
   it('records partial failure and safely resumes without duplicate folders', async () => {
-    const drive = new MockDrive();
+    const drive = new MockDriveProvider();
     drive.failOn = '03_Working_Files';
     await expect(provisionProject(db, projectId, drive)).rejects.toThrow('Temporary');
     const partial = db

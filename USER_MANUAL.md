@@ -497,6 +497,33 @@ the modal, reloading the page, or restarting the application. The fifty most rec
 Importing never touches Google Drive. Imported clients and projects start as **Drive offline**;
 use **Sync to Folder** on the dashboard to create their folders when you are ready.
 
+### Files
+
+**Files** shows what is actually in a project's Google Drive folder, without leaving the
+application. Choose a project at the top of the page, and a folder beside it — the project's own
+folder, or one of the five subfolders created with it. A project's detail page has a **Browse
+files** button that opens this page already pointing at that project.
+
+Each row gives the name, what kind of item it is, when it was last changed, and how big it is.
+Folders and Google Docs, Sheets, and Slides report no size, so those rows show a dash rather
+than a misleading zero. **Open** on any row opens that item in Google Drive itself, and a folder
+belonging to this project can also be opened here to browse into it. Long folders load 25 items
+at a time; **Show 25 more** adds the next page to the list.
+
+This page only ever reads. There is no upload, download, move, rename, or delete anywhere on it,
+and there is no hidden one: adding, renaming, and removing files is done in Google Drive, which
+every row links to. Deleting a project or a task in Command Center never touches a Drive file
+either — see [Removing records](#removing-records).
+
+If files cannot be shown, the page says which of four things is wrong and what to do about it:
+
+| What it says | What it means |
+| --- | --- |
+| Google Drive is not set up on this computer | The `.env` file has no Google credentials yet. See [Optional Google Drive setup](#6-optional-google-drive-setup). |
+| Google Drive is not connected | Credentials are present, but no Google account is connected. Connect one in Settings. |
+| *Project* has no Drive folder yet | This project was created while Drive was unavailable. Run **Sync to Folder** on the dashboard. |
+| Drive could not list this folder | Drive was asked and refused — usually a rate limit or a dropped connection. **Try again** repeats the request. |
+
 ### Removing records
 
 Removal works differently for each kind of record:
@@ -509,7 +536,7 @@ Removal works differently for each kind of record:
 | Tag | Delete from Settings. It is removed from every task carrying it; no task is deleted. |
 | Category | Delete from Settings. It is removed from every project carrying it; no project is deleted. |
 
-Every removal asks for confirmation first — except a tag no task is using, or a category no project is using, which have nothing to lose — and none of them touch Google Drive. Deleting a project or task in the application leaves its Drive folders and files exactly as they are — remove those in Google Drive yourself if you want them gone.
+Every removal asks for confirmation first — except a tag no task is using, or a category no project is using, which have nothing to lose — and none of them touch Google Drive. Deleting a project or task in the application leaves its Drive folders and files exactly as they are — remove those in Google Drive yourself if you want them gone. The project detail page says so beside its delete button, and the [Files](#files) page repeats it above every listing.
 
 Deleting cannot be undone from inside the application. Recover a mistake by restoring a database backup, as described in [Safe data backup](#10-safe-data-backup).
 
@@ -523,7 +550,7 @@ Settings contains:
 - **Task tags** — every tag in the workspace, with how many tasks carry it, and the only place a tag is deleted
 - The current application version
 - Detected local timezone
-- Information about the future Calendar and Files modules
+- Information about the future Calendar module
 
 Deleting a tag that is still attached asks first and tells you how many tasks are affected; a tag no task carries is removed straight away. Tags are created from tasks, not here.
 

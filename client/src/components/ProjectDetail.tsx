@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowRight, ChevronRight, ExternalLink, Plus, Trash2 } from 'lucide-react';
+import { ArrowRight, ChevronRight, ExternalLink, FileText, Plus, Trash2 } from 'lucide-react';
 import { send } from '../api';
 import type { Project, Task } from '../../../shared/types';
 import { type Modal } from './App';
@@ -108,6 +108,9 @@ export function ProjectDetail({
         <Link className="buttonlike" to={`/kanban?project=${p.id}`}>
           Open project status <ArrowRight />
         </Link>
+        <Link className="buttonlike secondary" to={`/files?project=${p.id}`}>
+          <FileText /> Browse files
+        </Link>
         <button className="secondary" onClick={() => open({ type: 'project', value: p })}>
           Edit project
         </button>
@@ -115,6 +118,12 @@ export function ProjectDetail({
           <Trash2 /> Delete project
         </button>
       </div>
+      {/* Stated where deleting is, not only in the confirmation: the Drive folder this page
+          links to outlives the record, and that is easiest to believe before the prompt. */}
+      <p className="field-hint">
+        Deleting this project removes it and its tasks from Command Center only. Its Drive folder
+        and every file in it are left exactly as they are.
+      </p>
       <section className="panel">
         <div className="section-title">
           <div>

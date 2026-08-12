@@ -13,6 +13,7 @@ import {
   type ImportReceipt,
   type PlaybookPreview,
 } from '../../shared/playbook';
+import { DRIVE_FOLDER_MIME, type DriveFile, type DriveListing } from '../../shared/drive';
 
 export {
   DEFAULT_BRANDING,
@@ -36,6 +37,7 @@ export {
 };
 export type { Branding, Category, Client, DashboardData, Project, Tag, Task };
 export type { ImportReceipt, PlaybookPreview };
+export type { DriveFile, DriveListing };
 
 export const emptyDashboard: DashboardData = {
   counts: {
@@ -146,6 +148,11 @@ export const testState = {
   importReceiptsPayload: [] as ImportReceipt[],
   importPreviewPayload: null as PlaybookPreview | null,
   importCommitPayload: null as { status: number; body: unknown } | null,
+  /**
+   * What `GET /api/projects/:id/files` answers, per request, so a suite can vary the page
+   * by folder and by cursor the way real Drive does. Unset means a Drive nobody connected.
+   */
+  driveListingPayload: null as ((projectId: string, query: URLSearchParams) => unknown) | null,
 };
 
 /** Serves the seven endpoints App() requests on mount. */
@@ -197,6 +204,14 @@ const respondTo = (url: string, init?: RequestInit) => {
     const receipt = (answer.body as { receipt?: ImportReceipt }).receipt;
     if (receipt) testState.importReceiptsPayload = [receipt, ...testState.importReceiptsPayload];
     return reply(answer.status, answer.body);
+  }
+  const files = url.match(/\/api\/projects\/([^/?]+)\/files(?:\?(.*))?$/);
+  if (files && method === 'GET') {
+    const query = new URLSearchParams(files[2] ?? '');
+    return (
+      testState.driveListingPayload?.(files[1], query) ??
+      driveListing({ state: 'NOT_CONNECTED', projectId: files[1] })
+    );
   }
   if (url.endsWith('/api/projects/reorder')) {
     const order: string[] = body.orderedIds;
@@ -373,6 +388,41 @@ export const preview = (overrides: Partial<PlaybookPreview> = {}): PlaybookPrevi
   ...overrides,
 });
 
+/** One Drive item in the shape the files endpoint answers with, varied per case. */
+export const driveFile = (
+  id: string,
+  name: string,
+  overrides: Partial<DriveFile> = {},
+): DriveFile => ({
+  id,
+  name,
+  mimeType: 'application/pdf',
+  url: `https://drive.test/file/${id}`,
+  modifiedAt: '2026-03-01T12:00:00.000Z',
+  size: 4096,
+  ...overrides,
+});
+
+/** A folder row, which is the one kind of row that can be opened inside the app. */
+export const driveFolder = (id: string, name: string): DriveFile =>
+  driveFile(id, name, { mimeType: DRIVE_FOLDER_MIME, size: null });
+
+/** A listing in the shape the files endpoint answers with, varied per case. */
+export const driveListing = (overrides: Partial<DriveListing> = {}): DriveListing => ({
+  state: 'READY',
+  projectId: 'p1',
+  projectName: 'Site refresh',
+  folder: { id: 'folder-p1', name: 'Project folder', url: 'https://drive.test/folder-p1' },
+  scopes: [
+    { id: 'folder-p1', name: 'Project folder', url: 'https://drive.test/folder-p1' },
+    { id: 'folder-p1-admin', name: '01_Admin', url: 'https://drive.test/folder-p1-admin' },
+  ],
+  files: [],
+  nextPageToken: null,
+  error: null,
+  ...overrides,
+});
+
 /** A receipt in the shape the server answers with, varied per case. */
 export const receipt = (overrides: Partial<ImportReceipt> = {}): ImportReceipt => ({
   id: 'receipt-1',
@@ -406,6 +456,7 @@ beforeEach(() => {
   testState.importReceiptsPayload = [];
   testState.importPreviewPayload = null;
   testState.importCommitPayload = null;
+  testState.driveListingPayload = null;
   requests.length = 0;
   vi.stubGlobal(
     'fetch',

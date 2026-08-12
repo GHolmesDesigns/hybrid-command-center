@@ -32,7 +32,10 @@ import {
   setSetting,
   syncAllToDrive,
 } from './drive/service.ts';
+import { DriveScopeError, driveConfigured, listProjectFiles } from './drive/browse.ts';
+import type { DriveProvider } from './drive/provider.ts';
 import { encryptJson } from './drive/tokens.ts';
+import { DRIVE_PAGE_SIZE, DRIVE_PAGE_SIZE_MAX } from '../shared/drive.ts';
 import {
   ImportInputError,
   commitPlaybook,
@@ -92,7 +95,15 @@ const productionContentSecurityPolicy = {
   },
 } as const;
 
-type AppOptions = { production?: boolean };
+type AppOptions = {
+  production?: boolean;
+  /**
+   * The Drive provider the read-only browsing routes use. Tests supply a mock one so a
+   * listing can be exercised without credentials and without contacting real Drive; in
+   * every other case this resolves to the encrypted-token provider as usual.
+   */
+  drive?: (db: Db) => DriveProvider;
+};
 
 /**
  * Optional text field. An omitted key stays `undefined` so a PATCH keeps the stored
@@ -468,6 +479,37 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     try {
       await provisionProject(db, req.params.id);
       res.json(projectById(db, req.params.id));
+    } catch (e) {
+      next(e);
+    }
+  });
+  /**
+   * One page of a project's Drive folder, read-only (FR8). This is the whole API surface
+   * the Files page has: there is no POST, PATCH, or DELETE beside it, and nothing here
+   * returns a token or a credential — the browser gets names, IDs, and the `webViewLink`
+   * Drive itself would send someone to.
+   *
+   * Every failure mode is a state on the body rather than an HTTP error, because each one
+   * has a different thing for the user to do about it and the page has to render them.
+   * The two genuine 4xxs are a project that does not exist and a folder that is not this
+   * project's.
+   */
+  app.get('/api/projects/:id/files', async (req, res, next) => {
+    try {
+      const query = z
+        .object({
+          folderId: z.string().trim().min(5).max(200).optional(),
+          pageToken: z.string().trim().min(1).max(4096).optional(),
+          pageSize: z.coerce.number().int().min(1).max(DRIVE_PAGE_SIZE_MAX).optional(),
+        })
+        .parse(req.query);
+      const listing = await listProjectFiles(db, req.params.id, {
+        ...query,
+        pageSize: query.pageSize ?? DRIVE_PAGE_SIZE,
+        ...(options.drive ? { provider: options.drive(db) } : {}),
+      });
+      if (!listing) return res.status(404).json({ error: 'Project not found.' });
+      res.json(listing);
     } catch (e) {
       next(e);
     }
@@ -1052,9 +1094,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
 
   app.get('/api/settings/drive', (_req, res) =>
     res.json({
-      configured: Boolean(
-        config.google.clientId && config.google.clientSecret && config.google.encryptionKey,
-      ),
+      configured: driveConfigured(),
       connected: driveProvider(db).connected,
       rootFolderId: getSetting(db, 'drive_root_id'),
       rootFolderUrl: getSetting(db, 'drive_root_url'),
@@ -1128,7 +1168,9 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       // An unreadable upload is the caller's problem, not a 500: the message already says
       // what to do about it, and the import modal shows it verbatim.
       const status =
-        error instanceof z.ZodError || error instanceof ImportInputError
+        error instanceof z.ZodError ||
+        error instanceof ImportInputError ||
+        error instanceof DriveScopeError
           ? 400
           : error?.code === 'SQLITE_CONSTRAINT_UNIQUE'
             ? 409

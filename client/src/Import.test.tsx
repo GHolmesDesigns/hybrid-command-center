@@ -35,7 +35,7 @@ const pasteAndCheck = async (dialog: HTMLElement) => {
 };
 
 describe('Import module', () => {
-  it('links Import from the sidebar, collapsed or not, and leaves Calendar and Files unbuilt', async () => {
+  it('links Import from the sidebar, collapsed or not, and leaves Calendar unbuilt', async () => {
     render(
       <MemoryRouter>
         <App />
@@ -45,10 +45,9 @@ describe('Import module', () => {
     await screen.findByText(branding.title);
     expect(screen.getByRole('link', { name: 'Import' })).toHaveAttribute('href', '/import');
     expect(screen.getByText('Calendar')).toHaveClass('nav-disabled');
-    expect(screen.getByText('Files')).toHaveClass('nav-disabled');
   });
 
-  it('keeps Import reachable when the sidebar is collapsed, unlike the unbuilt modules', async () => {
+  it('keeps the shipped modules reachable when the sidebar is collapsed, unlike the unbuilt one', async () => {
     localStorage.setItem('hcc-sidebar-collapsed', '1');
     render(
       <MemoryRouter>
@@ -58,8 +57,8 @@ describe('Import module', () => {
 
     await screen.findByText(branding.title);
     expect(screen.getByRole('link', { name: 'Import' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Files' })).toBeVisible();
     expect(screen.queryByText('Calendar')).toBeNull();
-    expect(screen.queryByText('Files')).toBeNull();
   });
 
   it('points Settings at the shipped module rather than listing it as future work', async () => {

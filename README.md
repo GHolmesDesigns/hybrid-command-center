@@ -23,7 +23,8 @@ The Import module's versioned XLSX contract, pasted text form, and example campa
 - **Edit details** on a task, opening the full create/edit form from the task detail view
 - Collapsible sidebar with **version tracker** and Settings-editable branding — wording, colours, and an optional logo, with **WCAG AA contrast enforced** and every field resettable to the defaults in `shared/branding.ts`
 - **Campaign playbook import** — an .xlsx workbook or pasted tabs creating a client, its projects, their tasks, checklists, and dependencies in one confirmed transaction, previewed first, duplicates skipped and reported, with a persisted receipt and no Drive side effect
-- Reserved placeholders for the Calendar and Files modules — visible in the sidebar and Settings, not yet implemented
+- **Files** — read-only browsing of a project's Drive folder and its provisioned subfolders: paginated listing, type/size/modified for every item, and "Open in Drive" on every row. It uploads, downloads, moves, renames, and deletes nothing, and every Drive failure mode has its own state and next step
+- Reserved placeholder for the Calendar module — visible in the sidebar and Settings, not yet implemented
 - Server-only Google OAuth 2.0, encrypted token storage, configurable Drive root, and resumable/idempotent folder creation
 - Responsive desktop/tablet/mobile interface with empty, error, loading, disconnected, and confirmation states
 - Optional realistic seed data that never contacts Drive unless explicitly requested
@@ -36,7 +37,8 @@ client/                    React + TypeScript + Vite
   src/api.ts               typed HTTP boundary
 server/                    Express local API
   domain/                  deadline and dependency rules
-  drive/                   provider interface, Google implementation, provisioning + sync
+  drive/                   provider interface, Google implementation, provisioning + sync,
+                           and read-only project folder browsing (browse.ts)
   scripts/                 migration, demo seed, backup, restore, and rehearsal
   backup.ts                SQLite online backup / restore helpers
   app.ts                   validated HTTP endpoints
@@ -46,7 +48,7 @@ e2e/                       Playwright critical-flow coverage
 data/                      ignored local SQLite database and backups
 ```
 
-The browser never receives Google tokens. UI code calls only the local API. Drive operations sit behind `DriveProvider`, leaving a clean boundary for the future embedded file browser. Deadline calculations are reusable domain functions, leaving a clean boundary for future month/week/agenda calendar views.
+The browser never receives Google tokens. UI code calls only the local API. Drive operations sit behind `DriveProvider` — including the Files module, which reads through it and never imports a Google SDK. Deadline calculations are reusable domain functions, leaving a clean boundary for future month/week/agenda calendar views.
 
 ### Data ownership
 
@@ -230,6 +232,31 @@ Every folder receives a stable Command Center idempotency property. Folder IDs�
 
 Expired access tokens refresh through Google's OAuth client. Revoked access produces a visible failed status and a retry path; reconnect in Settings if authorization was revoked.
 
+### Files — read-only Drive browsing
+
+`/files` browses the Drive folder behind a project. It is a page rather than a modal because a
+paginated list with a folder switcher is cramped in a dialog, and because the project and folder
+both belong in the address: `/files?project=<id>&folder=<id>` reloads and shares as it looks.
+A project's detail page links to it, and the Drive folder itself is one click from every row.
+
+- **Read-only by construction.** The UI has no upload, download, move, rename, or delete
+  control, and there is no endpoint behind it that would accept one. The provider gained exactly
+  one method, `listFiles`, and `server/drive/browse.ts` — the only module the route calls — has
+  no write in it.
+- **One endpoint.** `GET /api/projects/:id/files?folderId=&pageToken=&pageSize=` answers with
+  `{ state, projectId, projectName, folder, scopes, files, nextPageToken, error }`. No token,
+  credential, or Drive SDK object crosses it; the client never imports `googleapis`.
+- **Scoped by ID.** A project is browsable at its own Drive folder and the subfolders recorded
+  in `drive_steps` for it, matched by ID and never by name. Any other folder ID is refused with
+  a 400 rather than fetched, so a folder ID in the address bar cannot turn one project's file
+  list into a browser for the whole connected account. Folders deeper than that open in Drive.
+- **Five states, five next steps.** `NOT_CONFIGURED` (no credentials in `.env`),
+  `NOT_CONNECTED` (credentials but no connection), `NO_FOLDER` (this project has not been
+  provisioned yet), `FAILED` (Drive was asked and refused — its own words, plus a retry), and
+  `READY`, which includes a folder that is genuinely empty.
+- **Paging is forward-only**, as Drive's cursor is: "Show 25 more" appends to the list rather
+  than replacing it, and a reply that arrives after the selection changed is dropped.
+
 ## Tests
 
 Run all automated checks:
@@ -292,7 +319,8 @@ If `.env` sets `DATABASE_PATH`, pass the same path with `--database`. Write back
 - Clients can only be archived; there is no client delete. Projects and tasks delete permanently from SQLite with no in-app undo — recover from a database backup
 - **Sync to Folder** provisions folder skeletons only; there is no file-level Drive sync, and nothing is uploaded, downloaded, or mirrored
 - Google shared-drive-specific controls are not exposed
-- The file browser and calendar views are intentionally not implemented
+- The file browser is read-only by decision, not by omission: it lists and opens, and there is no upload, download, move, rename, or delete in the UI or in the API surface behind it. A project is browsable only at its own Drive folder and the subfolders provisioning recorded for it; anything deeper opens in Drive
+- Calendar views are intentionally not implemented
 - Playbook import is create-only: it never edits or merges into a record that already exists, and there is no in-app undo of an import beyond deleting what it created
 - Checklist reordering is supported by the API/data model; the current UI focuses on add, edit-by-state, and removal
 
@@ -300,6 +328,6 @@ If `.env` sets `DATABASE_PATH`, pass the same path with `--database`. Write back
 
 **Calendar:** add `/calendar` and a calendar service that consumes task due dates and project milestones through the existing deadline domain functions. Month, week, and agenda components should remain clients of that service. Optional Google Calendar sync belongs in a separate provider beside Drive, not in task components.
 
-**Files:** add `/files`, expand `DriveProvider` with list/upload/download/move/rename/search methods, and build client/project-scoped browser views. Continue storing only Drive IDs and metadata locally. UI components should never import `googleapis`.
+**Files:** `/files` has shipped read-only — `DriveProvider.listFiles` plus `server/drive/browse.ts` and the `GET /api/projects/:id/files` boundary. Extending it means adding upload/download/move/rename/search methods to the provider and a write path beside `browse.ts`, which stays read-only; a mutation belongs in its own module with its own confirmation flow. Continue storing only Drive IDs and metadata locally. UI components should never import `googleapis`.
 
-Recommended order: (1) agenda/calendar read views and milestone model, (2) paginated Drive folder browsing and recent files, (3) uploads/downloads, (4) guarded move/rename operations and search, (5) optional Calendar sync.
+Recommended order: (1) agenda/calendar read views and milestone model, (2) recent-files and cross-project search over the existing listing, (3) uploads/downloads, (4) guarded move/rename operations, (5) optional Calendar sync.
