@@ -96,7 +96,7 @@ npm test
 npm run test:e2e
 npm run db:migrate
 npm run db:seed
-npm run db:backup
+npm run db:backup             # add -- --keep <n> to prune older snapshots
 npm run db:restore -- <backup-file> --force
 npm run db:backup:rehearse
 ```
@@ -423,15 +423,52 @@ npm run db:restore -- data/backups/command-center-<timestamp>.db --force
 npm run db:migrate
 ```
 
-Before a schema migration release, rehearse against a *copy* of the backup (the live database is only read):
+Keep `GOOGLE_TOKEN_ENCRYPTION_KEY` with the backup; encrypted Drive tokens in SQLite cannot be read without it. Folder IDs and URLs survive restore on their own. Google Drive files require no local backup from this app; use Google's export/retention tools according to your own policy.
+
+If `.env` sets `DATABASE_PATH`, pass the same path with `--database`. Write backups elsewhere with `--dir`.
+
+### Retention
+
+Every file in `data/backups/` is a full copy of the database, so the directory outgrows the data it protects unless something prunes it. `db:backup` keeps the newest **7** snapshots and deletes the rest:
+
+```bash
+npm run db:backup -- --keep 3
+```
+
+- Pruning runs only after the new snapshot is written. A backup that fails deletes nothing.
+- Retention never removes the last remaining backup, whatever the count says.
+- A snapshot's `-wal`, `-shm`, and `-journal` sidecars are deleted with it.
+- `--keep 0` turns retention off and keeps everything.
+- Only files named `command-center-<timestamp>.db` are considered. Anything else you put in that directory is left alone.
+
+### Rehearsal
+
+A backup you have never restored is a claim, not a backup, and the restore path is the one thing you cannot afford to discover is broken at the moment you need it. `db:backup:rehearse` restores a snapshot into a throwaway file, migrates it, and compares row counts, Drive folder references, and encrypted tokens against the source. It only reads the live database.
 
 ```bash
 npm run db:backup:rehearse
 ```
 
-Keep `GOOGLE_TOKEN_ENCRYPTION_KEY` with the backup; encrypted Drive tokens in SQLite cannot be read without it. Folder IDs and URLs survive restore on their own. Google Drive files require no local backup from this app; use Google's export/retention tools according to your own policy.
+**It runs on two triggers, and both are deliberate:**
 
-If `.env` sets `DATABASE_PATH`, pass the same path with `--database`. Write backups elsewhere with `--dir`.
+1. **A scheduled task on the machine that owns the data**, weekly. This is the only place a rehearsal means anything: the database is local and gitignored, so a `workflow_dispatch` job in CI would rehearse a restore of an empty database that migrations had just created, pass, and report a green check that says nothing about your data — worse than no gate at all.
+2. **Before merging a schema card**, by hand, on the machine holding the real data. A migration is the thing most likely to break a restore, and a weekly schedule can easily not have run since the last one.
+
+Register the weekly task on Windows (adjust the path, and run it as the account that owns `data/`):
+
+```bash
+schtasks /create /tn "Command Center rehearsal" /sc weekly /d SUN /st 03:00 /tr "cmd /c cd /d C:\path\to\hybrid-command-center && npm run db:backup:rehearse -- --log data\backups\rehearsal.log"
+```
+
+A scheduled run reports failure in three places, because a background job that fails silently is the failure mode this exists to avoid:
+
+- It **exits non-zero**, so Task Scheduler's *Last Run Result* shows the failure.
+- It appends the full report to the `--log` file, which is never truncated — the run before the one that broke is the useful one.
+- It leaves `data/backups/REHEARSAL-FAILED.txt`, and **every backup command prints a warning while that file exists**. A passing rehearsal removes it. This is what puts an unattended failure in front of a person: the next time you run `db:backup`, you cannot miss it.
+
+A rehearsal that cannot run at all — missing database, unreadable backup directory — counts as a failure and is recorded the same way. The rehearsal also applies the same retention to what it writes, and leaves one `rehearsal-…db` copy behind for inspection; otherwise a weekly run would add a full database copy to the directory every week.
+
+Schedule `db:backup` the same way if you want unattended snapshots — same command, same account, `--keep` doing the pruning.
 
 ## Troubleshooting
 
