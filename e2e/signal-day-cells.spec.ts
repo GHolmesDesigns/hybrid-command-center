@@ -34,6 +34,9 @@ test('a Signal day cell keeps its height whatever its posts hold', async ({ page
 
   await page.goto(`/signal?month=${MONTH}`);
   await expect(page.getByRole('heading', { level: 2, name: 'May 2099' })).toBeVisible();
+  // The web fonts are an @import, and swapping one in re-lays out every heading above the grid.
+  // Settled before anything is measured, so a font arriving late cannot move the page mid-run.
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
 
   const cells = page.locator('.signal-grid > .signal-day');
   const heights = () =>
@@ -41,33 +44,40 @@ test('a Signal day cell keeps its height whatever its posts hold', async ({ page
       elements.map((element) => Math.round(element.getBoundingClientRect().height)),
     );
 
+  /**
+   * Where each cell sits in the grid, measured from the first cell rather than from the
+   * viewport. "Expanding moves no other cell" is a claim about the cells' positions relative
+   * to each other; against the viewport it would also fail on anything that shifted the whole
+   * page, which is a different thing and not what this spec is for.
+   */
+  const boxes = () =>
+    cells.evaluateAll((elements) => {
+      const origin = elements[0]?.getBoundingClientRect();
+      if (!origin) throw new Error('the month has no cells to measure');
+      return elements.map((element) => {
+        const box = element.getBoundingClientRect();
+        const top = Math.round(box.top - origin.top);
+        return `${top}:${Math.round(box.left - origin.left)}:${Math.round(box.height)}`;
+      });
+    });
+
   // 1. Every cell in the month is one height — the cell holding the long post included.
   const before = await heights();
   expect(before.length).toBeGreaterThan(30);
   expect(new Set(before).size).toBe(1);
 
-  const long = page.getByRole('region', { name: LONG_DAY });
+  // Scoped to one post rather than to the day: the suite shares a database, and this spec is
+  // about the post it created, not about everything that has ever been given that date.
+  const long = page.getByRole('region', { name: LONG_DAY }).locator('.signal-post').first();
   const body = long.locator('.signal-post-text');
   await expect(body).toHaveText(/…$/);
   await expect(body).not.toHaveText(LONG);
 
   // 2. Expanding shows the whole post and moves nothing: not its own cell, not its neighbours.
-  const boxesBefore = await cells.evaluateAll((elements) =>
-    elements.map((element) => {
-      const box = element.getBoundingClientRect();
-      return `${Math.round(box.top)}:${Math.round(box.left)}:${Math.round(box.height)}`;
-    }),
-  );
+  const boxesBefore = await boxes();
   await long.getByRole('button', { name: /^Show more of/ }).click();
   await expect(body).toHaveText(LONG);
-  expect(
-    await cells.evaluateAll((elements) =>
-      elements.map((element) => {
-        const box = element.getBoundingClientRect();
-        return `${Math.round(box.top)}:${Math.round(box.left)}:${Math.round(box.height)}`;
-      }),
-    ),
-  ).toEqual(boxesBefore);
+  expect(await boxes()).toEqual(boxesBefore);
 
   await long.getByRole('button', { name: /^Show less of/ }).click();
   await expect(body).toHaveText(/…$/);
@@ -92,7 +102,10 @@ test('a Signal day cell keeps its height whatever its posts hold', async ({ page
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
   // 4. A post short enough to show whole is shown whole, with no control that would do nothing.
-  const short = page.getByRole('region', { name: SHORT_DAY });
+  const short = page
+    .getByRole('region', { name: SHORT_DAY })
+    .locator('.signal-post')
+    .filter({ hasText: shortText });
   await expect(short.locator('.signal-post-text')).toHaveText(shortText);
   await expect(short.getByRole('button', { name: /^Show more/ })).toHaveCount(0);
 
