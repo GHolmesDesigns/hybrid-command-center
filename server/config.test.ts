@@ -40,15 +40,37 @@ describe('API host binding', () => {
     expect((await loadConfig()).host).toBe('127.0.0.1');
   });
 
-  it('honors an explicit HOST override so LAN exposure stays deliberate', async () => {
-    process.env.HOST = '0.0.0.0';
-    expect((await loadConfig()).host).toBe('0.0.0.0');
-  });
-
   it('treats an empty HOST as unset rather than binding every interface', async () => {
     process.env.HOST = '';
     expect((await loadConfig()).host).toBe('127.0.0.1');
   });
+
+  /**
+   * The bind gate from `docs/cloud-hosting.md` §5.1. `0.0.0.0` used to be honored, on the theory
+   * that a documented foot-gun is a deliberate choice; it is not, because nothing in the app
+   * authenticates the LAN it would then be answering. Until §5's operator password ships, the
+   * only deliberate choice available is loopback.
+   */
+  it.each(['0.0.0.0', '::', '192.168.1.20', 'command-center.local'])(
+    'refuses HOST=%s while nothing authenticates the API, naming the variable',
+    async (host) => {
+      process.env.HOST = host;
+      await expect(loadConfig()).rejects.toThrow(/HOST: must be a loopback address/);
+    },
+  );
+
+  it('points a refused bind at the decision record rather than only failing', async () => {
+    process.env.HOST = '0.0.0.0';
+    await expect(loadConfig()).rejects.toThrow(/docs\/cloud-hosting\.md §5\.1/);
+  });
+
+  it.each(['127.0.0.1', '::1', 'localhost', 'LocalHost'])(
+    'accepts HOST=%s, since it binds loopback and means to',
+    async (host) => {
+      process.env.HOST = host;
+      expect((await loadConfig()).host).toBe(host);
+    },
+  );
 });
 
 describe('log level', () => {

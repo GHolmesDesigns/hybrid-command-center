@@ -10,7 +10,7 @@ The Import module's versioned XLSX contract, pasted text form, and example campa
 
 Nothing in this app publishes to a social platform. The decision record that a publishing integration would be built from — the provider, the interface, the scheduling conversion, and what `PUBLISHED` would then mean — is [Publishing Integration](docs/publishing-integration.md).
 
-Nothing in this app is reachable off loopback by design. The decision record that a cloud deployment would be built from — access model, source of truth, authentication, Drive OAuth continuity, and migration — is [Cloud Hosting](docs/cloud-hosting.md). Do not expose the current server by changing `HOST`.
+Nothing in this app is reachable off loopback by design, and the server enforces that itself: a `HOST` outside `127.0.0.1`, `::1`, and `localhost` fails the boot while there is no authentication to put in front of it. The decision record that a cloud deployment would be built from — access model, source of truth, authentication, Drive OAuth continuity, and migration — is [Cloud Hosting](docs/cloud-hosting.md).
 
 ## What is included
 
@@ -141,7 +141,7 @@ Required environment variables:
 | Variable | Purpose |
 | --- | --- |
 | `PORT` | Local API port; default `8787`. A port number, 1–65535 |
-| `HOST` | Interface the API binds to; default `127.0.0.1` (loopback only). Set `0.0.0.0` to expose it on the LAN — the app has no authentication, so do this deliberately. A non-loopback bind is not a cloud deployment; see [Cloud Hosting](docs/cloud-hosting.md) |
+| `HOST` | Interface the API binds to; default `127.0.0.1`. Loopback only — `127.0.0.1`, `::1`, or `localhost`. Any other value **stops the boot**, because the app has no authentication and there is no LAN override to opt into; see [Cloud Hosting](docs/cloud-hosting.md) §5.1 |
 | `DATABASE_PATH` | SQLite path; default `./data/command-center.db` |
 | `APP_ORIGIN` | Vite/browser origin; default `http://localhost:5173`. An http or https URL, scheme included |
 | `GOOGLE_CLIENT_ID` | OAuth web client ID |
@@ -183,10 +183,11 @@ import that arrived while another was running — see [Request budgets](#request
 ### Request budgets
 
 The API has no authentication. Every route trusts whichever browser can reach it, which is why the
-default bind is `127.0.0.1` and why changing `HOST` is a foot-gun rather than a feature. Within
-that design nothing here is reachable across a network. `docs/cloud-hosting.md` (C20) recommends a
-private single-instance remote deployment, so the routes that cost real memory, CPU, or Google's
-quota carry a ceiling now rather than acquiring one on the day a listen address leaves loopback.
+bind is loopback and why the boot refuses any other `HOST` rather than trusting a comment to stop
+someone. Within that design nothing here is reachable across a network. `docs/cloud-hosting.md`
+(C20) recommends a private single-instance remote deployment, so the routes that cost real memory,
+CPU, or Google's quota carry a ceiling now rather than acquiring one on the day a listen address
+leaves loopback.
 
 There is deliberately **no global limiter**. The board is used interactively — a drag reorders
 several tasks, opening a project reads its tasks and its files — and one bucket over every route
@@ -564,7 +565,7 @@ Schedule `db:backup` the same way if you want unattended snapshots — same comm
 - Integration activity is bounded rather than permanent: the newest 200 records are kept and each lists at most 100 affected records, so it is a diagnostic log, not a compliance archive. Keep a database backup if a longer history matters
 - Checklist reordering is supported by the API/data model; the current UI focuses on add, edit-by-state, and removal
 - Nothing publishes. Signal Campaign plans content and `PUBLISHED` is the user's own claim that a post went out, not this app having sent it. How a publisher would be built is decided in [`docs/publishing-integration.md`](docs/publishing-integration.md) and nothing in that document has been implemented
-- Nothing is hosted off loopback. How a cloud deploy would be built is decided in [`docs/cloud-hosting.md`](docs/cloud-hosting.md) and nothing in that document has been implemented — do not treat a `HOST` change as that work
+- Nothing is hosted off loopback, and a `HOST` outside `127.0.0.1`, `::1`, and `localhost` fails the boot rather than publishing the unauthenticated API. How a cloud deploy would be built is decided in [`docs/cloud-hosting.md`](docs/cloud-hosting.md) and nothing else in that document has been implemented — the gate is not that work, and neither is lifting it
 
 ## Planned extension points
 
@@ -574,6 +575,6 @@ Schedule `db:backup` the same way if you want unattended snapshots — same comm
 
 **Publishing:** decided but unbuilt. [`docs/publishing-integration.md`](docs/publishing-integration.md) names the provider (Post Bridge), the `PublishProvider` interface and where it lives, how a post's `YYYY-MM-DD` plus `HH:MM` becomes the instant a scheduling API needs, and why delivery state is a separate record rather than a fourth `SignalStatus`. Read it before opening an implementation card; it also establishes that the first release reaches four channels, not eight, because `SignalPost` models no media.
 
-**Cloud hosting:** recommended, awaiting sign-off, unbuilt. [`docs/cloud-hosting.md`](docs/cloud-hosting.md) names a private single-instance remote deploy for one operator, SQLite on the host as authoritative, password-session authentication before any non-loopback bind, production Drive redirect URIs, and a C10 backup/restore cutover. Read it before opening an Infra 2 implementation card. Changing `HOST` alone is not that card.
+**Cloud hosting:** recommended, awaiting sign-off, unbuilt. [`docs/cloud-hosting.md`](docs/cloud-hosting.md) names a private single-instance remote deploy for one operator, SQLite on the host as authoritative, password-session authentication before any non-loopback bind, production Drive redirect URIs, and a C10 backup/restore cutover. Read it before opening an Infra 2 implementation card. Its §5.1 bind gate is the one part now enforced in `server/config.ts`, which refuses a non-loopback `HOST` outright; an implementation card widens that check to the full checklist — password hash, session secret, `https:` `APP_ORIGIN`, TLS acknowledgement — rather than removing it.
 
 Recommended order: (1) recent-files and cross-project search over the existing listing, (2) uploads/downloads, (3) guarded move/rename operations, (4) optional Calendar sync, (5) confirmed publishing integration, (6) cloud hosting only after `docs/cloud-hosting.md` is signed off.

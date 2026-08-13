@@ -28,6 +28,43 @@ export type LogLevel = (typeof LOG_LEVELS)[number];
 export const ENCRYPTION_KEY_MIN_LENGTH = 32;
 
 /**
+ * The only listen addresses this app may bind. `localhost` is here because an operator who
+ * writes it means loopback and the resolver agrees; everything else — `0.0.0.0`, `::`, a LAN
+ * address, a hostname — is an address another machine can reach. `127.0.0.2` is loopback to the
+ * kernel and is deliberately not on this list: the gate is a small set of values an operator
+ * types on purpose, not a subnet calculator.
+ */
+const LOOPBACK_HOSTS = ['127.0.0.1', '::1', 'localhost'] as const;
+
+/** Case-insensitive because `HOST=LocalHost` binds loopback and means to. */
+const isLoopbackHost = (host: string) =>
+  LOOPBACK_HOSTS.some((loopback) => loopback === host.trim().toLowerCase());
+
+/**
+ * Whether the operator-password session from `docs/cloud-hosting.md` §5 is configured. It is not
+ * built — there is no password hash, no session secret, and no CSRF — so the answer is `false`
+ * for every environment, and the bind gate below therefore refuses every non-loopback `HOST`.
+ *
+ * This is annotated `boolean` rather than left to infer `false` on purpose: the type is the
+ * contract the gate is written against, and the value is what today's implementation can honestly
+ * report. When Infra 2 ships §5, this becomes the full §5.1 checklist — password hash and session
+ * secret present, `APP_ORIGIN` an `https:` URL, and a production flag acknowledging TLS
+ * termination — read from the parsed environment. There is no weaker interim mode: a LAN bind
+ * without authentication publishes every write path and both Drive OAuth routes.
+ */
+const AUTHENTICATION_CONFIGURED: boolean = false;
+
+/**
+ * Named so the message and the test read the same rule. It names the variable and the fix and
+ * quotes no value, which matters because the same error list carries secrets' variables.
+ */
+const BIND_GATE_MESSAGE =
+  `must be a loopback address — ${LOOPBACK_HOSTS.join(', ')} — while this app has no ` +
+  'authentication. Any other value publishes every API route, Drive OAuth and every write ' +
+  'path included, to whoever can reach the interface. See docs/cloud-hosting.md §5.1 and the ' +
+  'HOST row in README.md';
+
+/**
  * What each variable falls back to when it is unset. These are the values `.env.example`
  * documents, and `config.test.ts` reads that file to keep the two from drifting. Variables
  * with no entry here — the Google trio — are optional and default to nothing.
@@ -65,7 +102,13 @@ const absoluteUrl = z.url({
 
 const environment = z.object({
   PORT: portNumber,
-  HOST: z.string(),
+  // The bind gate from `docs/cloud-hosting.md` §5.1, enforced here rather than only in the
+  // README: refuse to start on an address other machines can reach while nothing authenticates
+  // them. It is a field rule rather than an object-level one so that a bad `HOST` is still
+  // reported alongside a bad `PORT` — Zod skips object refinements once the shape has failed.
+  HOST: z
+    .string()
+    .refine((value) => isLoopbackHost(value) || AUTHENTICATION_CONFIGURED, BIND_GATE_MESSAGE),
   DATABASE_PATH: z.string(),
   APP_ORIGIN: absoluteUrl,
   // Drive is optional, so its three variables are too. What is refused is a value that is

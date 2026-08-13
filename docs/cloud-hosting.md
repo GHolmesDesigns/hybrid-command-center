@@ -8,8 +8,11 @@ against — not a survey, and not a plan to change `HOST` and see what happens.
 Card: C20 (#77). Resolves Infra 2 / Master Plan §6a / decision §5.6. Builds on the tested backup
 and restore path from C10 (#66).
 
-**Do not expose the current server by changing `HOST`.** The default bind stays `127.0.0.1`. A
-non-loopback bind is forbidden until authentication from §4 is shipped and verified.
+**`HOST` cannot expose the current server.** The default bind stays `127.0.0.1`, and the half of
+the §5.1 bind gate that can be enforced without authentication now is: `server/config.ts` refuses
+to start on anything but `127.0.0.1`, `::1`, or `localhost` (C31, #129). A non-loopback bind stays
+forbidden until authentication from §5 is shipped and verified, at which point that check widens to
+the rest of the checklist rather than being lifted.
 
 ---
 
@@ -143,7 +146,10 @@ scheme, hosting is just publishing an open database.
 5. **Bind gate.** The process refuses to listen on anything other than loopback unless (a) a
    session secret and operator password hash are configured, (b) `APP_ORIGIN` is `https:`, and
    (c) a production flag acknowledges TLS termination. Changing `HOST` alone must continue to be
-   treated as a foot-gun in docs and in code.
+   treated as a foot-gun in docs and in code. **Shipped, in its fail-closed form** (C31, #129):
+   none of (a)–(c) can be satisfied yet, so `server/config.ts` refuses every non-loopback `HOST`
+   at boot and names the variable. Implementing this item means replacing that constant with the
+   three conditions above — the refusal is the default and stays the default.
 6. **Hosted secrets.** `GOOGLE_CLIENT_SECRET`, `GOOGLE_TOKEN_ENCRYPTION_KEY`, the session signing
    secret, and the operator password hash live in the platform secret store or a root-only env
    file outside the app tree. They are never written to `integration_events`, never logged, and
