@@ -108,6 +108,8 @@ export function ModalHost({
         edit={() => edit(task)}
         refresh={refresh}
         flash={flash}
+        projectExists={projects.some((project) => project.id === task.projectId)}
+        clientExists={clients.some((client) => client.id === task.clientId)}
       />
     </EntityModal>
   );

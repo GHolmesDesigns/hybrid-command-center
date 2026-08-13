@@ -194,6 +194,7 @@ export function ClientDetail({
         <Link to="/clients">← All clients</Link>
       </div>
       <PageHead
+        focusOnMount
         eyebrow="Client portfolio"
         title={client.name}
         body={client.notes || 'Client details and every project in one place.'}

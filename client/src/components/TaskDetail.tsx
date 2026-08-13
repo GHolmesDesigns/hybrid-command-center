@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { AlertCircle, Check, FolderKanban, Pencil, ShieldAlert, Trash2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { send } from '../api';
 import type { Tag, Task } from '../../../shared/types';
 import { InlineDateChip, InlineTextEditor } from './InlineEditors';
@@ -17,6 +18,8 @@ export function TaskDetail({
   edit,
   refresh,
   flash,
+  projectExists,
+  clientExists,
 }: {
   task: Task;
   tasks: Task[];
@@ -25,6 +28,8 @@ export function TaskDetail({
   edit: () => void;
   refresh: () => Promise<void>;
   flash: (s: string, t?: 'success' | 'error') => void;
+  projectExists: boolean;
+  clientExists: boolean;
 }) {
   const [text, setText] = useState(''),
     [dep, setDep] = useState(''),
@@ -199,8 +204,22 @@ export function TaskDetail({
             </button>
           </div>
         )}
-        <span>
-          {task.clientName} · {task.projectName}
+        <span className="task-detail-location">
+          {clientExists && task.clientId && task.clientName ? (
+            <Link to={`/clients/${task.clientId}`} onClick={close}>
+              {task.clientName}
+            </Link>
+          ) : (
+            task.clientName
+          )}{' '}
+          ·{' '}
+          {projectExists && task.projectName ? (
+            <Link to={`/projects/${task.projectId}`} onClick={close}>
+              {task.projectName}
+            </Link>
+          ) : (
+            task.projectName
+          )}
         </span>
         <InlineTextEditor
           label="Description"

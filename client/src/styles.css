@@ -1925,6 +1925,11 @@ button.tag-chip.toggle.active {
   color: var(--muted);
   font-size: 12px;
 }
+.task-detail-location a {
+  color: inherit;
+  font-weight: 700;
+  text-underline-offset: 2px;
+}
 .task-detail-head > p {
   color: #58605c;
   line-height: 1.55;
