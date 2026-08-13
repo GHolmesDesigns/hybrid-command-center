@@ -8,6 +8,27 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [4.1.7] - 2026-08-13
+
+### Fixed
+
+- A Signal day cell no longer grows to fit the longest post in it. Every cell in the month is
+  one height, so a thousand-character campaign post can no longer stretch its day and the whole
+  of that week's row with it. A cell holding more than fits scrolls on its own.
+
+### Added
+
+- A post longer than its cell shows its opening, ending in an ellipsis, with **Show more**
+  underneath. **Show more** opens the rest of that post where it sits and moves nothing else on
+  the page; **Show less** puts the opening back. It is a separate control from the post itself,
+  reachable and labelled on its own, so revealing the text and opening the editor can no longer
+  be mistaken for each other. Queue items are still shown whole — the queue is a column of its
+  own with no day beside it to stretch.
+
+### Breaking changes
+
+None.
+
 ## [4.1.6] - 2026-08-13
 
 ### Added
