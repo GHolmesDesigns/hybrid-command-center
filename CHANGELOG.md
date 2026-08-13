@@ -8,6 +8,30 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [4.1.9] - 2026-08-13
+
+### Changed
+
+- The Status board now lives at `/status`. The nav item, breadcrumb, dashboard tiles, and every
+  in-app link that opened the board point there. `/kanban` still works: it redirects to `/status`
+  and keeps whatever query string it had, so an old bookmark filtered to today still opens today's
+  board.
+
+### Fixed
+
+- Calendar links to a task's board no longer append a `task` query parameter the board never
+  read. They keep the project filter only. Opening a specific task from the calendar is left for
+  a later card rather than half-wired through a dead parameter.
+
+### Notes
+
+- CSS class names (`.kanban-board`, `.kanban-column`, `.kanban-card`) stay as they are. Renaming
+  them would double the diff and churn e2e selectors without changing anything a user sees.
+
+### Breaking changes
+
+None. `/kanban` remains as a redirect.
+
 ## [4.1.8] - 2026-08-13
 
 ### Fixed

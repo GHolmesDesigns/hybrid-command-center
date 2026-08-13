@@ -116,7 +116,7 @@ describe('Tag chip input', () => {
       task('t1', 'Recap post', { tags: [{ id: 'tag-brand', name: 'Brand system' }] }),
     ];
     render(
-      <MemoryRouter initialEntries={['/kanban']}>
+      <MemoryRouter initialEntries={['/status']}>
         <App />
       </MemoryRouter>,
     );
@@ -141,7 +141,7 @@ describe('Tag chip input', () => {
       task('t1', 'Recap post', { tags: [{ id: 'tag-brand', name: 'Brand system' }] }),
     ];
     render(
-      <MemoryRouter initialEntries={['/kanban']}>
+      <MemoryRouter initialEntries={['/status']}>
         <App />
       </MemoryRouter>,
     );

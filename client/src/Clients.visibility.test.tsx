@@ -103,7 +103,7 @@ describe('Archived client visibility', () => {
     testState.clientsPayload = [activeClient, archivedClient];
     testState.projectsPayload = [project('p1', 'Site refresh'), archivedClientProject];
     testState.tasksPayload = [task('current', 'Current task'), activeCandidate, archivedCandidate];
-    renderApp('/kanban');
+    renderApp('/status');
     await screen.findByRole('heading', { name: 'Project Status' });
 
     clickTopbarNewTask();

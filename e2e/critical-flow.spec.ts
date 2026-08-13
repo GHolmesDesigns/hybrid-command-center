@@ -22,7 +22,7 @@ test('critical project workflow is visible and interactive', async ({ page }) =>
   await projectDialog.locator('select[name="clientId"]').selectOption(clientId);
   await projectDialog.getByLabel('Project name').fill(projectName);
   await projectDialog.getByRole('button', { name: 'Create project' }).click();
-  await page.goto('/kanban');
+  await page.goto('/status');
   await page.getByRole('button', { name: 'New task' }).first().click();
   const projects = await (await page.request.get('/api/projects')).json();
   const projectId = projects.find((project: { name: string }) => project.name === projectName).id;
@@ -31,7 +31,7 @@ test('critical project workflow is visible and interactive', async ({ page }) =>
   await taskDialog.getByLabel('Task title').fill(foundationTitle);
   await taskDialog.getByLabel('Due date').fill(format(addDays(new Date(), 1), 'yyyy-MM-dd'));
   await taskDialog.getByRole('button', { name: 'Create task' }).click();
-  await page.goto(`/kanban?project=${projectId}`);
+  await page.goto(`/status?project=${projectId}`);
   await expect(page.getByText(foundationTitle, { exact: true })).toBeVisible();
   await page.getByText(foundationTitle, { exact: true }).click();
   // Each detail section owns an Add control, so every one of them is scoped by section.
@@ -137,7 +137,7 @@ test('critical project workflow is visible and interactive', async ({ page }) =>
     page.getByRole('heading', { name: new RegExp(`^${dashboard.counts.overdue} overdue task`) }),
   ).toBeVisible();
   // The tag survived every reload above and reads as text on the card, not colour alone.
-  await page.goto(`/kanban?project=${projectId}`);
+  await page.goto(`/status?project=${projectId}`);
   await expect(foundationCard.getByText(tagName, { exact: true })).toBeVisible();
   await page.getByRole('textbox', { name: 'Search' }).fill(tagName);
   await expect(page.locator('.kanban-card')).toHaveCount(1);

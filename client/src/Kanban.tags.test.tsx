@@ -25,7 +25,7 @@ describe('Board tag filtering and search', () => {
       task('t3', 'Invoice chase', { tags: [] }),
     ];
     render(
-      <MemoryRouter initialEntries={['/kanban']}>
+      <MemoryRouter initialEntries={['/status']}>
         <App />
       </MemoryRouter>,
     );

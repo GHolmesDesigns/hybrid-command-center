@@ -106,7 +106,7 @@ export function ProjectDetail({
         </ul>
       )}
       <div className="detail-actions">
-        <Link className="buttonlike" to={`/kanban?project=${p.id}`}>
+        <Link className="buttonlike" to={`/status?project=${p.id}`}>
           Open project status <ArrowRight />
         </Link>
         <Link className="buttonlike secondary" to={`/files?project=${p.id}`}>

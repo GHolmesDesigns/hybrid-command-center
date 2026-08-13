@@ -134,7 +134,7 @@ function TaskRow({ task }: { task: Task }) {
         {task.overdue && !done && <span className="cal-overdue">Overdue</span>}
       </div>
       <p className="cal-text">
-        <Link to={`/kanban?project=${task.projectId}&task=${task.id}`}>{task.title}</Link>
+        <Link to={`/status?project=${task.projectId}`}>{task.title}</Link>
       </p>
       <div className="cal-item-foot">
         {task.projectName && <span className="cal-project">{task.projectName}</span>}

@@ -41,8 +41,8 @@ describe('Dashboard stat tiles', () => {
     const destinations: [string, string][] = [
       ['Active clients: 4', '/clients'],
       ['Active projects: 7', '/projects'],
-      ['Due today: 2', '/kanban?filter=today'],
-      ['Next 7 days: 5', '/kanban?filter=week'],
+      ['Due today: 2', '/status?filter=today'],
+      ['Next 7 days: 5', '/status?filter=week'],
     ];
     for (const [name, href] of destinations) {
       expect(screen.getByRole('link', { name })).toHaveAttribute('href', href);

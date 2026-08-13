@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Route, Routes, useLocation } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import {
   BriefcaseBusiness,
   CalendarDays,
@@ -48,6 +48,12 @@ export type Modal =
 const SIDEBAR_KEY = 'hcc-sidebar-collapsed';
 
 const LAST_PROJECT_KEY = 'hcc-last-project';
+
+/** Old Status URL. Preserves filters so `/kanban?filter=today` still opens today's board. */
+function LegacyKanbanRedirect() {
+  const { search } = useLocation();
+  return <Navigate to={`/status${search}`} replace />;
+}
 
 export function App() {
   const [clients, setClients] = useState<Client[]>([]),
@@ -159,7 +165,7 @@ export function App() {
           <Nav icon={<LayoutDashboard />} to="/" label="Dashboard" collapsed={collapsed} />
           <Nav icon={<Users />} to="/clients" label="Clients" collapsed={collapsed} />
           <Nav icon={<BriefcaseBusiness />} to="/projects" label="Projects" collapsed={collapsed} />
-          <Nav icon={<FolderKanban />} to="/kanban" label="Status" collapsed={collapsed} />
+          <Nav icon={<FolderKanban />} to="/status" label="Status" collapsed={collapsed} />
           <Nav icon={<Upload />} to="/import" label="Import" collapsed={collapsed} />
           <Nav icon={<FileText />} to="/files" label="Files" collapsed={collapsed} />
           <Nav icon={<CalendarDays />} to="/calendar" label="Calendar" collapsed={collapsed} />
@@ -277,7 +283,7 @@ export function App() {
               }
             />
             <Route
-              path="/kanban"
+              path="/status"
               element={
                 <Kanban
                   tasks={tasks}
@@ -292,6 +298,8 @@ export function App() {
                 />
               }
             />
+            {/* Bookmarks and older dashboard tiles still use /kanban; keep the query string. */}
+            <Route path="/kanban" element={<LegacyKanbanRedirect />} />
             <Route
               path="/import"
               element={
