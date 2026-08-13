@@ -297,6 +297,10 @@ export function createDb(
 ): Db {
   if (filename !== ':memory:') fs.mkdirSync(path.dirname(filename), { recursive: true });
   const db = new DatabaseSync(filename);
+  // WAL lets readers continue while a writer is active. A busy timeout gives a concurrent
+  // writer (backup rehearsal, migration script, or another process) a short window to finish
+  // instead of making BEGIN IMMEDIATE fail as soon as it meets the lock.
+  db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;');
   db.exec(tableSchema);
   const applied = applyAdditiveMigrations(db);
   backfillProjectActivity(db);
