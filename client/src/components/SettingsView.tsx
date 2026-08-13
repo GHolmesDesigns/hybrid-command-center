@@ -406,21 +406,22 @@ export function SettingsView({
           </div>
           <div className="section-title">
             <div>
-              <span className="eyebrow">Future modules</span>
+              <span className="eyebrow">Modules</span>
               <h2>Calendar</h2>
             </div>
           </div>
           <p>
-            Route and service extension points are reserved. This module can be added without
-            changing current task or project data.
+            One month of Signal Campaign&rsquo;s scheduled content beside the tasks coming due, kept
+            as two groups rather than one merged list. It reads and never writes — content is
+            scheduled in Signal, not here.
           </p>
-          <div className="future-list">
-            <span>
-              <CalendarDays /> Calendar views
-            </span>
+          <div className="module-list">
+            <Link to="/calendar">
+              <CalendarDays /> Open the calendar
+            </Link>
           </div>
           <p className="field-hint">
-            Campaign playbook import has shipped — it lives in the sidebar under{' '}
+            Campaign playbook import has shipped too — it lives in the sidebar under{' '}
             <Link to="/import">Import</Link>. So has read-only Drive browsing, under{' '}
             <Link to="/files">Files</Link>; it lists and opens files and never uploads, renames,
             moves, or deletes one.

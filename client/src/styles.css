@@ -1777,12 +1777,12 @@ button.tag-chip.toggle.active {
   border-color: var(--line);
   font-size: 12px;
 }
-.future-list {
+.module-list {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
 }
-.future-list span {
+.module-list a {
   display: flex;
   gap: 5px;
   align-items: center;
@@ -1791,7 +1791,7 @@ button.tag-chip.toggle.active {
   padding: 8px;
   border-radius: 7px;
 }
-.future-list svg {
+.module-list svg {
   width: 14px;
 }
 .empty {

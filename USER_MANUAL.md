@@ -8,7 +8,7 @@ This manual is for the person who will install and use Hybrid Command Center on 
 
 Hybrid Command Center divides information between your computer and Google Drive:
 
-- Your computer stores clients, projects, tasks, deadlines, checklist items, dependencies, notes, and settings in a local SQLite database, along with a bounded record of what each import or outside system has changed.
+- Your computer stores clients, projects, tasks, deadlines, checklist items, dependencies, notes, planned social content, and settings in a local SQLite database, along with a bounded record of what each import or outside system has changed.
 - Google Drive stores the actual client and project files.
 - The application stores Drive folder IDs and links locally. It does not copy file contents into the database.
 
@@ -540,6 +540,51 @@ If files cannot be shown, the page says which of four things is wrong and what t
 | *Project* has no Drive folder yet | This project was created while Drive was unavailable. Run **Sync to Folder** on the dashboard. |
 | Drive could not list this folder | Drive was asked and refused — usually a rate limit or a dropped connection. **Try again** repeats the request. |
 
+### Calendar
+
+**Calendar** shows one month at a time: the content Signal Campaign has scheduled, beside the
+tasks coming due. It opens on the current month. The arrows either side of **Today** step a month
+back or forward, **Today** returns, and the month you are looking at is in the address, so a
+particular month can be bookmarked or sent to someone.
+
+Under the month heading, two counts say how much is there — how many scheduled posts, and how
+many task deadlines.
+
+The page is a list of days rather than a grid of boxes, and days with nothing on them are left
+out entirely. Two reasons: a scheduled post can run to several paragraphs and will not fit in a
+small square, and scrolling past three empty weeks to find the one busy day helps nobody. Today's
+date is marked.
+
+Within a day, scheduled content and task deadlines are kept in **two separate headed groups**,
+each with its own icon and count. They are never mixed into one list, because they are not the
+same kind of thing: one is content going out, the other is work coming due.
+
+- A **scheduled post** shows its time, whether it is a draft, scheduled, or published, what kind
+  of piece it is, the text itself, the channels it goes out on, and the campaign it belongs to if
+  it has one. Each channel shows its initials as well as its colour, so the channel is readable
+  without relying on being able to tell the colours apart.
+- A **task deadline** shows whether it is due or complete, is marked **Overdue** when it is, names
+  the project and client, and its title is a link that opens the task on the Status board.
+
+**Nothing on this page changes anything.** There is no control that creates, moves, or reschedules
+a post or a task, and there is no hidden one. The calendar is a window onto the schedule. Editing
+a scheduled post in the browser is not in this version — the schedule is changed through the
+application's own interface for it, which has not shipped yet.
+
+Two things it will tell you rather than hide:
+
+| What it says | What it means |
+| --- | --- |
+| Signal's schedule could not be read. Showing task deadlines only. | The scheduled content could not be fetched, but your task deadlines below are complete and correct. The reason is printed underneath, and **Retry** asks again. An empty calendar and an unreadable one are different things, and the page will not let one look like the other. |
+| This month has more scheduled posts than one page shows. | A very full month; the list is not the whole of it. |
+
+If a month genuinely holds nothing, the page says **Nothing this month** rather than showing an
+empty frame.
+
+Dates behave the same way they do everywhere else in the application: a post scheduled for the
+14th appears on the 14th, whatever timezone the computer is set to. A post with no date at all is
+not scheduled, and deliberately appears on no day here.
+
 ### Removing records
 
 Removal works differently for each kind of record:
@@ -566,7 +611,7 @@ Settings contains:
 - **Task tags** — every tag in the workspace, with how many tasks carry it, and the only place a tag is deleted
 - The current application version
 - Detected local timezone
-- Information about the future Calendar module
+- A short note on the Calendar, with a link to it
 
 Deleting a tag that is still attached asks first and tells you how many tasks are affected; a tag no task carries is removed straight away. Tags are created from tasks, not here.
 
@@ -592,7 +637,10 @@ Leave the address empty to use the text mark instead. The text mark also returns
 
 **Reset to defaults** restores every branding field — wording, colours, and logo — to the values the application shipped with. The reset fills the form; press **Save branding** to apply it.
 
-Calendar and the embedded file browser are not available in this version. They appear as dimmed placeholders in the sidebar. Use **Open Drive** links to manage project files directly in Google Drive.
+Both [Calendar](#calendar) and [Files](#files) are in the sidebar and working. Each reads and
+nothing more: the calendar shows the month without changing it, and Files lists a project's Drive
+folder without uploading, renaming, moving, or deleting anything. Use the **Open** links on Files,
+or **Open Drive** on a project, to manage the files themselves in Google Drive.
 
 ## 9. Deadlines and timezones
 

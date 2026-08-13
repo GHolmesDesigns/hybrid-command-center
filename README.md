@@ -27,7 +27,8 @@ Nothing in this app publishes to a social platform. The decision record that a p
 - **Campaign playbook import** — an .xlsx workbook or pasted tabs creating a client, its projects, their tasks, checklists, and dependencies in one confirmed transaction, previewed first, duplicates skipped and reported, with a persisted receipt and no Drive side effect
 - **Files** — read-only browsing of a project's Drive folder and its provisioned subfolders: paginated listing, type/size/modified for every item, and "Open in Drive" on every row. It uploads, downloads, moves, renames, and deletes nothing, and every Drive failure mode has its own state and next step
 - **Integration activity** — an append-only record of what each integration changed, when, and how it ended, naming the affected clients, projects, and tasks by id, bounded to the most recent 200 rows, credential-scrubbed, and shown on the Import page beside the receipt it belongs to
-- Reserved placeholder for the Calendar module — visible in the sidebar and Settings, not yet implemented
+- **Signal Campaign** — the authoritative store of planned content: what is being posted, on which channels, on which day and at what time. Data, API, and a read-only provider today; the planner that makes it operable in the browser has not shipped
+- **Calendar** — a read-only month agenda putting Signal's scheduled content beside task due dates, kept as two headed groups rather than one merged list of "events", with empty days dropped. It writes nothing, and a schedule it cannot read degrades the page to task due dates alone with the reason shown
 - Server-only Google OAuth 2.0, encrypted token storage, configurable Drive root, and resumable/idempotent folder creation
 - Responsive desktop/tablet/mobile interface with empty, error, loading, disconnected, and confirmation states
 - Optional realistic seed data that never contacts Drive unless explicitly requested
@@ -42,8 +43,11 @@ server/                    Express local API
   domain/                  deadline and dependency rules
   drive/                   provider interface, Google implementation, provisioning + sync,
                            and read-only project folder browsing (browse.ts)
+  signal/                  Signal Campaign's schedule: SignalProvider (provider.ts), the
+                           read-only implementation (read.ts), writes (service.ts)
   scripts/                 migration, demo seed, backup, restore, and rehearsal
   backup.ts                SQLite online backup / restore helpers
+  calendar.ts              the read-only calendar: schedule and due dates over one range
   import.ts                campaign playbook import: plan, one transaction, receipt
   integration-log.ts       append-only integration activity records
   app.ts                   validated HTTP endpoints
@@ -53,11 +57,11 @@ e2e/                       Playwright critical-flow coverage
 data/                      ignored local SQLite database and backups
 ```
 
-The browser never receives Google tokens. UI code calls only the local API. Drive operations sit behind `DriveProvider` — including the Files module, which reads through it and never imports a Google SDK. Deadline calculations are reusable domain functions, leaving a clean boundary for future month/week/agenda calendar views.
+The browser never receives Google tokens. UI code calls only the local API. Drive operations sit behind `DriveProvider` — including the Files module, which reads through it and never imports a Google SDK. Signal Campaign's schedule sits behind `SignalProvider` the same way, and that interface has no write method by construction, so the calendar reading through it cannot reach a change to a schedule. Deadline calculations are reusable domain functions, which is what let the calendar compose due dates and scheduled content without either module knowing about the other.
 
 ### Data ownership
 
-- **SQLite:** clients, projects, tasks, board-card and project-tile positions, checklists, dependencies, due dates, notes, task tags, project categories, settings, branding (including the sidebar palette and the logo's address, never the image itself), Drive IDs/URLs, provisioning steps, import receipts, integration activity records, and timestamps.
+- **SQLite:** clients, projects, tasks, board-card and project-tile positions, checklists, dependencies, due dates, notes, task tags, project categories, Signal Campaign's planned posts and their channels, settings, branding (including the sidebar palette and the logo's address, never the image itself), Drive IDs/URLs, provisioning steps, import receipts, integration activity records, and timestamps.
 - **Google Drive:** every project file. The database stores references, never duplicate file contents. Deleting a project or task in the app does **not** delete Drive folders or files.
 
 Timestamps are stored as UTC ISO strings. Date-only deadlines are interpreted in the browser/server machine's local timezone and become overdue after their local calendar day has passed.
@@ -300,6 +304,49 @@ written with.
 
 The migration is additive: an existing database gains one empty table and two indexes.
 
+### Signal Campaign and the calendar
+
+Signal Campaign is authoritative for what is scheduled: `signal_posts` is the only store of
+planned content, and nothing else in the app keeps a second copy of a schedule. `/calendar` reads
+it and never writes.
+
+- **A post carries a date and a time, never an instant.** `date` is a `YYYY-MM-DD` value read in
+  local time and `time` is an `HH:MM` label beside it. **A post belongs to the calendar cell whose
+  local date equals its date string** — that is the whole rule, and because no moment is ever
+  derived from the pair, a post scheduled for the 14th is on the 14th in every zone and nothing
+  shifts a day when the clocks change. A post with no date is in the unscheduled queue and
+  deliberately appears on no calendar at all; inventing a cell for it would make an idea look
+  scheduled.
+- **Everything reads through `SignalProvider`.** It has one method and it lists. There is no
+  counterpart that creates, moves, or reschedules, so the calendar cannot reach a write through
+  the interface it consumes. Signal's own writes live in `server/signal/service.ts`, behind
+  `/api/signal/*`, and nothing else calls them.
+- **The two kinds stay two kinds.** `GET /api/calendar?from=&to=` returns scheduled posts and
+  task due dates as two arrays, and the page renders them as two headed groups with their own
+  icons and wording — never one list of "events" with a type tag. The moment they share a list
+  something sorts and counts them together and the difference survives only as a colour. The
+  distinction holds with the stylesheet off.
+- **An agenda, not a grid.** Days are listed and empty days are dropped: a month cell cannot hold
+  a post that runs to a thousand characters, and an agenda answers "what is happening and when"
+  without three empty weeks in the way.
+- **A failing schedule degrades the page rather than emptying it.** Task due dates still render,
+  and the reason the other half is missing is shown. An unreadable schedule and a genuinely empty
+  month are different claims and only one of them is ever true.
+- **Archived work is out, completed work is in.** A calendar claims to show what is happening, and
+  work under an archived client or project is not; finished tasks stay, with their status, because
+  a calendar that dropped them would make a busy week look empty in hindsight.
+- **Signal's own writes record no `integration_events`.** Editing a post is local data, like
+  editing a task. The log is for what an *integration* did.
+
+`npm run signal:import` loads the campaign content Signal already held into `signal_posts`. It is
+real content rather than demo data, which is why it is not part of `db:seed`; it is idempotent by
+post id and never overwrites a post that is already there.
+
+A post's status — `DRAFT`, `SCHEDULED`, `PUBLISHED` — describes its own progress and nothing about
+a publishing integration, because there is not one: `PUBLISHED` is the user saying the post went
+out, not this app having sent it anywhere. That meaning is settled rather than provisional, and
+[`docs/publishing-integration.md`](docs/publishing-integration.md) is where it was settled.
+
 ### Drive provisioning behavior
 
 Client creation ensures `[Root]/[Client Name]`. Project creation ensures the project folder and the five configured subfolders from `server/config.ts`:
@@ -406,7 +453,7 @@ If `.env` sets `DATABASE_PATH`, pass the same path with `--database`. Write back
 - **Sync to Folder** provisions folder skeletons only; there is no file-level Drive sync, and nothing is uploaded, downloaded, or mirrored
 - Google shared-drive-specific controls are not exposed
 - The file browser is read-only by decision, not by omission: it lists and opens, and there is no upload, download, move, rename, or delete in the UI or in the API surface behind it. A project is browsable only at its own Drive folder and the subfolders provisioning recorded for it; anything deeper opens in Drive
-- Calendar views are intentionally not implemented
+- The calendar reads and never writes: it shows one month of scheduled content and task due dates and has no control that creates, moves, or reschedules anything. Editing a post belongs to the Signal planner, which has not shipped, so planned content is currently changed through `/api/signal/*` rather than in the browser
 - Playbook import is create-only: it never edits or merges into a record that already exists, and there is no in-app undo of an import beyond deleting what it created
 - Integration activity is bounded rather than permanent: the newest 200 records are kept and each lists at most 100 affected records, so it is a diagnostic log, not a compliance archive. Keep a database backup if a longer history matters
 - Checklist reordering is supported by the API/data model; the current UI focuses on add, edit-by-state, and removal
@@ -414,10 +461,10 @@ If `.env` sets `DATABASE_PATH`, pass the same path with `--database`. Write back
 
 ## Planned extension points
 
-**Calendar:** add `/calendar` and a calendar service that consumes task due dates and project milestones through the existing deadline domain functions. Month, week, and agenda components should remain clients of that service. Optional Google Calendar sync belongs in a separate provider beside Drive, not in task components. Every sync attempt should record to `integration_events` through `recordIntegrationEvent` — a sync that reads some sources and fails on one is the `PARTIAL` case the log was shaped for.
+**Calendar:** `/calendar` has shipped read-only — `readCalendarRange` in `server/calendar.ts` over `SignalProvider` and the deadline domain functions, behind `GET /api/calendar`. Week and month-grid views would be further clients of that same range, not new reads. What it still lacks is a planner: editing a scheduled post in the browser is C30, and it belongs beside `server/signal/service.ts` rather than on the calendar, which stays a window onto the schedule. Optional Google Calendar sync belongs in a separate provider beside Drive, not in task components. Every sync attempt should record to `integration_events` through `recordIntegrationEvent` — a sync that reads some sources and fails on one is the `PARTIAL` case the log was shaped for.
 
 **Files:** `/files` has shipped read-only — `DriveProvider.listFiles` plus `server/drive/browse.ts` and the `GET /api/projects/:id/files` boundary. Extending it means adding upload/download/move/rename/search methods to the provider and a write path beside `browse.ts`, which stays read-only; a mutation belongs in its own module with its own confirmation flow. Continue storing only Drive IDs and metadata locally. UI components should never import `googleapis`.
 
 **Publishing:** decided but unbuilt. [`docs/publishing-integration.md`](docs/publishing-integration.md) names the provider (Post Bridge), the `PublishProvider` interface and where it lives, how a post's `YYYY-MM-DD` plus `HH:MM` becomes the instant a scheduling API needs, and why delivery state is a separate record rather than a fourth `SignalStatus`. Read it before opening an implementation card; it also establishes that the first release reaches four channels, not eight, because `SignalPost` models no media.
 
-Recommended order: (1) agenda/calendar read views and milestone model, (2) recent-files and cross-project search over the existing listing, (3) uploads/downloads, (4) guarded move/rename operations, (5) optional Calendar sync.
+Recommended order: (1) the Signal planner, so scheduled content can be edited where it is read, (2) recent-files and cross-project search over the existing listing, (3) uploads/downloads, (4) guarded move/rename operations, (5) optional Calendar sync.
