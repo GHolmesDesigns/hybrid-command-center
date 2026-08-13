@@ -88,6 +88,11 @@ import {
 
 const id = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
+/**
+ * What a 500 says, in place of the internal message. Exported so the test asserts the same
+ * string the handler sends rather than a copy of it.
+ */
+export const SERVER_ERROR_MESSAGE = 'Something went wrong on the server.';
 const isProductionRuntime = () =>
   process.env.NODE_ENV === 'production' || process.argv.includes('--production');
 
@@ -1329,33 +1334,51 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     res.json({ ok: true });
   });
 
-  app.use(
-    (error: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
-      void next;
-      // An unreadable upload is the caller's problem, not a 500: the message already says
-      // what to do about it, and the import modal shows it verbatim.
-      const status =
-        error instanceof z.ZodError ||
-        error instanceof ImportInputError ||
-        error instanceof DriveScopeError
-          ? 400
-          : // Editing or deleting a post that is not there is the caller addressing something
-            // that does not exist, not a failure of the write.
-            error instanceof SignalPostNotFoundError
-            ? 404
-            : error?.code === 'SQLITE_CONSTRAINT_UNIQUE'
-              ? 409
-              : 500;
-      res.status(status).json({
-        error:
-          error instanceof z.ZodError
-            ? error.issues[0]?.message
-            : error instanceof Error
-              ? error.message
-              : 'Unexpected error',
-      });
-    },
-  );
+  /**
+   * The API's own 404, registered last among the API routes and therefore ahead of anything
+   * mounted after `createApp` — `server/index.ts` serves the built client from there. Without
+   * it, `/api/typo` fell through every route, past the error handler (which only runs on
+   * `next(error)`), and into `index.html` with a 200, so a client-side typo surfaced as a JSON
+   * parse error rather than as the 404 it is.
+   */
+  app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found.' }));
+
+  app.use((error: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    void next;
+    // An unreadable upload is the caller's problem, not a 500: the message already says
+    // what to do about it, and the import modal shows it verbatim.
+    const status =
+      error instanceof z.ZodError ||
+      error instanceof ImportInputError ||
+      error instanceof DriveScopeError
+        ? 400
+        : // Editing or deleting a post that is not there is the caller addressing something
+          // that does not exist, not a failure of the write.
+          error instanceof SignalPostNotFoundError
+          ? 404
+          : error?.code === 'SQLITE_CONSTRAINT_UNIQUE'
+            ? 409
+            : 500;
+    /**
+     * A 500 is the one status whose message has no reader who benefits: it is whatever SQLite
+     * or googleapis said, which means table names, absolute paths, and provider detail going
+     * to the browser. The detail goes to the log instead, against an ID the response carries,
+     * so a user reporting "something went wrong" can still be traced to the actual error.
+     */
+    if (status === 500) {
+      const errorId = id();
+      req.log.error({ err: error, errorId }, 'Unhandled request error');
+      return res.status(500).json({ error: SERVER_ERROR_MESSAGE, errorId });
+    }
+    res.status(status).json({
+      error:
+        error instanceof z.ZodError
+          ? error.issues[0]?.message
+          : error instanceof Error
+            ? error.message
+            : 'Unexpected error',
+    });
+  });
   return app;
 }
 
