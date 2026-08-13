@@ -2688,3 +2688,215 @@ button.tag-chip.toggle.active {
     display: none;
   }
 }
+
+/* ---------- Calendar (FR7) ----------
+   An agenda rather than a grid: several scheduled posts run past a thousand characters, which
+   no month cell holds. Within a day, scheduled content and task deadlines are separate groups
+   with their own headings and icons — the distinction is structural, and survives with colour
+   and stylesheet both gone. */
+.cal-nav {
+  display: flex;
+  gap: 8px;
+}
+.cal-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin: -6px 0 18px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.cal-summary span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.cal-summary svg {
+  width: 15px;
+  height: 15px;
+}
+.cal-loading {
+  color: var(--muted);
+  font-size: 13px;
+}
+.cal-agenda {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.cal-day {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px 18px 18px;
+}
+.cal-day.is-today {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 1px var(--blue);
+}
+.cal-day-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+  font-size: 15px;
+}
+.cal-today-flag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--blue);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+}
+.cal-group + .cal-group {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--line);
+}
+.cal-group h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 9px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.cal-group h4 svg {
+  width: 15px;
+  height: 15px;
+}
+.cal-count {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.06);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+.cal-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.cal-item {
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  padding: 10px 12px;
+}
+/* The left edge repeats what the group heading and the icons already say. It is a third
+   redundant cue, never the only one. */
+.cal-post {
+  border-left: 3px solid var(--blue);
+}
+.cal-task {
+  border-left: 3px solid var(--amber);
+}
+.cal-task.is-done {
+  border-left-color: var(--green);
+}
+.cal-item-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.cal-time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--ink);
+}
+.cal-status {
+  padding: 1px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-weight: 600;
+}
+.cal-status-draft {
+  border-style: dashed;
+}
+.cal-status-published {
+  border-color: var(--green);
+  color: var(--green);
+}
+.cal-overdue {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--red);
+  color: #fff;
+  font-weight: 600;
+}
+.cal-task-icon {
+  width: 15px;
+  height: 15px;
+}
+.cal-task.is-done .cal-task-icon {
+  color: var(--green);
+}
+.cal-task-state {
+  font-weight: 600;
+  color: var(--ink);
+}
+.cal-text {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  /* Imported posts carry their original line breaks; keep them, and keep long copy readable
+     rather than clipped — nothing here is a preview of something you can open. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.cal-item-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.cal-channels {
+  list-style: none;
+  display: flex;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+}
+.cal-channel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 19px;
+  padding: 0 5px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.07);
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.cal-campaign,
+.cal-project,
+.cal-client {
+  padding: 1px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+.cal-task .cal-text a {
+  color: inherit;
+}
+@media (max-width: 640px) {
+  .cal-day {
+    padding: 13px 13px 15px;
+  }
+  .cal-day-head {
+    font-size: 14px;
+  }
+}

@@ -24,6 +24,7 @@ import { BreadcrumbTrail } from './BreadcrumbTrail';
 import { ClientDetail, Clients } from './Clients';
 import { Dashboard } from './Dashboard';
 import { FilesView } from './FilesView';
+import { CalendarView } from './CalendarView';
 import { ImportView } from './ImportView';
 import { Kanban } from './Kanban';
 import { ModalHost } from './Modals';
@@ -159,16 +160,7 @@ export function App() {
           <Nav icon={<FolderKanban />} to="/kanban" label="Status" collapsed={collapsed} />
           <Nav icon={<Upload />} to="/import" label="Import" collapsed={collapsed} />
           <Nav icon={<FileText />} to="/files" label="Files" collapsed={collapsed} />
-          {!collapsed && (
-            <div className="nav-divider">
-              <span>Coming next</span>
-            </div>
-          )}
-          {!collapsed && (
-            <span className="nav-disabled">
-              <CalendarDays /> Calendar
-            </span>
-          )}
+          <Nav icon={<CalendarDays />} to="/calendar" label="Calendar" collapsed={collapsed} />
           <Nav icon={<Settings />} to="/settings" label="Settings" collapsed={collapsed} />
         </nav>
         <div className="sidebar-foot">
@@ -313,6 +305,7 @@ export function App() {
                 />
               }
             />
+            <Route path="/calendar" element={<CalendarView />} />
             <Route
               path="/settings"
               element={

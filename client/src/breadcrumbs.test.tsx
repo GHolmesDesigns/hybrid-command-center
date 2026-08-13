@@ -49,9 +49,19 @@ describe('breadcrumbsFor', () => {
   });
 
   it('picks up a new route from the table with no page-specific breadcrumb code', () => {
-    const routes = [...BREADCRUMB_ROUTES, { path: '/calendar', label: 'Calendar' }];
-    expect(labels('/calendar', empty, routes)).toEqual([HOME_CRUMB_LABEL, 'Calendar']);
-    expect(breadcrumbsFor('/calendar', empty, routes)[1]).toMatchObject({
+    // A route the table does not carry, so this keeps testing the mechanism rather than one of
+    // the routes that now happens to be registered.
+    const routes = [...BREADCRUMB_ROUTES, { path: '/reports', label: 'Reports' }];
+    expect(labels('/reports', empty, routes)).toEqual([HOME_CRUMB_LABEL, 'Reports']);
+    expect(breadcrumbsFor('/reports', empty, routes)[1]).toMatchObject({
+      href: '/reports',
+      current: true,
+    });
+  });
+
+  it('trails the calendar from the real table', () => {
+    expect(labels('/calendar', empty)).toEqual([HOME_CRUMB_LABEL, 'Calendar']);
+    expect(breadcrumbsFor('/calendar', empty)[1]).toMatchObject({
       href: '/calendar',
       current: true,
     });

@@ -27,8 +27,8 @@ test('the Files page browses a project read-only and states its Drive problem pl
     })
   ).json();
 
-  // The module is in the sidebar, not listed as future work beside Calendar. Scoped to the
-  // navigation, because a project named after this spec is a link that says "Files" too.
+  // The module is in the sidebar. Scoped to the navigation, because a project named after this
+  // spec is a link that says "Files" too.
   const nav = page.getByRole('navigation', { name: 'Primary navigation' });
   await page.goto('/');
   await expect(nav.getByRole('link', { name: 'Files', exact: true })).toBeVisible();

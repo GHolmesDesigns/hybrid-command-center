@@ -34,6 +34,7 @@ import {
 } from './drive/service.ts';
 import { DriveScopeError, driveConfigured, listProjectFiles } from './drive/browse.ts';
 import { signalProvider } from './signal/read.ts';
+import { readCalendarRange } from './calendar.ts';
 import {
   SignalPostNotFoundError,
   createPost,
@@ -1161,6 +1162,25 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     const receipt = getReceipt(db, req.params.id);
     if (!receipt) return res.status(404).json({ error: 'Import receipt not found.' });
     res.json(receipt);
+  });
+
+  /**
+   * The calendar: Signal's schedule and task due dates over one range, kept as two lists
+   * (FR7, §8.7). Read-only — the provider behind it has no write method, so there is no way to
+   * change a schedule through this route, and no counterpart route that would accept one.
+   *
+   * A schedule that cannot be read answers 200 with the tasks and a reason, not an error: the
+   * page is still useful with half of it, and `signal.available` is what the browser renders
+   * the difference from.
+   */
+  app.get('/api/calendar', async (req, res, next) => {
+    try {
+      const { from, to } = signalRangeQuery.parse(req.query);
+      if (from > to) return res.status(400).json({ error: 'The range ends before it starts.' });
+      res.json(await readCalendarRange(db, signalProvider(db), from, to));
+    } catch (error) {
+      next(error);
+    }
   });
 
   /**

@@ -15,6 +15,8 @@ import {
 } from '../../shared/playbook';
 import { DRIVE_FOLDER_MIME, type DriveFile, type DriveListing } from '../../shared/drive';
 import type { IntegrationEvent } from '../../shared/integration-log';
+import type { CalendarRange } from '../../shared/calendar';
+import { SIGNAL_DEFAULT_TIME, type SignalPost } from '../../shared/signal';
 
 export {
   DEFAULT_BRANDING,
@@ -40,6 +42,7 @@ export type { Branding, Category, Client, DashboardData, Project, Tag, Task };
 export type { ImportReceipt, PlaybookPreview };
 export type { DriveFile, DriveListing };
 export type { IntegrationEvent };
+export type { CalendarRange, SignalPost };
 
 export const emptyDashboard: DashboardData = {
   counts: {
@@ -158,7 +161,44 @@ export const testState = {
    * by folder and by cursor the way real Drive does. Unset means a Drive nobody connected.
    */
   driveListingPayload: null as ((projectId: string, query: URLSearchParams) => unknown) | null,
+  /**
+   * What `GET /api/calendar` answers, per range, so a suite can vary a month. Unset means an
+   * empty month with a healthy schedule behind it.
+   */
+  calendarPayload: null as ((from: string, to: string) => unknown) | null,
 };
+
+/** One scheduled post, with only the fields a case cares about spelled out. */
+export const signalPost = (
+  id: string,
+  text: string,
+  date: string | null,
+  overrides: Partial<SignalPost> = {},
+): SignalPost => ({
+  id,
+  text,
+  channels: [],
+  date,
+  time: SIGNAL_DEFAULT_TIME,
+  format: 'TEXT',
+  status: 'SCHEDULED',
+  campaign: null,
+  cta: 'NONE',
+  position: 0,
+  createdAt: '2026-08-01T09:00:00.000Z',
+  updatedAt: '2026-08-01T09:00:00.000Z',
+  ...overrides,
+});
+
+/** A calendar range with both halves healthy unless a case says otherwise. */
+export const calendarRange = (overrides: Partial<CalendarRange> = {}): CalendarRange => ({
+  from: '2026-09-01',
+  to: '2026-09-30',
+  posts: [],
+  tasks: [],
+  signal: { available: true, error: null, truncated: false },
+  ...overrides,
+});
 
 /** Serves the seven endpoints App() requests on mount. */
 const payloadFor = (url: string) => {
@@ -199,6 +239,14 @@ const respondTo = (url: string, init?: RequestInit) => {
   }
   if (url.endsWith('/api/settings/drive') && testState.driveSettingsError)
     return reply(503, { error: testState.driveSettingsError });
+  if (url.includes('/api/calendar')) {
+    const query = new URLSearchParams(url.split('?')[1] ?? '');
+    const from = query.get('from') ?? '';
+    const to = query.get('to') ?? '';
+    return testState.calendarPayload
+      ? testState.calendarPayload(from, to)
+      : calendarRange({ from, to });
+  }
   if (url.includes('/api/integrations/activity'))
     return testState.integrationActivityError
       ? reply(503, { error: testState.integrationActivityError })
@@ -504,6 +552,7 @@ beforeEach(() => {
   testState.integrationActivityPayload = [];
   testState.integrationActivityError = null;
   testState.driveListingPayload = null;
+  testState.calendarPayload = null;
   requests.length = 0;
   vi.stubGlobal(
     'fetch',
