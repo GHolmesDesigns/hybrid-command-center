@@ -67,6 +67,7 @@
 - Every merged card ships a version bump. Run `npm version <new-version> --no-git-tag-version` and set `APP_VERSION` in `shared/branding.ts` to the same value, so `package.json` and both `package-lock.json` values stay aligned. The full bump rule is stated on each issue.
 - The number is only settled once the branch merges. Cards run concurrently, so the minor a card claimed on the day it was cut may be taken by whichever card closes first — rebase, re-read `origin/main`, and take the next number rather than assuming the one already written is still free. `npm run check:version-bump` is what tells you, and it is a blocking CI gate.
 - Settle the branch name before opening a pull request. Renaming a head branch closes the open PR, and it cannot be reopened once the old ref is gone.
+- Record the bump in `CHANGELOG.md` under its own version heading, in the same branch that makes it. Say what changed for someone using the app, not which files moved, and state breaking changes explicitly — including their absence, so a major digit is never left to be inferred.
 
 ## Security and Drive rules
 
