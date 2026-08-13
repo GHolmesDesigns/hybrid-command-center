@@ -1,6 +1,8 @@
 ﻿import crypto from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
+import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { addDays, format, subDays } from 'date-fns';
@@ -11,8 +13,16 @@ import { projectScopes } from './drive/browse.ts';
 import { MockDriveProvider, MockOAuthClient, mockDriveFile } from './drive/mock-provider.ts';
 import { OAUTH_STATE_KEY, OAUTH_STATE_TTL_MS } from './drive/oauth.ts';
 import { getSetting, provisionProject, setSetting } from './drive/service.ts';
-import { DRIVE_BUDGET, DRIVE_SYNC_BUDGET, IMPORT_BUDGET, IMPORT_BUSY_MESSAGE } from './budgets.ts';
+import {
+  DRIVE_BUDGET,
+  DRIVE_SYNC_BUDGET,
+  IMPORT_BUDGET,
+  IMPORT_BUSY_MESSAGE,
+  SAMPLE_PLAYBOOK_BUDGET,
+} from './budgets.ts';
 import { IMPORT_BODY_LIMIT_BYTES } from './import.ts';
+import { findSheet, readXlsxWorkbook } from './domain/workbook.ts';
+import { PLAYBOOK_SHEETS } from '../shared/playbook.ts';
 import { TASK_CHECKLIST_TEMPLATES } from '../shared/types.ts';
 import { DEFAULT_BRANDING } from '../shared/branding.ts';
 
@@ -1585,6 +1595,92 @@ describe('HTTP boundary', () => {
       .get('/projects/whatever')
       .expect(200)
       .expect(/<div id="root">/);
+  });
+});
+
+/**
+ * C37 (#139). `docs/examples/` holds the workbook a first-time importer starts from, and until
+ * this route it was reachable only by opening the repository. The file is served from `docs/`
+ * rather than copied into `client/public/`, because `AGENTS.md` requires the format document to
+ * change in the same branch as the importer and a duplicate binary would not be in that branch.
+ */
+describe('the sample playbook download', () => {
+  /**
+   * The committed workbook, addressed the way the rest of the suite addresses it — by its path
+   * under `docs/examples/`, not by the constant the route reads. That is the point of the case:
+   * moving or renaming the file fails the build here rather than the user's download.
+   */
+  const SAMPLE = path.join(
+    import.meta.dirname,
+    '../docs/examples/campaign-playbook-import-format.xlsx',
+  );
+  const download = (app: ReturnType<typeof createApp>) =>
+    request(app).get('/api/import/playbook/sample').responseType('blob');
+  const digest = (bytes: Buffer) => crypto.createHash('sha256').update(bytes).digest('hex');
+
+  it('serves the workbook committed under docs/examples, byte for byte', async () => {
+    const response = await download(createApp(db));
+    const expected = readFileSync(SAMPLE);
+
+    expect(response.status).toBe(200);
+    // Digest and length rather than a buffer comparison, so a failure reads as two hex strings
+    // instead of 86 KB of binary diff.
+    expect({ bytes: response.body.length, sha256: digest(response.body) }).toEqual({
+      bytes: expected.length,
+      sha256: digest(expected),
+    });
+  });
+
+  it('serves bytes that open as a workbook, with every tab the importer reads', async () => {
+    const response = await download(createApp(db));
+    // The acceptance criterion is that the download opens, not that it arrived: the same reader
+    // the importer uses is what decides that here.
+    const workbook = readXlsxWorkbook(response.body);
+
+    expect(PLAYBOOK_SHEETS.every((sheet) => findSheet(workbook, sheet))).toBe(true);
+  });
+
+  it('tells the browser the type and the filename to save it as', async () => {
+    const response = await download(createApp(db));
+
+    expect(response.headers['content-type']).toBe(
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    expect(response.headers['content-disposition']).toBe(
+      'attachment; filename="campaign-playbook-import-format.xlsx"',
+    );
+  });
+
+  it('serves it from the production build, where the client is served too', async () => {
+    // `index.ts` mounts `dist/client` and its SPA fallback *after* this app, so the API route
+    // still matches first. What is asserted here is the half `createApp` owns: the download is
+    // not something the relaxed development policy was carrying.
+    const response = await download(createApp(db, { production: true }));
+
+    expect(response.status).toBe(200);
+    expect(response.body.length).toBe(readFileSync(SAMPLE).length);
+  });
+
+  it('stays available after the import budget is spent', async () => {
+    const app = createApp(db);
+    const playbook = { text: '[Clients]\nclient_key\tname\nCLI-1\tAcme Studio' };
+    for (let i = 0; i < IMPORT_BUDGET.limit + 1; i += 1)
+      await request(app).post('/api/import/playbook/preview').send(playbook);
+
+    // The sample is what fixes the workbook that spent the window. Sharing `IMPORT_BUDGET` would
+    // withhold it at exactly the moment it is wanted, which is why it has its own.
+    expect((await download(app)).status).toBe(200);
+  });
+
+  it('refuses a caller past its own window, and names the budget it hit', async () => {
+    const app = createApp(db);
+    for (let i = 0; i < SAMPLE_PLAYBOOK_BUDGET.limit; i += 1)
+      expect((await download(app)).status).toBe(200);
+
+    const refused = await request(app).get('/api/import/playbook/sample');
+    expect(refused.status).toBe(429);
+    expect(refused.body).toEqual({ error: SAMPLE_PLAYBOOK_BUDGET.message });
+    expect(refused.headers['retry-after']).toBeTruthy();
   });
 });
 

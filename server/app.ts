@@ -60,6 +60,8 @@ import { DRIVE_PAGE_SIZE, DRIVE_PAGE_SIZE_MAX } from '../shared/drive.ts';
 import {
   IMPORT_BODY_LIMIT_BYTES,
   ImportInputError,
+  SAMPLE_PLAYBOOK_CONTENT_TYPE,
+  SAMPLE_PLAYBOOK_DIRECTORY,
   commitPlaybook,
   getReceipt,
   listReceipts,
@@ -72,10 +74,12 @@ import {
   IMPORT_BUDGET,
   IMPORT_BUSY_MESSAGE,
   IMPORT_CONCURRENCY,
+  SAMPLE_PLAYBOOK_BUDGET,
   concurrencyGate,
   postsOnly,
   requestBudget,
 } from './budgets.ts';
+import { SAMPLE_PLAYBOOK_DOWNLOAD_PATH, SAMPLE_PLAYBOOK_FILENAME } from '../shared/playbook.ts';
 import { listIntegrationEvents } from './integration-log.ts';
 import { INTEGRATION_EVENT_PAGE_MAX, INTEGRATION_SOURCES } from '../shared/integration-log.ts';
 import {
@@ -382,6 +386,12 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     '/api/import/playbook',
     concurrencyGate(IMPORT_CONCURRENCY, IMPORT_BUSY_MESSAGE, { applies: postsOnly }),
   );
+  /**
+   * The sample download is a GET under the same prefix, so the two mounts above pass it through —
+   * both meter POSTs only. It gets its own window because what it spends is different, and
+   * because a spent import budget must not withhold the example that fixes the failing workbook.
+   */
+  app.use(SAMPLE_PLAYBOOK_DOWNLOAD_PATH, requestBudget(SAMPLE_PLAYBOOK_BUDGET, { now: clock }));
   app.use('/api/drive/sync', requestBudget(DRIVE_SYNC_BUDGET, { now: clock }));
   app.use('/api/drive', driveBudget);
   app.use('/api/settings/drive', driveBudget);
@@ -1181,6 +1191,31 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     } catch (error) {
       next(error);
     }
+  });
+  /**
+   * The sample workbook, downloaded rather than looked up in the repository. One fixed file: the
+   * name comes from a constant and never from the request, so the route cannot be asked for a
+   * second file and there is no path for it to join wrongly.
+   *
+   * The headers are set here rather than left to `sendFile`'s extension lookup, so the browser is
+   * told the `.xlsx` type and the filename by this code and a test can hold it to both.
+   */
+  app.get(SAMPLE_PLAYBOOK_DOWNLOAD_PATH, (req, res, next) => {
+    res.setHeader('Content-Type', SAMPLE_PLAYBOOK_CONTENT_TYPE);
+    res.setHeader('Content-Disposition', `attachment; filename="${SAMPLE_PLAYBOOK_FILENAME}"`);
+    res.sendFile(SAMPLE_PLAYBOOK_FILENAME, { root: SAMPLE_PLAYBOOK_DIRECTORY }, (error?: Error) => {
+      if (!error) return;
+      /**
+       * Before any bytes are on the wire this is a 500 through the shared handler, which is what
+       * keeps the absolute path out of the response. After them there is no status left to send,
+       * so a download the browser abandoned is logged and dropped rather than answered twice.
+       */
+      if (res.headersSent) {
+        req.log.error({ err: error }, 'Sample playbook download failed');
+        return;
+      }
+      next(error);
+    });
   });
   // Campaign playbook import. The preview is the error report: a workbook that cannot be
   // imported answers 200 with every reason, because an author needs the whole list, not the

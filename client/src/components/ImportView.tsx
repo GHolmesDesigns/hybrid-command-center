@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle2, CircleAlert, Upload } from 'lucide-react';
+import { AlertCircle, CheckCircle2, CircleAlert, Download, Upload } from 'lucide-react';
 import { api } from '../api';
-import { PLAYBOOK_SHEETS, type ImportReceipt } from '../../../shared/playbook';
+import {
+  PLAYBOOK_SHEETS,
+  SAMPLE_PLAYBOOK_DOWNLOAD_PATH,
+  SAMPLE_PLAYBOOK_FILENAME,
+  type ImportReceipt,
+} from '../../../shared/playbook';
 import {
   INTEGRATION_ENTITY_LABEL,
   INTEGRATION_OPERATION_LABEL,
@@ -73,9 +78,23 @@ export function ImportView({
         title="Import"
         body="Create a client, its projects, their tasks, checklists, and dependencies from one campaign playbook workbook."
         action={
-          <button className="top-action" onClick={open}>
-            <Upload /> Import a playbook
-          </button>
+          <div className="head-actions">
+            {/*
+              A plain link, not a fetch: the API answers with `Content-Disposition: attachment`,
+              so the browser saves the workbook itself. Nothing here reads the bytes, which is
+              why `download` names the file rather than any code assembling a blob for it.
+            */}
+            <a
+              className="secondary buttonlike"
+              href={SAMPLE_PLAYBOOK_DOWNLOAD_PATH}
+              download={SAMPLE_PLAYBOOK_FILENAME}
+            >
+              <Download /> Download sample playbook
+            </a>
+            <button onClick={open}>
+              <Upload /> Import a playbook
+            </button>
+          </div>
         }
       />
       <div className="import-layout">
@@ -100,8 +119,10 @@ export function ImportView({
             </li>
           </ul>
           <p className="field-hint">
-            The format is documented in <code>docs/campaign-playbook-import-format.md</code>, with a
-            sample workbook beside it.
+            <strong>Download sample playbook</strong> above gives you the filled-in workbook to
+            start from — every tab, in order, with the columns already named. The format itself is
+            documented in <code>docs/campaign-playbook-import-format.md</code>, beside the same
+            file.
           </p>
         </section>
         <section className="panel import-receipts">
