@@ -43,6 +43,21 @@ export const IMPORT_BUDGET: Budget = {
 };
 
 /**
+ * The sample playbook download sends the same 86 KB file off disk on every request, so what it
+ * costs is bytes and a file read rather than the parse and plan `IMPORT_BUDGET` meters. It gets
+ * its own window rather than sharing that one: a spent import budget must not take away the file
+ * a first-time importer is downloading in order to fix the workbook that spent it.
+ *
+ * Thirty a minute is far above use — the link is pressed once, twice if the first download was
+ * lost — and it caps a loop at a couple of megabytes a minute.
+ */
+export const SAMPLE_PLAYBOOK_BUDGET: Budget = {
+  limit: 30,
+  windowMs: 60_000,
+  message: 'Too many sample playbook downloads. Wait a moment and try again.',
+};
+
+/**
  * Drive routes spend someone else's quota and wait on a network round trip. Two a second
  * sustained covers clicking through folders as fast as a person can — the Files page reads one
  * listing per folder — while capping a loop at a rate Google's own quota will not notice.
