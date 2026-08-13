@@ -28,6 +28,22 @@ describe('Task detail inline editing', () => {
   const taskPatches = () =>
     requests.filter((r) => r.method === 'PATCH' && /\/api\/tasks\/[^/]+$/.test(r.url));
 
+  it('orders progress, working text, labels, then dependencies', async () => {
+    testState.tasksPayload = [task('t1', 'Recap post')];
+    await openTask('Recap post');
+
+    const sectionHeadings = detail()
+      .getAllByRole('heading', { level: 2 })
+      .map((heading) => heading.textContent);
+    expect(sectionHeadings).toEqual([
+      'Task details',
+      'Checklist 0/0',
+      'Notes',
+      'Tags',
+      'Dependencies',
+    ]);
+  });
+
   it('shows empty states that open editors for description, dates, and notes', async () => {
     testState.tasksPayload = [task('t1', 'Recap post')];
     await openTask('Recap post');
