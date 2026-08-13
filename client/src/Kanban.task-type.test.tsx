@@ -25,13 +25,13 @@ describe('Task type on the board', () => {
   };
 
   it('shows the type on the card and again in the task detail', async () => {
-    await renderBoard([task('t1', 'Recap post', { taskType: 'QA_BRAND_PASS' })]);
+    await renderBoard([task('t1', 'Implement task types', { taskType: 'DEV_WORK' })]);
 
-    expect(screen.getByText('QA / Brand Pass')).toBeVisible();
+    expect(screen.getByText('Dev Work')).toBeVisible();
 
-    fireEvent.click(screen.getByRole('button', { name: /^Recap post/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Implement task types/ }));
 
-    await waitFor(() => expect(screen.getAllByText('QA / Brand Pass').length).toBe(2));
+    await waitFor(() => expect(screen.getAllByText('Dev Work').length).toBe(2));
   });
 
   it('renders an untyped task with no badge at all', async () => {

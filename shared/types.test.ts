@@ -1,10 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
+  TASK_CHECKLIST_TEMPLATES,
+  TASK_TYPES,
   compareTasksByProjectThenTitle,
   normalizeCategoryName,
   sameCategoryName,
   type Task,
 } from './types.ts';
+
+describe('task types', () => {
+  it('includes development work without imposing a generic checklist', () => {
+    expect(TASK_TYPES).toContain('DEV_WORK');
+    expect(TASK_CHECKLIST_TEMPLATES.DEV_WORK).toBeUndefined();
+  });
+});
 
 /** Only the four fields the order reads; the rest of a Task never enters the comparison. */
 const task = (id: string, projectId: string, projectName: string | undefined, title: string) =>
