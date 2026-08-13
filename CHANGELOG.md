@@ -8,6 +8,20 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [4.1.6] - 2026-08-13
+
+### Added
+
+- The client and project named on a task's detail panel are now links to those detail pages.
+  Following one closes the task panel and moves focus to the heading of the page it opened, so
+  the journey from a task to the work around it no longer means closing the panel and finding
+  the record by hand. A name whose record no longer exists stays plain text rather than
+  offering a link that would lead nowhere.
+
+### Breaking changes
+
+None.
+
 ## [4.1.5] - 2026-08-13
 
 ### Added
