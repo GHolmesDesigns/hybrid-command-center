@@ -28,6 +28,10 @@
   Real content rather than demo data, which is why it is not part of `db:seed`. Idempotent by
   post id, and it never overwrites a post that is already there, so running it twice is safe.
 - `npm test`: unit/integration tests with mock Drive
+- `npm run test:coverage`: the same suite with coverage and its thresholds. CI runs this rather
+  than `npm test`, so a drop below any project's threshold fails the build. The thresholds are
+  the measured figures, not targets — raise one when the suite genuinely covers more, and do not
+  lower one to make a branch pass.
 - `npm run test:e2e`: Playwright workflows. Playwright starts and stops the API and Vite
   itself, on ports 8788 and 5174, against `data/e2e.db`, which is deleted at the start of
   every run. The command exits on its own, passing or failing; if it ever does not, something
