@@ -6,6 +6,9 @@
 - `server/domain/`: reusable, framework-free business rules.
 - `server/drive/`: all Drive and OAuth behavior behind `DriveProvider`. `browse.ts` is the
   read-only half and must stay that way; writes live in `service.ts`.
+- `server/signal/`: Signal Campaign's schedule, split the same way Drive is. `provider.ts` is the
+  `SignalProvider` interface and `read.ts` is its implementation — the read-only half everything
+  outside Signal consumes; writes live in `service.ts`.
 - `server/import.ts`: campaign playbook import — workspace snapshot, transactional commit, receipts.
 - `server/integration-log.ts`: the append-only integration activity records every integration writes.
 - `server/app.ts`: validated HTTP boundary; keep data writes transaction-safe.
@@ -39,6 +42,7 @@
 - An import previews before it writes, plans from the same code twice — once for the preview, once against the workspace as it stands at the commit — and writes the whole hierarchy in one transaction. It skips a record the workspace already has, reports the rule that matched, and never edits one. The format is specified in `docs/campaign-playbook-import-format.md`; changing what the importer does means changing that document in the same branch.
 - Every integration operation that changes local data records one `integration_events` row through `recordIntegrationEvent`, in the same transaction as whatever else it persists about the operation. The log is append-only: that module holds the only `INSERT` and the only `DELETE` — retention, keeping the newest 200 rows — and nothing updates a row, so a new integration adds a source and an operation to `shared/integration-log.ts` rather than a column or a write path. Report `PARTIAL` whenever some of an operation landed and some did not, and name what landed; an all-or-nothing operation reports `SUCCESS` or `FAILURE`. Never write a credential to it: pass structured fields, not a dump of a request or a provider response, and let `redactSecrets` scrub the one free-text field an external failure reaches.
 - The Files module reads and nothing else. It browses a project only at its own Drive folder and the subfolders `drive_steps` recorded for it, matched by ID; any other folder ID is refused rather than fetched. Adding upload, download, move, rename, or delete means a new module beside `browse.ts` with its own confirmation flow, not a method on the browsing path — and it changes what `/files` promises, so the README and the user manual change in the same branch.
+- Signal Campaign is authoritative for what is scheduled: `signal_posts` is the only store of planned content, and nothing else keeps a second copy of a schedule. A post carries a `YYYY-MM-DD` date and an `HH:MM` time and never an instant — it belongs to the calendar cell whose local date equals its date string, and no code derives a moment from the pair, which is what keeps a post on its own day in every zone. A null date is the unscheduled queue and belongs to no cell. Channels are a normalized join like tags and categories. Anything reading the schedule goes through `SignalProvider`, which has no write method by construction; adding one means a new module beside `read.ts`, not a method on it. Signal's own writes record no `integration_events` — it is local data now, like projects and tasks, and the log is for what an *integration* did.
 - Pair visual status colors with text or icons and preserve visible keyboard focus.
 - Prefer small service/provider boundaries over generic abstractions.
 

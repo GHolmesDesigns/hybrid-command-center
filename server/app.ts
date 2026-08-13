@@ -33,6 +33,18 @@ import {
   syncAllToDrive,
 } from './drive/service.ts';
 import { DriveScopeError, driveConfigured, listProjectFiles } from './drive/browse.ts';
+import { signalProvider } from './signal/read.ts';
+import {
+  SignalPostNotFoundError,
+  createPost,
+  deletePost,
+  getPost,
+  listQueue,
+  signalPostInput,
+  signalPostPatch,
+  signalRangeQuery,
+  updatePost,
+} from './signal/service.ts';
 import type { DriveProvider } from './drive/provider.ts';
 import {
   OAuthStateError,
@@ -1152,6 +1164,59 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   });
 
   /**
+   * Signal Campaign's schedule. Signal is authoritative for what is scheduled (decision §5.7),
+   * so these routes are the only way it changes and nothing else in the app keeps a second copy.
+   *
+   * The range read goes through `SignalProvider` rather than straight to the query behind it.
+   * That is the boundary the calendar consumes, and routing this endpoint through it too means
+   * the interface is exercised by the app rather than only by its tests.
+   */
+  app.get('/api/signal/posts', async (req, res, next) => {
+    try {
+      const { from, to } = signalRangeQuery.parse(req.query);
+      if (from > to) return res.status(400).json({ error: 'The range ends before it starts.' });
+      res.json(await signalProvider(db).listPosts({ from, to }));
+    } catch (error) {
+      next(error);
+    }
+  });
+  /** The unscheduled queue — posts with no date, which belong to no range and no calendar cell. */
+  app.get('/api/signal/queue', (_req, res, next) => {
+    try {
+      res.json(listQueue(db));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/signal/posts', (req, res, next) => {
+    try {
+      res.status(201).json(createPost(db, signalPostInput.parse(req.body)));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.get('/api/signal/posts/:id', (req, res) => {
+    const post = getPost(db, req.params.id);
+    if (!post) return res.status(404).json({ error: 'Signal post not found.' });
+    res.json(post);
+  });
+  app.patch('/api/signal/posts/:id', (req, res, next) => {
+    try {
+      res.json(updatePost(db, req.params.id, signalPostPatch.parse(req.body)));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.delete('/api/signal/posts/:id', (req, res, next) => {
+    try {
+      deletePost(db, req.params.id);
+      res.json({ ok: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
    * The integration activity log, read-only by construction: this is the only route that
    * touches `integration_events`, and there is no route that writes, edits, or deletes one.
    * Rows arrive from the services that do the work — the importer today, a calendar sync
@@ -1254,9 +1319,13 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         error instanceof ImportInputError ||
         error instanceof DriveScopeError
           ? 400
-          : error?.code === 'SQLITE_CONSTRAINT_UNIQUE'
-            ? 409
-            : 500;
+          : // Editing or deleting a post that is not there is the caller addressing something
+            // that does not exist, not a failure of the write.
+            error instanceof SignalPostNotFoundError
+            ? 404
+            : error?.code === 'SQLITE_CONSTRAINT_UNIQUE'
+              ? 409
+              : 500;
       res.status(status).json({
         error:
           error instanceof z.ZodError
