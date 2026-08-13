@@ -8,13 +8,33 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
-## [4.1.3] - 2026-08-13
+## [4.1.4] - 2026-08-13
 
 ### Changed
 
 - Task details now presents Checklist, Notes, Tags, and Dependencies in that order, putting
   progress and working text ahead of labels while keeping Dependencies last. The sections'
   content and behaviour are unchanged.
+
+### Breaking changes
+
+None.
+
+## [4.1.3] - 2026-08-13
+
+### Added
+
+- The Status board filters by task type. The new control offers every type, plus **No type** for
+  the tasks that carry none — untyped work predates the field and is normal, so it is findable
+  rather than merely not excluded. The type narrows the board alongside the client, project,
+  priority, focus, tag, and search filters rather than replacing any of them.
+
+### Changed
+
+- The task type and priority selections are now carried in the page address, as the client,
+  project, focus, and tag selections already were. Priority was the last filter that reset on a
+  reload; a filtered board now reloads and shares as a link exactly as it was left. The filter
+  bar also wraps onto a second line at narrow widths instead of running off the side of its card.
 
 ### Breaking changes
 

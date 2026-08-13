@@ -22,7 +22,7 @@ Nothing in this app is reachable off loopback by design, and the server enforces
 - Project creation, editing, archival, and **record-only delete** that cascades to tasks (Drive files untouched)
 - Projects view with search, client filter, category filter, and seven sort modes, including a **Custom order** where tiles are rearranged by drag or keyboard and the arrangement persists
 - Shared **project categories** — many per project, created from a project or from Settings, reused case-insensitively, filtered from the page address, renamed everywhere at once, and deleted with an affected-project count that never deletes a project
-- Five-stage **Status** board with persistent ordering, drag-and-drop, filters, tag filtering, title/tag search, and keyboard status controls
+- Five-stage **Status** board with persistent ordering, drag-and-drop, client/project/priority/task-type/focus filters carried in the page address, tag filtering, title/tag search, and keyboard status controls
 - Shared **task tags** created straight from a task, reused case-insensitively, shown as named chips on cards, and deleted from Settings with an affected-task count
 - Task checklists, dependency blocking, circular-dependency prevention, **rename**, inline description/dates/notes, **record-only delete**, and explicit completion override
 - Optional **task type** for studio work — blog post, video, social post, graphics, scheduling, QA/brand pass, admin, dev work, or other — shown on the card and in the task detail

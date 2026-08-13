@@ -1467,6 +1467,9 @@ button.tag-chip.toggle.active {
   border-radius: 12px;
   padding: 13px;
   display: flex;
+  /* The selects hold a 160px floor, so they wrap onto a second line at the widths between the
+     desktop bar and the single-column one rather than running off the side of the card. */
+  flex-wrap: wrap;
   gap: 10px;
   margin-bottom: 18px;
 }
