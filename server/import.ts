@@ -59,17 +59,44 @@ import { TASK_CHECKLIST_TEMPLATES } from '../shared/types.ts';
 const id = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
 
+/** The longest `filename` a playbook may name itself with. */
+export const PLAYBOOK_FILENAME_MAX = 255;
+/** The longest base64 workbook this accepts — about 9 MB of `.xlsx` before encoding. */
+export const PLAYBOOK_CONTENT_BASE64_MAX = 12_000_000;
+/** The longest pasted playbook this accepts, in characters. */
+export const PLAYBOOK_TEXT_MAX = 4_000_000;
+
+/**
+ * The JSON around the fields: two braces, three quoted keys, their colons and commas, and room
+ * for the filename. Rounded up generously — it is a rounding error next to the payload, and the
+ * point of deriving the limit is that it is never *below* what the schema accepts.
+ */
+const PLAYBOOK_ENVELOPE_MAX = PLAYBOOK_FILENAME_MAX + 256;
+
+/**
+ * The body limit for the import routes, derived from the field caps above rather than picked as a
+ * round number. It was 16 MB, which was neither of those things.
+ *
+ * The binding case is the base64 workbook: base64 is ASCII, JSON escapes none of it, so the
+ * longest body the schema can accept through that field is its cap plus the envelope. The pasted
+ * form cannot reach this — its cap is a third as long, and even a playbook of nothing but tabs
+ * and newlines doubles only those characters. A paste long enough to exceed this limit in bytes
+ * while staying under 4,000,000 characters would have to average three bytes per character, which
+ * is not a tab-separated table of names and dates.
+ */
+export const IMPORT_BODY_LIMIT_BYTES = PLAYBOOK_CONTENT_BASE64_MAX + PLAYBOOK_ENVELOPE_MAX;
+
 /**
  * A playbook as it arrives: an uploaded workbook, base64 encoded because the file crosses a
  * JSON boundary, or the tab-separated text the modal's paste box collects. Exactly one.
  */
 export const playbookInput = z
   .object({
-    filename: z.string().trim().max(255).optional(),
+    filename: z.string().trim().max(PLAYBOOK_FILENAME_MAX).optional(),
     /** Base64 of an .xlsx file. */
-    contentBase64: z.string().max(12_000_000).optional(),
+    contentBase64: z.string().max(PLAYBOOK_CONTENT_BASE64_MAX).optional(),
     /** The pasted form: `[Clients]` and friends, tab separated. */
-    text: z.string().max(4_000_000).optional(),
+    text: z.string().max(PLAYBOOK_TEXT_MAX).optional(),
   })
   .refine((value) => Boolean(value.contentBase64) !== Boolean(value.text), {
     message: 'Provide either a workbook file or pasted playbook text.',
