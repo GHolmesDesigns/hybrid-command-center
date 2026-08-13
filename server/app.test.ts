@@ -84,6 +84,19 @@ describe('command center API', () => {
     expect(response.status).toBe(404);
   });
 
+  it('reports whether SQLite can answer a health read', async () => {
+    const healthy = await request(createApp(db)).get('/api/health');
+    expect(healthy.status).toBe(200);
+    expect(healthy.body).toEqual({ ok: true });
+
+    const unreadable = createDb(':memory:');
+    const app = createApp(unreadable);
+    unreadable.close();
+    const unhealthy = await request(app).get('/api/health');
+    expect(unhealthy.status).toBe(503);
+    expect(unhealthy.body).toEqual({ ok: false });
+  });
+
   it('creates clients and projects without pretending disconnected Drive is ready', async () => {
     const { c, p } = await setup();
     expect(c.slug).toBe(`acme-studio-${c.id.slice(0, 6)}`);

@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { once } from 'node:events';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { applyAdditiveMigrations, backfillProjectActivity, createDb, type Db } from './db.ts';
@@ -45,6 +47,8 @@ const scratch = (name: string) => path.join(directory, name);
 
 const rows = <T>(db: Db, sql: string) => db.prepare(sql).all() as unknown as T[];
 
+const children: ChildProcess[] = [];
+
 const columnsOf = (db: Db, table: string) =>
   rows<{ name: string }>(db, `PRAGMA table_info(${table})`).map((column) => column.name);
 
@@ -72,8 +76,61 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  while (children.length) children.pop()?.kill();
   while (open.length) open.pop()?.close();
   fs.rmSync(directory, { recursive: true, force: true });
+});
+
+describe('database connection durability', () => {
+  it('uses WAL for fresh and existing file-backed databases', () => {
+    const file = scratch('durable.db');
+    const fresh = track(createDb(file));
+    expect(rows<{ journal_mode: string }>(fresh, 'PRAGMA journal_mode')).toEqual([
+      { journal_mode: 'wal' },
+    ]);
+    fresh.close();
+    open.pop();
+
+    const existing = new DatabaseSync(file);
+    existing.exec('PRAGMA journal_mode = DELETE');
+    existing.close();
+    const reopened = track(createDb(file));
+    expect(rows<{ journal_mode: string }>(reopened, 'PRAGMA journal_mode')).toEqual([
+      { journal_mode: 'wal' },
+    ]);
+  });
+
+  it('waits for a concurrent writer instead of failing immediately', async () => {
+    const file = scratch('contended.db');
+    const writer = track(createDb(file));
+    writer.exec('CREATE TABLE contention (id INTEGER PRIMARY KEY)');
+
+    const lockHolder = spawn(
+      process.execPath,
+      [
+        '--input-type=module',
+        '--eval',
+        `import { DatabaseSync } from 'node:sqlite';
+         const db = new DatabaseSync(process.argv[1]);
+         db.exec('PRAGMA busy_timeout=5000; BEGIN IMMEDIATE');
+         process.stdout.write('locked\\n');
+         setTimeout(() => { db.exec('COMMIT'); db.close(); }, 300);`,
+        file,
+      ],
+      { stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    children.push(lockHolder);
+    await once(lockHolder.stdout!, 'data');
+
+    const started = Date.now();
+    writer.prepare('INSERT INTO contention DEFAULT VALUES').run();
+    expect(Date.now() - started).toBeGreaterThanOrEqual(150);
+    expect(rows<{ total: number }>(writer, 'SELECT COUNT(*) AS total FROM contention')).toEqual([
+      { total: 1 },
+    ]);
+    await once(lockHolder, 'exit');
+    children.pop();
+  });
 });
 
 describe('additive schema migration', () => {
