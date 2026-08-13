@@ -135,8 +135,8 @@ export function Dashboard({
   const cards = [
     ['Active clients', dashboard.counts.activeClients, <Users />, '/clients'],
     ['Active projects', dashboard.counts.activeProjects, <BriefcaseBusiness />, '/projects'],
-    ['Due today', dashboard.counts.dueToday, <Clock3 />, '/kanban?filter=today'],
-    ['Next 7 days', dashboard.counts.dueNextSevenDays, <CalendarDays />, '/kanban?filter=week'],
+    ['Due today', dashboard.counts.dueToday, <Clock3 />, '/status?filter=today'],
+    ['Next 7 days', dashboard.counts.dueNextSevenDays, <CalendarDays />, '/status?filter=week'],
   ] as const;
   const syncFolders = async () => {
     setSyncing(true);
@@ -202,7 +202,7 @@ export function Dashboard({
             <h2>{shown.count ? shown.heading : shown.emptyTitle}</h2>
             <p>{shown.count ? shown.body : shown.emptyBody}</p>
           </div>
-          <button className="secondary" onClick={() => nav(`/kanban?filter=${shown.boardFilter}`)}>
+          <button className="secondary" onClick={() => nav(`/status?filter=${shown.boardFilter}`)}>
             Open board <ArrowRight />
           </button>
         </div>
@@ -245,7 +245,7 @@ export function Dashboard({
               <span className="eyebrow">On the horizon</span>
               <h2>Coming up next</h2>
             </div>
-            <button className="text-btn" onClick={() => nav('/kanban')}>
+            <button className="text-btn" onClick={() => nav('/status')}>
               See all <ArrowRight />
             </button>
           </div>
@@ -304,7 +304,7 @@ export function Dashboard({
             <ListChecks />
             New task
           </button>
-          <button onClick={() => nav('/kanban')}>
+          <button onClick={() => nav('/status')}>
             <FolderKanban />
             Open Status board
           </button>

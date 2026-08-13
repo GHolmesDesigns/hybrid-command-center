@@ -43,7 +43,7 @@ export const BREADCRUMB_ROUTES: readonly BreadcrumbRoute[] = [
     label: (params, data) =>
       data.projects.find((project) => project.id === params.id)?.name ?? 'Project',
   },
-  { path: '/kanban', label: 'Status' },
+  { path: '/status', label: 'Status' },
   { path: '/calendar', label: 'Calendar' },
   { path: '/signal', label: 'Signal' },
   { path: '/settings', label: 'Settings' },

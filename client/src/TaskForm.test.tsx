@@ -77,7 +77,7 @@ describe('Task type selector', () => {
   it('opens an existing task in the edit form with its type already selected', async () => {
     testState.tasksPayload = [task('t1', 'Recap post', { taskType: 'BLOG_POST' })];
     render(
-      <MemoryRouter initialEntries={['/kanban']}>
+      <MemoryRouter initialEntries={['/status']}>
         <App />
       </MemoryRouter>,
     );
@@ -92,7 +92,7 @@ describe('Task type selector', () => {
   it('types a task that has none and sends only the type', async () => {
     testState.tasksPayload = [task('t1', 'Legacy chore')];
     render(
-      <MemoryRouter initialEntries={['/kanban']}>
+      <MemoryRouter initialEntries={['/status']}>
         <App />
       </MemoryRouter>,
     );

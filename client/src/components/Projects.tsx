@@ -378,7 +378,7 @@ function ProjectTile({
         </span>
       </div>
       <div className="card-actions">
-        <Link className="secondary buttonlike" to={`/kanban?project=${project.id}`}>
+        <Link className="secondary buttonlike" to={`/status?project=${project.id}`}>
           Open board
         </Link>
         <button

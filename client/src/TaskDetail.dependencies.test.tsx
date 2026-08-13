@@ -40,7 +40,7 @@ describe('Dependency picker', () => {
     testState.tasksPayload = board;
     testState.projectsPayload = activeProjects;
     render(
-      <MemoryRouter initialEntries={['/kanban']}>
+      <MemoryRouter initialEntries={['/status']}>
         <App />
       </MemoryRouter>,
     );

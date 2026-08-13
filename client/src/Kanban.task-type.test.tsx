@@ -21,7 +21,7 @@ function LocationProbe() {
   return <output aria-label="Current location">{`${location.pathname}${location.search}`}</output>;
 }
 
-const renderBoard = async (tasks: Task[], entry = '/kanban') => {
+const renderBoard = async (tasks: Task[], entry = '/status') => {
   testState.tasksPayload = tasks;
   render(
     <MemoryRouter initialEntries={[entry]}>
@@ -81,7 +81,7 @@ describe('Task type filtering on the board', () => {
 
     expect(cardTitles()).toEqual(['Launch graphics', 'Sponsor cutdown']);
     expect(headerCount()).toBe(2);
-    expect(location()).toBe('/kanban?type=GRAPHICS');
+    expect(location()).toBe('/status?type=GRAPHICS');
 
     fireEvent.change(typeFilter(), { target: { value: '' } });
 
@@ -91,7 +91,7 @@ describe('Task type filtering on the board', () => {
       'Sponsor cutdown',
       'Legacy chore',
     ]);
-    expect(location()).toBe('/kanban');
+    expect(location()).toBe('/status');
   });
 
   it('shows exactly the tasks with no type under "No type"', async () => {
@@ -101,7 +101,7 @@ describe('Task type filtering on the board', () => {
 
     expect(cardTitles()).toEqual(['Legacy chore']);
     expect(headerCount()).toBe(1);
-    expect(location()).toBe('/kanban?type=none');
+    expect(location()).toBe('/status?type=none');
   });
 
   it('combines the type with priority rather than replacing it', async () => {
@@ -114,11 +114,11 @@ describe('Task type filtering on the board', () => {
     expect(cardTitles()).toEqual(['Launch graphics']);
     expect(headerCount()).toBe(1);
     expect(typeFilter()).toHaveValue('GRAPHICS');
-    expect(location()).toBe('/kanban?type=GRAPHICS&priority=URGENT');
+    expect(location()).toBe('/status?type=GRAPHICS&priority=URGENT');
   });
 
   it('reproduces the same board from a pasted URL, priority included', async () => {
-    await renderBoard(seeded(), '/kanban?type=GRAPHICS&priority=URGENT');
+    await renderBoard(seeded(), '/status?type=GRAPHICS&priority=URGENT');
 
     expect(cardTitles()).toEqual(['Launch graphics']);
     expect(headerCount()).toBe(1);
@@ -135,7 +135,7 @@ describe('Task type filtering on the board', () => {
         task('t1', 'Launch graphics', { taskType: 'GRAPHICS', tags: [tag], dueDate: day(2) }),
         task('t2', 'Sponsor cutdown', { taskType: 'GRAPHICS', dueDate: day(2) }),
       ],
-      '/kanban?project=p1&client=client-p1&filter=week&tags=tag-brand',
+      '/status?project=p1&client=client-p1&filter=week&tags=tag-brand',
     );
 
     fireEvent.change(typeFilter(), { target: { value: 'GRAPHICS' } });
@@ -145,7 +145,7 @@ describe('Task type filtering on the board', () => {
 
     expect(cardTitles()).toEqual(['Launch graphics']);
     expect(location()).toBe(
-      '/kanban?project=p1&client=client-p1&filter=week&tags=tag-brand&type=GRAPHICS',
+      '/status?project=p1&client=client-p1&filter=week&tags=tag-brand&type=GRAPHICS',
     );
   });
 });

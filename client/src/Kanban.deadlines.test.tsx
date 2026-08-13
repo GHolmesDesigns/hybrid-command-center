@@ -15,7 +15,7 @@ import {
 describe('Board deadline filters', () => {
   const renderBoard = async (filter: string) => {
     render(
-      <MemoryRouter initialEntries={[`/kanban?filter=${filter}`]}>
+      <MemoryRouter initialEntries={[`/status?filter=${filter}`]}>
         <App />
       </MemoryRouter>,
     );

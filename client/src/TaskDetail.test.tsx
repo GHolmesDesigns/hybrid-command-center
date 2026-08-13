@@ -17,7 +17,7 @@ import {
 describe('Task detail inline editing', () => {
   const openTask = async (title: string) => {
     render(
-      <MemoryRouter initialEntries={['/kanban']}>
+      <MemoryRouter initialEntries={['/status']}>
         <App />
       </MemoryRouter>,
     );
