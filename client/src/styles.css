@@ -1668,9 +1668,7 @@ button.tag-chip.toggle.active {
   display: grid;
   grid-template-columns: 1.4fr 1fr;
   gap: 18px;
-}
-.settings-card:first-child {
-  grid-row: span 2;
+  align-items: start;
 }
 .settings-icon {
   width: 44px;
@@ -2492,9 +2490,6 @@ button.tag-chip.toggle.active {
   }
   .settings-layout {
     grid-template-columns: 1fr;
-  }
-  .settings-card:first-child {
-    grid-row: auto;
   }
   .project-summary {
     grid-template-columns: repeat(2, 1fr);

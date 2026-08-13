@@ -8,6 +8,23 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [4.1.1] - 2026-08-13
+
+### Fixed
+
+- The Google Drive card on Settings no longer runs on into several hundred pixels of blank
+  white space. It was being stretched to the height of the two cards beside it, so it stood
+  more than a thousand pixels taller than the content it held; it now ends where its content
+  ends, in every Drive state — credentials missing, disconnected, connected without a root
+  folder, and connected with one set. Every other Settings card sizes to its content in the
+  same way, which also closes the shorter gap that sat under Local timezone. Settings is
+  around 400px shorter to scroll at desktop width, and the single-column layout below 1100px
+  is unchanged.
+
+### Breaking changes
+
+None.
+
 ## [4.1.0] - 2026-08-13
 
 ### Fixed
