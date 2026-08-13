@@ -71,8 +71,12 @@ jobs:
       - name: Check the version was bumped
         run: npm run check:version-bump
 
-      - name: Run unit and integration tests
-        run: npm test
+      # Coverage is measured on this run rather than in a job of its own — the same suite,
+      # the same checkout, one flag. The thresholds in `vitest.config.ts` are per project and
+      # were taken from what this suite actually covers, so a module losing its tests fails
+      # here instead of passing quietly.
+      - name: Run unit and integration tests with coverage
+        run: npm run test:coverage
 
       - name: Build
         run: npm run build
