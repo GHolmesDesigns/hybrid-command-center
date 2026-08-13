@@ -117,6 +117,25 @@ npm run db:backup:rehearse
 8. Restart the app. Open **Settings → Google Drive → Connect Google Drive** and approve access.
 9. Create or choose one existing Drive folder, paste its URL or ID into **Command Center root folder**, and save.
 
+### Drive OAuth scope and exposure
+
+The connection requests `https://www.googleapis.com/auth/drive`, which grants read and write
+access across the connected account's Drive. The application itself behaves more narrowly: it
+creates folders beneath the configured Command Center root, and Files refuses to browse outside a
+project folder or its recorded subfolders. Those application checks do not narrow what an OAuth
+token can do. Anyone who steals the stored token — for example from the SQLite database or a
+backup together with a weak or exposed `GOOGLE_TOKEN_ENCRYPTION_KEY` — can use the full grant
+against files outside the Command Center root.
+
+The broader scope is required by the current setup because the root is an existing, user-named
+folder selected by pasting its URL or ID. The least-privilege replacement is a **size M** migration
+to `drive.file` together with Google Picker: `drive.file` limits the app to files it created or the
+user explicitly selected, and Picker would make the existing root an explicit selection. That is
+feature work, not a scope-only configuration change, and is an input to
+[C20's Drive-token threat model](https://github.com/GHolmesDesigns/hybrid-command-center/issues/77).
+For incident response, follow the complete revocation procedure in
+[the user manual](USER_MANUAL.md#68-revoke-drive-access-after-a-suspected-token-exposure).
+
 Required environment variables:
 
 | Variable | Purpose |
