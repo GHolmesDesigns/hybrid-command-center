@@ -36,7 +36,7 @@ const pasteAndCheck = async (dialog: HTMLElement) => {
 };
 
 describe('Import module', () => {
-  it('links Import from the sidebar, collapsed or not, and leaves Calendar unbuilt', async () => {
+  it('links Import from the sidebar, alongside every other shipped module', async () => {
     render(
       <MemoryRouter>
         <App />
@@ -45,10 +45,13 @@ describe('Import module', () => {
 
     await screen.findByText(branding.title);
     expect(screen.getByRole('link', { name: 'Import' })).toHaveAttribute('href', '/import');
-    expect(screen.getByText('Calendar')).toHaveClass('nav-disabled');
+    // Calendar was the last stub in the sidebar. Nothing is parked as future work now, so the
+    // "Coming next" divider that held it is gone too.
+    expect(screen.getByRole('link', { name: 'Calendar' })).toHaveAttribute('href', '/calendar');
+    expect(screen.queryByText('Coming next')).toBeNull();
   });
 
-  it('keeps the shipped modules reachable when the sidebar is collapsed, unlike the unbuilt one', async () => {
+  it('keeps every module reachable when the sidebar is collapsed', async () => {
     localStorage.setItem('hcc-sidebar-collapsed', '1');
     render(
       <MemoryRouter>
@@ -57,9 +60,12 @@ describe('Import module', () => {
     );
 
     await screen.findByText(branding.title);
-    expect(screen.getByRole('link', { name: 'Import' })).toBeVisible();
-    expect(screen.getByRole('link', { name: 'Files' })).toBeVisible();
-    expect(screen.queryByText('Calendar')).toBeNull();
+    // Collapsed, a nav item is its icon and its title attribute — the label text is dropped,
+    // so each is found by its accessible name rather than by visible text.
+    for (const label of ['Import', 'Files', 'Calendar']) {
+      expect(screen.getByRole('link', { name: label })).toBeVisible();
+    }
+    expect(screen.queryByText('Coming next')).toBeNull();
   });
 
   it('points Settings at the shipped module rather than listing it as future work', async () => {

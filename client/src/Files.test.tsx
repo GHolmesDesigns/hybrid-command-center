@@ -33,7 +33,7 @@ const listingCalls = () =>
   requests.filter((call) => call.method === 'GET' && call.url.includes('/files?'));
 
 describe('Files module', () => {
-  it('links Files from the sidebar and leaves only Calendar unbuilt', async () => {
+  it('links Files from the sidebar, alongside the calendar that used to be unbuilt', async () => {
     render(
       <MemoryRouter>
         <App />
@@ -42,7 +42,9 @@ describe('Files module', () => {
 
     await screen.findByText(branding.title);
     expect(screen.getByRole('link', { name: 'Files' })).toHaveAttribute('href', '/files');
-    expect(screen.getByText('Calendar')).toHaveClass('nav-disabled');
+    expect(screen.getByRole('link', { name: 'Calendar' })).toHaveAttribute('href', '/calendar');
+    // Nothing is parked under "Coming next" any more; the divider goes with the last stub.
+    expect(screen.queryByText('Coming next')).toBeNull();
   });
 
   it('lists a folder, shows what each row is, and opens every row in Drive', async () => {
