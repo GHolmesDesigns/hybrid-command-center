@@ -1,8 +1,11 @@
 {
   "name": "hybrid-command-center",
-  "version": "3.0.1",
+  "version": "3.0.2",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "concurrently -k -n api,web -c blue,green \"npm:dev:server\" \"npm:dev:client\"",
     "dev:server": "node --watch --experimental-strip-types server/index.ts",

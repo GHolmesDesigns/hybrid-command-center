@@ -1,0 +1,55 @@
+name: CodeQL
+
+# Static analysis, kept out of `quality-gates.yml` on purpose. That file is the merge gate and
+# every step in it blocks; this one reports into the Security tab, runs on a different cadence,
+# and needs `security-events: write`, which the gate workflow should not be granted.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  analyze:
+    name: Analyze JavaScript and TypeScript
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # Code scanning uploads need GitHub Code Security, which a private repository on this plan
+    # does not have: unguarded, `init` would fail with a 403 on every pull request and the red
+    # check would mean "not purchased" rather than "not safe" — a permanently red gate teaches
+    # people to ignore red, which is worse than no gate. So the job is gated, and both switches
+    # are one-way doors into it with no edit to this file: make the repository public, or set the
+    # repository variable `CODEQL_ENABLED` to `true` once Code Security is on.
+    if: github.event.repository.visibility == 'public' || vars.CODEQL_ENABLED == 'true'
+
+    permissions:
+      contents: read
+      security-events: write
+      # Read the workflow run's own metadata, which the analysis attaches to the results.
+      actions: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        with:
+          languages: javascript-typescript
+          # Nothing to compile: the server runs TypeScript directly under
+          # `--experimental-strip-types` and the client is bundled by Vite, so CodeQL reads the
+          # sources as they are rather than watching a build.
+          build-mode: none
+          queries: security-and-quality
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        with:
+          category: /language:javascript-typescript
