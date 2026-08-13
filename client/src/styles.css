@@ -1952,6 +1952,11 @@ button.tag-chip.toggle.active {
   gap: 8px;
   margin-top: 10px;
 }
+.inline-edit label {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
 .inline-edit textarea {
   width: 100%;
   min-height: 88px;

@@ -8,6 +8,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [4.1.0] - 2026-08-13
+
+### Fixed
+
+- The Description and Notes labels on Task details no longer sit flush against the box you
+  type into. Both inline editors now leave 10px between the label and its textarea, so the
+  field reads as a labelled field rather than as one block of text. Every other form in the
+  app — Settings, Task, Project, Client, and the Signal editor — is unchanged.
+
+### Breaking changes
+
+None.
+
 ## [4.0.0] - 2026-08-13
 
 A version-only major bump. The application code, HTTP API, database schema, and
