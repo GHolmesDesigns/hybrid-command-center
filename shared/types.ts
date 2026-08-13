@@ -13,6 +13,7 @@ export const TASK_TYPES = [
   'SCHEDULING',
   'QA_BRAND_PASS',
   'ADMIN',
+  'DEV_WORK',
   'OTHER',
 ] as const;
 export type TaskType = (typeof TASK_TYPES)[number];
@@ -68,6 +69,8 @@ export const TASK_CHECKLIST_TEMPLATES: Partial<Record<TaskType, readonly string[
     'Capture the prior week’s platform-native performance',
     'Record the topic, hook, and format carrying into the next brief',
   ],
+  // DEV_WORK deliberately has no template: development tasks range from investigation to
+  // implementation, so a generic checklist would add boilerplate rather than useful guidance.
 };
 
 export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';

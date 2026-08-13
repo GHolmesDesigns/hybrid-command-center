@@ -42,6 +42,7 @@ describe('Task type selector', () => {
       'Scheduling',
       'QA / Brand Pass',
       'Admin',
+      'Dev Work',
       'Other',
     ]);
   });

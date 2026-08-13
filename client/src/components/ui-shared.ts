@@ -34,6 +34,7 @@ export const TASK_TYPE_LABEL: Record<TaskType, string> = {
   SCHEDULING: 'Scheduling',
   QA_BRAND_PASS: 'QA / Brand Pass',
   ADMIN: 'Admin',
+  DEV_WORK: 'Dev Work',
   OTHER: 'Other',
 };
 

@@ -156,6 +156,7 @@ Task type, matching issue #11 and `shared/types.ts`:
 - `SCHEDULING`
 - `QA_BRAND_PASS`
 - `ADMIN`
+- `DEV_WORK`
 - `OTHER`
 
 ## Conflict behavior
