@@ -19,6 +19,7 @@
     "check:version-bump": "node --experimental-strip-types server/scripts/check-version-bump.ts",
     "db:migrate": "node --experimental-strip-types server/scripts/migrate.ts",
     "db:seed": "node --experimental-strip-types server/scripts/seed.ts",
+    "signal:import": "node --experimental-strip-types server/scripts/import-signal-archive.ts",
     "db:backup": "node --experimental-strip-types server/scripts/backup.ts",
     "db:restore": "node --experimental-strip-types server/scripts/restore.ts",
     "db:backup:rehearse": "node --experimental-strip-types server/scripts/rehearse-backup.ts"
