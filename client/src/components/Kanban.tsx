@@ -13,13 +13,20 @@ import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { Plus, Tag as TagIcon } from 'lucide-react';
 import { send } from '../api';
 import type { Client, Project, Tag, Task, TaskStatus } from '../../../shared/types';
-import { TASK_STATUSES } from '../../../shared/types';
+import { TASK_STATUSES, TASK_TYPES } from '../../../shared/types';
 import { isDueNextSevenDays, isDueToday } from '../../../shared/deadlines';
 import { type Modal } from './App';
 import { KanbanColumn } from './KanbanCards';
 import { SearchBox } from './Primitives';
-import { STATUS_LABEL, tagAccent } from './ui-shared';
+import { STATUS_LABEL, TASK_TYPE_LABEL, tagAccent } from './ui-shared';
 import { PageHead } from './Shell';
+
+/**
+ * The `type` value that asks for tasks carrying no type at all. Untyped tasks predate the
+ * field and are normal work, so they have to be findable rather than merely not excluded.
+ * Lowercase, so it can never collide with a `TASK_TYPES` member sharing the same param.
+ */
+const NO_TASK_TYPE = 'none';
 
 export function Kanban({
   tasks,
@@ -43,13 +50,14 @@ export function Kanban({
   flash: (s: string, t?: 'success' | 'error') => void;
 }) {
   const [params, setParams] = useSearchParams();
+  // Every filter lives in the URL, so a filtered board survives a reload and can be handed to
+  // someone else as a link. Only the search box is component state: it is typed per visit.
   const project = params.get('project') || '',
     client = params.get('client') || '',
+    priority = params.get('priority') || '',
+    taskType = params.get('type') || '',
     flag = params.get('filter') || '';
-  const [priority, setPriority] = useState('');
   const [query, setQuery] = useState('');
-  // Tag selection lives in the URL beside the client and project filters, so a filtered board
-  // survives a reload and can be handed to someone else as a link.
   const selectedTagIds = (params.get('tags') || '').split(',').filter(Boolean);
   useEffect(() => {
     if (project) remember(project);
@@ -60,6 +68,7 @@ export function Kanban({
       (!project || t.projectId === project) &&
       (!client || t.clientId === client) &&
       (!priority || t.priority === priority) &&
+      (!taskType || (taskType === NO_TASK_TYPE ? !t.taskType : t.taskType === taskType)) &&
       // Every selected tag must be present, so each chip narrows the board the way the
       // selects above it do rather than widening it.
       selectedTagIds.every((tagId) => t.tags.some((tag) => tag.id === tagId)) &&
@@ -195,10 +204,22 @@ export function Kanban({
         </label>
         <label>
           <span>Priority</span>
-          <select value={priority} onChange={(e) => setPriority(e.target.value)}>
+          <select value={priority} onChange={(e) => set('priority', e.target.value)}>
             <option value="">Any priority</option>
             {['URGENT', 'HIGH', 'MEDIUM', 'LOW'].map((p) => (
               <option key={p}>{p}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Task type</span>
+          <select value={taskType} onChange={(e) => set('type', e.target.value)}>
+            <option value="">Any type</option>
+            <option value={NO_TASK_TYPE}>No type</option>
+            {TASK_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {TASK_TYPE_LABEL[t]}
+              </option>
             ))}
           </select>
         </label>

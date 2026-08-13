@@ -475,6 +475,7 @@ Use the filters above the board to focus by:
 - Client
 - Project
 - Priority
+- Task type — any single type, or **No type** for the tasks that carry none
 - Overdue
 - Due today
 - Due this week
@@ -482,7 +483,7 @@ Use the filters above the board to focus by:
 - Blocked
 - Completed
 
-Below the filters, the search box matches both task titles and tag names, and the **Tags** row filters the board by tag. Selecting more than one tag shows only the tasks carrying every one of them; **Clear tags** removes the whole selection. Tag and search filters combine with the client, project, priority, and focus filters above them. The client, project, focus, and tag selections are kept in the page address, so a filtered board survives a reload and can be shared as a link.
+Below the filters, the search box matches both task titles and tag names, and the **Tags** row filters the board by tag. Selecting more than one tag shows only the tasks carrying every one of them; **Clear tags** removes the whole selection. Tag and search filters combine with the client, project, priority, type, and focus filters above them; every filter narrows the board further rather than replacing what is already chosen. Every selection except the search box is kept in the page address, so a filtered board survives a reload and can be shared as a link.
 
 Each card shows its project, priority, type when one is set, tags, due date, checklist progress, and dependency state. The type is repeated at the top of the task detail view.
 
