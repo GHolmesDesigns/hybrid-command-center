@@ -8,6 +8,8 @@ For nontechnical installation and day-to-day instructions, see the [First-Time S
 
 The Import module's versioned XLSX contract, pasted text form, and example campaigns are documented in the [Campaign Playbook Import Format](docs/campaign-playbook-import-format.md).
 
+Nothing in this app publishes to a social platform. The decision record that a publishing integration would be built from — the provider, the interface, the scheduling conversion, and what `PUBLISHED` would then mean — is [Publishing Integration](docs/publishing-integration.md).
+
 ## What is included
 
 - Deadline-led dashboard with overdue, due-today, seven-day (today included), and project-health counts, scoped to unarchived work and calculated by the same rules the board filters by
@@ -408,11 +410,14 @@ If `.env` sets `DATABASE_PATH`, pass the same path with `--database`. Write back
 - Playbook import is create-only: it never edits or merges into a record that already exists, and there is no in-app undo of an import beyond deleting what it created
 - Integration activity is bounded rather than permanent: the newest 200 records are kept and each lists at most 100 affected records, so it is a diagnostic log, not a compliance archive. Keep a database backup if a longer history matters
 - Checklist reordering is supported by the API/data model; the current UI focuses on add, edit-by-state, and removal
+- Nothing publishes. Signal Campaign plans content and `PUBLISHED` is the user's own claim that a post went out, not this app having sent it. How a publisher would be built is decided in [`docs/publishing-integration.md`](docs/publishing-integration.md) and nothing in that document has been implemented
 
 ## Planned extension points
 
 **Calendar:** add `/calendar` and a calendar service that consumes task due dates and project milestones through the existing deadline domain functions. Month, week, and agenda components should remain clients of that service. Optional Google Calendar sync belongs in a separate provider beside Drive, not in task components. Every sync attempt should record to `integration_events` through `recordIntegrationEvent` — a sync that reads some sources and fails on one is the `PARTIAL` case the log was shaped for.
 
 **Files:** `/files` has shipped read-only — `DriveProvider.listFiles` plus `server/drive/browse.ts` and the `GET /api/projects/:id/files` boundary. Extending it means adding upload/download/move/rename/search methods to the provider and a write path beside `browse.ts`, which stays read-only; a mutation belongs in its own module with its own confirmation flow. Continue storing only Drive IDs and metadata locally. UI components should never import `googleapis`.
+
+**Publishing:** decided but unbuilt. [`docs/publishing-integration.md`](docs/publishing-integration.md) names the provider (Post Bridge), the `PublishProvider` interface and where it lives, how a post's `YYYY-MM-DD` plus `HH:MM` becomes the instant a scheduling API needs, and why delivery state is a separate record rather than a fourth `SignalStatus`. Read it before opening an implementation card; it also establishes that the first release reaches four channels, not eight, because `SignalPost` models no media.
 
 Recommended order: (1) agenda/calendar read views and milestone model, (2) recent-files and cross-project search over the existing listing, (3) uploads/downloads, (4) guarded move/rename operations, (5) optional Calendar sync.

@@ -19,6 +19,11 @@
  * there is no zone conversion to disagree about and nothing shifts a day when the clock changes.
  * A post scheduled for the 14th is on the 14th in every view.
  *
+ * A scheduling API wants an instant, which is why this file does not hand one out and no caller
+ * builds one. `docs/publishing-integration.md` §5 specifies the single outbound conversion a
+ * publisher would do: one function, in the publishing module rather than here, in a configured
+ * zone, producing an argument that is never stored on the post or read back into a view.
+ *
  * A null `date` means the post is not scheduled at all. Those are the queue, ordered by
  * `position`, and they deliberately appear nowhere on a calendar — there is no cell to put them
  * in, and inventing one would make an unscheduled idea look scheduled.
@@ -89,7 +94,11 @@ export const SIGNAL_FORMAT_LABEL: Record<SignalFormat, string> = {
  *
  * These describe the post's own progress and nothing about a publishing integration: `PUBLISHED`
  * is the user saying it went out, not this app having sent it anywhere. Nothing in this app
- * publishes (C19b).
+ * publishes.
+ *
+ * That meaning is settled rather than provisional. `docs/publishing-integration.md` (C19b) decides
+ * that a publisher would keep its delivery state in its own record and never write this field, so
+ * these three values stay three and keep belonging to the user.
  */
 export const SIGNAL_STATUSES = ['DRAFT', 'SCHEDULED', 'PUBLISHED'] as const;
 export type SignalStatus = (typeof SIGNAL_STATUSES)[number];
