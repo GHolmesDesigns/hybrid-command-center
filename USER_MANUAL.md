@@ -271,6 +271,30 @@ That is the whole operation. Despite the word "sync", it does not:
 
 Existing folders are matched by a stable Command Center property rather than by name, so running it repeatedly is safe and cannot create duplicates. If Drive is disconnected, or no root folder is selected, the button reports what to fix instead of making changes.
 
+### 6.8 Revoke Drive access after a suspected token exposure
+
+Use this procedure if the local database, a database backup, or
+`GOOGLE_TOKEN_ENCRYPTION_KEY` may have been exposed. Complete every step; disconnecting locally
+and revoking the Google grant are separate actions.
+
+1. Open **Settings → Google Drive** and select **Disconnect**. This deletes the locally stored
+   OAuth tokens and Command Center root-folder references. It does **not** revoke the application's
+   authorization at Google, so stopping here leaves the Google grant active.
+2. Open [Google Account permissions](https://myaccount.google.com/permissions) while signed in to
+   the connected account. Find the OAuth application you configured for Hybrid Command Center and
+   remove its access. This revokes the grant at Google and invalidates the application's tokens.
+3. Generate a new `GOOGLE_TOKEN_ENCRYPTION_KEY` using the command in
+   [Create a local encryption key](#64-create-a-local-encryption-key). Stop the application, replace
+   the old value in `.env`, and update the private backup of the key. Do not reuse the exposed key.
+4. Start the application, return to **Settings → Google Drive**, and select **Connect Google
+   Drive**. Approve access again only after confirming the expected Google account and application.
+5. Paste the Command Center root folder's URL or ID again and select **Verify & save root**.
+
+The application currently requests full Drive read and write access, even though its own Files
+page browses only recorded project folders. Revoking at Google is therefore the step that ends a
+stolen token's access to files anywhere in the connected account; rotating only the local
+encryption key does not revoke an already-issued token.
+
 ## 7. Your first working session
 
 Use this order for the cleanest setup.
