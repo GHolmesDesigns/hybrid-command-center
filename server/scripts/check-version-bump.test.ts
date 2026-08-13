@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 /**
  * The script that enforces "every merged card ships a version bump". It is worth testing
@@ -13,14 +13,28 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
  *
  * Driven as a real process against real throwaway repositories, because what the script
  * does is read Git — mocking that away would leave nothing worth asserting.
+ *
+ * Each case still gets its own repository. The shared template below is only the initial
+ * commit on `main`; copying it is cheaper than re-running `git init` and the first commit
+ * ten times, which is what used to burn most of the budget under a loaded suite.
+ *
+ * Timeout is file-scoped: Vitest's 5000ms default is right for ordinary unit tests, and
+ * wrong for a case that starts a real Git repository and a real Node child. Measured under
+ * load at 13s; 30s leaves room without hiding a hang.
  */
 
 const SCRIPT = fileURLToPath(new URL('./check-version-bump.ts', import.meta.url));
 
+/** Long enough for a loaded machine; scoped to this describe, not the suite. */
+const CASE_TIMEOUT_MS = 30_000;
+
+let template: string;
 let repo: string;
 
-const git = (...args: string[]) =>
-  execFileSync('git', args, { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+const gitIn = (cwd: string, ...args: string[]) =>
+  execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+
+const git = (...args: string[]) => gitIn(repo, ...args);
 
 const setVersion = (version: string) =>
   fs.writeFileSync(path.join(repo, 'package.json'), JSON.stringify({ version }, null, 2));
@@ -49,20 +63,35 @@ function check(baseRef: string) {
   }
 }
 
+beforeAll(() => {
+  template = fs.mkdtempSync(path.join(os.tmpdir(), 'hcc-version-template-'));
+  gitIn(template, 'init', '-b', 'main');
+  gitIn(template, 'config', 'user.email', 'test@example.com');
+  gitIn(template, 'config', 'user.name', 'Version Test');
+  gitIn(template, 'config', 'commit.gpgsign', 'false');
+  fs.writeFileSync(
+    path.join(template, 'package.json'),
+    JSON.stringify({ version: '2.10.0' }, null, 2),
+  );
+  fs.writeFileSync(path.join(template, 'card.txt'), 'initial');
+  gitIn(template, 'add', '.');
+  gitIn(template, 'commit', '-m', 'initial');
+});
+
 beforeEach(() => {
   repo = fs.mkdtempSync(path.join(os.tmpdir(), 'hcc-version-'));
-  git('init', '-b', 'main');
-  git('config', 'user.email', 'test@example.com');
-  git('config', 'user.name', 'Version Test');
-  git('config', 'commit.gpgsign', 'false');
-  commit('2.10.0', 'initial');
+  fs.cpSync(template, repo, { recursive: true });
 });
 
 afterEach(() => {
   fs.rmSync(repo, { recursive: true, force: true });
 });
 
-describe('check:version-bump', () => {
+afterAll(() => {
+  fs.rmSync(template, { recursive: true, force: true });
+});
+
+describe('check:version-bump', { timeout: CASE_TIMEOUT_MS }, () => {
   it('passes when the branch moved the version past the base', () => {
     git('checkout', '-b', 'card');
     commit('2.10.1');
