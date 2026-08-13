@@ -166,6 +166,9 @@ export const testState = {
    * empty month with a healthy schedule behind it.
    */
   calendarPayload: null as ((from: string, to: string) => unknown) | null,
+  /** Planner state. Dated and undated posts are kept together here, then served by each API view. */
+  signalPostsPayload: [] as SignalPost[],
+  signalMutationError: null as string | null,
 };
 
 /** One scheduled post, with only the fields a case cares about spelled out. */
@@ -246,6 +249,50 @@ const respondTo = (url: string, init?: RequestInit) => {
     return testState.calendarPayload
       ? testState.calendarPayload(from, to)
       : calendarRange({ from, to });
+  }
+  if (url.includes('/api/signal/posts?') && method === 'GET') {
+    const query = new URLSearchParams(url.split('?')[1] ?? '');
+    const from = query.get('from') ?? '';
+    const to = query.get('to') ?? '';
+    return {
+      from,
+      to,
+      posts: testState.signalPostsPayload.filter(
+        (post) => post.date !== null && post.date >= from && post.date <= to,
+      ),
+      truncated: false,
+    };
+  }
+  if (url.endsWith('/api/signal/queue') && method === 'GET')
+    return testState.signalPostsPayload.filter((post) => post.date === null);
+  if (url.endsWith('/api/signal/posts') && method === 'POST') {
+    if (testState.signalMutationError) return reply(400, { error: testState.signalMutationError });
+    const created = signalPost('created-signal-post', body.text, body.date ?? null, {
+      status: body.status ?? 'DRAFT',
+      channels: body.channels ?? [],
+      time: body.time ?? SIGNAL_DEFAULT_TIME,
+      format: body.format ?? 'TEXT',
+      campaign: body.campaign ?? null,
+      cta: body.cta ?? 'NONE',
+      position: testState.signalPostsPayload.filter((post) => post.date === null).length,
+    });
+    testState.signalPostsPayload = [...testState.signalPostsPayload, created];
+    return created;
+  }
+  const signalPostPath = url.match(/\/api\/signal\/posts\/([^/?]+)$/);
+  if (signalPostPath && method === 'PATCH') {
+    if (testState.signalMutationError) return reply(400, { error: testState.signalMutationError });
+    testState.signalPostsPayload = testState.signalPostsPayload.map((post) =>
+      post.id === signalPostPath[1] ? { ...post, ...body } : post,
+    );
+    return testState.signalPostsPayload.find((post) => post.id === signalPostPath[1]) ?? {};
+  }
+  if (signalPostPath && method === 'DELETE') {
+    if (testState.signalMutationError) return reply(400, { error: testState.signalMutationError });
+    testState.signalPostsPayload = testState.signalPostsPayload.filter(
+      (post) => post.id !== signalPostPath[1],
+    );
+    return { ok: true };
   }
   if (url.includes('/api/integrations/activity'))
     return testState.integrationActivityError
@@ -553,6 +600,8 @@ beforeEach(() => {
   testState.integrationActivityError = null;
   testState.driveListingPayload = null;
   testState.calendarPayload = null;
+  testState.signalPostsPayload = [];
+  testState.signalMutationError = null;
   requests.length = 0;
   vi.stubGlobal(
     'fetch',

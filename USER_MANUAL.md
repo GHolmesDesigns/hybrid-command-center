@@ -464,6 +464,30 @@ Each card shows its project, priority, type when one is set, tags, due date, che
 
 Open a task to rename it, edit its description, dates, and notes inline, or delete it. **Edit details** still opens the same form used to create the task, so this is where you set a type on an older task, change its project, or edit every field at once.
 
+### Signal
+
+**Signal** is the content planner. The left side is the **Unscheduled queue**: ideas that do not
+yet belong to a day. Type into **Add an idea** to capture one quickly. The idea is created in the
+queue and its editor opens so you can add details.
+
+The month grid shows every dated post in its calendar cell. Use the arrows to move between months.
+Select any queue item or grid post to open the editor. It can change:
+
+- Content, including long-form copy
+- One or more channels
+- Date and time
+- Format and status
+- Campaign and call to action
+
+Clear the date, or use **Move to unscheduled queue**, to return a post to the queue. Giving a
+queued post a date schedules it in that month's grid. Saving reloads both views from the Signal
+API, so the same post cannot remain in the queue and the calendar at once.
+
+**Delete** asks for confirmation and then removes the post permanently. There is no in-app undo;
+restore a database backup to recover it. Signal plans and records content only. A status of
+**Published** is your own record that the post went out — the application does not publish to any
+social platform.
+
 ### Import
 
 **Import** creates a whole campaign at once from a *campaign playbook*: a client, its projects,
@@ -637,10 +661,9 @@ Leave the address empty to use the text mark instead. The text mark also returns
 
 **Reset to defaults** restores every branding field — wording, colours, and logo — to the values the application shipped with. The reset fills the form; press **Save branding** to apply it.
 
-Both [Calendar](#calendar) and [Files](#files) are in the sidebar and working. Each reads and
-nothing more: the calendar shows the month without changing it, and Files lists a project's Drive
-folder without uploading, renaming, moving, or deleting anything. Use the **Open** links on Files,
-or **Open Drive** on a project, to manage the files themselves in Google Drive.
+[Calendar](#calendar), [Signal](#signal), and [Files](#files) are in the sidebar and working.
+Calendar and Files only read: use Signal to change the content schedule, and use the **Open** links
+on Files or **Open Drive** on a project to manage files themselves in Google Drive.
 
 ## 9. Deadlines and timezones
 

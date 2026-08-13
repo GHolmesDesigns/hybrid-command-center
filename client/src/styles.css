@@ -2900,3 +2900,326 @@ button.tag-chip.toggle.active {
     font-size: 14px;
   }
 }
+
+/* Signal planner: the queue and month are two views of the same API state. */
+.signal-layout {
+  display: grid;
+  grid-template-columns: minmax(250px, 320px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+.signal-queue,
+.signal-calendar {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+}
+.signal-queue {
+  padding: 18px;
+  position: sticky;
+  top: 88px;
+  max-height: calc(100vh - 108px);
+  overflow: auto;
+}
+.signal-section-head,
+.signal-month-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.signal-section-head h2,
+.signal-month-nav h2 {
+  font: 700 20px Manrope;
+  margin: 3px 0 0;
+}
+.signal-count {
+  display: grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #eef1ef;
+  font-size: 12px;
+  font-weight: 700;
+}
+.signal-quick-add {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 16px 0;
+}
+.signal-quick-add textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid #d7d9d4;
+  border-radius: 9px;
+  padding: 10px;
+  color: var(--ink);
+}
+.signal-quick-add button {
+  align-self: flex-end;
+}
+.signal-queue-list,
+.signal-day ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.signal-calendar {
+  min-width: 0;
+  overflow: hidden;
+}
+.signal-month-nav {
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.signal-month-nav > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.signal-month-nav > div svg {
+  width: 19px;
+  color: var(--blue);
+}
+.signal-month-nav button {
+  padding: 7px;
+}
+.signal-weekdays,
+.signal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+.signal-weekdays {
+  border-bottom: 1px solid var(--line);
+  background: #f7f7f4;
+}
+.signal-weekdays span {
+  padding: 8px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.signal-day {
+  min-width: 0;
+  min-height: 132px;
+  padding: 8px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+}
+.signal-day:nth-child(7n) {
+  border-right: 0;
+}
+.signal-day.is-blank {
+  background: #f7f7f4;
+}
+.signal-day.is-today {
+  box-shadow: inset 0 0 0 2px var(--blue);
+}
+.signal-day > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 7px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.signal-day > header strong {
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: var(--blue);
+  color: #fff;
+  font-size: 8px;
+  text-transform: uppercase;
+}
+.signal-day-empty {
+  color: #a3a8a4;
+  font-size: 10px;
+}
+.signal-post {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--blue);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  text-align: left;
+}
+.signal-post:hover {
+  background: #f7f8f5;
+}
+.signal-post-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.signal-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.signal-status svg {
+  width: 11px;
+  height: 11px;
+}
+.signal-status.status-published {
+  color: var(--green);
+}
+.signal-status.status-scheduled {
+  color: var(--blue);
+}
+.signal-channel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 4px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 5px;
+  background: #eef1ef;
+  color: var(--ink);
+  font-size: 9px;
+  font-weight: 700;
+}
+.signal-post-text {
+  display: block;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.signal-post-detail {
+  color: var(--muted);
+  font-size: 9px;
+}
+.signal-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.signal-editor-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(19, 25, 22, 0.5);
+}
+.signal-editor {
+  width: min(560px, 100%);
+  height: 100%;
+  overflow: auto;
+  background: #fff;
+  box-shadow: -20px 0 55px rgba(0, 0, 0, 0.2);
+}
+.signal-editor > header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.96);
+}
+.signal-editor > header h2 {
+  margin: 3px 0 0;
+  font: 700 22px Manrope;
+}
+.signal-editor-form textarea {
+  min-height: 190px;
+  overflow-wrap: anywhere;
+}
+.signal-channel-fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.signal-channel-fieldset legend {
+  margin-bottom: 7px;
+  color: #58605c;
+  font-size: 11px;
+  font-weight: 600;
+}
+.signal-channel-fieldset > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+.signal-channel-fieldset label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 7px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.signal-channel-fieldset input {
+  width: auto;
+  margin: 0;
+}
+.signal-unschedule {
+  align-self: flex-start;
+}
+.signal-editor-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+@media (max-width: 1000px) {
+  .signal-layout {
+    grid-template-columns: 1fr;
+  }
+  .signal-queue {
+    position: static;
+    max-height: none;
+  }
+  .signal-queue-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 720px) {
+  .signal-calendar {
+    overflow-x: auto;
+  }
+  .signal-weekdays,
+  .signal-grid {
+    min-width: 760px;
+  }
+  .signal-queue-list {
+    grid-template-columns: 1fr;
+  }
+  .signal-editor-form .form-row,
+  .signal-editor-form .form-row.triple {
+    grid-template-columns: 1fr;
+  }
+}
