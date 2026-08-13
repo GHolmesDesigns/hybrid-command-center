@@ -19,6 +19,7 @@
  * renames, or touches a folder as a side effect.
  */
 import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import type { Db } from './db.ts';
 import { transaction } from './db.ts';
@@ -58,6 +59,32 @@ import { TASK_CHECKLIST_TEMPLATES } from '../shared/types.ts';
 
 const id = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
+
+/**
+ * Where the versioned sample workbook lives on disk, so a first-time importer can reach it from
+ * the Import page instead of from the repository.
+ *
+ * `docs/examples/` is the directory `docs/campaign-playbook-import-format.md` links its example
+ * from, and the file is served from there rather than copied into `client/public/`. `AGENTS.md`
+ * requires that document to change in the same branch as the importer; a duplicate binary would
+ * not be in that branch and would drift the first time the format moved.
+ *
+ * Resolved from this module's own URL rather than from `process.cwd()`, which is whatever
+ * directory `npm start` was run in. The server is never bundled — `node --experimental-strip-types
+ * server/index.ts` in both dev and production — so `server/../docs` is the committed file in both.
+ *
+ * A directory rather than the whole path because it is what the route hands `sendFile` as its
+ * `root`: `send` answers 404 for any path with a dot-segment in it, and a checkout under a
+ * directory such as `.claude/worktrees` would otherwise make the download disappear with no error
+ * worth reading. Rooted here, only the filename is matched against that rule, and it carries no
+ * dot-segment.
+ */
+export const SAMPLE_PLAYBOOK_DIRECTORY = fileURLToPath(
+  new URL('../docs/examples/', import.meta.url),
+);
+/** The `.xlsx` media type, stated here so the route never depends on a MIME lookup table. */
+export const SAMPLE_PLAYBOOK_CONTENT_TYPE =
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 /** The longest `filename` a playbook may name itself with. */
 export const PLAYBOOK_FILENAME_MAX = 255;

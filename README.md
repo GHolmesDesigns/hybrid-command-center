@@ -317,6 +317,10 @@ tab-separated text — into clients, projects, tasks, checklist items, and depen
 is specified in [`docs/campaign-playbook-import-format.md`](docs/campaign-playbook-import-format.md),
 with a sample workbook in `docs/examples/`.
 
+- **The sample is downloadable.** `GET /api/import/playbook/sample` serves
+  `docs/examples/campaign-playbook-import-format.xlsx` with its `.xlsx` type and filename, and
+  **Download sample playbook** on the Import page is that route. One fixed file, read from `docs/`
+  rather than copied into the client build, so it cannot drift from the format document beside it.
 - **Preview first.** `POST /api/import/playbook/preview` is read-only and reports what would be
   created, what is already here, and every validation error with its tab, row, and column. The
   confirm button is enabled only for a clean preview.

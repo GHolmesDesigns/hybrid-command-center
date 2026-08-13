@@ -21,6 +21,17 @@ export const PLAYBOOK_DOC_SHEETS = ['README', 'DataDictionary', 'AllowedValues']
 export const PLAYBOOK_SCHEMA_VERSION = 1;
 
 /**
+ * The versioned sample workbook: where the API serves it and the name the browser saves it as.
+ *
+ * Both live here rather than once in the route and once in the page, so the link the Import page
+ * offers and the `Content-Disposition` the route answers with cannot come to disagree about what
+ * is downloaded or what it is called. The file itself stays in `docs/examples/`, beside the format
+ * document that links it — the server reads it from there rather than a copy.
+ */
+export const SAMPLE_PLAYBOOK_DOWNLOAD_PATH = '/api/import/playbook/sample';
+export const SAMPLE_PLAYBOOK_FILENAME = 'campaign-playbook-import-format.xlsx';
+
+/**
  * One reason an import cannot proceed, addressed the way an author reads their workbook:
  * which tab, which spreadsheet row, which column header. Row and column are absent for a
  * whole-workbook problem such as a missing tab.

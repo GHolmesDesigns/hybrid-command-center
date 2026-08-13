@@ -97,6 +97,29 @@ describe('Import module', () => {
     expect(screen.getByText('No imports yet')).toBeVisible();
   });
 
+  /**
+   * C37 (#139). The sample workbook is committed under `docs/examples/`, and before this it was
+   * reachable only by opening the repository. The page head offers it beside the import itself.
+   */
+  it('offers the sample workbook for download beside importing one', async () => {
+    render(
+      <MemoryRouter initialEntries={['/import']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    const link = await screen.findByRole('link', { name: /Download sample playbook/ });
+    expect(link).toHaveAttribute('href', '/api/import/playbook/sample');
+    // The API answers `Content-Disposition: attachment`, so the browser saves rather than
+    // navigates; `download` names the file it saves as, and both come from `shared/playbook.ts`.
+    expect(link).toHaveAttribute('download', 'campaign-playbook-import-format.xlsx');
+    // Nothing is fetched to offer it. A blob assembled in the page would be a second copy of the
+    // workbook's bytes and a second thing to get the filename wrong.
+    expect(requests.some((call) => call.url.includes('/import/playbook/sample'))).toBe(false);
+    // Beside the action it belongs with, not instead of it.
+    expect(screen.getByRole('button', { name: /Import a playbook/ })).toBeVisible();
+  });
+
   it('previews before it writes, and only enables the confirm button for a clean preview', async () => {
     testState.importPreviewPayload = preview({
       ok: false,

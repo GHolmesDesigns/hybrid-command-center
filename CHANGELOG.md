@@ -8,6 +8,25 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [4.1.5] - 2026-08-13
+
+### Added
+
+- The Import page offers the sample playbook. **Download sample playbook**, beside **Import a
+  playbook** at the top of the page, saves the filled-in workbook — every tab, in order, with its
+  columns already named — so a first import starts from a working file instead of from a column
+  list. Until now that workbook shipped with the application but nothing served it, and the page
+  could only name the folder it was in.
+
+### Changed
+
+- The Import page's note about the format now points at the download rather than only at the
+  format document.
+
+### Breaking changes
+
+None.
+
 ## [4.1.4] - 2026-08-13
 
 ### Changed

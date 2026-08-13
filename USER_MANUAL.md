@@ -521,10 +521,13 @@ for a campaign you have already written down — a spreadsheet you filled in bef
 started — rather than for typing the same structure in by hand.
 
 A playbook is an `.xlsx` workbook with one tab per kind of record: `Clients`, `Projects`, `Tasks`,
-`ChecklistItems`, and `Dependencies`. There is a sample workbook in the application folder at
-`docs/examples/campaign-playbook-import-format.xlsx`, and the full list of columns is in
-`docs/campaign-playbook-import-format.md`. You can also paste the tabs straight in as text, each
-one under its name in square brackets, which is what a spreadsheet gives you when you copy cells.
+`ChecklistItems`, and `Dependencies`. **Download sample playbook**, beside **Import a playbook** at
+the top of the page, saves a filled-in workbook with every tab already there and its columns
+already named — start from that rather than building one from the column list. The same file is in
+the application folder at `docs/examples/campaign-playbook-import-format.xlsx`, and the full list
+of columns is in `docs/campaign-playbook-import-format.md`. You can also paste the tabs straight in
+as text, each one under its name in square brackets, which is what a spreadsheet gives you when you
+copy cells.
 
 **Import a playbook** opens the modal. Choose the workbook or paste the tabs, then press **Check
 this playbook**. Nothing is written yet. The check tells you three things:

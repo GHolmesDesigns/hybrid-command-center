@@ -7,6 +7,7 @@ import {
   HEADERS_TIMEOUT_MS,
   IMPORT_BUDGET,
   REQUEST_TIMEOUT_MS,
+  SAMPLE_PLAYBOOK_BUDGET,
   concurrencyGate,
   configureServerTimeouts,
   postsOnly,
@@ -100,6 +101,27 @@ describe('a request budget', () => {
 
     expect(send(budget, { ip: '10.0.0.1' }).passed).toBe(false);
     expect(send(budget, { ip: '10.0.0.2' }).passed).toBe(true);
+  });
+
+  it('meters the sample playbook download on a window of its own, reads included', () => {
+    const clock = fixedClock();
+    const importing = requestBudget(IMPORT_BUDGET, { now: clock.now, applies: postsOnly });
+    const sample = requestBudget(SAMPLE_PLAYBOOK_BUDGET, { now: clock.now });
+
+    // The download is a GET, so it has to be metered without `postsOnly` — the import budget
+    // beside it would wave it through however many arrived.
+    for (let i = 0; i < SAMPLE_PLAYBOOK_BUDGET.limit; i += 1)
+      expect(send(sample, { method: 'GET' }).passed).toBe(true);
+    const refused = send(sample, { method: 'GET' });
+    expect(refused.passed).toBe(false);
+    expect(refused.res.body).toEqual({ error: SAMPLE_PLAYBOOK_BUDGET.message });
+
+    /**
+     * Two windows, not one. The sample is what fixes the workbook that spent the import budget,
+     * and an import is what a downloaded sample leads to; sharing a bucket would have each of
+     * them withhold the other at the moment it is wanted.
+     */
+    expect(send(importing).passed).toBe(true);
   });
 
   it('leaves a request outside what it meters alone, however many arrive', () => {
