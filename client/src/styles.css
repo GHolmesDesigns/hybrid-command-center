@@ -3003,6 +3003,11 @@ button.tag-chip.toggle.active {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
 }
+/* Every row is the same fixed height, so the longest post in a week cannot stretch the week.
+   A cell that holds more than fits scrolls inside itself. */
+.signal-grid {
+  grid-auto-rows: 184px;
+}
 .signal-weekdays {
   border-bottom: 1px solid var(--line);
   background: #f7f7f4;
@@ -3017,12 +3022,24 @@ button.tag-chip.toggle.active {
   letter-spacing: 0.06em;
 }
 .signal-day {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
-  min-height: 132px;
+  min-height: 0;
+  overflow: hidden;
   padding: 8px;
   border-right: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
   background: #fff;
+}
+/* The posts scroll, the cell does not grow. The negative inline margin buys the focus ring
+   room inside the cell's own padding rather than taking width from the posts. */
+.signal-day ul {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px;
+  margin: -4px -4px 0;
 }
 .signal-day:nth-child(7n) {
   border-right: 0;
@@ -3053,11 +3070,13 @@ button.tag-chip.toggle.active {
   color: #a3a8a4;
   font-size: 10px;
 }
+/* The frame is the wrapper, not a control: editing and expanding are two sibling buttons
+   inside it, so neither can nest in the other. */
 .signal-post {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 5px;
+  gap: 4px;
   width: 100%;
   min-width: 0;
   padding: 8px;
@@ -3070,6 +3089,27 @@ button.tag-chip.toggle.active {
 }
 .signal-post:hover {
   background: #f7f8f5;
+}
+.signal-post-edit {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font-weight: 400;
+  text-align: left;
+}
+.signal-post-expand {
+  align-self: flex-start;
+  padding: 1px 0;
+  font-size: 10px;
+  font-weight: 700;
+  text-decoration: underline;
 }
 .signal-post-meta {
   display: flex;
