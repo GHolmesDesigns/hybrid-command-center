@@ -47,7 +47,13 @@ export interface SignalPostRange {
  */
 export class UnavailableSignalProvider implements SignalProvider {
   readonly available = false;
-  constructor(private readonly reason = 'Signal Campaign is unavailable.') {}
+  private readonly reason: string;
+  // Declared and assigned rather than a constructor parameter property: the server runs under
+  // `node --experimental-strip-types`, which erases types without rewriting code, and a
+  // parameter property needs the rewrite. It is a boot-time failure, not a type error.
+  constructor(reason = 'Signal Campaign is unavailable.') {
+    this.reason = reason;
+  }
   async listPosts(): Promise<SignalPostRange> {
     throw new Error(this.reason);
   }

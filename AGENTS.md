@@ -38,6 +38,7 @@
 ## Conventions
 
 - TypeScript strict mode. Validate all external input with Zod.
+- The server runs under `node --experimental-strip-types`, which erases annotations without rewriting code. **Constructor parameter properties do not work there** — declare the field and assign it in the constructor instead. Vite transpiles them, so unit tests, typecheck, and the build all pass while the real server refuses to boot; `@typescript-eslint/parameter-properties` is enforced over `server/` and `shared/` so `npm run lint` catches it rather than end-to-end.
 - Keep timestamps as UTC ISO strings and due dates as `YYYY-MM-DD` values interpreted in local time.
 - Keep deadline rules and dependency rules out of React components.
 - Archive rather than permanently delete top-level **clients**. Projects and tasks may be hard-deleted from SQLite when the user confirms; never delete or modify Drive files as a side effect of those actions.

@@ -36,10 +36,20 @@ export function listPostsInRange(db: Db, from: string, to: string): SignalPostRa
   return { from, to, posts: toSignalPosts(db, rows.slice(0, SIGNAL_RANGE_LIMIT)), truncated };
 }
 
-/** The `SignalProvider` backed by this database. */
+/**
+ * The `SignalProvider` backed by this database.
+ *
+ * The field is declared and assigned rather than written as a constructor parameter property:
+ * the server runs under `node --experimental-strip-types`, which erases types without rewriting
+ * anything, and a parameter property is the one TypeScript form that needs a rewrite to mean
+ * what it says. Vite transpiles it happily, so this only fails where it matters — at boot.
+ */
 export class LocalSignalProvider implements SignalProvider {
   readonly available = true;
-  constructor(private readonly db: Db) {}
+  private readonly db: Db;
+  constructor(db: Db) {
+    this.db = db;
+  }
   async listPosts(input: { from: string; to: string }): Promise<SignalPostRange> {
     return listPostsInRange(this.db, input.from, input.to);
   }
