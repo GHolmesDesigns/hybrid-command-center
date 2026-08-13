@@ -76,6 +76,21 @@ CREATE TABLE IF NOT EXISTS drive_steps (
   entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, step_key TEXT NOT NULL, folder_id TEXT NOT NULL,
   folder_url TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(entity_type, entity_id, step_key)
 );
+-- Signal Campaign's schedule: the authoritative store for planned content (decision 5.7).
+-- The date column is a YYYY-MM-DD value in local time, never an instant, and NULL means the
+-- post is in the unscheduled queue rather than on any day. See shared/signal.ts for the rule.
+CREATE TABLE IF NOT EXISTS signal_posts (
+  id TEXT PRIMARY KEY, text TEXT NOT NULL, date TEXT, time TEXT NOT NULL DEFAULT '09:00',
+  format TEXT NOT NULL DEFAULT 'TEXT', status TEXT NOT NULL DEFAULT 'DRAFT', campaign TEXT,
+  cta TEXT NOT NULL DEFAULT 'NONE', position INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+-- Channels are a normalized join rather than a packed column, for the same reason tags and
+-- categories are: one row per channel a post goes out on, queryable without parsing a string.
+CREATE TABLE IF NOT EXISTS signal_post_channels (
+  post_id TEXT NOT NULL REFERENCES signal_posts(id) ON DELETE CASCADE,
+  channel TEXT NOT NULL, PRIMARY KEY(post_id, channel)
+);
 `;
 
 /**
@@ -93,6 +108,10 @@ CREATE INDEX IF NOT EXISTS idx_project_categories_category ON project_categories
 CREATE INDEX IF NOT EXISTS idx_import_receipts_created ON import_receipts(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_integration_events_created ON integration_events(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_integration_events_correlation ON integration_events(correlation_id);
+-- The calendar reads a date range; the planner reads the queue. Both are this one index:
+-- dated rows order by day, and the NULL dates group together at the front.
+CREATE INDEX IF NOT EXISTS idx_signal_posts_date ON signal_posts(date, time);
+CREATE INDEX IF NOT EXISTS idx_signal_post_channels_channel ON signal_post_channels(channel);
 `;
 
 const schema = `${tableSchema}${indexSchema}`;
