@@ -158,6 +158,52 @@ that same ID. A user reporting "something went wrong" can quote the ID, and the 
 An unmatched path under `/api` answers `404` with a JSON body, ahead of the static client. A typo
 in a client-side request reads as the 404 it is rather than arriving as `index.html` with a `200`.
 
+A `413` answers a body over the parser's limit, a `429` a spent request budget, and a `503` an
+import that arrived while another was running — see [Request budgets](#request-budgets).
+
+### Request budgets
+
+The API has no authentication. Every route trusts whichever browser can reach it, which is why the
+default bind is `127.0.0.1` and why changing `HOST` is a foot-gun rather than a feature. Within
+that design nothing here is reachable across a network. `docs/cloud-hosting.md` (C20) recommends a
+private single-instance remote deployment, so the routes that cost real memory, CPU, or Google's
+quota carry a ceiling now rather than acquiring one on the day a listen address leaves loopback.
+
+There is deliberately **no global limiter**. The board is used interactively — a drag reorders
+several tasks, opening a project reads its tasks and its files — and one bucket over every route
+would throttle ordinary browsing long before it inconvenienced a loop. What is metered is import
+and Drive:
+
+| Routes | Budget | Why |
+| --- | --- | --- |
+| `POST /api/import/playbook`, `POST /api/import/playbook/preview` | 12 per 5 minutes, and one at a time | The only routes that read megabytes and then plan the whole workspace per request |
+| `POST /api/drive/sync` | 4 per minute | One sync walks every client and project, so it costs a multiple of any other Drive call |
+| `/api/drive/*`, `/api/settings/drive/*`, `GET /api/projects/:id/files`, the two `retry-drive` routes | 120 per minute, shared | They spend one Google account's quota, and two a second covers clicking through folders as fast as a person can |
+| Everything else — clients, projects, tasks, tags, categories, Signal, the calendar, import receipts | unmetered | Ordinary interactive use, and local rows only |
+
+Windows are counted per client address and answered with a `429`, a `Retry-After`, and a message
+naming which budget was hit. The counting is a fixed window in memory, tracking a bounded number
+of addresses; there is no store and nothing survives a restart, which is the right size for one
+operator on one host.
+
+The import routes also carry a **concurrency cap of one**, and both it and the rate limit are
+mounted ahead of the body parser. That ordering is the point: a limiter that runs after
+`express.json` has already buffered a 12 MB body has metered nothing, so a refused caller never
+gets its body read. A second import while one is running is answered `503`.
+
+The body limit for those routes is derived from the caps the Zod schema puts on the fields —
+about 12 MB, the base64 workbook cap plus its JSON envelope — rather than the round 16 MB it
+replaced, which sat 4 MB above anything the schema could accept. Every other route keeps 1 MB.
+
+`headersTimeout` and `requestTimeout` are set on the server, which Express does not do and whose
+Node defaults are minutes long. They bound how long a client may take to send headers and a whole
+request, so connections cannot be held open with no request to show for them.
+
+**This is not authentication, and it does not substitute for it.** A budget on an unauthenticated
+endpoint buys time, not safety. C20 §5 puts an operator password, a session cookie, CSRF, and a
+bind gate ahead of any non-loopback listen address; until that ships, local-first on `127.0.0.1`
+remains the only supported deployment.
+
 ### OAuth callback security
 
 `GET /api/drive/oauth/callback` is single-use. Connecting Drive mints a `state` and stores it

@@ -58,6 +58,7 @@ import {
 import { encryptJson } from './drive/tokens.ts';
 import { DRIVE_PAGE_SIZE, DRIVE_PAGE_SIZE_MAX } from '../shared/drive.ts';
 import {
+  IMPORT_BODY_LIMIT_BYTES,
   ImportInputError,
   commitPlaybook,
   getReceipt,
@@ -65,6 +66,16 @@ import {
   playbookInput,
   previewPlaybook,
 } from './import.ts';
+import {
+  DRIVE_BUDGET,
+  DRIVE_SYNC_BUDGET,
+  IMPORT_BUDGET,
+  IMPORT_BUSY_MESSAGE,
+  IMPORT_CONCURRENCY,
+  concurrencyGate,
+  postsOnly,
+  requestBudget,
+} from './budgets.ts';
 import { listIntegrationEvents } from './integration-log.ts';
 import { INTEGRATION_EVENT_PAGE_MAX, INTEGRATION_SOURCES } from '../shared/integration-log.ts';
 import {
@@ -360,16 +371,41 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   );
   app.use(cors({ origin: config.appOrigin }));
   /**
+   * The budgets go here — ahead of every parser — because both of the things they protect are
+   * spent by the parser. A rate limit that runs after `express.json` has already read a 12 MB
+   * body has metered nothing, and a concurrency cap behind it counts requests whose memory is
+   * already allocated. See `budgets.ts` for why import and Drive are metered and the board is not.
+   */
+  const driveBudget = requestBudget(DRIVE_BUDGET, { now: clock });
+  app.use('/api/import/playbook', requestBudget(IMPORT_BUDGET, { now: clock, applies: postsOnly }));
+  app.use(
+    '/api/import/playbook',
+    concurrencyGate(IMPORT_CONCURRENCY, IMPORT_BUSY_MESSAGE, { applies: postsOnly }),
+  );
+  app.use('/api/drive/sync', requestBudget(DRIVE_SYNC_BUDGET, { now: clock }));
+  app.use('/api/drive', driveBudget);
+  app.use('/api/settings/drive', driveBudget);
+  /**
+   * The three Drive routes that do not sit under a Drive prefix, sharing the window above because
+   * the quota they spend is one account's however they are addressed. Mounted rather than passed
+   * to the route: a second handler on a path with a parameter widens `req.params.id` to
+   * `string | string[]` in Express 5's types, and the budget is not worth casting the route for.
+   */
+  app.use('/api/projects/:id/files', driveBudget);
+  app.use('/api/clients/:id/retry-drive', driveBudget);
+  app.use('/api/projects/:id/retry-drive', driveBudget);
+  /**
    * An uploaded workbook is base64 in a JSON body — the committed sample playbook alone is 86 KB
    * — so the import routes get a larger limit rather than raising it for every endpoint that
-   * only ever carries a form. The Zod schema caps the field itself.
+   * only ever carries a form. `IMPORT_BODY_LIMIT_BYTES` is derived from the caps the Zod schema
+   * puts on the fields, so the parser and the schema cannot drift apart.
    *
    * Registered *before* the 1 MB parser deliberately: whichever parser runs first is the one
    * that reads the body and the one whose limit applies, and middleware runs in registration
    * order regardless of where the route is declared. Behind it, the general parser sees a body
    * that is already read and passes it through.
    */
-  app.use('/api/import', express.json({ limit: '16mb' }));
+  app.use('/api/import', express.json({ limit: IMPORT_BODY_LIMIT_BYTES }));
   app.use(express.json({ limit: '1mb' }));
   app.use(requestLogger(options.logStream));
   app.get('/api/health', (_req, res) => {
@@ -1352,6 +1388,14 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
 
   app.use((error: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
     void next;
+    /**
+     * A body over the parser's limit is the caller's problem as much as an unreadable one is, and
+     * body-parser reports it by rejecting before any route runs. Without this branch it reached
+     * the 500 below, so the answer to an oversized upload was "something went wrong" and an error
+     * ID — which reads as a defect in the app rather than as the limit it is.
+     */
+    if (error?.type === 'entity.too.large')
+      return res.status(413).json({ error: 'That request body is too large.' });
     // An unreadable upload is the caller's problem, not a 500: the message already says
     // what to do about it, and the import modal shows it verbatim.
     const status =

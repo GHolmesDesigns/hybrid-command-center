@@ -4,7 +4,15 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { createApp } from './app.ts';
 import { createDb, type Db } from './db.ts';
-import { commitPlaybook, listReceipts, previewPlaybook, readWorkspace } from './import.ts';
+import {
+  IMPORT_BODY_LIMIT_BYTES,
+  PLAYBOOK_CONTENT_BASE64_MAX,
+  PLAYBOOK_TEXT_MAX,
+  commitPlaybook,
+  listReceipts,
+  previewPlaybook,
+  readWorkspace,
+} from './import.ts';
 import { listIntegrationEvents } from './integration-log.ts';
 import { buildXlsx } from './domain/workbook-fixture.ts';
 import { IMPORT_RECEIPT_LIMIT } from '../shared/playbook.ts';
@@ -576,5 +584,38 @@ describe('campaign playbook import', () => {
     expect(response.status).toBe(409);
     expect(response.body.preview.issues[0].message).toMatch(/not part of the format/);
     expect(counts().clients).toBe(0);
+  });
+});
+
+/**
+ * C28 (#109). The parser limit ahead of these routes used to be a round 16 MB, chosen above the
+ * field caps rather than from them. These cases pin the relationship both ways: the limit must
+ * never refuse a body the schema would accept, and it must not be loose enough to be decorative.
+ */
+describe('the import body limit', () => {
+  it('is derived from the field caps, not rounded up past them', () => {
+    // Nothing the schema accepts through the base64 field can exceed the limit, envelope included.
+    expect(IMPORT_BODY_LIMIT_BYTES).toBeGreaterThan(PLAYBOOK_CONTENT_BASE64_MAX);
+    // And nothing beyond the envelope is granted: the 16 MB it replaced was 4 MB of slack.
+    expect(IMPORT_BODY_LIMIT_BYTES - PLAYBOOK_CONTENT_BASE64_MAX).toBeLessThan(1_024);
+    expect(IMPORT_BODY_LIMIT_BYTES).toBeLessThan(16 * 1_024 * 1_024);
+  });
+
+  it('leaves room for the pasted form, whose cap is the smaller of the two', () => {
+    // A paste of nothing but tabs and newlines doubles those characters when JSON-escaped, which
+    // is the worst realistic expansion for a tab-separated table and still fits.
+    expect(PLAYBOOK_TEXT_MAX * 2).toBeLessThan(IMPORT_BODY_LIMIT_BYTES);
+  });
+
+  it('accepts the committed sample workbook with the limit in force', async () => {
+    const contentBase64 = fs.readFileSync(SAMPLE).toString('base64');
+    // The sample is the format's own example, so a limit that refused it would be the wrong limit.
+    expect(Buffer.byteLength(contentBase64)).toBeLessThan(IMPORT_BODY_LIMIT_BYTES);
+
+    const response = await request(createApp(db))
+      .post('/api/import/playbook/preview')
+      .send({ filename: 'campaign-playbook-import-format.xlsx', contentBase64 });
+    expect(response.status).toBe(200);
+    expect(response.body.ok).toBe(true);
   });
 });

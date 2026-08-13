@@ -1,4 +1,6 @@
 ﻿import crypto from 'node:crypto';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { addDays, format, subDays } from 'date-fns';
@@ -9,6 +11,8 @@ import { projectScopes } from './drive/browse.ts';
 import { MockDriveProvider, MockOAuthClient, mockDriveFile } from './drive/mock-provider.ts';
 import { OAUTH_STATE_KEY, OAUTH_STATE_TTL_MS } from './drive/oauth.ts';
 import { getSetting, provisionProject, setSetting } from './drive/service.ts';
+import { DRIVE_BUDGET, DRIVE_SYNC_BUDGET, IMPORT_BUDGET, IMPORT_BUSY_MESSAGE } from './budgets.ts';
+import { IMPORT_BODY_LIMIT_BYTES } from './import.ts';
 import { TASK_CHECKLIST_TEMPLATES } from '../shared/types.ts';
 import { DEFAULT_BRANDING } from '../shared/branding.ts';
 
@@ -1581,5 +1585,170 @@ describe('HTTP boundary', () => {
       .get('/projects/whatever')
       .expect(200)
       .expect(/<div id="root">/);
+  });
+});
+
+/**
+ * C28 (#109). The API has no authentication, so what stops a loop against the routes that cost
+ * real memory, CPU, or Google's quota is a per-route budget. These cases are the wiring — which
+ * routes are metered, which deliberately are not, and what a refused caller is told. `budgets.ts`
+ * and its tests own the counting rules.
+ */
+describe('request budgets', () => {
+  /** One import body, small enough that a case can send a dozen without minding the bytes. */
+  const playbook = { text: '[Clients]\nclient_key\tname\nCLI-1\tAcme Studio' };
+  const PREVIEW = '/api/import/playbook/preview';
+  const spend = async (app: ReturnType<typeof createApp>, count: number, path: string) => {
+    const statuses: number[] = [];
+    for (let i = 0; i < count; i += 1)
+      statuses.push((await request(app).post(path).send(playbook)).status);
+    return statuses;
+  };
+
+  it('refuses an import once its window is spent, and names the budget it hit', async () => {
+    const app = createApp(db);
+    const spent = await spend(app, IMPORT_BUDGET.limit, '/api/import/playbook/preview');
+    expect(spent.some((status) => status === 429)).toBe(false);
+
+    const refused = await request(app).post('/api/import/playbook/preview').send(playbook);
+    expect(refused.status).toBe(429);
+    expect(refused.body).toEqual({ error: IMPORT_BUDGET.message });
+    expect(refused.headers['retry-after']).toBeTruthy();
+  });
+
+  it('counts a preview and a commit against the same import window', async () => {
+    const app = createApp(db);
+    await spend(app, IMPORT_BUDGET.limit, '/api/import/playbook/preview');
+
+    // The commit is the expensive half; spending the window on previews still closes it.
+    const commit = await request(app).post('/api/import/playbook').send(playbook);
+    expect(commit.status).toBe(429);
+  });
+
+  it('leaves the receipts an import page reads unmetered beside the imports it budgets', async () => {
+    const app = createApp(db);
+    await spend(app, IMPORT_BUDGET.limit + 1, '/api/import/playbook/preview');
+
+    // Opening /import lists receipts. It is a cheap read of local rows and shares no window
+    // with the previews above, so a spent import budget must not black out the page.
+    for (let i = 0; i < IMPORT_BUDGET.limit + 5; i += 1)
+      expect((await request(app).get('/api/import/receipts')).status).toBe(200);
+  });
+
+  it('leaves the interactive board unmetered, however much of it is used', async () => {
+    const app = createApp(db);
+    const { p } = await setup();
+    // Well past the tightest budget in the app: a global limiter would have refused these, which
+    // is the reason there is no global limiter. Reads and writes both.
+    for (let i = 0; i < IMPORT_BUDGET.limit * 3; i += 1) {
+      expect((await request(app).get('/api/tasks')).status).toBe(200);
+      const created = await request(app)
+        .post('/api/tasks')
+        .send({ projectId: p.id, title: `Task ${i}`, status: 'TODO', priority: 'MEDIUM' });
+      expect(created.status).toBe(201);
+    }
+  });
+
+  it('budgets the Drive routes together, whatever their prefix', async () => {
+    const app = createApp(db);
+    const { c, p } = await setup();
+    for (let i = 0; i < DRIVE_BUDGET.limit; i += 1)
+      expect((await request(app).get('/api/settings/drive')).status).not.toBe(429);
+
+    // Different Drive routes, the same window: the quota these protect is one account's, and
+    // three of them are addressed under `/api/projects` and `/api/clients` rather than a Drive
+    // prefix. Each is mounted separately, so each is asked here — an unmatched mount would meter
+    // nothing and pass silently.
+    const files = await request(app).get(`/api/projects/${p.id}/files`);
+    expect(files.status).toBe(429);
+    expect(files.body).toEqual({ error: DRIVE_BUDGET.message });
+    expect((await request(app).post(`/api/projects/${p.id}/retry-drive`)).status).toBe(429);
+    expect((await request(app).post(`/api/clients/${c.id}/retry-drive`)).status).toBe(429);
+  });
+
+  it('budgets a full sync far more tightly than the rest of Drive', async () => {
+    const app = createApp(db);
+    for (let i = 0; i < DRIVE_SYNC_BUDGET.limit; i += 1)
+      expect((await request(app).post('/api/drive/sync')).status).toBe(200);
+
+    const refused = await request(app).post('/api/drive/sync');
+    expect(refused.status).toBe(429);
+    expect(refused.body).toEqual({ error: DRIVE_SYNC_BUDGET.message });
+    // Only the sync window is spent; the rest of Drive is still readable.
+    expect((await request(app).get('/api/settings/drive')).status).toBe(200);
+  });
+
+  it('runs one import at a time, counting from before the body is read', async () => {
+    const app = createApp(db);
+    const server = app.listen(0);
+    const port = (server.address() as AddressInfo).port;
+    const body = JSON.stringify(playbook);
+    const headers = {
+      'content-type': 'application/json',
+      'content-length': String(Buffer.byteLength(body)),
+    };
+    const openImport = () =>
+      http.request({ port, host: '127.0.0.1', method: 'POST', path: PREVIEW, headers });
+
+    /**
+     * Supertest cannot express this case: two ordinary requests to a route this fast never
+     * overlap, and a cap that only shows up under real contention is a cap nobody has tested.
+     * So the first caller announces a body and then sends ten bytes of it — a slow client, or a
+     * deliberate one holding a connection open, which is the case the cap exists for.
+     *
+     * `server.once('request')` is the sync point. Express's own listener was attached first and
+     * runs first, and every middleware ahead of the gate hands off synchronously, so the slot is
+     * taken by the time this resolves.
+     */
+    const slow = openImport();
+    // This request is destroyed on purpose below, and an unhandled `ECONNRESET` on a socket the
+    // test dropped itself would fail the run for the one thing it is trying to demonstrate.
+    slow.on('error', () => {});
+    const arrived = new Promise<void>((resolve) => server.once('request', () => resolve()));
+    slow.write(body.slice(0, 10));
+    await arrived;
+
+    const second = await new Promise<{ status: number; body: string }>((resolve) => {
+      const req = openImport();
+      req.on('response', (res) => {
+        let text = '';
+        res.on('data', (chunk) => (text += chunk));
+        res.on('end', () => resolve({ status: res.statusCode ?? 0, body: text }));
+      });
+      req.end(body);
+    });
+
+    expect(second.status).toBe(503);
+    expect(JSON.parse(second.body)).toEqual({ error: IMPORT_BUSY_MESSAGE });
+    expect(second.status).not.toBe(429);
+
+    // Dropping the held connection frees the slot, so the gate does not wedge the route.
+    slow.destroy();
+    await new Promise((resolve) => server.close(resolve));
+    // The same app, so this asks the gate that just refused a request whether its slot came back.
+    expect((await request(app).post(PREVIEW).send(playbook)).status).toBe(200);
+  });
+
+  it('answers a body over the import limit with 413 rather than a server error', async () => {
+    const app = createApp(db);
+    // A single field longer than the whole body limit, so the parser refuses it before the
+    // schema — whose own cap on this field the limit is derived from — ever sees it.
+    const oversized = 'A'.repeat(IMPORT_BODY_LIMIT_BYTES);
+    const response = await request(app)
+      .post('/api/import/playbook/preview')
+      .send({ contentBase64: oversized });
+
+    expect(response.status).toBe(413);
+    expect(response.body).toEqual({ error: 'That request body is too large.' });
+    // A 500 would have carried an error ID and told the user nothing they could act on.
+    expect(response.body.errorId).toBeUndefined();
+  });
+
+  it('keeps the 1 MB limit on everything that is not an import', async () => {
+    const response = await request(createApp(db))
+      .post('/api/clients')
+      .send({ name: 'A'.repeat(1_100_000) });
+
+    expect(response.status).toBe(413);
   });
 });
