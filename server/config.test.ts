@@ -30,3 +30,31 @@ describe('API host binding', () => {
     expect((await loadConfig()).host).toBe('127.0.0.1');
   });
 });
+
+describe('log level', () => {
+  const original = process.env.LOG_LEVEL;
+  afterEach(() => {
+    if (original === undefined) delete process.env.LOG_LEVEL;
+    else process.env.LOG_LEVEL = original;
+  });
+
+  it('defaults to info when LOG_LEVEL is unset', async () => {
+    delete process.env.LOG_LEVEL;
+    expect((await loadConfig()).logLevel).toBe('info');
+  });
+
+  it('honors LOG_LEVEL, so the documented variable is the one in use', async () => {
+    process.env.LOG_LEVEL = 'debug';
+    expect((await loadConfig()).logLevel).toBe('debug');
+  });
+
+  it('accepts a level in any casing, with surrounding whitespace', async () => {
+    process.env.LOG_LEVEL = '  WARN ';
+    expect((await loadConfig()).logLevel).toBe('warn');
+  });
+
+  it('falls back to info for a level pino would reject, rather than failing startup', async () => {
+    process.env.LOG_LEVEL = 'verbose';
+    expect((await loadConfig()).logLevel).toBe('info');
+  });
+});

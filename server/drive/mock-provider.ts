@@ -1,4 +1,5 @@
 import type { DriveFile } from '../../shared/drive.ts';
+import type { OAuthAuthorizationClient } from './oauth.ts';
 import type { DriveFilePage, DriveFolder, DriveProvider } from './provider.ts';
 
 /**
@@ -71,6 +72,43 @@ export class MockDriveProvider implements DriveProvider {
         nextPageToken: index < pages.length - 1 ? `${folderId}-page-${index + 1}` : null,
       })),
     );
+  }
+}
+
+/**
+ * The authorization server every automated test connects against. It stands in for Google's
+ * two OAuth calls and, more to the point, remembers what it was sent: the PKCE challenge that
+ * went out on the authorization URL and the verifier that came back on the exchange are both
+ * recorded, so a test can assert the exchange was bound to the request that started it rather
+ * than take the route's word for it.
+ */
+export class MockOAuthClient implements OAuthAuthorizationClient {
+  /** Every authorization URL this client was asked to build, in order. */
+  authorizations: { state: string; challenge: string }[] = [];
+  /** Every exchange it was asked to perform, in order. */
+  exchanges: { code: string; verifier: string }[] = [];
+  /** Thrown by `exchange` when set, standing in for a code the provider refused. */
+  exchangeError?: string;
+  /** The credentials a successful exchange answers with. */
+  tokens: { access_token: string; refresh_token: string } = {
+    access_token: 'mock-access-token',
+    refresh_token: 'mock-refresh-token',
+  };
+
+  authorizationUrl(input: { state: string; challenge: string }) {
+    this.authorizations.push(input);
+    const query = new URLSearchParams({
+      state: input.state,
+      code_challenge: input.challenge,
+      code_challenge_method: 'S256',
+    });
+    return `https://accounts.test/authorize?${query.toString()}`;
+  }
+
+  async exchange(input: { code: string; verifier: string }) {
+    this.exchanges.push(input);
+    if (this.exchangeError) throw new Error(this.exchangeError);
+    return this.tokens;
   }
 }
 
