@@ -1,4 +1,4 @@
-import { useId, useState, type KeyboardEvent } from 'react';
+import { useId, useState, type ChangeEventHandler, type KeyboardEvent } from 'react';
 import { Plus, RefreshCw, X } from 'lucide-react';
 import { normalizeTagName, sameTagName } from '../../../shared/types';
 import { type ChipOption, type TagDraft, tagAccent } from './ui-shared';
@@ -40,6 +40,7 @@ export function Select({
   options,
   labels,
   placeholder,
+  onChange,
 }: {
   label: string;
   name: string;
@@ -49,11 +50,13 @@ export function Select({
   labels?: Record<string, string>;
   /** Leading empty-value option, for a field that may legitimately be left unset. */
   placeholder?: string;
+  /** Supplied by controlled forms; existing create/edit forms omit it and keep defaults. */
+  onChange?: ChangeEventHandler<HTMLSelectElement>;
 }) {
   return (
     <label>
       {label}
-      <select name={name} defaultValue={value}>
+      <select name={name} {...(onChange ? { value, onChange } : { defaultValue: value })}>
         {placeholder && <option value="">{placeholder}</option>}
         {options.map((o) => (
           <option key={o} value={o}>

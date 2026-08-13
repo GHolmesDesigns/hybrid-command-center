@@ -8,6 +8,7 @@ import {
   FileText,
   FolderKanban,
   LayoutDashboard,
+  Megaphone,
   Menu,
   PanelLeft,
   PanelLeftClose,
@@ -32,6 +33,7 @@ import { BrandMark } from './Primitives';
 import { ProjectDetail } from './ProjectDetail';
 import { Projects } from './Projects';
 import { SettingsView } from './SettingsView';
+import { SignalView } from './SignalView';
 import { Nav } from './Shell';
 import { brandStyle } from './ui-shared';
 
@@ -161,6 +163,7 @@ export function App() {
           <Nav icon={<Upload />} to="/import" label="Import" collapsed={collapsed} />
           <Nav icon={<FileText />} to="/files" label="Files" collapsed={collapsed} />
           <Nav icon={<CalendarDays />} to="/calendar" label="Calendar" collapsed={collapsed} />
+          <Nav icon={<Megaphone />} to="/signal" label="Signal" collapsed={collapsed} />
           <Nav icon={<Settings />} to="/settings" label="Settings" collapsed={collapsed} />
         </nav>
         <div className="sidebar-foot">
@@ -306,6 +309,7 @@ export function App() {
               }
             />
             <Route path="/calendar" element={<CalendarView />} />
+            <Route path="/signal" element={<SignalView />} />
             <Route
               path="/settings"
               element={
