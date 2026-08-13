@@ -56,6 +56,7 @@ export function ProjectDetail({
         <Link to="/projects">← All projects</Link>
       </div>
       <PageHead
+        focusOnMount
         eyebrow={p.clientName || 'Project'}
         title={p.name}
         body={p.description || 'Project tasks, deadline, and Drive workspace.'}

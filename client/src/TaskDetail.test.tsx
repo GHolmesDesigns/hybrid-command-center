@@ -28,6 +28,48 @@ describe('Task detail inline editing', () => {
   const taskPatches = () =>
     requests.filter((r) => r.method === 'PATCH' && /\/api\/tasks\/[^/]+$/.test(r.url));
 
+  it('links existing client and project destinations, closes the modal, and focuses the page', async () => {
+    testState.clientsPayload = [
+      {
+        id: 'client-p1',
+        name: 'Acme',
+        slug: 'acme',
+        status: 'ACTIVE',
+        driveStatus: 'DISCONNECTED',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ];
+    testState.tasksPayload = [task('t1', 'Recap post')];
+    await openTask('Recap post');
+
+    const projectLink = detail().getByRole('link', { name: 'Site refresh' });
+    expect(projectLink).toHaveAttribute('href', '/projects/p1');
+    expect(detail().getByRole('link', { name: 'Acme' })).toHaveAttribute(
+      'href',
+      '/clients/client-p1',
+    );
+    projectLink.focus();
+    // Enter activates a native anchor as a click; exercising the click after focusing models that
+    // browser behavior without replacing the link with a keyboard-specific handler.
+    fireEvent.click(projectLink);
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    const heading = await screen.findByRole('heading', { name: 'Site refresh', level: 1 });
+    await waitFor(() => expect(heading).toHaveFocus());
+  });
+
+  it('does not render dead links when the task relationships no longer exist', async () => {
+    testState.projectsPayload = [];
+    testState.clientsPayload = [];
+    testState.tasksPayload = [task('t1', 'Orphaned task')];
+    await openTask('Orphaned task');
+
+    expect(detail().queryByRole('link', { name: 'Acme' })).toBeNull();
+    expect(detail().queryByRole('link', { name: 'Site refresh' })).toBeNull();
+    expect(detail().getByText(/Acme.*Site refresh/)).toBeVisible();
+  });
+
   it('orders progress, working text, labels, then dependencies', async () => {
     testState.tasksPayload = [task('t1', 'Recap post')];
     await openTask('Recap post');
