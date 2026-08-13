@@ -1,3 +1,4 @@
+import { useLocation } from 'react-router-dom';
 import {
   fireEvent,
   render,
@@ -8,30 +9,50 @@ import {
   expect,
   it,
   App,
+  client,
+  day,
   type Task,
   task,
   testState,
 } from './App.test-setup';
 
-describe('Task type on the board', () => {
-  const renderBoard = async (tasks: Task[]) => {
-    testState.tasksPayload = tasks;
-    render(
-      <MemoryRouter initialEntries={['/kanban']}>
-        <App />
-      </MemoryRouter>,
-    );
-    expect(await screen.findByRole('heading', { level: 1, name: 'Project Status' })).toBeVisible();
-  };
+function LocationProbe() {
+  const location = useLocation();
+  return <output aria-label="Current location">{`${location.pathname}${location.search}`}</output>;
+}
 
+const renderBoard = async (tasks: Task[], entry = '/kanban') => {
+  testState.tasksPayload = tasks;
+  render(
+    <MemoryRouter initialEntries={[entry]}>
+      <App />
+      <LocationProbe />
+    </MemoryRouter>,
+  );
+  expect(await screen.findByRole('heading', { level: 1, name: 'Project Status' })).toBeVisible();
+};
+
+const cardTitles = () =>
+  [...document.querySelectorAll('.kanban-card .card-title strong')].map((n) => n.textContent);
+/** The count the page header claims, which has to agree with the board under every filter. */
+const headerCount = () =>
+  Number(/(\d+) visible tasks/.exec(document.querySelector('.page-head')!.textContent!)![1]);
+const location = () => screen.getByLabelText('Current location').textContent;
+const typeFilter = () => screen.getByRole('combobox', { name: 'Task type' });
+/** Badges only: the filter bar now offers every type name as an option text as well. */
+const typeBadges = () =>
+  [...document.querySelectorAll('.task-type-badge')].map((n) => n.textContent);
+const priorityFilter = () => screen.getByRole('combobox', { name: 'Priority' });
+
+describe('Task type on the board', () => {
   it('shows the type on the card and again in the task detail', async () => {
     await renderBoard([task('t1', 'Implement task types', { taskType: 'DEV_WORK' })]);
 
-    expect(screen.getByText('Dev Work')).toBeVisible();
+    expect(typeBadges()).toEqual(['Dev Work']);
 
     fireEvent.click(screen.getByRole('button', { name: /^Implement task types/ }));
 
-    await waitFor(() => expect(screen.getAllByText('Dev Work').length).toBe(2));
+    await waitFor(() => expect(typeBadges()).toEqual(['Dev Work', 'Dev Work']));
   });
 
   it('renders an untyped task with no badge at all', async () => {
@@ -41,5 +62,90 @@ describe('Task type on the board', () => {
     expect(document.querySelector('.task-type-badge')).toBeNull();
     // The priority badge beside it still renders, so the row itself is not missing.
     expect(document.querySelector('.priority-badge')).not.toBeNull();
+  });
+});
+
+describe('Task type filtering on the board', () => {
+  const seeded = () => [
+    task('t1', 'Recap post', { taskType: 'BLOG_POST' }),
+    task('t2', 'Launch graphics', { taskType: 'GRAPHICS', priority: 'URGENT' }),
+    task('t3', 'Sponsor cutdown', { taskType: 'GRAPHICS' }),
+    task('t4', 'Legacy chore'),
+  ];
+
+  it('narrows the board to one type and puts the choice in the URL', async () => {
+    await renderBoard(seeded());
+    expect(headerCount()).toBe(4);
+
+    fireEvent.change(typeFilter(), { target: { value: 'GRAPHICS' } });
+
+    expect(cardTitles()).toEqual(['Launch graphics', 'Sponsor cutdown']);
+    expect(headerCount()).toBe(2);
+    expect(location()).toBe('/kanban?type=GRAPHICS');
+
+    fireEvent.change(typeFilter(), { target: { value: '' } });
+
+    expect(cardTitles()).toEqual([
+      'Recap post',
+      'Launch graphics',
+      'Sponsor cutdown',
+      'Legacy chore',
+    ]);
+    expect(location()).toBe('/kanban');
+  });
+
+  it('shows exactly the tasks with no type under "No type"', async () => {
+    await renderBoard(seeded());
+
+    fireEvent.change(typeFilter(), { target: { value: 'none' } });
+
+    expect(cardTitles()).toEqual(['Legacy chore']);
+    expect(headerCount()).toBe(1);
+    expect(location()).toBe('/kanban?type=none');
+  });
+
+  it('combines the type with priority rather than replacing it', async () => {
+    await renderBoard(seeded());
+
+    fireEvent.change(typeFilter(), { target: { value: 'GRAPHICS' } });
+    fireEvent.change(priorityFilter(), { target: { value: 'URGENT' } });
+
+    // Both filters are still applied: the second Graphics task is MEDIUM and drops out.
+    expect(cardTitles()).toEqual(['Launch graphics']);
+    expect(headerCount()).toBe(1);
+    expect(typeFilter()).toHaveValue('GRAPHICS');
+    expect(location()).toBe('/kanban?type=GRAPHICS&priority=URGENT');
+  });
+
+  it('reproduces the same board from a pasted URL, priority included', async () => {
+    await renderBoard(seeded(), '/kanban?type=GRAPHICS&priority=URGENT');
+
+    expect(cardTitles()).toEqual(['Launch graphics']);
+    expect(headerCount()).toBe(1);
+    expect(typeFilter()).toHaveValue('GRAPHICS');
+    expect(priorityFilter()).toHaveValue('URGENT');
+  });
+
+  it('keeps the type beside the client, project, focus, tag, and search filters', async () => {
+    const tag = { id: 'tag-brand', name: 'Brand system' };
+    testState.tagsPayload = [tag];
+    testState.clientsPayload = [client('client-p1', 'Acme')];
+    await renderBoard(
+      [
+        task('t1', 'Launch graphics', { taskType: 'GRAPHICS', tags: [tag], dueDate: day(2) }),
+        task('t2', 'Sponsor cutdown', { taskType: 'GRAPHICS', dueDate: day(2) }),
+      ],
+      '/kanban?project=p1&client=client-p1&filter=week&tags=tag-brand',
+    );
+
+    fireEvent.change(typeFilter(), { target: { value: 'GRAPHICS' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search' }), {
+      target: { value: 'launch' },
+    });
+
+    expect(cardTitles()).toEqual(['Launch graphics']);
+    expect(location()).toBe(
+      '/kanban?project=p1&client=client-p1&filter=week&tags=tag-brand&type=GRAPHICS',
+    );
   });
 });
