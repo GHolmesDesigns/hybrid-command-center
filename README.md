@@ -113,17 +113,42 @@ Required environment variables:
 
 | Variable | Purpose |
 | --- | --- |
-| `PORT` | Local API port; default `8787` |
+| `PORT` | Local API port; default `8787`. A port number, 1–65535 |
 | `HOST` | Interface the API binds to; default `127.0.0.1` (loopback only). Set `0.0.0.0` to expose it on the LAN — the app has no authentication, so do this deliberately |
 | `DATABASE_PATH` | SQLite path; default `./data/command-center.db` |
-| `APP_ORIGIN` | Vite/browser origin; default `http://localhost:5173` |
+| `APP_ORIGIN` | Vite/browser origin; default `http://localhost:5173`. An http or https URL, scheme included |
 | `GOOGLE_CLIENT_ID` | OAuth web client ID |
 | `GOOGLE_CLIENT_SECRET` | OAuth web client secret |
-| `GOOGLE_REDIRECT_URI` | Must match the Cloud Console URI exactly |
-| `GOOGLE_TOKEN_ENCRYPTION_KEY` | Local token-encryption secret |
+| `GOOGLE_REDIRECT_URI` | Must match the Cloud Console URI exactly. An http or https URL |
+| `GOOGLE_TOKEN_ENCRYPTION_KEY` | Local token-encryption secret; at least 32 characters |
 | `LOG_LEVEL` | Structured API/Drive logging level: `fatal`, `error`, `warn`, `info` (default), `debug`, `trace`, or `silent`. An unrecognized value falls back to `info` |
 
+The environment is validated when the server starts, and every problem is reported at once,
+naming the variable and what was wrong with it — a rejected value is never printed back, because
+two of these are secrets. A value the schema refuses stops the boot rather than surfacing later as
+a CORS failure, a redirect mismatch, or a server listening on a port nobody chose. `LOG_LEVEL` is
+the one exception: an unrecognized level falls back to `info`, since a typo there should not stop
+the app.
+
+The three Google values are optional together — leave them blank and the app runs with Drive
+reporting itself unconfigured. What is refused is a value that is *present* and unusable, which is
+why the encryption key has a minimum length: it is hashed into an AES-256 key, so a short secret
+produces ciphertext that looks exactly as encrypted as a strong one.
+
 Secrets, tokens, local databases, logs, and test artifacts are excluded by `.gitignore`.
+
+### API error responses
+
+A `400` or a `409` answers with the message the interface shows — a validation failure, a name
+already taken, an import that could not be read. Those messages exist to be read, and the import
+modal shows them verbatim.
+
+A `500` does not. It answers with a fixed message and an `errorId`, and the real error — whatever
+SQLite or googleapis said, table names and absolute paths included — goes to the server log against
+that same ID. A user reporting "something went wrong" can quote the ID, and the log has the rest.
+
+An unmatched path under `/api` answers `404` with a JSON body, ahead of the static client. A typo
+in a client-side request reads as the 404 it is rather than arriving as `index.html` with a `200`.
 
 ### OAuth callback security
 
@@ -368,6 +393,8 @@ If `.env` sets `DATABASE_PATH`, pass the same path with `--database`. Write back
 - **A project shows Drive issue:** the local record remains valid. Retry provisioning; completed steps are reused.
 - **Database cannot open:** confirm the process can write to `data/`, or set an absolute `DATABASE_PATH`.
 - **Port already in use:** change `PORT`, and update the Vite proxy if using a non-default API port.
+- **Server exits with "Invalid environment configuration":** each line names a variable in `.env` and what was wrong with it. Fix them all and start again; the check reports every problem at once.
+- **A request fails with "Something went wrong on the server":** the response carries an `errorId`. Search the server log for it — the actual error is logged there.
 
 ## Current MVP limitations
 

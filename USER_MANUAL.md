@@ -205,6 +205,10 @@ openssl rand -base64 32
 
 Copy the generated value. Keep a private backup; it is needed to read the saved Google connection.
 
+Either command produces a key long enough to be accepted. A key shorter than 32 characters is
+refused when the application starts, because a short key protects the stored connection no better
+than none at all while looking exactly the same.
+
 ### 6.5 Update the `.env` file
 
 Open `.env` in a text editor and fill in these values:
@@ -660,6 +664,15 @@ Confirm that `npm run dev` is still running and shows no error. Use `http://loca
 ### A port is already in use
 
 Close another running copy of the application. If necessary, restart the computer. Changing the API port also requires matching updates to the OAuth redirect URI and development proxy, so closing the duplicate process is usually simpler.
+
+### The application will not start and reports an invalid configuration
+
+The application checks `.env` before it starts and refuses to run on a value it cannot use. Each
+line of the message names one variable and what was wrong with it — for example a port that is not
+a number, an address without `http://` in front of it, or an encryption key shorter than 32
+characters. Every problem is listed at once. Correct them in `.env`, save, and start again.
+
+The message never prints the value it rejected, so it is safe to copy from a terminal.
 
 ### Google Drive says credentials are required
 

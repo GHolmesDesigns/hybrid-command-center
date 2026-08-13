@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { addDays, format, subDays } from 'date-fns';
 import { createDb, type Db } from './db.ts';
-import { createApp, type AppOptions } from './app.ts';
+import { SERVER_ERROR_MESSAGE, createApp, type AppOptions } from './app.ts';
 import { PROJECT_SUBFOLDERS, config } from './config.ts';
 import { projectScopes } from './drive/browse.ts';
 import { MockDriveProvider, MockOAuthClient, mockDriveFile } from './drive/mock-provider.ts';
@@ -41,6 +41,18 @@ const backdate = (projectId: string, stamp = BACKDATED) =>
   db
     .prepare('UPDATE projects SET updated_at=?, last_activity_at=? WHERE id=?')
     .run(stamp, stamp, projectId);
+/** Collects what the request logger writes, which is the only way to assert what it did not. */
+const captureLogs = () => {
+  const lines: string[] = [];
+  return {
+    lines,
+    stream: {
+      write(line: string) {
+        lines.push(line);
+      },
+    },
+  };
+};
 /** Reads both stamps straight from SQLite, so the API cannot paper over one of them. */
 const stampsOf = (projectId: string) =>
   db
@@ -1295,19 +1307,6 @@ describe('Drive OAuth connect', () => {
   /** A code shaped like Google's, so a leak of it into a log is recognizable in the assertion. */
   const CODE = '4/0AeanS0b-authorization-code';
 
-  /** Collects what the request logger writes, which is the only way to assert what it did not. */
-  const captureLogs = () => {
-    const lines: string[] = [];
-    return {
-      lines,
-      stream: {
-        write(line: string) {
-          lines.push(line);
-        },
-      },
-    };
-  };
-
   const connect = (overrides: AppOptions = {}) => {
     const oauth = new MockOAuthClient();
     const app = createApp(db, { oauth: () => oauth, now: () => MINTED_AT, ...overrides });
@@ -1482,5 +1481,92 @@ describe('Drive OAuth connect', () => {
 
     // Nothing pending, so a callback invented against it has nothing to match either.
     expect(getSetting(db, OAUTH_STATE_KEY)).toBeUndefined();
+  });
+});
+
+describe('HTTP boundary', () => {
+  const originalLogLevel = config.logLevel;
+  beforeEach(() => {
+    // A developer's own LOG_LEVEL must not decide whether the error line is written.
+    config.logLevel = 'info';
+  });
+  afterEach(() => {
+    config.logLevel = originalLogLevel;
+  });
+
+  /**
+   * A failure the app cannot anticipate, from the layer whose messages are the reason a 500
+   * stopped repeating them: SQLite names the table it could not find.
+   */
+  const breakTheDatabase = () => db.prepare('DROP TABLE clients').run();
+
+  it('answers a server error with a fixed message and a correlation ID, and logs the detail against it', async () => {
+    const logs = captureLogs();
+    const app = createApp(db, { logStream: logs.stream });
+    breakTheDatabase();
+
+    const response = await request(app).get('/api/clients').expect(500);
+
+    expect(response.body.error).toBe(SERVER_ERROR_MESSAGE);
+    expect(response.body.errorId).toEqual(expect.any(String));
+    // Whatever SQLite said is not in the response — table names, paths, and provider detail
+    // have no reader in the browser who benefits from them.
+    expect(JSON.stringify(response.body)).not.toContain('no such table');
+
+    // ...but it is in the log, beside the ID the caller was handed, so the two can be joined.
+    const against = logs.lines.filter((line) => line.includes(response.body.errorId));
+    expect(against).not.toHaveLength(0);
+    expect(against.join('')).toContain('no such table');
+  });
+
+  it('gives each server error its own ID, so two reports are two errors', async () => {
+    const app = createApp(db, { logStream: captureLogs().stream });
+    breakTheDatabase();
+
+    const first = await request(app).get('/api/clients').expect(500);
+    const second = await request(app).get('/api/clients').expect(500);
+
+    expect(first.body.errorId).not.toBe(second.body.errorId);
+  });
+
+  it('still answers rejected input with the message the form shows, and no ID', async () => {
+    const response = await request(createApp(db)).post('/api/clients').send({ name: '' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).not.toBe(SERVER_ERROR_MESSAGE);
+    expect(response.body.error).toEqual(expect.any(String));
+    expect(response.body.errorId).toBeUndefined();
+  });
+
+  /**
+   * `server/index.ts` mounts the built client *after* `createApp`, so this mirrors that order:
+   * the point of the assertion is that `/api/nope` is answered before the SPA fallback can
+   * hand it `index.html` with a 200, which is how a client-side typo used to surface as a
+   * JSON parse error.
+   */
+  const withStaticClient = () => {
+    const app = createApp(db, { production: true });
+    app.get('/{*splat}', (_req, res) => res.type('html').send('<!doctype html><div id="root">'));
+    return app;
+  };
+
+  it('answers an unmatched /api path with a JSON 404 rather than the client shell', async () => {
+    const response = await request(withStaticClient()).get('/api/nope').expect(404);
+
+    expect(response.headers['content-type']).toMatch(/application\/json/);
+    expect(response.body).toEqual({ error: 'Not found.' });
+  });
+
+  it('answers an unmatched /api path the same way for any method', async () => {
+    const response = await request(withStaticClient()).post('/api/nope').send({}).expect(404);
+
+    expect(response.body).toEqual({ error: 'Not found.' });
+  });
+
+  it('still serves the client shell for a client-side route', async () => {
+    await request(withStaticClient())
+      .get('/projects/whatever')
+      .expect(200)
+      .expect(/<div id="root">/);
   });
 });
