@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   CalendarClock,
@@ -86,6 +86,31 @@ const draftFor = (post: SignalPost): Draft => ({
   cta: post.cta,
 });
 
+/**
+ * A day cell is a fixed height, so a post shows a preview and opens the rest in place. The
+ * preview is this short because a cell is a seventh of the calendar and runs to about a dozen
+ * characters a line. It is cut here rather than by a CSS line clamp: the cut and the control
+ * that undoes it have to agree, and a clamp firing at a width this code cannot see would hide
+ * text that no expand control was rendered for.
+ */
+const POST_PREVIEW_CHARS = 44;
+const POST_PREVIEW_LINES = 2;
+
+/** Whether the cell shows less than the whole post, and so owes the reader a way to see it. */
+const isTrimmed = (text: string) =>
+  text.length > POST_PREVIEW_CHARS || text.split('\n').length > POST_PREVIEW_LINES;
+
+const previewOf = (text: string) => {
+  const lines = text.split('\n').slice(0, POST_PREVIEW_LINES).join('\n');
+  return `${lines.slice(0, POST_PREVIEW_CHARS).trimEnd()}…`;
+};
+
+/** Enough of a post to tell two expand controls apart in a screen reader's list. */
+const nameOf = (text: string) => {
+  const line = text.split('\n')[0] as string;
+  return line.length > 40 ? `${line.slice(0, 40).trimEnd()}…` : line;
+};
+
 const StatusIcon = ({ status }: { status: SignalStatus }) =>
   status === 'PUBLISHED' ? (
     <CheckCircle2 aria-hidden="true" />
@@ -111,15 +136,52 @@ function PostMeta({ post }: { post: SignalPost }) {
   );
 }
 
-function PostButton({ post, open }: { post: SignalPost; open: (post: SignalPost) => void }) {
+/**
+ * Editing and expanding are siblings, never nested: a control inside the edit button would be
+ * invalid markup and would never receive its own click.
+ */
+function Post({
+  post,
+  open,
+  preview = false,
+}: {
+  post: SignalPost;
+  open: (post: SignalPost) => void;
+  /** Set in a day cell, which has neighbours to stretch. The queue is a column of its own. */
+  preview?: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const textId = useId();
+  const trimmed = preview && isTrimmed(post.text);
+
   return (
-    <button className="signal-post" onClick={() => open(post)} aria-label={`Edit ${post.text}`}>
-      <PostMeta post={post} />
-      <span className="signal-post-text">{post.text}</span>
-      <span className="signal-post-detail">
-        {post.time} · {SIGNAL_FORMAT_LABEL[post.format]}
-      </span>
-    </button>
+    <div className={`signal-post ${expanded ? 'is-expanded' : ''}`}>
+      <button
+        className="signal-post-edit"
+        onClick={() => open(post)}
+        aria-label={`Edit ${post.text}`}
+      >
+        <PostMeta post={post} />
+        <span className="signal-post-text" id={textId}>
+          {trimmed && !expanded ? previewOf(post.text) : post.text}
+        </span>
+        <span className="signal-post-detail">
+          {post.time} · {SIGNAL_FORMAT_LABEL[post.format]}
+        </span>
+      </button>
+      {trimmed && (
+        <button
+          type="button"
+          className="text-btn signal-post-expand"
+          onClick={() => setExpanded((current) => !current)}
+          aria-expanded={expanded}
+          aria-controls={textId}
+          aria-label={`${expanded ? 'Show less' : 'Show more'} of ${nameOf(post.text)}`}
+        >
+          {expanded ? 'Show less' : 'Show more'}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -464,7 +526,7 @@ export function SignalView() {
             <ul className="signal-queue-list">
               {queue.map((post) => (
                 <li key={post.id}>
-                  <PostButton post={post} open={setEditing} />
+                  <Post post={post} open={setEditing} />
                 </li>
               ))}
             </ul>
@@ -519,7 +581,7 @@ export function SignalView() {
                     <ul>
                       {scheduled.map((post) => (
                         <li key={post.id}>
-                          <PostButton post={post} open={setEditing} />
+                          <Post post={post} open={setEditing} preview />
                         </li>
                       ))}
                     </ul>

@@ -496,7 +496,16 @@ yet belong to a day. Type into **Add an idea** to capture one quickly. The idea 
 queue and its editor opens so you can add details.
 
 The month grid shows every dated post in its calendar cell. Use the arrows to move between months.
-Select any queue item or grid post to open the editor. It can change:
+
+Every cell is the same height whatever it holds, so a long post no longer stretches its day and
+the whole of that week with it. A post longer than the cell shows its opening, ending in an
+ellipsis, with **Show more** underneath. **Show more** opens the rest of that post where it sits
+and moves nothing else on the page; **Show less** puts the opening back. A cell holding more than
+fits scrolls on its own. Queue items are never shortened — the queue is a column of its own with
+no day beside it to stretch.
+
+Select any queue item or grid post to open the editor — **Show more** only reveals the text, and
+never opens the editor by accident. The editor can change:
 
 - Content, including long-form copy
 - One or more channels
