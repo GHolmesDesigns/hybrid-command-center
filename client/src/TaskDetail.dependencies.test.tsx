@@ -59,6 +59,11 @@ describe('Dependency picker', () => {
   it('groups candidates by project and orders both levels case-insensitively', async () => {
     await openRecapPost();
 
+    const headings = within(screen.getByRole('dialog'))
+      .getAllByRole('heading', { level: 2 })
+      .map((heading) => heading.textContent);
+    expect(headings.at(-1)).toBe('Dependencies');
+
     // The API answers in board order — status, then column position — so any alphabetical
     // order here is the client's doing.
     expect(groupLabels()).toEqual(['Acme rebrand', 'zephyr audit']);

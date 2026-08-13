@@ -278,20 +278,6 @@ export function TaskDetail({
           </div>
         </div>
       )}
-      <section>
-        <div className="section-title">
-          <div>
-            <span className="eyebrow">Labels</span>
-            <h2>Tags</h2>
-          </div>
-        </div>
-        <TagChipInput
-          label="Tags"
-          chosen={task.tags}
-          available={tags}
-          onChange={(next) => mutate(() => syncTaskTags(task.id, next, task.tags), 'Tags updated.')}
-        />
-      </section>
       <TaskChecklist task={task} text={text} setText={setText} mutate={mutate} />
       <section>
         <div className="section-title">
@@ -317,6 +303,20 @@ export function TaskDetail({
             setEditingNotes(false);
           }}
           onSave={saveNotes}
+        />
+      </section>
+      <section>
+        <div className="section-title">
+          <div>
+            <span className="eyebrow">Labels</span>
+            <h2>Tags</h2>
+          </div>
+        </div>
+        <TagChipInput
+          label="Tags"
+          chosen={task.tags}
+          available={tags}
+          onChange={(next) => mutate(() => syncTaskTags(task.id, next, task.tags), 'Tags updated.')}
         />
       </section>
       <TaskDependencies task={task} tasks={tasks} dep={dep} setDep={setDep} mutate={mutate} />
