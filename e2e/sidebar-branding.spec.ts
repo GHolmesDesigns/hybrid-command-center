@@ -48,11 +48,13 @@ test('sidebar colours and logo save, survive a reload, and refuse an unreadable 
 
   await page.reload();
   await expect(sidebar).toBeVisible();
-  expect(await colorOf('--sidebar-bg')).toBe('#2b0f3a');
-  expect(await colorOf('--sidebar-fg')).toBe('#ffe9ff');
-  expect(await colorOf('--sidebar-accent')).toBe('#f0c419');
+  // Polled rather than read once: the sidebar repaints when the saved branding arrives, so a
+  // single read can land on the paint before it.
+  await expect.poll(() => colorOf('--sidebar-bg')).toBe('#2b0f3a');
+  await expect.poll(() => colorOf('--sidebar-fg')).toBe('#ffe9ff');
+  await expect.poll(() => colorOf('--sidebar-accent')).toBe('#f0c419');
   // Derived rather than chosen: the mark's lettering follows the background it sits against.
-  expect(await colorOf('--sidebar-mark-ink')).toBe('#2b0f3a');
+  await expect.poll(() => colorOf('--sidebar-mark-ink')).toBe('#2b0f3a');
   await expect(sidebar).toHaveCSS('background-color', 'rgb(43, 15, 58)');
   // The logo replaced the text mark and carries its description.
   await expect(sidebar.locator('.brand-logo')).toHaveAttribute('alt', 'E2E studio logo');
@@ -74,8 +76,13 @@ test('sidebar colours and logo save, survive a reload, and refuse an unreadable 
 
   await page.goto('/settings');
   await page.getByRole('button', { name: 'Reset to defaults' }).click();
+  // Reset only sets form state, and Save is enabled on either palette because both pass AA, so
+  // there is no disabled interval to wait through. Saving before the reset reaches the form
+  // submits the custom palette instead — valid, accepted, and wrong. The field is where the
+  // reset becomes observable.
+  await expect(hex('Sidebar background')).toHaveValue('#18201d');
   await save.click();
   await expect(page.getByText('Sidebar branding saved.')).toBeVisible();
-  expect(await colorOf('--sidebar-bg')).toBe('#18201d');
+  await expect.poll(() => colorOf('--sidebar-bg')).toBe('#18201d');
   await expect(sidebar.locator('.brand-mark')).toHaveText('HC');
 });
