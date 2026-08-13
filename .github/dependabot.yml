@@ -2,11 +2,9 @@
 # is a dozen or more bumps, and a dozen single-dependency pull requests is a queue nobody reads.
 # Three grouped pull requests a week is a review; fifteen is a backlog.
 #
-# Note for whoever merges these: `check:version-bump` is a blocking gate and Dependabot does not
-# move `package.json`'s version, so every one of these branches needs a bump commit before it can
-# go green — `npm version patch --no-git-tag-version` plus the matching `APP_VERSION` in
-# `shared/branding.ts`, exactly as any other chore card. That is the house rule working as
-# intended, not a gate to exempt the bot from.
+# Keep these pull requests draft during review and give each one a `changes/<issue>.md` fragment.
+# The merge owner performs the normal serialized finalization after review: refresh main, assign
+# the next version, fold the fragment into CHANGELOG.md, remove it, and then mark the PR ready.
 version: 2
 
 updates:

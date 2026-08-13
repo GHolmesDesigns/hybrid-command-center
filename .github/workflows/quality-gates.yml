@@ -65,10 +65,15 @@ jobs:
       - name: Check formatting
         run: npm run format:check
 
-      # "Every merged card ships a version bump" was a rule with no enforcement: the script
-      # that checks it existed and ran nowhere. Two cards cut from the same commit can both
-      # bump correctly and both land on the same number, and only this catches the second.
+      # Draft PRs deliberately carry a per-issue changelog fragment and do not claim a version.
+      # Once review is complete, the merge owner refreshes main, finalizes the version and
+      # changelog, removes the fragment, and marks the PR ready. Enforce the version then and on
+      # main; branch-push runs defer to the corresponding pull_request run because push events do
+      # not expose draft state.
       - name: Check the version was bumped
+        if: >-
+          github.ref == 'refs/heads/main' ||
+          (github.event_name == 'pull_request' && github.event.pull_request.draft == false)
         run: npm run check:version-bump
 
       # Coverage is measured on this run rather than in a job of its own — the same suite,
