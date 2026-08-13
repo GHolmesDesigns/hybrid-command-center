@@ -11,5 +11,10 @@ tokens.json
 playwright-report/
 test-results/
 coverage/
+# Linked Git worktrees. Checkouts of this repository, not content of it — committing one would
+# commit a second copy of the tree. Both spellings: the plain one and the path the agent tooling
+# actually uses.
+.worktrees/
+.claude/worktrees/
 *.log
 .DS_Store

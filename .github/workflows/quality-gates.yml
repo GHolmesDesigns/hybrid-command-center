@@ -7,14 +7,28 @@ on:
 permissions:
   contents: read
 
+# Pushing twice to a branch used to run both sets of gates to completion, and the answer from
+# the superseded commit was thrown away on arrival. The Windows end-to-end job is the expensive
+# one to waste. Keyed on the ref, so a pull-request run (`refs/pull/N/merge`) and a branch push
+# run (`refs/heads/...`) are separate groups and neither cancels the other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Except on the default branch: a push there is a merge, and every merge commit keeps its own
+  # recorded result rather than being cancelled by the next one.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   quality-gates:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
     steps:
+      # Actions are pinned to a commit SHA rather than a floating major tag: a tag is mutable
+      # and a compromised one would run with the repository checked out and the npm cache in
+      # reach. The trailing comment is the human-readable version, and it is what Dependabot
+      # rewrites when it bumps the SHA.
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Full history so `origin/main` resolves. The version-bump gate compares against
           # the base branch tip, and a shallow checkout has no such ref to compare against —
@@ -22,13 +36,23 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           cache: npm
 
       - name: Install dependencies
         run: npm ci
+
+      # Blocking, like every gate around it, and deliberately so: the lockfile is clean at
+      # `high` today, so this starts green and only goes red on a genuinely new advisory. A
+      # report-only step would be a line of log nobody reads, which is the failure this card
+      # was written against. `high` is the threshold because a low or moderate advisory in the
+      # build toolchain is noise on an app that feeds no untrusted input through Vite or
+      # Playwright. When a high-severity advisory lands with no fix published, the deliberate
+      # move is to record that exemption here by advisory id — not to lower the threshold.
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
 
       - name: Typecheck
         run: npm run typecheck
@@ -67,7 +91,7 @@ jobs:
       # carries the traces and the error context files with it.
       - name: Upload the Playwright report
         if: failure() && steps.e2e.outcome == 'failure'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: playwright-report
           path: |
@@ -84,10 +108,10 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           cache: npm
@@ -105,7 +129,7 @@ jobs:
 
       - name: Upload the Playwright report
         if: failure() && steps.e2e.outcome == 'failure'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: playwright-report-windows
           path: |

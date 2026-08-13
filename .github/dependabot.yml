@@ -1,0 +1,56 @@
+# Dependency updates. Grouped on purpose: a week of patch releases across this dependency tree
+# is a dozen or more bumps, and a dozen single-dependency pull requests is a queue nobody reads.
+# Three grouped pull requests a week is a review; fifteen is a backlog.
+#
+# Note for whoever merges these: `check:version-bump` is a blocking gate and Dependabot does not
+# move `package.json`'s version, so every one of these branches needs a bump commit before it can
+# go green — `npm version patch --no-git-tag-version` plus the matching `APP_VERSION` in
+# `shared/branding.ts`, exactly as any other chore card. That is the house rule working as
+# intended, not a gate to exempt the bot from.
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - chore
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      # Runtime and build-time dependencies are separated because they carry different risk: a
+      # bad `express` patch reaches users, a bad `vitest` patch reaches only this machine and CI.
+      production-dependencies:
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
+      development-dependencies:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+    # Majors are deliberately left ungrouped. React 20 or Express 6 is a card with a migration,
+    # not a line in a batch, and it should arrive as its own pull request that can sit open.
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - chore
+    commit-message:
+      prefix: chore
+    groups:
+      # One pull request for the lot. Every `uses:` in this repository is pinned to a commit SHA,
+      # and this is what keeps those pins current — without it, pinning trades a mutable tag for
+      # a frozen one, which is the worse of the two.
+      github-actions:
+        patterns:
+          - '*'
