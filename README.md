@@ -6,6 +6,8 @@ Built from Master Project Command Center (Codex) infrastructure, with Hybrid V2 
 
 For nontechnical installation and day-to-day instructions, see the [First-Time Setup and User Manual](USER_MANUAL.md).
 
+Released versions and what changed in each are recorded in the [Changelog](CHANGELOG.md).
+
 The Import module's versioned XLSX contract, pasted text form, and example campaigns are documented in the [Campaign Playbook Import Format](docs/campaign-playbook-import-format.md).
 
 Nothing in this app publishes to a social platform. The decision record that a publishing integration would be built from — the provider, the interface, the scheduling conversion, and what `PUBLISHED` would then mean — is [Publishing Integration](docs/publishing-integration.md).
