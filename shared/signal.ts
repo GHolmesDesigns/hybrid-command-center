@@ -21,7 +21,7 @@
  *
  * A scheduling API wants an instant, which is why this file does not hand one out and no caller
  * builds one. `docs/publishing-integration.md` §5 specifies the single outbound conversion a
- * publisher would do: one function, in the publishing module rather than here, in a configured
+ * publisher does: one function, in the publishing module rather than here, in a configured
  * zone, producing an argument that is never stored on the post or read back into a view.
  *
  * A null `date` means the post is not scheduled at all. Those are the queue, ordered by
@@ -123,7 +123,7 @@ export const SIGNAL_FORMAT_LABEL: Record<SignalFormat, string> = {
  * publishes.
  *
  * That meaning is settled rather than provisional. `docs/publishing-integration.md` (C19b) decides
- * that a publisher would keep its delivery state in its own record and never write this field, so
+ * that the publisher keeps its delivery state in its own record and never writes this field, so
  * these three values stay three and keep belonging to the user.
  */
 export const SIGNAL_STATUSES = ['DRAFT', 'SCHEDULED', 'PUBLISHED'] as const;

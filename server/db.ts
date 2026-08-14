@@ -97,6 +97,18 @@ CREATE TABLE IF NOT EXISTS signal_post_media (
   position INTEGER NOT NULL CHECK(position >= 0), url TEXT NOT NULL,
   PRIMARY KEY(post_id, position)
 );
+CREATE TABLE IF NOT EXISTS signal_publications (
+  id TEXT PRIMARY KEY, post_id TEXT NOT NULL REFERENCES signal_posts(id) ON DELETE RESTRICT,
+  state TEXT NOT NULL, provider TEXT NOT NULL, provider_post_id TEXT,
+  idempotency_key TEXT NOT NULL UNIQUE, scheduled_instant TEXT NOT NULL, timezone TEXT NOT NULL,
+  sent_caption TEXT NOT NULL, sent_channels TEXT NOT NULL, error TEXT,
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS signal_publication_targets (
+  publication_id TEXT NOT NULL REFERENCES signal_publications(id) ON DELETE CASCADE,
+  channel TEXT NOT NULL, provider_account_id INTEGER NOT NULL, outcome TEXT, permalink TEXT, error TEXT,
+  PRIMARY KEY(publication_id, provider_account_id)
+);
 `;
 
 /**
@@ -118,6 +130,9 @@ CREATE INDEX IF NOT EXISTS idx_integration_events_correlation ON integration_eve
 -- dated rows order by day, and the NULL dates group together at the front.
 CREATE INDEX IF NOT EXISTS idx_signal_posts_date ON signal_posts(date, time);
 CREATE INDEX IF NOT EXISTS idx_signal_post_channels_channel ON signal_post_channels(channel);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_signal_publications_live ON signal_publications(post_id)
+  WHERE state IN ('SUBMITTING','SUBMITTED','UNCONFIRMED');
+CREATE INDEX IF NOT EXISTS idx_signal_publications_post ON signal_publications(post_id);
 `;
 
 const schema = `${tableSchema}${indexSchema}`;

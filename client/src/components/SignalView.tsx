@@ -38,6 +38,7 @@ import {
 import { Empty } from './Primitives';
 import { Select } from './FormControls';
 import { PageHead } from './Shell';
+import type { PublishPreview, SignalPublication } from '../../../shared/publish';
 
 type SignalRange = {
   from: string;
@@ -212,7 +213,11 @@ function Editor({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [mediaInput, setMediaInput] = useState('');
+  const [publishPreview, setPublishPreview] = useState<PublishPreview | null>(null);
+  const [publications, setPublications] = useState<SignalPublication[]>([]);
   const textRef = useRef<HTMLTextAreaElement>(null);
+  const hasUnsavedChanges = JSON.stringify(draft) !== JSON.stringify(draftFor(post));
+  const hasPublishableChannel = post.channels.some((channel) => channel !== 'blog');
 
   useEffect(() => {
     textRef.current?.focus();
@@ -222,6 +227,76 @@ function Editor({
     window.addEventListener('keydown', keydown);
     return () => window.removeEventListener('keydown', keydown);
   }, [close]);
+
+  useEffect(() => {
+    api<SignalPublication[]>(`/signal/posts/${post.id}/publications`)
+      .then(setPublications)
+      .catch(() => setPublications([]));
+  }, [post.id]);
+
+  const previewPublish = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      setPublishPreview(
+        await send<PublishPreview>(`/signal/posts/${post.id}/publish/preview`, 'POST'),
+      );
+    } catch (reason) {
+      setError((reason as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmPublish = async () => {
+    if (!publishPreview || publishPreview.refusals.length) return;
+    setBusy(true);
+    setError('');
+    try {
+      const publication = await send<SignalPublication>(
+        `/signal/posts/${post.id}/publish`,
+        'POST',
+        { planHash: publishPreview.planHash },
+      );
+      setPublications((current) => [publication, ...current]);
+      setPublishPreview(null);
+    } catch (reason) {
+      setError((reason as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const markPublished = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      await saved(
+        await send<SignalPost>(`/signal/posts/${post.id}`, 'PATCH', { status: 'PUBLISHED' }),
+      );
+    } catch (reason) {
+      setError((reason as Error).message);
+      setBusy(false);
+    }
+  };
+
+  const refreshDelivery = async (publicationId: string) => {
+    setBusy(true);
+    setError('');
+    try {
+      const refreshed = await send<SignalPublication>(
+        `/signal/publications/${publicationId}/reconcile`,
+        'POST',
+      );
+      setPublications((current) =>
+        current.map((publication) => (publication.id === refreshed.id ? refreshed : publication)),
+      );
+    } catch (reason) {
+      setError((reason as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -489,6 +564,75 @@ function Editor({
               onChange={(event) => setDraft({ ...draft, campaign: event.target.value })}
             />
           </label>
+          {publications.length > 0 && (
+            <section className="signal-publications" aria-label="Publishing history">
+              <h3>Delivery</h3>
+              {publications.map((publication) => (
+                <p key={publication.id}>
+                  <strong>{publication.state}</strong> · {publication.sentChannels.join(', ')} ·{' '}
+                  {new Date(publication.scheduledInstant).toLocaleString()}
+                </p>
+              ))}
+              {publications[0]?.state === 'CONFIRMED' && post.status !== 'PUBLISHED' && (
+                <button type="button" className="secondary" onClick={markPublished} disabled={busy}>
+                  Mark published
+                </button>
+              )}
+              {publications[0]?.providerPostId && publications[0].state === 'SUBMITTED' && (
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => refreshDelivery(publications[0]!.id)}
+                  disabled={busy}
+                >
+                  Refresh delivery
+                </button>
+              )}
+            </section>
+          )}
+          {publishPreview && (
+            <section className="signal-publish-preview" aria-label="Publish confirmation">
+              <h3>Confirm publishing</h3>
+              {publishPreview.scheduledInstant && (
+                <p>
+                  <strong>{publishPreview.timezone}</strong>: {post.date} at {post.time}
+                  <br />
+                  UTC: {publishPreview.scheduledInstant}
+                </p>
+              )}
+              <p>{publishPreview.caption}</p>
+              <ul>
+                {publishPreview.targets.map((target) => (
+                  <li key={`${target.channel}-${target.accountId}`}>
+                    {SIGNAL_CHANNEL_LABEL[target.channel]} → {target.handle}
+                  </li>
+                ))}
+              </ul>
+              {publishPreview.warnings.map((warning) => (
+                <p className="form-warning" key={warning}>
+                  {warning}
+                </p>
+              ))}
+              {publishPreview.refusals.map((refusal) => (
+                <p className="form-error" key={refusal}>
+                  {refusal}
+                </p>
+              ))}
+              <div className="signal-editor-actions">
+                <button type="button" className="secondary" onClick={() => setPublishPreview(null)}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="submit"
+                  onClick={confirmPublish}
+                  disabled={busy || publishPreview.refusals.length > 0}
+                >
+                  Confirm and submit
+                </button>
+              </div>
+            </section>
+          )}
           <div className="form-error" role="alert">
             {error}
           </div>
@@ -510,6 +654,16 @@ function Editor({
                 'Save post'
               )}
             </button>
+            {post.date && hasPublishableChannel && !publishPreview && (
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy || hasUnsavedChanges}
+                onClick={previewPublish}
+              >
+                {hasUnsavedChanges ? 'Save changes before preview' : 'Preview publishing'}
+              </button>
+            )}
           </div>
         </form>
       </aside>

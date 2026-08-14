@@ -17,6 +17,7 @@ import { DRIVE_FOLDER_MIME, type DriveFile, type DriveListing } from '../../shar
 import type { IntegrationEvent } from '../../shared/integration-log';
 import type { CalendarRange } from '../../shared/calendar';
 import { SIGNAL_DEFAULT_TIME, type SignalPost } from '../../shared/signal';
+import type { PublishPreview, SignalPublication } from '../../shared/publish';
 
 export {
   DEFAULT_BRANDING,
@@ -169,6 +170,10 @@ export const testState = {
   /** Planner state. Dated and undated posts are kept together here, then served by each API view. */
   signalPostsPayload: [] as SignalPost[],
   signalMutationError: null as string | null,
+  publishPreviewPayload: null as PublishPreview | null,
+  publicationsPayload: [] as SignalPublication[],
+  publishSubmitPayload: null as SignalPublication | null,
+  publishReconcilePayload: null as SignalPublication | null,
 };
 
 /** One scheduled post, with only the fields a case cares about spelled out. */
@@ -281,6 +286,23 @@ const respondTo = (url: string, init?: RequestInit) => {
     testState.signalPostsPayload = [...testState.signalPostsPayload, created];
     return created;
   }
+  const publishPreviewPath = url.match(/\/api\/signal\/posts\/([^/?]+)\/publish\/preview$/);
+  if (publishPreviewPath && method === 'POST')
+    return (
+      testState.publishPreviewPayload ?? reply(400, { error: 'No publish preview was set up.' })
+    );
+  const publishPath = url.match(/\/api\/signal\/posts\/([^/?]+)\/publish$/);
+  if (publishPath && method === 'POST') {
+    const created = testState.publishSubmitPayload;
+    return created ?? reply(400, { error: 'No publication was set up.' });
+  }
+  const publicationsPath = url.match(/\/api\/signal\/posts\/([^/?]+)\/publications$/);
+  if (publicationsPath && method === 'GET') return testState.publicationsPayload;
+  const reconcilePath = url.match(/\/api\/signal\/publications\/([^/?]+)\/reconcile$/);
+  if (reconcilePath && method === 'POST')
+    return (
+      testState.publishReconcilePayload ?? reply(400, { error: 'No reconciliation was set up.' })
+    );
   const signalPostPath = url.match(/\/api\/signal\/posts\/([^/?]+)$/);
   if (signalPostPath && method === 'PATCH') {
     if (testState.signalMutationError) return reply(400, { error: testState.signalMutationError });
@@ -604,6 +626,10 @@ beforeEach(() => {
   testState.calendarPayload = null;
   testState.signalPostsPayload = [];
   testState.signalMutationError = null;
+  testState.publishPreviewPayload = null;
+  testState.publicationsPayload = [];
+  testState.publishSubmitPayload = null;
+  testState.publishReconcilePayload = null;
   requests.length = 0;
   vi.stubGlobal(
     'fetch',

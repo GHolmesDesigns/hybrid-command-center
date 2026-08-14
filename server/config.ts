@@ -120,6 +120,14 @@ const environment = z.object({
     .string()
     .min(ENCRYPTION_KEY_MIN_LENGTH, `must be at least ${ENCRYPTION_KEY_MIN_LENGTH} characters`)
     .optional(),
+  POST_BRIDGE_API_KEY: z.string().optional(),
+  PUBLISH_TIMEZONE: z
+    .string()
+    .optional()
+    .refine(
+      (value) => !value || Intl.supportedValuesOf('timeZone').includes(value),
+      'must be an IANA timezone such as America/New_York',
+    ),
   // A typo in a log level should not stop the app, so this one is the schema's single
   // forgiving field: an unrecognized value falls back rather than failing the boot.
   LOG_LEVEL: z.enum(LOG_LEVELS).catch(ENVIRONMENT_DEFAULTS.LOG_LEVEL),
@@ -141,6 +149,8 @@ const parsed = environment.safeParse({
   GOOGLE_CLIENT_SECRET: read('GOOGLE_CLIENT_SECRET'),
   GOOGLE_REDIRECT_URI: read('GOOGLE_REDIRECT_URI') ?? ENVIRONMENT_DEFAULTS.GOOGLE_REDIRECT_URI,
   GOOGLE_TOKEN_ENCRYPTION_KEY: read('GOOGLE_TOKEN_ENCRYPTION_KEY'),
+  POST_BRIDGE_API_KEY: read('POST_BRIDGE_API_KEY'),
+  PUBLISH_TIMEZONE: read('PUBLISH_TIMEZONE'),
   LOG_LEVEL: read('LOG_LEVEL')?.toLowerCase() ?? ENVIRONMENT_DEFAULTS.LOG_LEVEL,
 });
 
@@ -173,4 +183,11 @@ export const config = {
     redirectUri: env.GOOGLE_REDIRECT_URI,
     encryptionKey: env.GOOGLE_TOKEN_ENCRYPTION_KEY ?? '',
   },
+  publish: {
+    apiKey: env.POST_BRIDGE_API_KEY ?? '',
+    timezone: env.PUBLISH_TIMEZONE ?? '',
+  },
 };
+
+/** Publishing is optional, but half-configuration never counts as available. */
+export const publishConfigured = () => Boolean(config.publish.apiKey && config.publish.timezone);

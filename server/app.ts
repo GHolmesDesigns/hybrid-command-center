@@ -8,7 +8,7 @@ import { isValid, parseISO } from 'date-fns';
 import { z } from 'zod';
 import type { Db } from './db.ts';
 import { getDb, transaction } from './db.ts';
-import { config } from './config.ts';
+import { config, publishConfigured } from './config.ts';
 import {
   getCategory,
   getTag,
@@ -47,6 +47,10 @@ import {
   updatePost,
 } from './signal/service.ts';
 import type { DriveProvider } from './drive/provider.ts';
+import type { PublishProvider } from './publish/provider.ts';
+import { UnavailablePublishProvider } from './publish/provider.ts';
+import { PostBridgeProvider } from './publish/post-bridge.ts';
+import { PublishRequestError, PublishService } from './publish/service.ts';
 import {
   OAuthStateError,
   beginAuthorization,
@@ -146,6 +150,10 @@ export type AppOptions = {
    * every other case this resolves to the encrypted-token provider as usual.
    */
   drive?: (db: Db) => DriveProvider;
+  /** Test-only publishing provider; automated tests never contact the real service. */
+  publish?: PublishProvider;
+  /** Fixed configured zone for publishing tests and deployments. */
+  publishTimezone?: string;
   /**
    * The authorization server the OAuth routes talk to. Tests supply `MockOAuthClient` so a
    * whole connect — authorization URL, callback, token exchange — runs without credentials
@@ -367,6 +375,18 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   const production = options.production ?? isProductionRuntime();
   const clock = options.now ?? (() => new Date());
   const oauthClient = options.oauth ?? createGoogleOAuthClient;
+  const publishProvider =
+    options.publish ??
+    (publishConfigured()
+      ? new PostBridgeProvider(config.publish.apiKey)
+      : new UnavailablePublishProvider());
+  const publisher = new PublishService(
+    db,
+    signalProvider(db),
+    publishProvider,
+    options.publishTimezone ?? config.publish.timezone,
+    clock,
+  );
   app.use(
     helmet({
       // Vite's development client needs a relaxed policy for HMR. The built client does not.
@@ -1303,6 +1323,35 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     if (!post) return res.status(404).json({ error: 'Signal post not found.' });
     res.json(post);
   });
+  app.post('/api/signal/posts/:id/publish/preview', async (req, res, next) => {
+    try {
+      res.json(await publisher.preview(req.params.id));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/signal/posts/:id/publish', async (req, res, next) => {
+    try {
+      const input = z.object({ planHash: z.string().length(64) }).parse(req.body);
+      res.status(201).json(await publisher.submit(req.params.id, input.planHash));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.get('/api/signal/posts/:id/publications', (req, res, next) => {
+    try {
+      res.json(publisher.list(req.params.id));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/signal/publications/:id/reconcile', async (req, res, next) => {
+    try {
+      res.json(await publisher.reconcile(req.params.id));
+    } catch (error) {
+      next(error);
+    }
+  });
   app.patch('/api/signal/posts/:id', (req, res, next) => {
     try {
       res.json(updatePost(db, req.params.id, signalPostPatch.parse(req.body)));
@@ -1310,8 +1359,9 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       next(error);
     }
   });
-  app.delete('/api/signal/posts/:id', (req, res, next) => {
+  app.delete('/api/signal/posts/:id', async (req, res, next) => {
     try {
+      await publisher.cancelLiveForPost(req.params.id);
       deletePost(db, req.params.id);
       res.json({ ok: true });
     } catch (error) {
@@ -1442,9 +1492,11 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
           // that does not exist, not a failure of the write.
           error instanceof SignalPostNotFoundError
           ? 404
-          : error?.code === 'SQLITE_CONSTRAINT_UNIQUE'
-            ? 409
-            : 500;
+          : error instanceof PublishRequestError
+            ? error.status
+            : error?.code === 'SQLITE_CONSTRAINT_UNIQUE'
+              ? 409
+              : 500;
     /**
      * A 500 is the one status whose message has no reader who benefits: it is whatever SQLite
      * or googleapis said, which means table names, absolute paths, and provider detail going
