@@ -33,6 +33,32 @@
 export const SIGNAL_CHANNELS = ['blog', 'ig', 'x', 'bsky', 'li', 'fb', 'tt', 'yt'] as const;
 export type SignalChannel = (typeof SIGNAL_CHANNELS)[number];
 
+/** Media kind inferred from a public URL's extension. No network request is made. */
+export const SIGNAL_MEDIA_KINDS = ['image', 'video', 'pdf', 'unknown'] as const;
+export type SignalMediaKind = (typeof SIGNAL_MEDIA_KINDS)[number];
+
+const SIGNAL_VIDEO_EXTENSION = /\.(mp4|mov|m4v|webm|avi|mkv)$/i;
+const SIGNAL_PDF_EXTENSION = /\.pdf$/i;
+const SIGNAL_IMAGE_EXTENSION = /\.(png|jpe?g|gif|webp|bmp|tiff?)$/i;
+
+/**
+ * Classifies a media reference from its pathname alone, matching the proven publisher artifact.
+ * An extensionless URL is deliberately `unknown`: guessing from a hostname or query string would
+ * claim a video exists when the publisher's own preflight cannot know that.
+ */
+export function signalMediaKind(url: string): SignalMediaKind {
+  let pathname: string;
+  try {
+    pathname = new URL(url).pathname;
+  } catch {
+    return 'unknown';
+  }
+  if (SIGNAL_VIDEO_EXTENSION.test(pathname)) return 'video';
+  if (SIGNAL_PDF_EXTENSION.test(pathname)) return 'pdf';
+  if (SIGNAL_IMAGE_EXTENSION.test(pathname)) return 'image';
+  return 'unknown';
+}
+
 export const SIGNAL_CHANNEL_LABEL: Record<SignalChannel, string> = {
   blog: 'Blog',
   ig: 'Instagram',
@@ -125,6 +151,8 @@ export interface SignalPost {
   /** What is being posted. The copy itself, not a title. */
   text: string;
   channels: SignalChannel[];
+  /** Ordered public `https:` references. Signal stores no media files and fetches none. */
+  mediaUrls: string[];
   /** `YYYY-MM-DD` in local time, or null when the post is in the unscheduled queue. */
   date: string | null;
   /** `HH:MM`, a label rather than an instant. Carried even by unscheduled posts. */

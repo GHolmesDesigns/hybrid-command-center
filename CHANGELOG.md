@@ -8,6 +8,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [4.2.1] - 2026-08-13
+
+### Added
+
+- Signal posts can now keep, reorder, and display ordered public media URL references without
+  uploading, downloading, or storing the files themselves.
+
+### Breaking changes
+
+- None.
+
 ## [4.2.0] - 2026-08-13
 
 ### Changed

@@ -42,17 +42,41 @@ export function channelsByPost(db: Db, postIds: string[]): Map<string, SignalCha
   return grouped;
 }
 
+/** Ordered media references for a set of posts, fetched in one query. */
+export function mediaByPost(db: Db, postIds: string[]): Map<string, string[]> {
+  const grouped = new Map<string, string[]>();
+  if (postIds.length === 0) return grouped;
+  const placeholders = postIds.map(() => '?').join(',');
+  const rows = db
+    .prepare(
+      `SELECT post_id, url FROM signal_post_media
+       WHERE post_id IN (${placeholders}) ORDER BY post_id, position`,
+    )
+    .all(...postIds) as { post_id: string; url: string }[];
+  for (const row of rows) {
+    const attached = grouped.get(row.post_id) ?? [];
+    attached.push(row.url);
+    grouped.set(row.post_id, attached);
+  }
+  return grouped;
+}
+
 /**
  * One row plus its channels. The row's enum columns are passed through as their declared types:
  * nothing but this module's own validated writes puts values in these columns, so a cast here is
  * a statement about that invariant rather than a guess about the data.
  */
-export function toSignalPost(row: SignalPostRow, channels: SignalChannel[]): SignalPost {
+export function toSignalPost(
+  row: SignalPostRow,
+  channels: SignalChannel[],
+  mediaUrls: string[],
+): SignalPost {
   return {
     id: row.id,
     text: row.text,
     // Empty rather than absent, so every consumer can read `post.channels.length`.
     channels,
+    mediaUrls,
     date: row.date,
     time: row.time,
     format: row.format as SignalPost['format'],
@@ -67,9 +91,8 @@ export function toSignalPost(row: SignalPostRow, channels: SignalChannel[]): Sig
 
 /** Rows and their channels together, in the order the rows arrived. */
 export function toSignalPosts(db: Db, rows: SignalPostRow[]): SignalPost[] {
-  const channels = channelsByPost(
-    db,
-    rows.map((row) => row.id),
-  );
-  return rows.map((row) => toSignalPost(row, channels.get(row.id) ?? []));
+  const postIds = rows.map((row) => row.id);
+  const channels = channelsByPost(db, postIds);
+  const media = mediaByPost(db, postIds);
+  return rows.map((row) => toSignalPost(row, channels.get(row.id) ?? [], media.get(row.id) ?? []));
 }

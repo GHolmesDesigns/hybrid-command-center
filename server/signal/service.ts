@@ -11,7 +11,13 @@ import {
   isSignalDate,
   type SignalPost,
 } from '../../shared/signal.ts';
-import { toSignalPost, toSignalPosts, channelsByPost, type SignalPostRow } from './rows.ts';
+import {
+  toSignalPost,
+  toSignalPosts,
+  channelsByPost,
+  mediaByPost,
+  type SignalPostRow,
+} from './rows.ts';
 
 /**
  * Signal's writes, and the only place they live.
@@ -33,6 +39,13 @@ const now = () => new Date().toISOString();
 export class SignalPostNotFoundError extends Error {}
 
 const channel = z.enum(SIGNAL_CHANNELS);
+const mediaUrl = z
+  .string()
+  .trim()
+  .min(1, 'A media URL cannot be empty.')
+  .max(2048, 'A media URL is too long.')
+  .url('Use a valid media URL.')
+  .refine((value) => new URL(value).protocol === 'https:', 'Media URLs must use https.');
 const date = z
   .string()
   .regex(SIGNAL_DATE_PATTERN, 'Use a YYYY-MM-DD date.')
@@ -48,6 +61,8 @@ const postFields = {
     .max(SIGNAL_CHANNELS.length)
     .transform((values) => [...new Set(values)])
     .default([]),
+  /** Ordered and bounded; per-platform media limits belong to the publisher preflight. */
+  mediaUrls: z.array(mediaUrl).max(20, 'A post can reference at most 20 media items.').default([]),
   /** Null is the unscheduled queue, and is the default: an idea starts without a day. */
   date: date.nullable().default(null),
   time: z
@@ -89,6 +104,12 @@ function writeChannels(db: Db, postId: string, channels: string[]): void {
   for (const value of channels) insert.run(postId, value);
 }
 
+function writeMedia(db: Db, postId: string, mediaUrls: string[]): void {
+  db.prepare('DELETE FROM signal_post_media WHERE post_id=?').run(postId);
+  const insert = db.prepare('INSERT INTO signal_post_media(post_id, position, url) VALUES(?,?,?)');
+  mediaUrls.forEach((url, position) => insert.run(postId, position, url));
+}
+
 function readRow(db: Db, postId: string): SignalPostRow | undefined {
   return db.prepare('SELECT * FROM signal_posts WHERE id=?').get(postId) as
     SignalPostRow | undefined;
@@ -98,7 +119,11 @@ function readRow(db: Db, postId: string): SignalPostRow | undefined {
 export function getPost(db: Db, postId: string): SignalPost | undefined {
   const row = readRow(db, postId);
   if (!row) return undefined;
-  return toSignalPost(row, channelsByPost(db, [postId]).get(postId) ?? []);
+  return toSignalPost(
+    row,
+    channelsByPost(db, [postId]).get(postId) ?? [],
+    mediaByPost(db, [postId]).get(postId) ?? [],
+  );
 }
 
 /**
@@ -115,8 +140,8 @@ export function listQueue(db: Db): SignalPost[] {
 export function createPost(db: Db, input: SignalPostInput): SignalPost {
   const postId = id();
   const timestamp = now();
-  // The post and its channels land together: a post that exists without the channels it was
-  // created with would be a half-written record the caller was told succeeded.
+  // The post, channels, and media land together: a post missing part of the requested plan would
+  // be a half-written record the caller was told succeeded.
   db.exec('BEGIN');
   try {
     db.prepare(
@@ -136,6 +161,7 @@ export function createPost(db: Db, input: SignalPostInput): SignalPost {
       timestamp,
     );
     writeChannels(db, postId, input.channels);
+    writeMedia(db, postId, input.mediaUrls);
     db.exec('COMMIT');
   } catch (error) {
     db.exec('ROLLBACK');
@@ -180,6 +206,7 @@ export function updatePost(db: Db, postId: string, patch: SignalPostPatch): Sign
       postId,
     );
     if (patch.channels !== undefined) writeChannels(db, postId, patch.channels);
+    if (patch.mediaUrls !== undefined) writeMedia(db, postId, patch.mediaUrls);
     db.exec('COMMIT');
   } catch (error) {
     db.exec('ROLLBACK');
@@ -190,7 +217,7 @@ export function updatePost(db: Db, postId: string, patch: SignalPostPatch): Sign
 
 /**
  * Removes a post outright. Signal posts are plans rather than records of work, so there is
- * nothing here to archive; the channel rows go with it by cascade.
+ * nothing here to archive; the channel and media rows go with it by cascade.
  */
 export function deletePost(db: Db, postId: string): void {
   const result = db.prepare('DELETE FROM signal_posts WHERE id=?').run(postId);

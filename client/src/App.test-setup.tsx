@@ -181,6 +181,7 @@ export const signalPost = (
   id,
   text,
   channels: [],
+  mediaUrls: [],
   date,
   time: SIGNAL_DEFAULT_TIME,
   format: 'TEXT',
@@ -270,6 +271,7 @@ const respondTo = (url: string, init?: RequestInit) => {
     const created = signalPost('created-signal-post', body.text, body.date ?? null, {
       status: body.status ?? 'DRAFT',
       channels: body.channels ?? [],
+      mediaUrls: body.mediaUrls ?? [],
       time: body.time ?? SIGNAL_DEFAULT_TIME,
       format: body.format ?? 'TEXT',
       campaign: body.campaign ?? null,
