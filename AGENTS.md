@@ -37,9 +37,9 @@
   every run. The command exits on its own, passing or failing; if it ever does not, something
   it spawned outlived the run and that is the bug.
 - `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build`: required quality checks
-- `npm run check:version-bump`: fails when the branch has not moved the version past
-  `origin/main`. Run it before opening a pull request — it is the only thing that catches a
-  second card landing on a version another card already shipped.
+- `npm run check:version-bump`: finalization gate. Draft pull requests defer it; after review,
+  refresh `origin/main`, assign the next version, and run it before marking the pull request
+  ready. It catches a second card trying to land on a version another card already shipped.
 
 ## Conventions
 
@@ -64,10 +64,27 @@
 - Types are `feat` (new capability), `fix` (defect), `chore` (tooling, dependencies, formatting), and `docs` (documentation only).
 - Keep the slug lowercase, hyphen-separated, and short enough to scan in a branch list. The issue number is the identifier; the slug is a reminder.
 - **Do not name branches after version numbers.** The version a card ships as is decided at merge time from milestone close order — the first card closed in a milestone takes the minor bump, the rest take patches — so it is unknowable when the branch is created. Several milestones carry four or five open cards at once.
-- Every merged card ships a version bump. Run `npm version <new-version> --no-git-tag-version` and set `APP_VERSION` in `shared/branding.ts` to the same value, so `package.json` and both `package-lock.json` values stay aligned. The full bump rule is stated on each issue.
-- The number is only settled once the branch merges. Cards run concurrently, so the minor a card claimed on the day it was cut may be taken by whichever card closes first — rebase, re-read `origin/main`, and take the next number rather than assuming the one already written is still free. `npm run check:version-bump` is what tells you, and it is a blocking CI gate.
+- Every merged card ships a version bump, but feature work must not claim one while it is under
+  review. Keep the pull request **draft** and add one issue-specific fragment at
+  `changes/<issue>.md` instead of editing `CHANGELOG.md`, `package.json`, `package-lock.json`, or
+  `shared/branding.ts`. The fragment is user-facing Markdown with the eventual changelog section
+  (`Added`, `Changed`, `Fixed`, or another Keep a Changelog heading), its bullets, and a
+  `Breaking changes` heading whose content is explicit, including `None.`. One file per card means
+  concurrent cards do not conflict.
+- After review, the merge owner serializes finalization: refresh `origin/main`, merge or rebase it
+  into the branch, reread the issue's bump rule, and take the next available version. Run
+  `npm version <new-version> --no-git-tag-version`, set `APP_VERSION` in `shared/branding.ts` to the
+  same value, move the fragment's content under a new dated version heading at the top of
+  `CHANGELOG.md`, and delete the fragment. Run `npm run check:version-bump` and all required gates,
+  then mark the pull request ready and merge it. If another card lands first, repeat finalization
+  against the new `origin/main`; never preserve a now-taken number.
+- A ready pull request must contain the finalized version and no fragment for its card. A draft
+  pull request must contain the fragment and must leave the four shared release locations alone.
+  Dependabot and other automated branches follow the same draft-then-finalize path.
 - Settle the branch name before opening a pull request. Renaming a head branch closes the open PR, and it cannot be reopened once the old ref is gone.
-- Record the bump in `CHANGELOG.md` under its own version heading, in the same branch that makes it. Say what changed for someone using the app, not which files moved, and state breaking changes explicitly — including their absence, so a major digit is never left to be inferred.
+- Changelog fragments and finalized entries say what changed for someone using the app, not which
+  files moved. State breaking changes explicitly — including their absence, so a major digit is
+  never left to be inferred.
 
 ## Security and Drive rules
 

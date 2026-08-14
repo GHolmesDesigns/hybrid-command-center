@@ -8,6 +8,25 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [4.1.10] - 2026-08-13
+
+### Changed
+
+- Contributors no longer claim a version number while a card is under review. A branch keeps its
+  pull request in draft and describes what it changed in `changes/<issue>.md`; the person merging
+  it assigns the version and folds that text into this file at merge time, when the number is
+  finally knowable. Concurrent cards stop colliding over the same four release files, and no card
+  needs a follow-up commit to renegotiate a number another card took first.
+- The version-bump check runs on `main` and on pull requests that are ready for review. Draft pull
+  requests are exempt by design, which is what lets a card defer its number. Every other quality
+  gate runs exactly as it did.
+- Dependency-update branches follow the same path. They no longer need a hand-added bump commit to
+  go green.
+
+### Breaking changes
+
+- None. Nothing in the running application changed; this is a contributor workflow change.
+
 ## [4.1.9] - 2026-08-13
 
 ### Changed
