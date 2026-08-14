@@ -406,7 +406,8 @@ function Editor({
               <label>
                 Add media URL
                 <input
-                  type="url"
+                  type="text"
+                  inputMode="url"
                   placeholder="https://example.com/campaign-image.jpg"
                   value={mediaInput}
                   onChange={(event) => setMediaInput(event.target.value)}
