@@ -22,7 +22,9 @@ const openSignal = async () => {
     </MemoryRouter>,
   );
   await screen.findByText(branding.title);
-  return screen.findByRole('heading', { level: 1, name: 'Content planner' });
+  const heading = await screen.findByRole('heading', { level: 1, name: 'Content planner' });
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh' })).toBeEnabled());
+  return heading;
 };
 
 /** The size of copy the campaign posts actually run to, ending in a line only a full view shows. */
