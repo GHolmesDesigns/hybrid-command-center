@@ -33,7 +33,8 @@ The working artifact reaches Post Bridge through a claude.ai MCP connector. That
 constraint of an artifact running inside claude.ai, not a reusable application boundary. This
 local Node server can and will use `POST_BRIDGE_API_KEY` against `api.post-bridge.com/v1` directly,
 so the original transport decision stands. A separate local Buffer Bridge is also in use for three
-accounts Post Bridge cannot reach; it remains a separate tool, with no overlapping accounts, and
+channels Post Bridge cannot reach for this account; it remains a separate tool, with no overlapping
+accounts, and
 does not turn this app into a multi-provider publisher (section 2).
 
 Four things follow, and the rest of this document is those four things in detail:
@@ -105,8 +106,9 @@ unrecoverable ones (in the GraphQL `errors` array), which is a better error cont
 volume, that gap matters.
 
 The 2026-08-13 artifact review confirmed that the second trigger below has already fired for the
-broader publishing setup: a separate local **Buffer Bridge** publishes three accounts Post Bridge
-cannot reach, and no account overlaps Post Bridge. That fact does **not** reopen this app's provider
+broader publishing setup: a separate local **Buffer Bridge** publishes three channels Post Bridge
+cannot reach for this account, and no account overlaps Post Bridge. That fact does **not** reopen
+this app's provider
 choice. The bridge stays one local tool and its transport and credentials stay outside this
 implementation. It does mean this record no longer claims Post Bridge is the only publishing path
 in use.
