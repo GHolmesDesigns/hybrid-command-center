@@ -205,10 +205,16 @@ describe('additive schema migration', () => {
         'drive_steps',
         'import_receipts',
         'integration_events',
+        'signal_publications',
+        'signal_publication_targets',
       ]),
     );
     // The integration activity log arrives empty: a migration invents no history.
     expect(rows(db, 'SELECT COUNT(*) AS total FROM integration_events')).toEqual([{ total: 0 }]);
+    expect(rows(db, 'SELECT COUNT(*) AS total FROM signal_publications')).toEqual([{ total: 0 }]);
+    expect(rows(db, 'SELECT COUNT(*) AS total FROM signal_publication_targets')).toEqual([
+      { total: 0 },
+    ]);
   });
 
   it('adds the media join to a populated Signal database without changing existing posts', () => {

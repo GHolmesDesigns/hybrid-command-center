@@ -22,7 +22,9 @@ const openSignal = async () => {
     </MemoryRouter>,
   );
   await screen.findByText(branding.title);
-  return screen.findByRole('heading', { level: 1, name: 'Content planner' });
+  const heading = await screen.findByRole('heading', { level: 1, name: 'Content planner' });
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh' })).toBeEnabled());
+  return heading;
 };
 
 /** The size of copy the campaign posts actually run to, ending in a line only a full view shows. */
@@ -97,6 +99,22 @@ describe('Signal planner', () => {
     expect(screen.queryByLabelText('Media URL 1')).not.toBeInTheDocument();
   });
 
+  it('adds, edits and removes a secure media reference before save', async () => {
+    testState.signalPostsPayload = [signalPost('media-edit', 'Edit media here', null)];
+    await openSignal();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Edit media here' }));
+    fireEvent.change(screen.getByLabelText('Add media URL'), {
+      target: { value: 'https://cdn.example.com/first.jpg' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add media' }));
+    fireEvent.change(screen.getByLabelText('Media URL 1'), {
+      target: { value: 'https://cdn.example.com/revised.jpg' },
+    });
+    expect(screen.getByLabelText('Media URL 1')).toHaveValue('https://cdn.example.com/revised.jpg');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove media 1' }));
+    expect(screen.queryByLabelText('Media URL 1')).not.toBeInTheDocument();
+  });
+
   it('validates editor content before sending a patch', async () => {
     testState.signalPostsPayload = [
       signalPost('queued', 'Edit this idea', null, { status: 'DRAFT' }),
@@ -109,6 +127,95 @@ describe('Signal planner', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('A post needs content.');
     expect(requests.filter((request) => request.method === 'PATCH')).toHaveLength(0);
+  });
+
+  it('shows the exact publishing preview before sending and keeps status as a user write', async () => {
+    const post = signalPost('publish', 'Preview this campaign post', '2026-09-14', {
+      channels: ['x'],
+    });
+    testState.signalPostsPayload = [post];
+    testState.publishPreviewPayload = {
+      available: true,
+      postId: post.id,
+      planHash: 'a'.repeat(64),
+      caption: post.text,
+      scheduledInstant: '2026-09-14T13:00:00.000Z',
+      timezone: 'America/New_York',
+      targets: [{ channel: 'x', platform: 'twitter', accountId: 4, handle: '@gholmes' }],
+      warnings: [],
+      refusals: [],
+    };
+    testState.publishSubmitPayload = {
+      id: 'publication-1',
+      postId: post.id,
+      state: 'SUBMITTED',
+      provider: 'post-bridge',
+      providerPostId: 'provider-1',
+      scheduledInstant: '2026-09-14T13:00:00.000Z',
+      timezone: 'America/New_York',
+      sentCaption: post.text,
+      sentChannels: ['x'],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    await openSignal();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Preview this campaign post' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Preview publishing' }));
+    expect(await screen.findByRole('region', { name: 'Publish confirmation' })).toHaveTextContent(
+      'America/New_York',
+    );
+    expect(screen.getByText('X → @gholmes')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm and submit' }));
+    await waitFor(() =>
+      expect(
+        requests.some((entry) => entry.url.endsWith('/publish') && entry.method === 'POST'),
+      ).toBe(true),
+    );
+    expect(requests.filter((entry) => entry.method === 'PATCH')).toHaveLength(0);
+  });
+
+  it('does not offer publishing for blog-only work or unsaved editor changes', async () => {
+    testState.signalPostsPayload = [
+      signalPost('blog-only', 'Blog stays manual', '2026-09-14', { channels: ['blog'] }),
+      signalPost('dirty', 'Save me first', '2026-09-15', { channels: ['x'] }),
+    ];
+    await openSignal();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Blog stays manual' }));
+    expect(screen.queryByRole('button', { name: 'Preview publishing' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Close editor' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Save me first' }));
+    fireEvent.change(screen.getByLabelText('Content'), { target: { value: 'Unsaved revision' } });
+    expect(screen.getByRole('button', { name: 'Save changes before preview' })).toBeDisabled();
+  });
+
+  it('refreshes provider delivery and leaves Mark published as an explicit patch', async () => {
+    const post = signalPost('delivery', 'Delivered campaign post', '2026-09-14', {
+      channels: ['x'],
+      status: 'SCHEDULED',
+    });
+    const submitted: (typeof testState.publicationsPayload)[number] = {
+      id: 'publication-2',
+      postId: post.id,
+      state: 'SUBMITTED' as const,
+      provider: 'post-bridge',
+      providerPostId: 'provider-2',
+      scheduledInstant: '2026-09-14T13:00:00.000Z',
+      timezone: 'America/New_York',
+      sentCaption: post.text,
+      sentChannels: ['x'],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    testState.signalPostsPayload = [post];
+    testState.publicationsPayload = [submitted];
+    testState.publishReconcilePayload = { ...submitted, state: 'CONFIRMED' };
+    await openSignal();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Delivered campaign post' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Refresh delivery' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Mark published' }));
+    await waitFor(() =>
+      expect(requests.find((entry) => entry.method === 'PATCH')?.body.status).toBe('PUBLISHED'),
+    );
   });
 
   it('moves a saved post between queue and grid and reloads both API views', async () => {

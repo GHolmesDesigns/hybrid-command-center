@@ -10,7 +10,7 @@ Released versions and what changed in each are recorded in the [Changelog](CHANG
 
 The Import module's versioned XLSX contract, pasted text form, and example campaigns are documented in the [Campaign Playbook Import Format](docs/campaign-playbook-import-format.md).
 
-Nothing in this app publishes to a social platform. The decision record that a publishing integration would be built from — the provider, the interface, the scheduling conversion, and what `PUBLISHED` would then mean — is [Publishing Integration](docs/publishing-integration.md).
+Signal Campaign can preview and explicitly submit scheduled social posts through an optional Post Bridge integration. [Publishing Integration](docs/publishing-integration.md) records its provider boundary, scheduling conversion, and why delivery state remains separate from `PUBLISHED`.
 
 Nothing in this app is reachable off loopback by design, and the server enforces that itself: a `HOST` outside `127.0.0.1`, `::1`, and `localhost` fails the boot while there is no authentication to put in front of it. The decision record that a cloud deployment would be built from — access model, source of truth, authentication, Drive OAuth continuity, and migration — is [Cloud Hosting](docs/cloud-hosting.md).
 
@@ -150,6 +150,8 @@ Required environment variables:
 | `GOOGLE_CLIENT_SECRET` | OAuth web client secret |
 | `GOOGLE_REDIRECT_URI` | Must match the Cloud Console URI exactly. An http or https URL |
 | `GOOGLE_TOKEN_ENCRYPTION_KEY` | Local token-encryption secret; at least 32 characters |
+| `POST_BRIDGE_API_KEY` | Optional Post Bridge API key; server-side only |
+| `PUBLISH_TIMEZONE` | Required with publishing; an explicit IANA zone such as `America/New_York` |
 | `LOG_LEVEL` | Structured API/Drive logging level: `fatal`, `error`, `warn`, `info` (default), `debug`, `trace`, or `silent`. An unrecognized value falls back to `info` |
 
 The environment is validated when the server starts, and every problem is reported at once,
@@ -421,8 +423,8 @@ real content rather than demo data, which is why it is not part of `db:seed`; it
 post id and never overwrites a post that is already there.
 
 A post's status — `DRAFT`, `SCHEDULED`, `PUBLISHED` — describes its own progress and nothing about
-a publishing integration, because there is not one: `PUBLISHED` is the user saying the post went
-out, not this app having sent it anywhere. That meaning is settled rather than provisional, and
+the publishing integration: `PUBLISHED` is the user saying the post went out, while provider
+delivery has its own publication state. That meaning is settled rather than provisional, and
 [`docs/publishing-integration.md`](docs/publishing-integration.md) is where it was settled.
 
 ### Drive provisioning behavior
@@ -574,7 +576,7 @@ Schedule `db:backup` the same way if you want unattended snapshots — same comm
 - Playbook import is create-only: it never edits or merges into a record that already exists, and there is no in-app undo of an import beyond deleting what it created
 - Integration activity is bounded rather than permanent: the newest 200 records are kept and each lists at most 100 affected records, so it is a diagnostic log, not a compliance archive. Keep a database backup if a longer history matters
 - Checklist reordering is supported by the API/data model; the current UI focuses on add, edit-by-state, and removal
-- Nothing publishes. Signal Campaign plans content and `PUBLISHED` is the user's own claim that a post went out, not this app having sent it. How a publisher would be built is decided in [`docs/publishing-integration.md`](docs/publishing-integration.md) and nothing in that document has been implemented
+- Publishing is deliberate and optional: a person previews resolved accounts, caption, media, configured-zone time and UTC instant, then confirms. The publisher records delivery separately and never sets `PUBLISHED`; after confirmed delivery, the user may mark the post published
 - Nothing is hosted off loopback, and a `HOST` outside `127.0.0.1`, `::1`, and `localhost` fails the boot rather than publishing the unauthenticated API. How a cloud deploy would be built is decided in [`docs/cloud-hosting.md`](docs/cloud-hosting.md) and nothing else in that document has been implemented — the gate is not that work, and neither is lifting it
 
 ## Planned extension points
@@ -583,8 +585,8 @@ Schedule `db:backup` the same way if you want unattended snapshots — same comm
 
 **Files:** `/files` has shipped read-only — `DriveProvider.listFiles` plus `server/drive/browse.ts` and the `GET /api/projects/:id/files` boundary. Extending it means adding upload/download/move/rename/search methods to the provider and a write path beside `browse.ts`, which stays read-only; a mutation belongs in its own module with its own confirmation flow. Continue storing only Drive IDs and metadata locally. UI components should never import `googleapis`.
 
-**Publishing:** decided but unbuilt. [`docs/publishing-integration.md`](docs/publishing-integration.md) names the provider (Post Bridge), the `PublishProvider` interface and where it lives, how a post's `YYYY-MM-DD` plus `HH:MM` becomes the instant a scheduling API needs, and why delivery state is a separate record rather than a fourth `SignalStatus`. Signal now models the ordered public media references that implementation requires, so the confirmed first release can plan all seven Signal social channels; `blog` remains outside every provider.
+**Publishing:** the first Post Bridge implementation follows [`docs/publishing-integration.md`](docs/publishing-integration.md). It previews and confirms one scheduled Signal post, preflights its channels and ordered media, records delivery per publication, and blocks ambiguous retries. `blog` remains outside every provider.
 
 **Cloud hosting:** recommended, awaiting sign-off, unbuilt. [`docs/cloud-hosting.md`](docs/cloud-hosting.md) names a private single-instance remote deploy for one operator, SQLite on the host as authoritative, password-session authentication before any non-loopback bind, production Drive redirect URIs, and a C10 backup/restore cutover. Read it before opening an Infra 2 implementation card. Its §5.1 bind gate is the one part now enforced in `server/config.ts`, which refuses a non-loopback `HOST` outright; an implementation card widens that check to the full checklist — password hash, session secret, `https:` `APP_ORIGIN`, TLS acknowledgement — rather than removing it.
 
-Recommended order: (1) recent-files and cross-project search over the existing listing, (2) uploads/downloads, (3) guarded move/rename operations, (4) optional Calendar sync, (5) confirmed publishing integration, (6) cloud hosting only after `docs/cloud-hosting.md` is signed off.
+Recommended order: (1) recent-files and cross-project search over the existing listing, (2) uploads/downloads, (3) guarded move/rename operations, (4) optional Calendar sync, (5) cloud hosting only after `docs/cloud-hosting.md` is signed off.

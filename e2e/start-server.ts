@@ -5,6 +5,7 @@ import { getDb } from '../server/db.ts';
 import { resetE2eDatabase } from './database.ts';
 import { handleE2eStopRequest } from './endpoints.ts';
 import { stopWhenTheRunEnds } from './shutdown.ts';
+import { MockPublishProvider } from '../server/publish/mock-provider.ts';
 
 const databasePath = resetE2eDatabase();
 console.log(`Reset E2E database at ${databasePath}`);
@@ -14,7 +15,13 @@ console.log(`Reset E2E database at ${databasePath}`);
 // to close; the production static-file branch in that module is not wanted anyway, since Vite
 // serves the client during E2E.
 const db = getDb();
-const app = createApp(db);
+const app = createApp(db, {
+  publishTimezone: 'America/New_York',
+  publish: new MockPublishProvider([
+    { id: 901, platform: 'twitter', handle: '@gholmes', name: 'G.Holmes Designs' },
+    { id: 902, platform: 'facebook', handle: 'gholmesdesigns', name: 'G.Holmes Designs' },
+  ]),
+});
 const server: Server = app.listen(config.port, config.host, () =>
   console.log(`Command Center E2E API ready at http://${config.host}:${config.port}`),
 );

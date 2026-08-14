@@ -524,10 +524,10 @@ count on the post. Command Center stores only those URL references: it never dow
 or inspects the file, so an extensionless link remains an unknown media kind until publishing
 preflight asks you to correct it.
 
-**Delete** asks for confirmation and then removes the post permanently. There is no in-app undo;
-restore a database backup to recover it. Signal plans and records content only. A status of
-**Published** is your own record that the post went out — the application does not publish to any
-social platform.
+**Delete** asks for confirmation and then removes a post that has no publication history
+permanently. There is no in-app undo; restore a database backup to recover it. A status of
+**Published** is your own record that the post went out. Provider delivery uses a separate
+publication record and never changes that status automatically.
 
 ### Import
 
@@ -816,6 +816,21 @@ For an External app in Testing status, confirm that your Google account is liste
 ### Drive disconnects after several days
 
 An External OAuth app left in Testing status commonly receives a refresh token that expires after seven days when Drive scopes are used. Reconnect from Settings, or review Google’s publishing, verification, and Workspace options for longer-term use.
+
+### Publishing is not available
+
+Publishing is optional. Add both `POST_BRIDGE_API_KEY` and an explicit IANA `PUBLISH_TIMEZONE`
+(for example, `America/New_York`) to `.env`, then restart. The API key stays on the server and is
+never returned to the browser or written to the database or activity log.
+
+To publish, save the scheduled Signal post first, choose **Preview publishing**, and review every
+resolved account, warning, caption, local configured-zone time, and UTC instant. A refusal must be
+fixed before **Confirm and submit** becomes available. A result marked **UNCONFIRMED** is never
+retried automatically; inspect Post Bridge before taking another action to avoid a duplicate.
+
+Delivery state does not change the Signal status. After a delivery is confirmed, **Mark published**
+is an explicit user action. Deleting a post with a live provider submission cancels it first;
+publication history then protects the Signal post from deletion so the audit record stays readable.
 
 ### The root folder is rejected
 

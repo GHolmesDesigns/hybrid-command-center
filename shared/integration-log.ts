@@ -20,7 +20,13 @@ export type IntegrationSource = (typeof INTEGRATION_SOURCES)[number];
  * Operations, named `<area>.<verb>`. A new one is added here rather than passed as free text,
  * so the log stays a list of known operations instead of whatever a caller typed.
  */
-export const INTEGRATION_OPERATIONS = ['playbook.import', 'calendar.sync', 'drive.sync'] as const;
+export const INTEGRATION_OPERATIONS = [
+  'playbook.import',
+  'calendar.sync',
+  'drive.sync',
+  'signal.publish',
+  'signal.reconcile',
+] as const;
 export type IntegrationOperation = (typeof INTEGRATION_OPERATIONS)[number];
 
 /**
@@ -37,7 +43,7 @@ export const INTEGRATION_OUTCOMES = ['SUCCESS', 'PARTIAL', 'FAILURE'] as const;
 export type IntegrationOutcome = (typeof INTEGRATION_OUTCOMES)[number];
 
 /** Record kinds an integration can affect. Each maps to one local table. */
-export const INTEGRATION_ENTITY_TYPES = ['client', 'project', 'task'] as const;
+export const INTEGRATION_ENTITY_TYPES = ['client', 'project', 'task', 'signalPost'] as const;
 export type IntegrationEntityType = (typeof INTEGRATION_ENTITY_TYPES)[number];
 
 /** One record an operation created or changed, addressed the way the rest of the app does. */
@@ -94,6 +100,8 @@ export const INTEGRATION_OPERATION_LABEL: Record<IntegrationOperation, string> =
   'playbook.import': 'Playbook import',
   'calendar.sync': 'Calendar sync',
   'drive.sync': 'Drive sync',
+  'signal.publish': 'Signal publish',
+  'signal.reconcile': 'Signal reconcile',
 };
 
 export const INTEGRATION_OUTCOME_LABEL: Record<IntegrationOutcome, string> = {
@@ -106,4 +114,5 @@ export const INTEGRATION_ENTITY_LABEL: Record<IntegrationEntityType, string> = {
   client: 'Client',
   project: 'Project',
   task: 'Task',
+  signalPost: 'Signal post',
 };

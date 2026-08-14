@@ -1,7 +1,6 @@
 # Publishing Integration — Decision Record
 
-Status: **decided, reconciled with the working artifact, not implemented.** Nothing in this app
-publishes. This document settles the
+Status: **implemented by #150 after reconciliation with the working artifact.** This document settles the
 questions an implementation would otherwise settle by accident, and it is the thing an
 implementation card is written against — not a survey, and not a plan to build both providers and
 choose later.
