@@ -8,6 +8,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [4.2.2] - 2026-08-14
+
+### Added
+
+- Add an explicit preview-and-confirm Post Bridge publishing flow for scheduled Signal posts, with configured-timezone conversion, account and media preflight, durable per-target delivery records, and safe handling of ambiguous submissions.
+
+### Breaking changes
+
+- None.
+
 ## [4.2.1] - 2026-08-13
 
 ### Added
