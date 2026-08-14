@@ -509,6 +509,7 @@ never opens the editor by accident. The editor can change:
 
 - Content, including long-form copy
 - One or more channels
+- Ordered public media URLs
 - Date and time
 - Format and status
 - Campaign and call to action
@@ -516,6 +517,12 @@ never opens the editor by accident. The editor can change:
 Clear the date, or use **Move to unscheduled queue**, to return a post to the queue. Giving a
 queued post a date schedules it in that month's grid. Saving reloads both views from the Signal
 API, so the same post cannot remain in the queue and the calendar at once.
+
+Media is added as a public `https:` URL, not uploaded. Use the arrow controls beside a media row to
+change its order, or the trash control to detach it from the post. The planner shows the media
+count on the post. Command Center stores only those URL references: it never downloads, proxies,
+or inspects the file, so an extensionless link remains an unknown media kind until publishing
+preflight asks you to correct it.
 
 **Delete** asks for confirmation and then removes the post permanently. There is no in-app undo;
 restore a database backup to recover it. Signal plans and records content only. A status of

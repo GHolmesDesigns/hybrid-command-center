@@ -31,7 +31,7 @@ Nothing in this app is reachable off loopback by design, and the server enforces
 - **Campaign playbook import** — an .xlsx workbook or pasted tabs creating a client, its projects, their tasks, checklists, and dependencies in one confirmed transaction, previewed first, duplicates skipped and reported, with a persisted receipt and no Drive side effect
 - **Files** — read-only browsing of a project's Drive folder and its provisioned subfolders: paginated listing, type/size/modified for every item, and "Open in Drive" on every row. It uploads, downloads, moves, renames, and deletes nothing, and every Drive failure mode has its own state and next step
 - **Integration activity** — an append-only record of what each integration changed, when, and how it ended, naming the affected clients, projects, and tasks by id, bounded to the most recent 200 rows, credential-scrubbed, and shown on the Import page beside the receipt it belongs to
-- **Signal Campaign** — the authoritative store and operable planner for content: month grid, unscheduled queue, quick idea capture, and a full editor for content, channels, date, time, format, status, campaign, and CTA, with confirmed deletion
+- **Signal Campaign** — the authoritative store and operable planner for content: month grid, unscheduled queue, quick idea capture, and a full editor for content, channels, ordered public media references, date, time, format, status, campaign, and CTA, with confirmed deletion
 - **Calendar** — a read-only month agenda putting Signal's scheduled content beside task due dates, kept as two headed groups rather than one merged list of "events", with empty days dropped. It writes nothing, and a schedule it cannot read degrades the page to task due dates alone with the reason shown
 - Server-only Google OAuth 2.0, encrypted token storage, configurable Drive root, and resumable/idempotent folder creation
 - Responsive desktop/tablet/mobile interface with empty, error, loading, disconnected, and confirmation states
@@ -65,7 +65,7 @@ The browser never receives Google tokens. UI code calls only the local API. Driv
 
 ### Data ownership
 
-- **SQLite:** clients, projects, tasks, board-card and project-tile positions, checklists, dependencies, due dates, notes, task tags, project categories, Signal Campaign's planned posts and their channels, settings, branding (including the sidebar palette and the logo's address, never the image itself), Drive IDs/URLs, provisioning steps, import receipts, integration activity records, and timestamps.
+- **SQLite:** clients, projects, tasks, board-card and project-tile positions, checklists, dependencies, due dates, notes, task tags, project categories, Signal Campaign's planned posts, channels, and ordered media URL references, settings, branding (including the sidebar palette and the logo's address, never the image itself), Drive IDs/URLs, provisioning steps, import receipts, integration activity records, and timestamps.
 - **Google Drive:** every project file. The database stores references, never duplicate file contents. Deleting a project or task in the app does **not** delete Drive folders or files.
 
 Timestamps are stored as UTC ISO strings. Date-only deadlines are interpreted in the browser/server machine's local timezone and become overdue after their local calendar day has passed.
@@ -411,6 +411,10 @@ it and never writes.
   a calendar that dropped them would make a busy week look empty in hindsight.
 - **Signal's own writes record no `integration_events`.** Editing a post is local data, like
   editing a task. The log is for what an *integration* did.
+- **Media stays a reference.** A post may carry an ordered list of public `https:` URLs. SQLite
+  stores those strings in `signal_post_media`; the app never fetches, downloads, proxies, or
+  uploads the referenced files. Kind is inferred from the URL extension and remains `unknown`
+  when an extension does not say.
 
 `npm run signal:import` loads the campaign content Signal already held into `signal_posts`. It is
 real content rather than demo data, which is why it is not part of `db:seed`; it is idempotent by
@@ -579,7 +583,7 @@ Schedule `db:backup` the same way if you want unattended snapshots — same comm
 
 **Files:** `/files` has shipped read-only — `DriveProvider.listFiles` plus `server/drive/browse.ts` and the `GET /api/projects/:id/files` boundary. Extending it means adding upload/download/move/rename/search methods to the provider and a write path beside `browse.ts`, which stays read-only; a mutation belongs in its own module with its own confirmation flow. Continue storing only Drive IDs and metadata locally. UI components should never import `googleapis`.
 
-**Publishing:** decided but unbuilt. [`docs/publishing-integration.md`](docs/publishing-integration.md) names the provider (Post Bridge), the `PublishProvider` interface and where it lives, how a post's `YYYY-MM-DD` plus `HH:MM` becomes the instant a scheduling API needs, and why delivery state is a separate record rather than a fourth `SignalStatus`. Read it before opening an implementation card; it also establishes that the first release reaches four channels, not eight, because `SignalPost` models no media.
+**Publishing:** decided but unbuilt. [`docs/publishing-integration.md`](docs/publishing-integration.md) names the provider (Post Bridge), the `PublishProvider` interface and where it lives, how a post's `YYYY-MM-DD` plus `HH:MM` becomes the instant a scheduling API needs, and why delivery state is a separate record rather than a fourth `SignalStatus`. Signal now models the ordered public media references that implementation requires, so the confirmed first release can plan all seven Signal social channels; `blog` remains outside every provider.
 
 **Cloud hosting:** recommended, awaiting sign-off, unbuilt. [`docs/cloud-hosting.md`](docs/cloud-hosting.md) names a private single-instance remote deploy for one operator, SQLite on the host as authoritative, password-session authentication before any non-loopback bind, production Drive redirect URIs, and a C10 backup/restore cutover. Read it before opening an Infra 2 implementation card. Its §5.1 bind gate is the one part now enforced in `server/config.ts`, which refuses a non-loopback `HOST` outright; an implementation card widens that check to the full checklist — password hash, session secret, `https:` `APP_ORIGIN`, TLS acknowledgement — rather than removing it.
 

@@ -211,6 +211,42 @@ describe('additive schema migration', () => {
     expect(rows(db, 'SELECT COUNT(*) AS total FROM integration_events')).toEqual([{ total: 0 }]);
   });
 
+  it('adds the media join to a populated Signal database without changing existing posts', () => {
+    const file = scratch('signal-before-media.db');
+    const legacy = new DatabaseSync(file);
+    legacy.exec(`
+      PRAGMA foreign_keys = ON;
+      CREATE TABLE signal_posts (
+        id TEXT PRIMARY KEY, text TEXT NOT NULL, date TEXT, time TEXT NOT NULL DEFAULT '09:00',
+        format TEXT NOT NULL DEFAULT 'TEXT', status TEXT NOT NULL DEFAULT 'DRAFT', campaign TEXT,
+        cta TEXT NOT NULL DEFAULT 'NONE', position INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      );
+      CREATE TABLE signal_post_channels (
+        post_id TEXT NOT NULL REFERENCES signal_posts(id) ON DELETE CASCADE,
+        channel TEXT NOT NULL, PRIMARY KEY(post_id, channel)
+      );
+      INSERT INTO signal_posts
+        (id, text, date, time, format, status, campaign, cta, position, created_at, updated_at)
+      VALUES
+        ('s1', 'Existing campaign post', '2026-09-14', '09:00', 'IMAGE', 'SCHEDULED',
+         'Week 1', 'SOFT', 0, '${NOW}', '${NOW}');
+      INSERT INTO signal_post_channels(post_id, channel) VALUES('s1', 'ig');
+    `);
+    legacy.close();
+
+    const db = track(createDb(file));
+    expect(rows(db, 'SELECT id, text, date FROM signal_posts')).toEqual([
+      { id: 's1', text: 'Existing campaign post', date: '2026-09-14' },
+    ]);
+    expect(rows(db, 'SELECT post_id, channel FROM signal_post_channels')).toEqual([
+      { post_id: 's1', channel: 'ig' },
+    ]);
+    expect(rows(db, 'SELECT COUNT(*) AS total FROM signal_post_media')).toEqual([{ total: 0 }]);
+    expect(rows(db, 'PRAGMA integrity_check')).toEqual([{ integrity_check: 'ok' }]);
+    expect(rows(db, 'PRAGMA foreign_key_check')).toEqual([]);
+  });
+
   it('opens an existing database with every project intact and uncategorized', () => {
     const file = scratch('legacy.db');
     seedLegacyDatabase(file);

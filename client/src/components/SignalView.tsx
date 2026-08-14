@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
+  ArrowDown,
+  ArrowUp,
   CalendarClock,
   CheckCircle2,
   ChevronLeft,
@@ -8,6 +10,7 @@ import {
   Circle,
   Clock3,
   Plus,
+  Paperclip,
   RefreshCw,
   Trash2,
   X,
@@ -24,6 +27,7 @@ import {
   SIGNAL_STATUS_LABEL,
   SIGNAL_STATUSES,
   signalDaysInMonth,
+  signalMediaKind,
   signalMonthBounds,
   type SignalChannel,
   type SignalCta,
@@ -45,6 +49,7 @@ type SignalRange = {
 type Draft = {
   text: string;
   channels: SignalChannel[];
+  mediaUrls: string[];
   date: string;
   time: string;
   format: SignalFormat;
@@ -78,6 +83,7 @@ const shiftMonth = (month: string, by: number) => {
 const draftFor = (post: SignalPost): Draft => ({
   text: post.text,
   channels: post.channels,
+  mediaUrls: post.mediaUrls,
   date: post.date ?? '',
   time: post.time,
   format: post.format,
@@ -167,6 +173,12 @@ function Post({
         </span>
         <span className="signal-post-detail">
           {post.time} · {SIGNAL_FORMAT_LABEL[post.format]}
+          {post.mediaUrls.length > 0 && (
+            <span className="signal-media-count">
+              {' · '}
+              <Paperclip aria-hidden="true" /> {post.mediaUrls.length} media
+            </span>
+          )}
         </span>
       </button>
       {trimmed && (
@@ -199,6 +211,7 @@ function Editor({
   const [draft, setDraft] = useState(() => draftFor(post));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [mediaInput, setMediaInput] = useState('');
   const textRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -253,6 +266,41 @@ function Editor({
         : [...current.channels, channel],
     }));
 
+  const addMedia = () => {
+    const value = mediaInput.trim();
+    try {
+      if (new URL(value).protocol !== 'https:') throw new Error();
+    } catch {
+      setError('Media URLs must be valid https addresses.');
+      return;
+    }
+    setDraft((current) => ({ ...current, mediaUrls: [...current.mediaUrls, value] }));
+    setMediaInput('');
+    setError('');
+  };
+
+  const updateMedia = (index: number, value: string) =>
+    setDraft((current) => ({
+      ...current,
+      mediaUrls: current.mediaUrls.map((url, currentIndex) =>
+        currentIndex === index ? value : url,
+      ),
+    }));
+
+  const moveMedia = (index: number, by: number) =>
+    setDraft((current) => {
+      const next = [...current.mediaUrls];
+      const [moved] = next.splice(index, 1);
+      next.splice(index + by, 0, moved as string);
+      return { ...current, mediaUrls: next };
+    });
+
+  const removeMedia = (index: number) =>
+    setDraft((current) => ({
+      ...current,
+      mediaUrls: current.mediaUrls.filter((_url, currentIndex) => currentIndex !== index),
+    }));
+
   return (
     <div
       className="signal-editor-backdrop"
@@ -303,6 +351,75 @@ function Editor({
                   {SIGNAL_CHANNEL_LABEL[channel]}
                 </label>
               ))}
+            </div>
+          </fieldset>
+          <fieldset className="signal-media-fieldset">
+            <legend>Media</legend>
+            <p>Public https URLs only. Signal stores the references and never fetches the files.</p>
+            {draft.mediaUrls.length > 0 && (
+              <ol>
+                {draft.mediaUrls.map((url, index) => (
+                  <li key={`${index}-${url}`}>
+                    <label>
+                      <span>Media URL {index + 1}</span>
+                      <input
+                        type="url"
+                        value={url}
+                        onChange={(event) => updateMedia(index, event.target.value)}
+                        required
+                      />
+                    </label>
+                    <span className="signal-media-kind">{signalMediaKind(url)}</span>
+                    <div>
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        onClick={() => moveMedia(index, -1)}
+                        disabled={index === 0}
+                        aria-label={`Move media ${index + 1} up`}
+                      >
+                        <ArrowUp />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        onClick={() => moveMedia(index, 1)}
+                        disabled={index === draft.mediaUrls.length - 1}
+                        aria-label={`Move media ${index + 1} down`}
+                      >
+                        <ArrowDown />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-btn danger-text"
+                        onClick={() => removeMedia(index)}
+                        aria-label={`Remove media ${index + 1}`}
+                      >
+                        <Trash2 />
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            )}
+            <div className="signal-media-add">
+              <label>
+                Add media URL
+                <input
+                  type="url"
+                  placeholder="https://example.com/campaign-image.jpg"
+                  value={mediaInput}
+                  onChange={(event) => setMediaInput(event.target.value)}
+                />
+              </label>
+              <button
+                type="button"
+                className="secondary"
+                onClick={addMedia}
+                disabled={!mediaInput.trim()}
+              >
+                <Plus /> Add media
+              </button>
             </div>
           </fieldset>
           <div className="form-row">

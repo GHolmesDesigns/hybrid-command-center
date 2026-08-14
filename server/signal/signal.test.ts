@@ -13,7 +13,12 @@ import {
   signalPostInput,
   updatePost,
 } from './service.ts';
-import { SIGNAL_RANGE_LIMIT, isSignalPostInRange, signalMonthBounds } from '../../shared/signal.ts';
+import {
+  SIGNAL_RANGE_LIMIT,
+  isSignalPostInRange,
+  signalMediaKind,
+  signalMonthBounds,
+} from '../../shared/signal.ts';
 
 let db: Db;
 const originalTimeZone = process.env.TZ;
@@ -101,6 +106,27 @@ describe('writing posts', () => {
     expect(updatePost(db, created.id, { text: 'Reworded' }).channels).toEqual(['x']);
   });
 
+  it('stores ordered media rows, replaces them on patch, and leaves them alone when omitted', () => {
+    const first = 'https://cdn.example.com/first.jpg';
+    const second = 'https://cdn.example.com/second.mp4?download=1';
+    const created = add({ mediaUrls: [second, first] });
+    expect(created.mediaUrls).toEqual([second, first]);
+    expect(
+      db
+        .prepare('SELECT position, url FROM signal_post_media WHERE post_id=? ORDER BY position')
+        .all(created.id),
+    ).toEqual([
+      { position: 0, url: second },
+      { position: 1, url: first },
+    ]);
+
+    expect(updatePost(db, created.id, { mediaUrls: [first, second] }).mediaUrls).toEqual([
+      first,
+      second,
+    ]);
+    expect(updatePost(db, created.id, { text: 'Reworded' }).mediaUrls).toEqual([first, second]);
+  });
+
   it('changes only what a patch names', () => {
     const created = add({
       date: '2026-09-14',
@@ -124,12 +150,16 @@ describe('writing posts', () => {
     expect(updatePost(db, created.id, { campaign: null }).campaign).toBeNull();
   });
 
-  it('takes the channel rows with the post when it is deleted', () => {
-    const created = add({ channels: ['li', 'ig'] });
+  it('takes the channel and media rows with the post when it is deleted', () => {
+    const created = add({
+      channels: ['li', 'ig'],
+      mediaUrls: ['https://cdn.example.com/post.jpg'],
+    });
     deletePost(db, created.id);
     expect(getPost(db, created.id)).toBeUndefined();
     const rows = db.prepare('SELECT COUNT(*) n FROM signal_post_channels').get() as { n: number };
     expect(rows.n).toBe(0);
+    expect(db.prepare('SELECT COUNT(*) n FROM signal_post_media').get()).toEqual({ n: 0 });
   });
 
   it('refuses to edit or delete a post that does not exist', () => {
@@ -166,6 +196,8 @@ describe('validation', () => {
     ['a date that does not exist', { date: '2026-02-31' }],
     ['a malformed time', { date: '2026-09-14', time: '9am' }],
     ['an impossible time', { date: '2026-09-14', time: '25:00' }],
+    ['an insecure media URL', { mediaUrls: ['http://example.com/post.jpg'] }],
+    ['a malformed media URL', { mediaUrls: ['not a URL'] }],
   ])('rejects %s', (_label, overrides) => {
     expect(() => post(overrides)).toThrow();
   });
@@ -177,6 +209,17 @@ describe('validation', () => {
 
   it('accepts a leap day in a leap year', () => {
     expect(post({ date: '2028-02-29' }).date).toBe('2028-02-29');
+  });
+
+  it.each([
+    ['https://cdn.example.com/post.JPG?download=1', 'image'],
+    ['https://cdn.example.com/post.tiff#page', 'image'],
+    ['https://cdn.example.com/post.MP4?download=1', 'video'],
+    ['https://cdn.example.com/brief.pdf', 'pdf'],
+    ['https://cdn.example.com/extensionless', 'unknown'],
+    ['not a URL', 'unknown'],
+  ])('infers media kind for %s as %s', (url, kind) => {
+    expect(signalMediaKind(url)).toBe(kind);
   });
 });
 
@@ -231,16 +274,33 @@ describe('the HTTP boundary', () => {
   it('creates, reads, patches, and deletes a post', async () => {
     const created = await request(app())
       .post('/api/signal/posts')
-      .send({ text: 'Teach first. Sell second.', channels: ['li'], date: '2026-09-21' })
+      .send({
+        text: 'Teach first. Sell second.',
+        channels: ['li'],
+        mediaUrls: ['https://cdn.example.com/first.jpg', 'https://cdn.example.com/second.mp4'],
+        date: '2026-09-21',
+      })
       .expect(201);
-    expect(created.body).toMatchObject({ date: '2026-09-21', channels: ['li'], status: 'DRAFT' });
+    expect(created.body).toMatchObject({
+      date: '2026-09-21',
+      channels: ['li'],
+      mediaUrls: ['https://cdn.example.com/first.jpg', 'https://cdn.example.com/second.mp4'],
+      status: 'DRAFT',
+    });
 
     await request(app()).get(`/api/signal/posts/${created.body.id}`).expect(200);
     const patched = await request(app())
       .patch(`/api/signal/posts/${created.body.id}`)
-      .send({ status: 'SCHEDULED' })
+      .send({
+        status: 'SCHEDULED',
+        mediaUrls: ['https://cdn.example.com/second.mp4', 'https://cdn.example.com/first.jpg'],
+      })
       .expect(200);
     expect(patched.body.status).toBe('SCHEDULED');
+    expect(patched.body.mediaUrls).toEqual([
+      'https://cdn.example.com/second.mp4',
+      'https://cdn.example.com/first.jpg',
+    ]);
 
     await request(app()).delete(`/api/signal/posts/${created.body.id}`).expect(200);
     await request(app()).get(`/api/signal/posts/${created.body.id}`).expect(404);
@@ -257,6 +317,14 @@ describe('the HTTP boundary', () => {
       .send({ text: 'Anywhere', channels: ['myspace'] })
       .expect(400);
     expect(response.body.error).toBeTruthy();
+  });
+
+  it('rejects a non-https media reference at the HTTP boundary with the reason', async () => {
+    const response = await request(app())
+      .post('/api/signal/posts')
+      .send({ text: 'Do not fetch this', mediaUrls: ['http://example.com/post.jpg'] })
+      .expect(400);
+    expect(response.body.error).toBe('Media URLs must use https.');
   });
 
   it('reads a range and refuses one that ends before it starts', async () => {

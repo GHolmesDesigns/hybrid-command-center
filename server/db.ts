@@ -91,6 +91,12 @@ CREATE TABLE IF NOT EXISTS signal_post_channels (
   post_id TEXT NOT NULL REFERENCES signal_posts(id) ON DELETE CASCADE,
   channel TEXT NOT NULL, PRIMARY KEY(post_id, channel)
 );
+-- Media is an ordered list of public references. The app never uploads, downloads, or proxies it.
+CREATE TABLE IF NOT EXISTS signal_post_media (
+  post_id TEXT NOT NULL REFERENCES signal_posts(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL CHECK(position >= 0), url TEXT NOT NULL,
+  PRIMARY KEY(post_id, position)
+);
 `;
 
 /**

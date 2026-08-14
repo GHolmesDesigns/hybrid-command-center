@@ -50,6 +50,53 @@ describe('Signal planner', () => {
     expect(screen.queryByText('Not in this month')).not.toBeInTheDocument();
   });
 
+  it('shows media count and saves an explicit media reorder from the editor', async () => {
+    const first = 'https://cdn.example.com/first.jpg';
+    const second = 'https://cdn.example.com/second.mp4';
+    testState.signalPostsPayload = [
+      signalPost('media', 'A post with media', '2026-09-14', {
+        mediaUrls: [first, second],
+      }),
+    ];
+    await openSignal();
+
+    const day = screen.getByRole('region', { name: '2026-09-14' });
+    expect(
+      within(day).getByText(
+        (_content, node) =>
+          node?.classList.contains('signal-media-count') === true &&
+          node.textContent?.includes('2 media') === true,
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(within(day).getByRole('button', { name: 'Edit A post with media' }));
+
+    expect(screen.getByLabelText('Media URL 1')).toHaveValue(first);
+    expect(screen.getByLabelText('Media URL 2')).toHaveValue(second);
+    expect(screen.getByText('image')).toBeInTheDocument();
+    expect(screen.getByText('video')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Move media 2 up' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save post' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    const patch = requests.find((request) => request.method === 'PATCH');
+    expect(patch?.body.mediaUrls).toEqual([second, first]);
+  });
+
+  it('refuses an insecure media reference before adding it to a post', async () => {
+    testState.signalPostsPayload = [signalPost('media', 'Add media here', null)];
+    await openSignal();
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Add media here' }));
+    fireEvent.change(screen.getByLabelText('Add media URL'), {
+      target: { value: 'http://example.com/not-secure.jpg' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add media' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Media URLs must be valid https addresses.',
+    );
+    expect(screen.queryByLabelText('Media URL 1')).not.toBeInTheDocument();
+  });
+
   it('validates editor content before sending a patch', async () => {
     testState.signalPostsPayload = [
       signalPost('queued', 'Edit this idea', null, { status: 'DRAFT' }),

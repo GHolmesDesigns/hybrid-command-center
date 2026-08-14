@@ -3161,6 +3161,15 @@ button.tag-chip.toggle.active {
   color: var(--muted);
   font-size: 9px;
 }
+.signal-media-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.signal-media-count svg {
+  width: 10px;
+  height: 10px;
+}
 .signal-loading {
   display: flex;
   align-items: center;
@@ -3233,6 +3242,55 @@ button.tag-chip.toggle.active {
   width: auto;
   margin: 0;
 }
+.signal-media-fieldset {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.signal-media-fieldset legend {
+  color: #58605c;
+  font-size: 11px;
+  font-weight: 600;
+}
+.signal-media-fieldset > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.signal-media-fieldset ol {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.signal-media-fieldset li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: end;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.signal-media-fieldset li > div {
+  display: flex;
+  gap: 4px;
+}
+.signal-media-kind {
+  align-self: center;
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.signal-media-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+}
 .signal-unschedule {
   align-self: flex-start;
 }
@@ -3268,6 +3326,10 @@ button.tag-chip.toggle.active {
   }
   .signal-editor-form .form-row,
   .signal-editor-form .form-row.triple {
+    grid-template-columns: 1fr;
+  }
+  .signal-media-fieldset li,
+  .signal-media-add {
     grid-template-columns: 1fr;
   }
 }
