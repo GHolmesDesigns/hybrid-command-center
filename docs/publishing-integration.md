@@ -1,12 +1,13 @@
 # Publishing Integration — Decision Record
 
-Status: **decided, not implemented.** Nothing in this app publishes. This document settles the
+Status: **decided, reconciled with the working artifact, not implemented.** Nothing in this app
+publishes. This document settles the
 questions an implementation would otherwise settle by accident, and it is the thing an
 implementation card is written against — not a survey, and not a plan to build both providers and
 choose later.
 
 Card: C19b (#76). Depends on C19 (#75, shipped) and C29 (#111, shipped). Resolves the XL half of
-FR7.
+FR7. Reconciled by C46 (#148) before the Version 5 implementation cards.
 
 Sources read for this decision, on 2026-08-12:
 [post bridge API reference](https://api.post-bridge.com/reference) (OpenAPI 3.0.0, `post bridge
@@ -14,16 +15,27 @@ API` 1.0) and the [Buffer GraphQL API guides](https://developers.buffer.com/guid
 — specifically [authentication](https://developers.buffer.com/guides/authentication.html),
 [posts and scheduling](https://developers.buffer.com/guides/posts-and-scheduling.html),
 [API standards](https://developers.buffer.com/guides/api-standards.html), and
-[rate limits](https://developers.buffer.com/guides/api-limits.html).
+[rate limits](https://developers.buffer.com/guides/api-limits.html). The decisions below were
+re-checked on 2026-08-13 against the working integration extracted in
+[`social-media-publisher-artifact.md`](social-media-publisher-artifact.md). Where the artifact and
+the vendor-documentation record disagreed, this record now states which answer governs this app.
 
 ---
 
 ## 1. The decision
 
-**Post Bridge ships first, behind one interface, `PublishProvider`.** One provider, one
+**Post Bridge ships first in this app, behind one interface, `PublishProvider`.** One provider, one
 implementation, one mock. There is no adapter layer, no provider registry, no dual-write, and no
 runtime switch between vendors. If Post Bridge is ever replaced, the replacement implements the
 same interface and the old implementation is deleted in the same branch.
+
+The working artifact reaches Post Bridge through a claude.ai MCP connector. That transport is a
+constraint of an artifact running inside claude.ai, not a reusable application boundary. This
+local Node server can and will use `POST_BRIDGE_API_KEY` against `api.post-bridge.com/v1` directly,
+so the original transport decision stands. A separate local Buffer Bridge is also in use for three
+channels Post Bridge cannot reach for this account; it remains a separate tool, with no overlapping
+accounts, and
+does not turn this app into a multi-provider publisher (section 2).
 
 Four things follow, and the rest of this document is those four things in detail:
 
@@ -93,7 +105,15 @@ unrecoverable ones (in the GraphQL `errors` array), which is a better error cont
 `400 | 500`. If publishing ever needs to be dependable at volume rather than deliberate at low
 volume, that gap matters.
 
-**Revisit this decision when any of these becomes true**, and not before:
+The 2026-08-13 artifact review confirmed that the second trigger below has already fired for the
+broader publishing setup: a separate local **Buffer Bridge** publishes three channels Post Bridge
+cannot reach for this account, and no account overlaps Post Bridge. That fact does **not** reopen
+this app's provider
+choice. The bridge stays one local tool and its transport and credentials stay outside this
+implementation. It does mean this record no longer claims Post Bridge is the only publishing path
+in use.
+
+**Revisit this app's decision when any of these becomes true**, and not before:
 
 - Post Bridge starts refusing requests in a way the app cannot predict, and no published limit
   exists to plan against.
@@ -105,32 +125,40 @@ volume, that gap matters.
 
 ## 3. What can actually be published in the first release
 
-`SignalPost` has no media field. Post Bridge refuses a post with no media on `youtube`, `tiktok`,
-`instagram`, and `pinterest`, and accepts text alone on `twitter`, `facebook`, `linkedin`,
-`threads`, `bluesky`, and `google_business`.
-
-Intersect that with Signal's channels and the first release can publish to **four**:
+The original four-channel ceiling was a consequence of `SignalPost` not modelling media, not a
+provider limitation. C47 (#149) is therefore a prerequisite to the publisher: it adds ordered
+public `https:` media references without uploading or storing files. With that prerequisite in
+place, the first publisher can plan all **seven** Signal social channels:
 
 | Signal channel | Post Bridge platform | First release |
 | --- | --- | --- |
-| `x` | `twitter` | publishes |
-| `fb` | `facebook` | publishes |
-| `li` | `linkedin` | publishes |
-| `bsky` | `bluesky` | publishes |
-| `ig` | `instagram` | refused — needs media the post does not model |
-| `tt` | `tiktok` | refused — needs media the post does not model |
-| `yt` | `youtube` | refused — needs media the post does not model |
+| `x` | `twitter` | publishes when its text and media pass preflight |
+| `fb` | `facebook` | publishes only to the `G.Holmes Designs` page (section 3.1) |
+| `li` | `linkedin` | publishes when its text and media pass preflight |
+| `bsky` | `bluesky` | publishes when its text and media pass preflight |
+| `ig` | `instagram` | publishes with required supported media |
+| `tt` | `tiktok` | publishes with required supported media |
+| `yt` | `youtube` | publishes with exactly one video |
 | `blog` | *(none)* | never published; see §10 |
 
-This is the most useful thing in this document, because it is the sentence an implementation card
-would otherwise write in error: **publishing is not a general capability that Signal gains, it is
-four channels.** A post targeting `ig`, `tt`, or `yt` is refused at preview with the reason named,
-rather than submitted and left to fail at the platform hours later. Adding those three means
-modelling media on `SignalPost` first, which is its own card and is not this one.
+The planner carries the artifact's complete platform capability table and preflight rules rather
+than treating media as present-or-absent. Caption limits, media minimums and maximums,
+`videoOnly`, `videoAloneOnly`, `noVideo`, and `stripsLinks` are database-free rules in `plan.ts`.
+An over-limit caption blocks `twitter` and `bluesky` and warns elsewhere. **Post Bridge requires a
+caption on every submission, including media-only platform formats**, so an empty effective
+caption is always a refusal even when the target platform visually emphasizes only the media.
 
 Post Bridge also reaches `pinterest`, `threads`, and `google_business`. Signal has no channel for
 them and the mapping is not extended to invent one — a channel exists because content is planned
 for it, not because a provider supports it.
+
+### 3.1 The Facebook account rule
+
+Three Facebook pages are connected in the broader publishing setup: `AdDrive Media`,
+`G.Holmes Designs`, and `Wild Eye Photography`. **Only `G.Holmes Designs` may receive this
+campaign's work.** Target resolution matches that account by stable provider identity and verified
+handle, refuses zero or multiple matches, and never silently falls back to either of the other
+pages.
 
 ---
 
@@ -167,6 +195,9 @@ export interface PublishProvider {
 
 `PublishRequest` carries the resolved target ids, the caption, the computed instant, and the zone
 it was computed in — never a `SignalPost`. The provider is handed a submission, not the schedule.
+Provider drafts are not a staging boundary: the working integration confirms that submitting an
+existing Post Bridge draft is broken upstream and returns a server error, with no supported API
+route around it. Preview remains local and commit submits the confirmed request directly.
 
 Two boundaries are deliberate and worth stating so they are not eroded later:
 
@@ -212,6 +243,11 @@ not scheduling for the airport. A post is planned by a person, for an audience, 
 place is configuration, it is stated on the confirmation, and if it is unset publishing refuses to
 run rather than guessing.
 
+The working artifact uses the browser's implicit zone and converts a `datetime-local` value with
+`Date.toISOString()`, with no DST-gap handling. That behavior is intentionally not ported. The
+configured-zone rule is stricter and is the clearest reason to re-implement the integration inside
+this app rather than transplant its transport and time model.
+
 ### 5.3 The conversion, and its two hard days
 
 Compute the offset `zone` had at that wall-clock time — `Intl.DateTimeFormat` with `timeZone` set
@@ -242,7 +278,9 @@ Two more refusals, for the same reason:
 Post Bridge can place a post in the next free slot of *its* queue, in *its* configured timezone.
 That would make Post Bridge's queue settings the thing that decides when content goes out, which is
 precisely the authority §5.7 gives Signal. The app always sends an explicit `scheduled_at`, computed
-here, from the pair the user set.
+here, from the pair the user set. The working artifact does expose and use `use_queue`; the
+capability is real, but keeping Signal authoritative is more important than porting every mode, so
+the original decision stands.
 
 ---
 
@@ -385,6 +423,11 @@ outcomes are distinguished, because they need different behavior:
 | `500` after a complete response | yes, and it failed | safe: retry once, then `FAILED` |
 | **timeout, socket reset, no response** | **unknown** | **`UNCONFIRMED`. No automatic retry, ever.** |
 
+The working integration independently classifies `server_unavailable`, `upstream_error`,
+`cancelled`, and `rate_limited` submissions as ambiguous. The provider adapter maps those failures
+to `UNCONFIRMED` unless it has a complete response proving that no post was accepted; it never
+turns vendor wording alone into permission to resubmit.
+
 `UNCONFIRMED` is a state a person resolves, not a state the app retries out of. The failure mode of
 a blind retry here is that the world sees the same post twice, from an app whose entire job is to
 be deliberate about what goes out. Fifteen seconds of a human's attention is cheaper than a
@@ -524,10 +567,11 @@ written in the same transaction as the publication-state change it describes.
 
 ## 14. What this does not decide
 
-Named so an implementation card does not assume otherwise: media on `SignalPost`; the planner UI
-for publication state (C30, #112 territory); analytics — Post Bridge's `/v1/analytics` exists and
-this app has no use for it yet; multi-workspace or per-client API keys; publishing anything that is
-not a Signal post; and any second provider.
+Named so an implementation card does not assume otherwise: media uploading or storage; the planner
+UI beyond the confirmed submit flow and publication state; analytics — Post Bridge's
+`/v1/analytics` exists and this app has no use for it yet; multi-workspace or per-client API keys;
+publishing anything that is not a Signal post; Buffer Bridge transport or credentials; and any
+second provider inside this app.
 
 ## 15. Acceptance
 
@@ -536,4 +580,5 @@ not a Signal post; and any second provider.
       days a year it cannot be done — §5.
 - [x] The meaning of `PUBLISHED` under a real publisher is settled: two meanings, two fields, and
       the publisher writes neither of them onto the post — §6.
-- [ ] Signed off before any implementation card is opened against FR7 publishing.
+- [x] Reconciled with the working artifact and signed off before the Version 5 implementation cards
+      are opened against FR7 publishing — C46 (#148).
