@@ -8,6 +8,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [4.2.0] - 2026-08-13
+
+### Changed
+
+- Reconciled the publishing decision record with the proven social-media publisher, including the
+  seven-channel media prerequisite, provider boundaries, preflight rules, and account safety rule.
+
+### Breaking changes
+
+- None.
+
 ## [4.1.10] - 2026-08-13
 
 ### Changed
