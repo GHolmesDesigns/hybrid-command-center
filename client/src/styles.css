@@ -1608,7 +1608,8 @@ button.tag-chip.toggle.active {
   color: var(--muted);
   margin-top: 4px;
 }
-.kanban-card > p {
+.card-description,
+.card-notes p {
   font-size: 11px;
   color: var(--muted);
   line-height: 1.45;
@@ -1617,6 +1618,20 @@ button.tag-chip.toggle.active {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+.card-notes {
+  border-left: 2px solid #c7c9c2;
+  margin: 8px 0 10px;
+  padding-left: 8px;
+}
+.card-notes strong {
+  display: block;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.card-notes p {
+  margin: 2px 0 0;
 }
 .card-foot {
   border-top: 1px solid #eee;
