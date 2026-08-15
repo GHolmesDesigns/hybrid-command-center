@@ -438,6 +438,15 @@ Use Projects to:
 - Archive completed or inactive projects
 - Delete a project and its tasks from the application
 
+#### Reading a tile's status
+
+Every tile carries its status in the chip at its top-left, and the tile itself is tinted and
+edged to match, so a mixed list separates into planning, active, on hold, complete, and archived
+without reading each word in turn. The colour is never the whole signal: each status keeps its
+word and has an icon of its own, and the five stay apart in a greyscale screenshot or with
+colours turned off. Archived projects are the quiet ones — the one neutral tint in the list, and
+the only dashed edge — while staying as readable as the rest.
+
 #### Categories
 
 Categories organise projects the way tags organise tasks. A project can carry as many as it needs — retainer, campaign, internal, whatever your work divides into — and every project shares one workspace list, so the same category always means the same thing.

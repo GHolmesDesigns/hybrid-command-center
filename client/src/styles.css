@@ -1156,6 +1156,41 @@ button svg,
   padding: 5px 7px;
   border-radius: 5px;
 }
+/* Project status. The colours arrive as custom properties from `project-status.ts`, which is
+   also what the contrast test measures; what lives here is the shape of the thing. The icon
+   and the word are the signal a greyscale screenshot keeps. */
+.status-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--status-surface);
+  color: var(--status-ink);
+  border: 1px solid transparent;
+}
+.status-label svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+/* Archived recedes by emphasis — dashed outline, lighter weight, the one neutral hue — and
+   never by fading, which would cost the contrast the other four are held to. */
+.status-label[data-status='ARCHIVED'] {
+  border-color: var(--status-ink);
+  border-style: dashed;
+  font-weight: 700;
+}
+/* Selected through `.project-cards` so it outweighs the shared card rule above, which paints
+   every card white and hairlines all four sides. */
+.project-cards > article.project-tile {
+  background: var(--status-wash);
+  border-top: 4px solid var(--status-ink);
+}
+/* Thinner as well as dashed: archived work still announces itself in a greyscale grid, but a
+   solid 4px bar beside four live projects would announce it loudest. */
+.project-cards > article.project-tile[data-status='ARCHIVED'] {
+  border-top: 2px dashed var(--status-ink);
+  padding-top: 22px;
+}
 .priority-badge.urgent {
   background: #fde9e5;
   color: var(--red);

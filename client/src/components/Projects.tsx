@@ -34,7 +34,8 @@ import { compareProjectActivity, compareProjectNames } from '../../../shared/typ
 import { type Modal } from './App';
 import { formatDate } from './formatting';
 import { TagChip } from './FormControls';
-import { DriveBadge, Empty, SearchBox } from './Primitives';
+import { DriveBadge, Empty, ProjectStatusChip, SearchBox } from './Primitives';
+import { projectStatusStyle } from './project-status';
 import { tagAccent } from './ui-shared';
 import { PageHead } from './Shell';
 
@@ -326,11 +327,18 @@ function ProjectTile({
   return (
     <article
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={isDragging ? 'dragging' : ''}
+      // The status palette travels with the tile, so the chip and the tile it sits on are
+      // tinted from one entry rather than from two rules that can drift apart.
+      style={{
+        ...projectStatusStyle(project.status),
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }}
+      className={`project-tile${isDragging ? ' dragging' : ''}`}
+      data-status={project.status}
     >
       <div className="project-card-head">
-        <span className="status-label">{project.status.replace('_', ' ')}</span>
+        <ProjectStatusChip status={project.status} />
         <DriveBadge status={project.driveStatus} />
       </div>
       <Link to={`/projects/${project.id}`}>

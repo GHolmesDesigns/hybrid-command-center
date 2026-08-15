@@ -3,6 +3,11 @@ import { CalendarDays, FolderKanban, Search, X } from 'lucide-react';
 import type { DriveStatus, Priority, Task, TaskStatus, TaskType } from '../../../shared/types';
 import type { Branding } from '../../../shared/branding';
 import { formatDate } from './formatting';
+import {
+  PROJECT_STATUS_PRESENTATION,
+  projectStatusStyle,
+  type ProjectStatus,
+} from './project-status';
 import { STATUS_LABEL, TASK_TYPE_LABEL } from './ui-shared';
 
 /**
@@ -64,6 +69,21 @@ export function DriveBadge({ status }: { status: DriveStatus | string | undefine
           : value === 'failed'
             ? 'Drive issue'
             : 'Drive offline'}
+    </span>
+  );
+}
+
+/**
+ * A project's status, as a word, a shape, and a colour — in that order of dependence. The
+ * word is the label itself, the icon differs per status, and the colour is the third signal
+ * rather than the only one.
+ */
+export function ProjectStatusChip({ status }: { status: ProjectStatus }) {
+  const { label, Icon } = PROJECT_STATUS_PRESENTATION[status];
+  return (
+    <span className="status-label" data-status={status} style={projectStatusStyle(status)}>
+      <Icon aria-hidden="true" />
+      {label}
     </span>
   );
 }
