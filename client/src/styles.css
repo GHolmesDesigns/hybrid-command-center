@@ -782,7 +782,7 @@ button svg,
 }
 .urgent-list > button,
 .simple-list > button,
-.task-table > button {
+.task-row > button:first-child {
   width: 100%;
   background: #fff;
   color: var(--ink);
@@ -793,13 +793,12 @@ button svg,
   text-align: left;
 }
 .urgent-list > button:last-child,
-.simple-list > button:last-child,
-.task-table > button:last-child {
+.simple-list > button:last-child {
   border: 0;
 }
 .urgent-list > button > div,
 .simple-list > button > div,
-.task-table > button > div {
+.task-row > button:first-child > div {
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -1490,11 +1489,72 @@ button.tag-chip.toggle.active {
   gap: 8px;
   margin-bottom: 18px;
 }
-.task-table > button {
-  padding: 14px 4px;
+.task-table {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.task-row > button:first-child {
+  /* The row is a flex track now, so the open-the-task button takes the space the grip and the
+     position selector leave rather than the full width it claimed as a direct child. */
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  padding: 14px 11px;
 }
 .task-table .priority-badge {
   margin-right: 20px;
+}
+/* One stage per group, in workflow order, so a flat list never has to be read status by
+   status. The heading carries the dot, the word, and the count together. */
+.task-stage + .task-stage {
+  margin-top: 16px;
+}
+.task-stage > h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 7px;
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.task-stage > h3 > span {
+  background: #eef0ed;
+  border-radius: 9px;
+  padding: 1px 7px;
+  font-size: 10px;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+.task-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  border-bottom: 1px solid #eee;
+  padding-right: 11px;
+}
+.task-table > .task-row:last-child {
+  border-bottom: 0;
+}
+.task-row.dragging {
+  opacity: 0.55;
+  box-shadow: var(--shadow);
+}
+.task-row .drag-handle {
+  margin-left: 0;
+  flex: none;
+}
+.task-move select {
+  font-size: 10px;
+  padding: 4px 5px;
+  border: 1px solid #e1e2de;
+  border-radius: 6px;
+  background: #fafaf8;
+  color: #555;
 }
 .board-filters {
   background: #fff;

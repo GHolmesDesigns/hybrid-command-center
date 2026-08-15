@@ -1,7 +1,7 @@
 ﻿import type { Db } from './db.ts';
 import { blockingDependencies } from './domain/dependencies.ts';
 import { isOverdue } from '../shared/deadlines.ts';
-import type { Category, Tag, Task } from '../shared/types.ts';
+import { TASK_STATUSES, type Category, type Tag, type Task } from '../shared/types.ts';
 
 const camel = (row: any) =>
   Object.fromEntries(
@@ -107,12 +107,22 @@ export function hydrateTask(db: Db, raw: any): Task {
     checklistTotal: checklist.length,
   } as Task;
 }
+/**
+ * Workflow order for `status`, which is stored as text. Ordering by the column itself sorts
+ * alphabetically — BACKLOG, COMPLETE, IN_PROGRESS, REVIEW, TODO — which is invisible on the
+ * board, where every column filters to one status, and plainly wrong on any list that crosses
+ * statuses. Built from `TASK_STATUSES` so the SQL cannot drift from the board's column order.
+ */
+const STATUS_RANK = `CASE t.status ${TASK_STATUSES.map(
+  (status, rank) => `WHEN '${status}' THEN ${rank}`,
+).join(' ')} ELSE ${TASK_STATUSES.length} END`;
+
 export function listTasks(db: Db, where = '', params: (string | number | null)[] = []) {
   const rows = db
     .prepare(
       `SELECT t.*, p.name project_name, p.client_id, c.name client_name FROM tasks t
     JOIN projects p ON p.id=t.project_id JOIN clients c ON c.id=p.client_id ${where}
-    ORDER BY t.status, t.position, t.updated_at DESC`,
+    ORDER BY ${STATUS_RANK}, t.position, t.updated_at DESC`,
     )
     .all(...params) as any[];
   return rows.map((row) => hydrateTask(db, row));

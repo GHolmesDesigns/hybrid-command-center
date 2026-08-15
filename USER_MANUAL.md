@@ -477,6 +477,25 @@ Your arrangement is saved as soon as you make it. It survives a reload, and swit
 
 Archive keeps the project and its history. Delete removes the project and every task inside it. Both are available from the Projects list and from a project's detail page, and both ask for confirmation first. Neither one touches Drive.
 
+#### Ordering a project's tasks
+
+Open a project to see **All project tasks**, grouped into the five workflow stages — Backlog, To
+Do, In Progress, Review, Complete — in that order, with a count beside each. A stage with no work
+in it is not shown.
+
+Within a stage, drag a row by the grip at its right-hand end, or use the position selector beside
+the grip — the selector is the keyboard-accessible alternative and makes the same move. Selecting
+the row itself opens the task, so only the grip carries the drag.
+
+There is one order per stage and both views read it. The arrangement you make here is the same
+arrangement the Status board's column shows, and a move made on the board changes what this page
+shows too. This page hides the tasks other projects have in the same stage, and moving one of your
+rows leaves those hidden tasks exactly where they were.
+
+Your arrangement is saved as soon as you make it, and it survives a reload. Moving a task to a
+different stage is done on the Status board or from the task itself, not by dragging between the
+groups here.
+
 ### Status
 
 Use the filters above the board to focus by:

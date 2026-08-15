@@ -148,6 +148,7 @@ export const testState = {
   dashboardPayload: emptyDashboard as DashboardData,
   brandingPayload: null as Branding | null,
   taskPatchError: null as string | null,
+  taskReorderError: null as string | null,
   dashboardFailures: 0,
   driveSettingsError: null as string | null,
   /** Receipts the Import page lists, and what its two writes answer with. */
@@ -362,6 +363,18 @@ const respondTo = (url: string, init?: RequestInit) => {
       testState.driveListingPayload?.(files[1], query) ??
       driveListing({ state: 'NOT_CONNECTED', projectId: files[1] })
     );
+  }
+  if (url.endsWith('/api/tasks/reorder')) {
+    if (testState.taskReorderError) return reply(409, { error: testState.taskReorderError });
+    // The endpoint writes positions within the one status it was handed, which is what makes a
+    // reorder survive the `refresh()` that follows it.
+    const order: string[] = body.orderedIds;
+    testState.tasksPayload = testState.tasksPayload.map((current) =>
+      order.includes(current.id)
+        ? { ...current, status: body.status, position: order.indexOf(current.id) }
+        : current,
+    );
+    return testState.tasksPayload.find((current) => current.id === body.taskId) ?? {};
   }
   if (url.endsWith('/api/projects/reorder')) {
     const order: string[] = body.orderedIds;
@@ -615,6 +628,7 @@ beforeEach(() => {
   testState.dashboardPayload = emptyDashboard;
   testState.brandingPayload = null;
   testState.taskPatchError = null;
+  testState.taskReorderError = null;
   testState.dashboardFailures = 0;
   testState.driveSettingsError = null;
   testState.importReceiptsPayload = [];

@@ -301,8 +301,55 @@ describe('scope and ordering', () => {
       addTask(id, 'p1', id.toUpperCase(), { status });
       db.prepare('UPDATE tasks SET position=? WHERE id=?').run(position, id);
     }
-    // 'BACKLOG' sorts before 'TODO' as text, and position orders each column's cards.
+    // Backlog comes before To Do in the workflow, and position orders each column's cards.
     expect(listTasks(db).map((task) => task.id)).toEqual(['d', 'b', 'c', 'a']);
+  });
+
+  it('orders the columns by the workflow rather than by the status spelling', () => {
+    // Alphabetically these sort BACKLOG, COMPLETE, IN_PROGRESS, REVIEW, TODO — invisible on the
+    // board, where a column filters to one status, and wrong on any list that crosses them.
+    for (const [id, status] of [
+      ['t-complete', 'COMPLETE'],
+      ['t-todo', 'TODO'],
+      ['t-review', 'REVIEW'],
+      ['t-backlog', 'BACKLOG'],
+      ['t-progress', 'IN_PROGRESS'],
+    ] as const)
+      addTask(id, 'p1', id, { status });
+
+    expect(listTasks(db).map((task) => task.status)).toEqual([
+      'BACKLOG',
+      'TODO',
+      'IN_PROGRESS',
+      'REVIEW',
+      'COMPLETE',
+    ]);
+  });
+
+  it('keeps one order per column, so hiding a project does not renumber the rest', () => {
+    // What the project page reads: its own tasks are a filtered view of the board's column,
+    // and the positions written there are the positions every view sorts by.
+    addProject('p2', 'c1', 'Second project');
+    for (const [id, projectId, position] of [
+      ['mine-second', 'p1', 3],
+      ['theirs-first', 'p2', 0],
+      ['mine-first', 'p1', 1],
+      ['theirs-last', 'p2', 4],
+    ] as const) {
+      addTask(id, projectId, id, { status: 'TODO' });
+      db.prepare('UPDATE tasks SET position=? WHERE id=?').run(position, id);
+    }
+
+    expect(listTasks(db).map((task) => task.id)).toEqual([
+      'theirs-first',
+      'mine-first',
+      'mine-second',
+      'theirs-last',
+    ]);
+    expect(listTasks(db, 'WHERE t.project_id=?', ['p1']).map((task) => task.id)).toEqual([
+      'mine-first',
+      'mine-second',
+    ]);
   });
 
   it('returns nothing rather than throwing for an id that is not there', () => {
