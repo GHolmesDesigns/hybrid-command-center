@@ -90,7 +90,13 @@ function KanbanCard({
           ))}
         </ul>
       )}
-      {task.description && <p>{task.description}</p>}
+      {task.description && <p className="card-description">{task.description}</p>}
+      {task.notes && (
+        <div className="card-notes">
+          <strong>Notes</strong>
+          <p>{task.notes}</p>
+        </div>
+      )}
       <div className="card-foot">
         <Due task={task} />
         {task.checklistTotal > 0 && (

@@ -301,7 +301,7 @@ export function TaskDetail({
       <section>
         <div className="section-title">
           <div>
-            <span className="eyebrow">Private</span>
+            <span className="eyebrow">Working notes</span>
             <h2>Notes</h2>
           </div>
         </div>
