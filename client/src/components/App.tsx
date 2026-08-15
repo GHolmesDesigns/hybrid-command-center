@@ -275,6 +275,7 @@ export function App() {
                 <ProjectDetail
                   projects={projects}
                   tasks={tasks}
+                  updateTasks={setTasks}
                   open={setModal}
                   remember={setLastProjectId}
                   refresh={refresh}
