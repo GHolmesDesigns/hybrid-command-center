@@ -1,4 +1,4 @@
-import type { SignalPost } from './signal.ts';
+import { signalDaysInMonth, type SignalPost } from './signal.ts';
 import type { Task } from './types.ts';
 
 /**
@@ -52,6 +52,68 @@ export interface CalendarDay {
   date: string;
   posts: SignalPost[];
   tasks: Task[];
+}
+
+/** The three agenda spans exposed by the Calendar page and its `view` URL parameter. */
+export const CALENDAR_VIEWS = ['today', 'week', 'month'] as const;
+export type CalendarViewMode = (typeof CALENDAR_VIEWS)[number];
+
+export interface CalendarViewRange {
+  /** Inclusive local-date labels. No instant or timezone conversion is involved. */
+  from: string;
+  to: string;
+}
+
+const dateParts = (date: string) =>
+  date.split('-').map(Number) as [year: number, month: number, day: number];
+
+const dateLabel = (date: Date) =>
+  `${String(date.getUTCFullYear()).padStart(4, '0')}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+
+/**
+ * Adds whole calendar days to a local-date label.
+ *
+ * UTC is used only as a Gregorian arithmetic surface after the local parts have been extracted;
+ * the result is still a date label, never an instant shown to a user.
+ */
+const addCalendarDays = (date: string, amount: number) => {
+  const [year, month, day] = dateParts(date);
+  return dateLabel(new Date(Date.UTC(year, month - 1, day + amount)));
+};
+
+/** Returns inclusive bounds for an agenda view. Weeks run Monday through Sunday. */
+export function calendarViewRange(view: CalendarViewMode, anchor: string): CalendarViewRange {
+  if (view === 'today') return { from: anchor, to: anchor };
+  if (view === 'month') {
+    const [year, month] = dateParts(anchor);
+    const from = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-01`;
+    return {
+      from,
+      to: `${from.slice(0, 8)}${String(signalDaysInMonth(year, month)).padStart(2, '0')}`,
+    };
+  }
+
+  const [year, month, day] = dateParts(anchor);
+  const sundayFirstDay = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  const from = addCalendarDays(anchor, -((sundayFirstDay + 6) % 7));
+  return { from, to: addCalendarDays(from, 6) };
+}
+
+/** Moves an agenda by one of its own spans while preserving a useful anchor date. */
+export function shiftCalendarAnchor(
+  view: CalendarViewMode,
+  anchor: string,
+  direction: -1 | 1,
+): string {
+  if (view === 'today') return addCalendarDays(anchor, direction);
+  if (view === 'week') return addCalendarDays(anchor, direction * 7);
+
+  const [year, month, day] = dateParts(anchor);
+  const target = new Date(Date.UTC(year, month - 1 + direction, 1));
+  const targetMonth = target.getUTCMonth();
+  const lastDay = new Date(Date.UTC(target.getUTCFullYear(), targetMonth + 1, 0)).getUTCDate();
+  target.setUTCDate(Math.min(day, lastDay));
+  return dateLabel(target);
 }
 
 /**

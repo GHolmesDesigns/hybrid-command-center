@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   CheckCircle2,
@@ -12,17 +12,21 @@ import {
 } from 'lucide-react';
 import { api } from '../api';
 import {
+  CALENDAR_VIEWS,
   calendarCounts,
   calendarDays,
+  calendarViewRange,
+  shiftCalendarAnchor,
   type CalendarDay,
   type CalendarRange,
+  type CalendarViewMode,
 } from '../../../shared/calendar';
 import {
   SIGNAL_CHANNEL_INITIAL,
   SIGNAL_CHANNEL_LABEL,
   SIGNAL_FORMAT_LABEL,
   SIGNAL_STATUS_LABEL,
-  signalMonthBounds,
+  isSignalDate,
   type SignalPost,
 } from '../../../shared/signal';
 import type { Task } from '../../../shared/types';
@@ -75,18 +79,20 @@ const monthHeading = (month: string) => {
   });
 };
 
+const shortDayHeading = (date: string) => {
+  const [year, month, day] = date.split('-').map(Number) as [number, number, number];
+  return new Date(year, month - 1, day).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+};
+
 /** Today as `YYYY-MM-DD` in local time — the same kind of value the calendar compares. */
 const today = () => {
   const now = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-};
-
-/** Steps a `YYYY-MM` label by whole months, without letting a day-of-month overflow it. */
-const shiftMonth = (month: string, by: number) => {
-  const [year, index] = month.split('-').map(Number) as [number, number];
-  const zero = year * 12 + (index - 1) + by;
-  return `${Math.floor(zero / 12)}-${String((zero % 12) + 1).padStart(2, '0')}`;
 };
 
 /** One scheduled post. Status is a word, and the channels carry their initials beside colour. */
@@ -184,9 +190,19 @@ function DaySection({ day, isToday }: { day: CalendarDay; isToday: boolean }) {
 
 export function CalendarView() {
   const [params, setParams] = useSearchParams();
-  const month = /^\d{4}-\d{2}$/.test(params.get('month') ?? '')
-    ? (params.get('month') as string)
-    : today().slice(0, 7);
+  const now = today();
+  const requestedView = params.get('view');
+  const view: CalendarViewMode = CALENDAR_VIEWS.includes(requestedView as CalendarViewMode)
+    ? (requestedView as CalendarViewMode)
+    : 'month';
+  const requestedDate = params.get('date');
+  const requestedMonth = params.get('month');
+  const anchor = isSignalDate(requestedDate ?? '')
+    ? (requestedDate as string)
+    : /^\d{4}-(0[1-9]|1[0-2])$/.test(requestedMonth ?? '')
+      ? `${requestedMonth}-01`
+      : now;
+  const bounds = useMemo(() => calendarViewRange(view, anchor), [view, anchor]);
 
   const [range, setRange] = useState<CalendarRange | null>(null);
   const [loading, setLoading] = useState(true);
@@ -195,7 +211,7 @@ export function CalendarView() {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const { from, to } = signalMonthBounds(`${month}-01`);
+    const { from, to } = bounds;
     try {
       setRange(await api<CalendarRange>(`/calendar?from=${from}&to=${to}`));
     } catch (failure) {
@@ -204,43 +220,74 @@ export function CalendarView() {
     } finally {
       setLoading(false);
     }
-  }, [month]);
+  }, [bounds]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const goto = (next: string) => setParams(next === today().slice(0, 7) ? {} : { month: next });
+  const goto = (nextView: CalendarViewMode, nextAnchor: string) => {
+    if (nextView === 'month' && nextAnchor.slice(0, 7) === now.slice(0, 7)) {
+      setParams({});
+      return;
+    }
+    const next: Record<string, string> = { month: nextAnchor.slice(0, 7) };
+    if (nextView !== 'month') {
+      next.view = nextView;
+      next.date = nextAnchor;
+    }
+    setParams(next);
+  };
+
+  const title =
+    view === 'today'
+      ? dayHeading(anchor)
+      : view === 'week'
+        ? `${shortDayHeading(bounds.from)} – ${shortDayHeading(bounds.to)}`
+        : monthHeading(anchor.slice(0, 7));
+  const spanLabel = view === 'today' ? 'day' : view;
 
   const days = range ? calendarDays(range) : [];
   const counts = range ? calendarCounts(range) : { posts: 0, tasks: 0 };
-  const now = today();
-
   return (
     <>
       <PageHead
         eyebrow="Calendar"
-        title={monthHeading(month)}
+        title={title}
         body="Signal Campaign's schedule beside the work coming due. Read-only — content is scheduled in Signal."
         action={
-          <div className="cal-nav">
-            <button
-              className="secondary"
-              onClick={() => goto(shiftMonth(month, -1))}
-              aria-label="Previous month"
-            >
-              <ChevronLeft aria-hidden="true" />
-            </button>
-            <button className="secondary" onClick={() => goto(today().slice(0, 7))}>
-              Today
-            </button>
-            <button
-              className="secondary"
-              onClick={() => goto(shiftMonth(month, 1))}
-              aria-label="Next month"
-            >
-              <ChevronRight aria-hidden="true" />
-            </button>
+          <div className="cal-tools">
+            <div className="segmented-control cal-view-switch" aria-label="Calendar view">
+              {CALENDAR_VIEWS.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  aria-pressed={view === option}
+                  onClick={() => goto(option, anchor)}
+                >
+                  {option === 'today' ? 'Today' : option[0]!.toUpperCase() + option.slice(1)}
+                </button>
+              ))}
+            </div>
+            <div className="cal-nav">
+              <button
+                className="secondary"
+                onClick={() => goto(view, shiftCalendarAnchor(view, anchor, -1))}
+                aria-label={`Previous ${spanLabel}`}
+              >
+                <ChevronLeft aria-hidden="true" />
+              </button>
+              <button className="secondary" onClick={() => goto(view, now)}>
+                Today
+              </button>
+              <button
+                className="secondary"
+                onClick={() => goto(view, shiftCalendarAnchor(view, anchor, 1))}
+                aria-label={`Next ${spanLabel}`}
+              >
+                <ChevronRight aria-hidden="true" />
+              </button>
+            </div>
           </div>
         }
       />
@@ -268,7 +315,7 @@ export function CalendarView() {
         <div className="refresh-status" role="status" aria-live="polite">
           <div>
             <ShieldAlert aria-hidden="true" />
-            <span>This month has more scheduled posts than one page shows.</span>
+            <span>This {spanLabel} has more scheduled posts than one page shows.</span>
           </div>
         </div>
       )}
@@ -303,8 +350,14 @@ export function CalendarView() {
 
       {!loading && !error && days.length === 0 && (
         <Empty
-          title="Nothing this month"
-          body="No scheduled content and no task deadlines fall in this month."
+          title={
+            view === 'today'
+              ? 'Nothing scheduled today'
+              : view === 'week'
+                ? 'Nothing this week'
+                : 'Nothing this month'
+          }
+          body={`No scheduled content and no task deadlines fall in this ${spanLabel}.`}
         />
       )}
 

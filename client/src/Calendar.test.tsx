@@ -1,5 +1,7 @@
 import {
   MemoryRouter,
+  afterEach,
+  beforeEach,
   branding,
   calendarRange,
   describe,
@@ -14,6 +16,7 @@ import {
   testState,
   waitFor,
   within,
+  vi,
   App,
 } from './App.test-setup';
 
@@ -37,6 +40,43 @@ const septemberWith = (overrides: Parameters<typeof calendarRange>[0]) => {
 };
 
 describe('Calendar', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 8, 14, 23, 30));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('uses the local date for Today under a fixed clock', async () => {
+    await openCalendar('/calendar?view=today', /Monday, September 14, 2026/);
+    await waitFor(() => expect(calendarCalls().length).toBeGreaterThan(0));
+    expect(calendarCalls()[0]!.url).toContain('from=2026-09-14');
+    expect(calendarCalls()[0]!.url).toContain('to=2026-09-14');
+    expect(screen.getByRole('button', { name: 'Today', pressed: true })).toBeTruthy();
+  });
+
+  it('reproduces a pasted Monday-through-Sunday week URL across a month boundary', async () => {
+    await openCalendar(
+      '/calendar?view=week&month=2026-09&date=2026-09-30',
+      /Sep 28, 2026.*Oct 4, 2026/,
+    );
+    await waitFor(() => expect(calendarCalls().length).toBeGreaterThan(0));
+    expect(calendarCalls()[0]!.url).toContain('from=2026-09-28');
+    expect(calendarCalls()[0]!.url).toContain('to=2026-10-04');
+    expect(screen.getByRole('button', { name: 'Week', pressed: true })).toBeTruthy();
+  });
+
+  it.each([
+    ['/calendar?view=today&month=2026-09&date=2026-09-14', 'Nothing scheduled today'],
+    ['/calendar?view=week&month=2026-09&date=2026-09-14', 'Nothing this week'],
+    ['/calendar?month=2026-09', 'Nothing this month'],
+  ])('gives %s its own non-blank empty state', async (entry, message) => {
+    await openCalendar(entry, /.*/);
+    expect(await screen.findByText(message)).toBeTruthy();
+  });
+
   it('asks for the month named in the address, bounded by its own length', async () => {
     await openCalendar('/calendar?month=2026-02', /February 2026/);
     await waitFor(() => expect(calendarCalls().length).toBeGreaterThan(0));
@@ -138,18 +178,25 @@ describe('Calendar', () => {
     expect(await screen.findByText('Nothing this month')).toBeTruthy();
   });
 
-  it('degrades to task deadlines with a visible reason when the schedule cannot be read', async () => {
-    septemberWith({
-      tasks: [task('t1', 'Still due', { dueDate: '2026-09-14' })],
-      signal: { available: false, error: 'The schedule store is locked.', truncated: false },
-    });
-    await openCalendar();
+  it.each([
+    '/calendar?view=today&month=2026-09&date=2026-09-14',
+    '/calendar?view=week&month=2026-09&date=2026-09-14',
+    '/calendar?month=2026-09',
+  ])(
+    'degrades %s to task deadlines with a visible reason when Signal cannot be read',
+    async (entry) => {
+      septemberWith({
+        tasks: [task('t1', 'Still due', { dueDate: '2026-09-14' })],
+        signal: { available: false, error: 'The schedule store is locked.', truncated: false },
+      });
+      await openCalendar(entry, /.*/);
 
-    expect(await screen.findByText(/Showing task deadlines only/)).toBeTruthy();
-    expect(screen.getByText('The schedule store is locked.')).toBeTruthy();
-    // The half that still works is still there, and still correct.
-    expect(screen.getByRole('link', { name: 'Still due' })).toBeTruthy();
-  });
+      expect(await screen.findByText(/Showing task deadlines only/)).toBeTruthy();
+      expect(screen.getByText('The schedule store is locked.')).toBeTruthy();
+      // The half that still works is still there, and still correct.
+      expect(screen.getByRole('link', { name: 'Still due' })).toBeTruthy();
+    },
+  );
 
   it('retries the range on demand after a failure', async () => {
     septemberWith({
@@ -181,6 +228,18 @@ describe('Calendar', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Previous month' }));
     await screen.findByRole('heading', { level: 1, name: /September 2026/ });
+  });
+
+  it('switches views and steps by the active view span', async () => {
+    await openCalendar('/calendar?month=2026-09');
+    await waitFor(() => expect(calendarCalls().length).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Week' }));
+    await waitFor(() => expect(calendarCalls().at(-1)!.url).toContain('to=2026-09-06'));
+    expect(screen.getByRole('button', { name: 'Week', pressed: true })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next week' }));
+    await waitFor(() => expect(calendarCalls().at(-1)!.url).toContain('from=2026-09-07'));
   });
 
   it('steps across a year boundary without inventing a thirteenth month', async () => {

@@ -2816,6 +2816,15 @@ button.tag-chip.toggle.active {
   display: flex;
   gap: 8px;
 }
+.cal-tools {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px 12px;
+}
+.cal-view-switch {
+  flex-shrink: 0;
+}
 .cal-summary {
   display: flex;
   flex-wrap: wrap;
