@@ -26,15 +26,20 @@ import {
   SIGNAL_FORMATS,
   SIGNAL_STATUS_LABEL,
   SIGNAL_STATUSES,
-  signalDaysInMonth,
+  isSignalDate,
   signalMediaKind,
-  signalMonthBounds,
   type SignalChannel,
   type SignalCta,
   type SignalFormat,
   type SignalPost,
   type SignalStatus,
 } from '../../../shared/signal';
+import {
+  CALENDAR_VIEWS,
+  calendarViewRange,
+  shiftCalendarAnchor,
+  type CalendarViewMode,
+} from '../../../shared/calendar';
 import { Empty } from './Primitives';
 import { Select } from './FormControls';
 import { PageHead } from './Shell';
@@ -75,10 +80,19 @@ const monthHeading = (month: string) => {
   });
 };
 
-const shiftMonth = (month: string, by: number) => {
-  const [year, index] = month.split('-').map(Number) as [number, number];
-  const zero = year * 12 + index - 1 + by;
-  return `${Math.floor(zero / 12)}-${pad((zero % 12) + 1)}`;
+const dayHeading = (date: string, options: Intl.DateTimeFormatOptions) => {
+  const [year, month, day] = date.split('-').map(Number) as [number, number, number];
+  return new Date(year, month - 1, day).toLocaleDateString(undefined, options);
+};
+
+const dateLabels = (from: string, to: string) => {
+  const labels: string[] = [];
+  let current = from;
+  while (current <= to) {
+    labels.push(current);
+    current = shiftCalendarAnchor('today', current, 1);
+  }
+  return labels;
 };
 
 const draftFor = (post: SignalPost): Draft => ({
@@ -673,9 +687,19 @@ function Editor({
 
 export function SignalView() {
   const [params, setParams] = useSearchParams();
-  const month = /^\d{4}-\d{2}$/.test(params.get('month') ?? '')
-    ? (params.get('month') as string)
-    : today().slice(0, 7);
+  const now = today();
+  const requestedView = params.get('view');
+  const view: CalendarViewMode = CALENDAR_VIEWS.includes(requestedView as CalendarViewMode)
+    ? (requestedView as CalendarViewMode)
+    : 'month';
+  const requestedDate = params.get('date');
+  const requestedMonth = params.get('month');
+  const anchor = isSignalDate(requestedDate ?? '')
+    ? (requestedDate as string)
+    : /^\d{4}-(0[1-9]|1[0-2])$/.test(requestedMonth ?? '')
+      ? `${requestedMonth}-01`
+      : now;
+  const bounds = useMemo(() => calendarViewRange(view, anchor), [view, anchor]);
   const [posts, setPosts] = useState<SignalPost[]>([]);
   const [queue, setQueue] = useState<SignalPost[]>([]);
   const [editing, setEditing] = useState<SignalPost | null>(null);
@@ -688,7 +712,7 @@ export function SignalView() {
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
-    const { from, to } = signalMonthBounds(`${month}-01`);
+    const { from, to } = bounds;
     try {
       const [range, nextQueue] = await Promise.all([
         api<SignalRange>(`/signal/posts?from=${from}&to=${to}`),
@@ -702,7 +726,7 @@ export function SignalView() {
     } finally {
       setLoading(false);
     }
-  }, [month]);
+  }, [bounds]);
 
   useEffect(() => {
     void load();
@@ -739,12 +763,38 @@ export function SignalView() {
     await load();
   };
 
-  const [year, monthNumber] = month.split('-').map(Number) as [number, number];
-  const leading = new Date(year, monthNumber - 1, 1).getDay();
-  const days = Array.from(
-    { length: signalDaysInMonth(year, monthNumber) },
-    (_, index) => index + 1,
-  );
+  const days = dateLabels(bounds.from, bounds.to);
+  const [firstYear, firstMonth, firstDay] = bounds.from.split('-').map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  const leading = view === 'month' ? new Date(firstYear, firstMonth - 1, firstDay).getDay() : 0;
+  const weekdays =
+    view === 'month'
+      ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+      : days.map((date) => dayHeading(date, { weekday: 'short' }));
+
+  const goto = (nextView: CalendarViewMode, nextAnchor: string) => {
+    if (nextView === 'month' && nextAnchor.slice(0, 7) === now.slice(0, 7)) {
+      setParams({});
+      return;
+    }
+    const next: Record<string, string> = { month: nextAnchor.slice(0, 7) };
+    if (nextView !== 'month') {
+      next.view = nextView;
+      next.date = nextAnchor;
+    }
+    setParams(next);
+  };
+
+  const title =
+    view === 'today'
+      ? dayHeading(anchor, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+      : view === 'week'
+        ? `${dayHeading(bounds.from, { month: 'short', day: 'numeric', year: 'numeric' })} – ${dayHeading(bounds.to, { month: 'short', day: 'numeric', year: 'numeric' })}`
+        : monthHeading(anchor.slice(0, 7));
+  const spanLabel = view === 'today' ? 'day' : view;
 
   return (
     <>
@@ -765,7 +815,7 @@ export function SignalView() {
       )}
       {truncated && (
         <div className="refresh-error" role="status">
-          This month has more than 500 posts. Only the first 500 are shown.
+          This {spanLabel} has more than 500 posts. Only the first 500 are shown.
         </div>
       )}
       <div className="signal-layout">
@@ -804,48 +854,62 @@ export function SignalView() {
             </ul>
           )}
         </aside>
-        <section className="signal-calendar" aria-labelledby="signal-month-title">
+        <section className="signal-calendar" aria-labelledby="signal-range-title">
+          <div className="segmented-control signal-view-switch" aria-label="Signal view">
+            {CALENDAR_VIEWS.map((option) => (
+              <button
+                key={option}
+                type="button"
+                aria-pressed={view === option}
+                onClick={() => goto(option, anchor)}
+              >
+                {option === 'today' ? 'Today' : option[0]!.toUpperCase() + option.slice(1)}
+              </button>
+            ))}
+          </div>
           <div className="signal-month-nav">
             <button
               className="secondary"
-              onClick={() => setParams({ month: shiftMonth(month, -1) })}
-              aria-label="Previous month"
+              onClick={() => goto(view, shiftCalendarAnchor(view, anchor, -1))}
+              aria-label={`Previous ${spanLabel}`}
             >
               <ChevronLeft />
             </button>
             <div>
               <CalendarClock aria-hidden="true" />
-              <h2 id="signal-month-title">{monthHeading(month)}</h2>
+              <h2 id="signal-range-title">{title}</h2>
             </div>
+            <button className="secondary" onClick={() => goto(view, now)}>
+              Today
+            </button>
             <button
               className="secondary"
-              onClick={() => setParams({ month: shiftMonth(month, 1) })}
-              aria-label="Next month"
+              onClick={() => goto(view, shiftCalendarAnchor(view, anchor, 1))}
+              aria-label={`Next ${spanLabel}`}
             >
               <ChevronRight />
             </button>
           </div>
-          <div className="signal-weekdays" aria-hidden="true">
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+          <div className={`signal-weekdays view-${view}`} aria-hidden="true">
+            {weekdays.map((day) => (
               <span key={day}>{day}</span>
             ))}
           </div>
-          <div className="signal-grid">
+          <div className={`signal-grid view-${view}`}>
             {Array.from({ length: leading }, (_, index) => (
               <div className="signal-day is-blank" key={`blank-${index}`} />
             ))}
-            {days.map((day) => {
-              const date = `${month}-${pad(day)}`;
+            {days.map((date) => {
               const scheduled = byDate.get(date) ?? [];
               return (
                 <section
-                  className={`signal-day ${date === today() ? 'is-today' : ''}`}
+                  className={`signal-day ${date === now ? 'is-today' : ''}`}
                   key={date}
                   aria-label={date}
                 >
                   <header>
-                    <span>{day}</span>
-                    {date === today() && <strong>Today</strong>}
+                    <span>{Number(date.slice(-2))}</span>
+                    {date === now && <strong>Today</strong>}
                   </header>
                   {scheduled.length === 0 ? (
                     <span className="signal-day-empty">No posts</span>
