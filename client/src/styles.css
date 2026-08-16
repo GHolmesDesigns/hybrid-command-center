@@ -3101,6 +3101,9 @@ button.tag-chip.toggle.active {
   min-width: 0;
   overflow: hidden;
 }
+.signal-view-switch {
+  margin: 16px 18px 0;
+}
 .signal-month-nav {
   padding: 16px 18px;
   border-bottom: 1px solid var(--line);
@@ -3121,6 +3124,10 @@ button.tag-chip.toggle.active {
 .signal-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+.signal-weekdays.view-today,
+.signal-grid.view-today {
+  grid-template-columns: minmax(0, 1fr);
 }
 /* Every row is the same fixed height, so the longest post in a week cannot stretch the week.
    A cell that holds more than fits scrolls inside itself. */
@@ -3161,6 +3168,9 @@ button.tag-chip.toggle.active {
   margin: -4px -4px 0;
 }
 .signal-day:nth-child(7n) {
+  border-right: 0;
+}
+.signal-grid.view-today .signal-day {
   border-right: 0;
 }
 .signal-day.is-blank {
@@ -3439,6 +3449,10 @@ button.tag-chip.toggle.active {
   .signal-weekdays,
   .signal-grid {
     min-width: 760px;
+  }
+  .signal-weekdays.view-today,
+  .signal-grid.view-today {
+    min-width: 0;
   }
   .signal-queue-list {
     grid-template-columns: 1fr;

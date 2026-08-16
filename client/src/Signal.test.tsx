@@ -1,6 +1,8 @@
 import {
   App,
   MemoryRouter,
+  afterEach,
+  beforeEach,
   branding,
   describe,
   expect,
@@ -13,11 +15,12 @@ import {
   testState,
   waitFor,
   within,
+  vi,
 } from './App.test-setup';
 
-const openSignal = async () => {
+const openSignal = async (entry = '/signal?month=2026-09') => {
   render(
-    <MemoryRouter initialEntries={['/signal?month=2026-09']}>
+    <MemoryRouter initialEntries={[entry]}>
       <App />
     </MemoryRouter>,
   );
@@ -31,6 +34,93 @@ const openSignal = async () => {
 const LONG = `A thousand-character post ${'with durable copy '.repeat(70)}and a closing line.`;
 
 describe('Signal planner', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    // A local late-night clock west of UTC: the planner must still call this September 14.
+    vi.setSystemTime(new Date(2026, 8, 14, 23, 30));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('uses the Calendar view URL contract and keeps local dates in all three views', async () => {
+    testState.signalPostsPayload = [
+      signalPost('today', 'The local-date post', '2026-09-14'),
+      signalPost('outside', 'Outside this week', '2026-09-21'),
+    ];
+    await openSignal('/signal?view=week&month=2026-09&date=2026-09-14');
+
+    expect(screen.getByRole('button', { name: 'Week', pressed: true })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '2026-09-14' })).toHaveTextContent(
+      'The local-date post',
+    );
+    expect(screen.queryByText('Outside this week')).not.toBeInTheDocument();
+    const rangeCall = requests.find((request) => request.url.includes('/api/signal/posts?'));
+    expect(rangeCall?.url).toContain('from=2026-09-14');
+    expect(rangeCall?.url).toContain('to=2026-09-20');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Today', pressed: false }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Today', pressed: true })).toBeInTheDocument(),
+    );
+    expect(screen.getAllByRole('region', { name: /^2026-/ })).toHaveLength(1);
+    expect(screen.getByRole('region', { name: '2026-09-14' })).toHaveTextContent(
+      'The local-date post',
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Month' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Month', pressed: true })).toBeInTheDocument(),
+    );
+    expect(screen.getByRole('region', { name: '2026-09-14' })).toHaveTextContent(
+      'The local-date post',
+    );
+  });
+
+  it.each(['today', 'week', 'month'] as const)(
+    'edits a scheduled post from the %s view without changing the queue',
+    async (view) => {
+      testState.signalPostsPayload = [
+        signalPost('queued-view', 'Queue stays put', null, { status: 'DRAFT' }),
+        signalPost('edit-view', 'Edit in every view', '2026-09-14'),
+      ];
+      const entry =
+        view === 'month'
+          ? '/signal?month=2026-09'
+          : `/signal?view=${view}&month=2026-09&date=2026-09-14`;
+      await openSignal(entry);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Edit Edit in every view' }));
+      fireEvent.change(screen.getByLabelText('Content'), {
+        target: { value: `Edited from ${view}` },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Save post' }));
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(screen.getByText(`Edited from ${view}`)).toBeInTheDocument();
+      expect(
+        within(screen.getByRole('complementary', { name: 'Unscheduled queue' })).getByText(
+          'Queue stays put',
+        ),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it('returns to the current local day and keeps the truncation notice range-aware', async () => {
+    testState.signalPostsPayload = [signalPost('now', 'Back to today', '2026-09-14')];
+    testState.signalPostsTruncated = true;
+    await openSignal('/signal?view=today&month=2025-01&date=2025-01-03');
+
+    expect(
+      screen.getByText('This day has more than 500 posts. Only the first 500 are shown.'),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Today' })[1]!);
+    expect(await screen.findByRole('region', { name: '2026-09-14' })).toHaveTextContent(
+      'Back to today',
+    );
+  });
+
   it('keeps undated ideas in the queue and dated posts in their month cells', async () => {
     testState.signalPostsPayload = [
       signalPost('queued', 'An idea without a date', null, { status: 'DRAFT' }),

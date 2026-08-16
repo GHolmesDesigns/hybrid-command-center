@@ -170,6 +170,7 @@ export const testState = {
   calendarPayload: null as ((from: string, to: string) => unknown) | null,
   /** Planner state. Dated and undated posts are kept together here, then served by each API view. */
   signalPostsPayload: [] as SignalPost[],
+  signalPostsTruncated: false,
   signalMutationError: null as string | null,
   publishPreviewPayload: null as PublishPreview | null,
   publicationsPayload: [] as SignalPublication[],
@@ -267,7 +268,7 @@ const respondTo = (url: string, init?: RequestInit) => {
       posts: testState.signalPostsPayload.filter(
         (post) => post.date !== null && post.date >= from && post.date <= to,
       ),
-      truncated: false,
+      truncated: testState.signalPostsTruncated,
     };
   }
   if (url.endsWith('/api/signal/queue') && method === 'GET')
@@ -639,6 +640,7 @@ beforeEach(() => {
   testState.driveListingPayload = null;
   testState.calendarPayload = null;
   testState.signalPostsPayload = [];
+  testState.signalPostsTruncated = false;
   testState.signalMutationError = null;
   testState.publishPreviewPayload = null;
   testState.publicationsPayload = [];
