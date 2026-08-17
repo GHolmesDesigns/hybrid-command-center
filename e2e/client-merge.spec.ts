@@ -75,4 +75,8 @@ test('a client merges into another, and the archived source points at it', async
   await expect(card.getByRole('button', { name: `Unarchive ${sourceName}` })).toHaveCount(0);
   const refused = await page.request.post(`/api/clients/${source.id}/unarchive`);
   expect(refused.status()).toBe(409);
+
+  // The suite shares one database and one board, so the card this spec parked in Backlog is
+  // taken back off it. Clients are archive-only, and the two here are archived or inert.
+  expect((await page.request.delete(`/api/tasks/${task.id}`)).status()).toBe(200);
 });
