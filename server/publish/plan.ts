@@ -1,5 +1,10 @@
 import crypto from 'node:crypto';
-import { signalMediaKind, type SignalChannel, type SignalPost } from '../../shared/signal.ts';
+import {
+  signalMediaKind,
+  signalTextHasLink,
+  type SignalChannel,
+  type SignalPost,
+} from '../../shared/signal.ts';
 import type { PublishPreview } from '../../shared/publish.ts';
 import type { PublishRequest, PublishTarget } from './provider.ts';
 
@@ -25,9 +30,6 @@ export const PLATFORM_CAPABILITIES = {
   threads: { caption: 500, minMedia: 0, maxMedia: 4 },
   google_business: { caption: 1500, minMedia: 0, maxMedia: 1, noVideo: true },
 } as const;
-
-const LINK =
-  /(?:https?:\/\/|www\.)[^\s<>()]+|(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:com|net|org|io|co|ai|app|dev|design|studio|media|digital)\b(?:\/[^\s<>()]*)?/i;
 
 const partsInZone = (instant: Date, zone: string) => {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -123,7 +125,7 @@ export function buildPublishPlan(
       refusals.push(`${platform} does not accept video.`);
     if (platform === 'instagram' && mediaKinds.includes('pdf'))
       warnings.push('Instagram drops PDFs.');
-    if ('stripsLinks' in capability && capability.stripsLinks && LINK.test(caption))
+    if ('stripsLinks' in capability && capability.stripsLinks && signalTextHasLink(caption))
       warnings.push(
         'X removes links from the post body; move the link to a reply before publishing.',
       );
