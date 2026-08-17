@@ -4,6 +4,7 @@ import { send } from '../api';
 import type { Category, Client, Project, Tag, Task } from '../../../shared/types';
 import { TASK_STATUSES, TASK_TYPES } from '../../../shared/types';
 import { type Modal } from './App';
+import { ClientMergeForm } from './ClientMerge';
 import { dateInput } from './formatting';
 import { Field, FormEnd, Select, TagChipInput, TextArea } from './FormControls';
 import { ImportForm } from './ImportModal';
@@ -43,6 +44,18 @@ export function ModalHost({
     return (
       <EntityModal title={modal.value ? 'Edit client' : 'New client'} close={close}>
         <ClientForm value={modal.value} saved={saved} />
+      </EntityModal>
+    );
+  if (modal.type === 'clientMerge')
+    return (
+      <EntityModal title={`Merge ${modal.source.name} into another client`} wide close={close}>
+        <ClientMergeForm
+          source={modal.source}
+          clients={clients}
+          close={close}
+          refresh={refresh}
+          flash={flash}
+        />
       </EntityModal>
     );
   if (modal.type === 'project')

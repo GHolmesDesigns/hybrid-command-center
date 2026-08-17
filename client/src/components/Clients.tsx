@@ -1,6 +1,14 @@
 import { useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { Archive, ArchiveRestore, ChevronRight, ExternalLink, Plus, Settings } from 'lucide-react';
+import {
+  Archive,
+  ArchiveRestore,
+  ChevronRight,
+  ExternalLink,
+  Merge,
+  Plus,
+  Settings,
+} from 'lucide-react';
 import { send } from '../api';
 import type { Client, Project } from '../../../shared/types';
 import { type Modal } from './App';
@@ -89,6 +97,9 @@ export function Clients({
               <div className="monogram large">{initials(c.name)}</div>
               <div className="entity-badges">
                 {c.status === 'ARCHIVED' && <span className="archived-badge">Archived</span>}
+                {c.mergedInto && (
+                  <span className="merged-badge">Merged into {c.mergedInto.name}</span>
+                )}
                 <DriveBadge status={c.driveStatus} />
               </div>
             </div>
@@ -127,7 +138,9 @@ export function Clients({
                   <Archive />
                 </button>
               )}
-              {c.status === 'ARCHIVED' && (
+              {/* A merged client stays archived, so it is not offered a button the API answers
+                  with a 409. The badge above says where its work went instead. */}
+              {c.status === 'ARCHIVED' && !c.mergedInto && (
                 <button
                   className="icon-btn"
                   onClick={() => unarchive(c)}
@@ -188,6 +201,15 @@ export function ClientDetail({
     await refresh();
     flash('Client restored to Active.');
   };
+  /**
+   * A merge needs somewhere for the work to go: another live client that was not itself merged
+   * away. With none, the action stays visible and explains why it cannot be used, rather than
+   * disappearing from a page where it is sometimes there and sometimes not.
+   */
+  const destinations = clients.filter(
+    (candidate) =>
+      candidate.status === 'ACTIVE' && candidate.id !== client.id && !candidate.mergedInto,
+  );
   return (
     <>
       <div className="backline">
@@ -210,6 +232,22 @@ export function ClientDetail({
                 Open Drive <ExternalLink />
               </a>
             )}
+            {/* Offered on an active or an archived client, because a duplicate is usually
+                archived already. A client that has itself been merged has nothing left to give. */}
+            {!client.mergedInto && (
+              <button
+                className="secondary"
+                disabled={!destinations.length}
+                title={
+                  destinations.length
+                    ? undefined
+                    : 'A merge needs another active client to move this work into.'
+                }
+                onClick={() => open({ type: 'clientMerge', source: client })}
+              >
+                <Merge /> Merge client
+              </button>
+            )}
             {client.status === 'ACTIVE' && (
               <button onClick={() => open({ type: 'project', clientId: client.id })}>
                 <Plus /> New project
@@ -218,17 +256,39 @@ export function ClientDetail({
           </div>
         }
       />
-      {client.status === 'ARCHIVED' && (
-        <div className="inline-warning archived-client-state" role="status">
-          <Archive />
+      {!destinations.length && !client.mergedInto && (
+        <p className="field-hint merge-unavailable">
+          Merge is unavailable: there is no other active client to move this work into.
+        </p>
+      )}
+      {client.mergedInto ? (
+        <div className="inline-warning merged-client-state" role="status">
+          <Merge />
           <div>
-            <strong>This client is archived</strong>
-            <span>Its history is intact, but new projects and tasks are paused.</span>
+            <strong>This client was merged into {client.mergedInto.name}</strong>
+            <span>
+              Its projects moved on {formatDate(client.mergedInto.mergedAt)}. Its own contact
+              details and notes are kept here, its Drive folder was left where it was, and it cannot
+              be unarchived.
+            </span>
           </div>
-          <button className="secondary" onClick={unarchive}>
-            <ArchiveRestore /> Unarchive client
-          </button>
+          <Link className="secondary buttonlike" to={`/clients/${client.mergedInto.id}`}>
+            Open {client.mergedInto.name} <ChevronRight />
+          </Link>
         </div>
+      ) : (
+        client.status === 'ARCHIVED' && (
+          <div className="inline-warning archived-client-state" role="status">
+            <Archive />
+            <div>
+              <strong>This client is archived</strong>
+              <span>Its history is intact, but new projects and tasks are paused.</span>
+            </div>
+            <button className="secondary" onClick={unarchive}>
+              <ArchiveRestore /> Unarchive client
+            </button>
+          </div>
+        )
       )}
       <div className="detail-grid">
         <section className="panel detail-info">

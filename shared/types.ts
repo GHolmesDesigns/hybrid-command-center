@@ -90,6 +90,11 @@ export interface Client {
   driveFolderUrl?: string;
   driveStatus: DriveStatus;
   driveError?: string;
+  /**
+   * Present only on a client that was merged into another one. Its projects now belong to that
+   * client, it is archived for good, and a playbook naming it resolves to the survivor.
+   */
+  mergedInto?: { id: string; name: string; mergedAt: string };
   createdAt: string;
   updatedAt: string;
 }

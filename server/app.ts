@@ -20,6 +20,8 @@ import {
   listTags,
   listTasks,
 } from './repositories.ts';
+import { commitClientMerge, isMergedSource, previewClientMerge } from './client-merge.ts';
+import { ClientMergeError } from './domain/client-merge.ts';
 import { touchProjectActivity, touchProjectRecord } from './domain/activity.ts';
 import { wouldCreateCycle, blockingDependencies } from './domain/dependencies.ts';
 import { isDueNextSevenDays, isDueToday, isOverdue } from '../shared/deadlines.ts';
@@ -365,6 +367,9 @@ const normalizedCategoryName = z
   .string()
   .transform(normalizeCategoryName)
   .pipe(z.string().min(1).max(60));
+/** The destination half of a merge; the source is the route's own `:id`. */
+const clientMergeInput = z.object({ destinationId: z.string().uuid() });
+
 const categoryInput = z.object({ name: normalizedCategoryName, color: chipColor });
 const categoryPatch = categoryInput.partial().refine((value) => Object.keys(value).length > 0, {
   message: 'Provide a category field to update.',
@@ -509,11 +514,43 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     res.json({ ok: true });
   });
   app.post('/api/clients/:id/unarchive', (req, res) => {
+    /**
+     * A merged client stays archived. Restoring it would leave a live client whose projects
+     * belong to another one and whose name still resolves to that other one on import, which
+     * is not a state the merge can be talked out of afterwards — there is no unmerge.
+     */
+    if (isMergedSource(db, req.params.id))
+      return res.status(409).json({
+        error: 'This client was merged into another client, so it cannot be restored.',
+        code: 'CLIENT_MERGED',
+      });
     const result = db
       .prepare("UPDATE clients SET status='ACTIVE',updated_at=? WHERE id=?")
       .run(now(), req.params.id);
     if (!result.changes) return res.status(404).json({ error: 'Client not found.' });
     res.json({ ok: true });
+  });
+  /**
+   * Merging one client into another (C49). The preview writes nothing; the commit re-plans
+   * inside its own transaction and refuses a plan that no longer matches the one confirmed.
+   * Both live in `server/client-merge.ts`, which calls no Drive method and writes no
+   * `integration_events` row — a merge is local workspace surgery, not an integration.
+   */
+  app.post('/api/clients/:id/merge/preview', (req, res, next) => {
+    try {
+      const data = clientMergeInput.parse(req.body);
+      res.json(previewClientMerge(db, req.params.id, data.destinationId));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/clients/:id/merge', (req, res, next) => {
+    try {
+      const data = clientMergeInput.extend({ planHash: z.string().length(64) }).parse(req.body);
+      res.json(commitClientMerge(db, req.params.id, data.destinationId, data.planHash));
+    } catch (error) {
+      next(error);
+    }
   });
   app.post('/api/clients/:id/retry-drive', async (req, res, next) => {
     try {
@@ -569,6 +606,22 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       const data = projectPatch.parse(req.body);
       const p = db.prepare('SELECT * FROM projects WHERE id=?').get(req.params.id) as any;
       if (!p) return res.status(404).json({ error: 'Project not found.' });
+      /**
+       * A named client is held to what creating a project requires — it must be active — and,
+       * on top of that, must not be a client that was merged away. Without the second check a
+       * project edit could hand work back to a client the merge just emptied, undoing it one
+       * project at a time; without the first, a PATCH could put a project somewhere POST would
+       * refuse to.
+       */
+      if (data.clientId !== undefined) {
+        if (isMergedSource(db, data.clientId))
+          return res.status(409).json({
+            error: 'That client was merged into another client. Choose the surviving client.',
+            code: 'CLIENT_MERGED',
+          });
+        if (!db.prepare("SELECT id FROM clients WHERE id=? AND status='ACTIVE'").get(data.clientId))
+          return res.status(400).json({ error: 'Choose an active client.' });
+      }
       // Editing the project record is both an edit and activity, so it stamps both fields.
       const stamp = now();
       db.prepare(
@@ -1492,7 +1545,9 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
           // that does not exist, not a failure of the write.
           error instanceof SignalPostNotFoundError
           ? 404
-          : error instanceof PublishRequestError
+          : // A refused merge is the caller's problem — the wrong pair, or a preview the
+            // workspace moved out from under — and each case carries its own status.
+            error instanceof PublishRequestError || error instanceof ClientMergeError
             ? error.status
             : error?.code === 'SQLITE_CONSTRAINT_UNIQUE'
               ? 409

@@ -15,7 +15,7 @@ import {
 } from './import.ts';
 import { listIntegrationEvents } from './integration-log.ts';
 import { buildXlsx } from './domain/workbook-fixture.ts';
-import { IMPORT_RECEIPT_LIMIT } from '../shared/playbook.ts';
+import { IMPORT_RECEIPT_LIMIT, SKIP_REASON } from '../shared/playbook.ts';
 
 const SAMPLE = path.join(
   import.meta.dirname,
@@ -565,6 +565,96 @@ describe('campaign playbook import', () => {
     expect(workspace.clients).toEqual([{ id: client.id, name: 'Acme Studio' }]);
     expect(workspace.projects[0]).toMatchObject({ clientId: client.id, name: 'Spring Campaign' });
     expect(workspace.projectPosition).toBe(0);
+  });
+
+  /**
+   * C49. Merging leaves the source's name in `clients` beside the survivor's, and `clients.name`
+   * is not unique, so "a merged name is an alias" is an order rather than a lookup: a client of
+   * that name that was never merged wins, and only when every match was merged away does the
+   * name resolve — one hop — to the survivor.
+   */
+  describe('matching a client name through a merge', () => {
+    const mergeClients = async (sourceId: string, destinationId: string) => {
+      const planned = (
+        await request(createApp(db))
+          .post(`/api/clients/${sourceId}/merge/preview`)
+          .send({ destinationId })
+      ).body;
+      const done = await request(createApp(db))
+        .post(`/api/clients/${sourceId}/merge`)
+        .send({ destinationId, planHash: planned.planHash });
+      expect(done.status).toBe(200);
+    };
+    const newClient = async (name: string) =>
+      (await request(createApp(db)).post('/api/clients').send({ name })).body;
+
+    it('resolves a playbook naming a merged-away client to the surviving client', async () => {
+      const source = await newClient('Acme Studio');
+      const survivor = await newClient('Acme Group');
+      await mergeClients(source.id, survivor.id);
+
+      const preview = previewPlaybook(db, { text: playbookText({ client: 'Acme Studio' }) });
+
+      expect(preview.creates.Clients).toBe(0);
+      expect(preview.skips.Clients).toBe(1);
+      expect(preview.skipped[0]).toMatchObject({
+        sheet: 'Clients',
+        existingId: survivor.id,
+        reason: SKIP_REASON.clientMergedAlias,
+      });
+      commitPlaybook(db, { text: playbookText({ client: 'Acme Studio' }) });
+      // The new project landed under the survivor, not beneath the archived source.
+      expect(
+        db.prepare('SELECT client_id FROM projects WHERE name=?').get('Spring Campaign'),
+      ).toEqual({ client_id: survivor.id });
+    });
+
+    it('lets a live client of the same name win over a merged alias', async () => {
+      const source = await newClient('Acme Studio');
+      const survivor = await newClient('Acme Group');
+      await mergeClients(source.id, survivor.id);
+      // A second, unmerged client happens to carry the merged one's name.
+      const live = await newClient('Acme Studio');
+
+      const preview = previewPlaybook(db, { text: playbookText({ client: 'Acme Studio' }) });
+
+      expect(preview.skipped[0]).toMatchObject({
+        existingId: live.id,
+        reason: SKIP_REASON.client,
+      });
+    });
+
+    it('follows a retargeted alias to the latest survivor', async () => {
+      const first = await newClient('Acme Studio');
+      const second = await newClient('Acme Group');
+      const third = await newClient('Acme Worldwide');
+      await mergeClients(first.id, second.id);
+      await mergeClients(second.id, third.id);
+
+      // The name of the first source, whose alias was retargeted when its survivor was merged.
+      expect(
+        previewPlaybook(db, { text: playbookText({ client: 'Acme Studio' }) }).skipped[0],
+      ).toMatchObject({ existingId: third.id, reason: SKIP_REASON.clientMergedAlias });
+      // And the name of the middle client, which is a merge source in its own right.
+      expect(
+        previewPlaybook(db, { text: playbookText({ client: 'Acme Group' }) }).skipped[0],
+      ).toMatchObject({ existingId: third.id, reason: SKIP_REASON.clientMergedAlias });
+    });
+
+    it('carries the merge alias on the workspace snapshot', async () => {
+      const source = await newClient('Acme Studio');
+      const survivor = await newClient('Acme Group');
+      await mergeClients(source.id, survivor.id);
+
+      const workspace = readWorkspace(db);
+
+      expect(workspace.clients).toEqual(
+        expect.arrayContaining([
+          { id: source.id, name: 'Acme Studio', mergedIntoId: survivor.id },
+          { id: survivor.id, name: 'Acme Group' },
+        ]),
+      );
+    });
   });
 
   it('previews against the workspace as it stands, not as it was', () => {

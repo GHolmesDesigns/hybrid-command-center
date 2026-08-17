@@ -242,6 +242,12 @@ type DependencyRow = z.output<(typeof ROW_SCHEMAS)['Dependencies']>;
 export interface WorkspaceClient {
   id: string;
   name: string;
+  /**
+   * The client this one was merged into, when it is a merge source. Its name is still a name
+   * the workspace answers to — an alias for the surviving client — but no new work may be
+   * attached to it. See `resolveClientName`.
+   */
+  mergedIntoId?: string;
 }
 export interface WorkspaceProject {
   id: string;
@@ -368,6 +374,31 @@ const numberText = (value: string) => {
 };
 
 const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/**
+ * The client a playbook name attaches to, and whether it got there through a merge.
+ *
+ * `clients.name` is not unique, and merging leaves the source's name in the table beside the
+ * survivor's, so "a merged name is an alias" needs an order rather than a lookup:
+ *
+ * 1. A client with that name that has *not* been merged away wins, archived or not. This is the
+ *    duplicate rule the format has always documented, unchanged.
+ * 2. Otherwise, if the only clients with that name were merged away, the name resolves to the
+ *    survivor of one of them — one hop, because merging a survivor retargets the earlier
+ *    aliases rather than chaining them.
+ * 3. A merged-away client is never itself the answer, so an import can never attach new work
+ *    beneath a client whose portfolio was just moved somewhere else.
+ */
+function resolveClientName(
+  workspace: WorkspaceSnapshot,
+  name: string,
+): { id: string; viaMerge: boolean } | undefined {
+  const named = workspace.clients.filter((client) => sameName(client.name, name));
+  const live = named.find((client) => !client.mergedIntoId);
+  if (live) return { id: live.id, viaMerge: false };
+  const alias = named.find((client) => client.mergedIntoId);
+  return alias?.mergedIntoId ? { id: alias.mergedIntoId, viaMerge: true } : undefined;
+}
 
 interface SheetRows<S extends PlaybookSheet> {
   rows: { row: number; value: z.output<(typeof ROW_SCHEMAS)[S]> }[];
@@ -700,7 +731,7 @@ export function buildPlan(workbook: Workbook, workspace: WorkspaceSnapshot): Pla
       unresolved.clients.add(value.client_key);
       continue;
     }
-    const existing = workspace.clients.find((client) => sameName(client.name, value.name));
+    const existing = resolveClientName(workspace, value.name);
     if (existing) {
       plan.resolutions.clients.set(value.client_key, { kind: 'existing', id: existing.id });
       skipped.push({
@@ -708,7 +739,7 @@ export function buildPlan(workbook: Workbook, workspace: WorkspaceSnapshot): Pla
         row,
         key: value.client_key,
         label: value.name,
-        reason: SKIP_REASON.client,
+        reason: existing.viaMerge ? SKIP_REASON.clientMergedAlias : SKIP_REASON.client,
         existingId: existing.id,
       });
       continue;

@@ -56,16 +56,15 @@ export default defineConfig({
       // this branch, floored to a whole percent; a round number would be a target rather than
       // a baseline, and this way a drop reads as a drop.
       thresholds: {
-        // 97.57 statements / 90.99 branches / 100 functions / 100 lines
-        'shared/**': { statements: 97, branches: 90, functions: 100, lines: 100 },
-        // 91.10 statements / 82.97 branches / 94.58 functions / 92.76 lines
+        // 98.05 statements / 92.00 branches / 100 functions / 100 lines
+        'shared/**': { statements: 98, branches: 92, functions: 100, lines: 100 },
+        // 91.43 statements / 82.99 branches / 94.48 functions / 92.80 lines
         '{server,e2e}/**': { statements: 91, branches: 82, functions: 94, lines: 92 },
-        // 75.31 statements / 74.72 branches / 74.47 functions / 76.76 lines — the low end of
-        // the two figures this project alternates between, run to run, on the same commit.
-        // One block in `ImportView.tsx` renders on some runs and not others, which is worth
-        // 0.65 of a branch point; the floor is what the suite covers every time, so the gate
+        // 78.58 statements / 78.25 branches / 78.29 functions / 80.03 lines. One block in
+        // `ImportView.tsx` renders on some runs and not others, which is worth 0.65 of a branch
+        // point, so the branch floor is set below the measurement by that much: the gate
         // measures the suite rather than the coin flip.
-        'client/src/**': { statements: 75, branches: 74, functions: 74, lines: 76 },
+        'client/src/**': { statements: 78, branches: 77, functions: 78, lines: 80 },
       },
     },
     projects: [
