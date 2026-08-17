@@ -39,6 +39,7 @@ import { brandStyle } from './ui-shared';
 
 export type Modal =
   | { type: 'client'; value?: Client }
+  | { type: 'clientMerge'; source: Client }
   | { type: 'project'; value?: Project; clientId?: string }
   | { type: 'task'; value?: Task; projectId?: string }
   | { type: 'taskDetail'; value: Task }

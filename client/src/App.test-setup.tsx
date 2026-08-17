@@ -176,6 +176,29 @@ export const testState = {
   publicationsPayload: [] as SignalPublication[],
   publishSubmitPayload: null as SignalPublication | null,
   publishReconcilePayload: null as SignalPublication | null,
+  /**
+   * Client merge. Both routes are answered from the client and project state by default — the
+   * stub plans the merge the way the server would, and a commit moves the projects, archives the
+   * source, and records the alias — so a case only sets one of these to rehearse a refusal.
+   */
+  clientMergePreviewError: null as { status: number; error: string } | null,
+  clientMergeCommitError: null as { status: number; error: string } | null,
+};
+
+/** The plan the server would answer a preview with, taken from the current client state. */
+export const clientMergePlan = (sourceId: string, destinationId: string) => {
+  const party = (id: string) => {
+    const found = testState.clientsPayload.find((candidate) => candidate.id === id);
+    return found ? { id: found.id, name: found.name, status: found.status } : null;
+  };
+  const source = party(sourceId),
+    destination = party(destinationId);
+  if (!source || !destination) return null;
+  const merging = testState.projectsPayload
+    .filter((p) => p.clientId === sourceId)
+    .map((p) => ({ id: p.id, name: p.name, status: p.status }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+  return { source, destination, projects: merging, planHash: `hash-${sourceId}-${merging.length}` };
 };
 
 /** One scheduled post, with only the fields a case cares about spelled out. */
@@ -383,6 +406,49 @@ const respondTo = (url: string, init?: RequestInit) => {
       .sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id))
       .map((p, position) => ({ ...p, position }));
     return testState.projectsPayload;
+  }
+  const mergePreview = url.match(/\/api\/clients\/([^/]+)\/merge\/preview$/);
+  if (mergePreview && method === 'POST') {
+    if (testState.clientMergePreviewError)
+      return reply(testState.clientMergePreviewError.status, {
+        error: testState.clientMergePreviewError.error,
+      });
+    const plan = clientMergePlan(mergePreview[1], body.destinationId);
+    return plan ?? reply(404, { error: 'Client not found.' });
+  }
+  const mergeCommit = url.match(/\/api\/clients\/([^/]+)\/merge$/);
+  if (mergeCommit && method === 'POST') {
+    if (testState.clientMergeCommitError)
+      return reply(testState.clientMergeCommitError.status, {
+        error: testState.clientMergeCommitError.error,
+      });
+    const sourceId = mergeCommit[1];
+    const plan = clientMergePlan(sourceId, body.destinationId);
+    if (!plan) return reply(404, { error: 'Client not found.' });
+    const mergedAt = '2026-08-16T12:00:00.000Z';
+    // The same writes the server makes, so the `refresh()` that follows serves a workspace
+    // where the projects moved, the source is archived, and the alias is reported.
+    testState.projectsPayload = testState.projectsPayload.map((p) =>
+      p.clientId === sourceId
+        ? { ...p, clientId: plan.destination.id, clientName: plan.destination.name }
+        : p,
+    );
+    testState.clientsPayload = testState.clientsPayload.map((candidate) =>
+      candidate.id === sourceId
+        ? {
+            ...candidate,
+            status: 'ARCHIVED' as const,
+            mergedInto: { id: plan.destination.id, name: plan.destination.name, mergedAt },
+          }
+        : candidate,
+    );
+    return {
+      source: { ...plan.source, status: 'ARCHIVED' },
+      destination: plan.destination,
+      projects: plan.projects,
+      movedProjectCount: plan.projects.length,
+      mergedAt,
+    };
   }
   const clientStatus = url.match(/\/api\/clients\/([^/]+)\/(archive|unarchive)$/);
   if (clientStatus && method === 'POST') {
@@ -646,6 +712,8 @@ beforeEach(() => {
   testState.publicationsPayload = [];
   testState.publishSubmitPayload = null;
   testState.publishReconcilePayload = null;
+  testState.clientMergePreviewError = null;
+  testState.clientMergeCommitError = null;
   requests.length = 0;
   vi.stubGlobal(
     'fetch',

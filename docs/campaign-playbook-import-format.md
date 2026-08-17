@@ -175,6 +175,24 @@ Archived clients and projects match too, and are neither revived nor rewritten. 
 
 Two rows of the *same* workbook that resolve to the same record are a different matter: they are ambiguous rather than already-imported, and are reported as errors.
 
+### Merged clients are aliases
+
+A client that was merged into another one (**Clients → Merge client**) keeps its own name in the
+workspace, archived, while its projects belong to the surviving client. Client names are not
+unique, so a playbook naming a merged client resolves in this order:
+
+1. A client with that name that has **not** been merged away wins — the rule above, unchanged,
+   archived clients included.
+2. Otherwise, when every client of that name was merged away, the name resolves to the client
+   they were merged into. The skip reports that rule by name, rather than the ordinary
+   already-exists one, so the preview says which client the work will actually attach to.
+3. A merged-away client is never itself the answer. New work is never created beneath a client
+   whose portfolio has been moved somewhere else.
+
+Resolution is always one hop: merging a surviving client again retargets the aliases that pointed
+at it, so an old name follows the work to whichever client holds it now. The alias is the merged
+client's live name — renaming it renames the alias with it.
+
 ## Importer behavior
 
 Two rules were settled when the importer shipped (issue #72), and this section is the authority on them.

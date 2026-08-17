@@ -418,10 +418,45 @@ Use Clients to:
 - Open connected Drive folders
 - Review Drive connection state
 - Archive inactive clients
+- Merge a duplicate client into the client you are keeping
 
 Archiving requires confirmation and preserves the record, its projects, and Drive files.
 
 Clients cannot be deleted. Archiving is the only way to retire one. See [Removing records](#removing-records).
+
+#### Merging a duplicate client
+
+When the same client ended up in the list twice, **Merge client** on the duplicate's page moves
+all of its work to the one you are keeping. It is on both active and archived clients, because a
+duplicate has usually been archived already.
+
+1. Open the client you want to get rid of and select **Merge client**.
+2. Choose the client to keep. The list offers active clients only, and never one that has itself
+   been merged.
+3. Read the summary. It names both clients, lists every project that will move — including
+   archived and completed ones — and states what the merge will not do.
+4. Select **Merge clients**. The application opens the client you kept, and its project list now
+   includes the work that moved.
+
+What a merge does:
+
+- Moves every project, with its tasks, checklists, dependencies, categories, ordering, dates, and
+  Drive links unchanged. Projects with the same name stay separate; nothing is combined.
+- Archives the duplicate and records where its work went. Its own contact details and notes stay
+  readable on it — they are never copied onto the client you kept, whose details win.
+- Leaves Google Drive exactly as it is. No folder is moved, renamed, created, or deleted, so
+  every project's files still open where they always did, and the duplicate's own client folder
+  stays in Drive. A later **Sync to Folder** will create a folder for a project that never had
+  one under the client you kept.
+- Makes the duplicate's name an alias. A future playbook import naming it attaches to the client
+  you kept instead of recreating work under the archived one.
+
+A merged client cannot be unarchived, chosen as the destination of another merge, or given a
+project back by editing one. If the summary is out of date — someone added or renamed a project
+while it was on screen — the merge is refused and you are shown the current one to confirm again.
+
+**There is no undo.** Recover from a database backup as described in
+[Safe data backup](#10-safe-data-backup) if a merge was a mistake.
 
 ### Projects
 
@@ -687,7 +722,7 @@ Removal works differently for each kind of record:
 
 | Record | What you can do |
 | --- | --- |
-| Client | Archive only. No delete exists. |
+| Client | Archive only. No delete exists. A duplicate can also be **merged** into another client, which moves its projects and archives it — see [Merging a duplicate client](#merging-a-duplicate-client). |
 | Project | Archive, **or** delete the project and all of its tasks. |
 | Task | Delete. Its checklist items, tag links, and dependency links go with it. |
 | Tag | Delete from Settings. It is removed from every task carrying it; no task is deleted. |
@@ -695,7 +730,9 @@ Removal works differently for each kind of record:
 
 Every removal asks for confirmation first — except a tag no task is using, or a category no project is using, which have nothing to lose — and none of them touch Google Drive. Deleting a project or task in the application leaves its Drive folders and files exactly as they are — remove those in Google Drive yourself if you want them gone. The project detail page says so beside its delete button, and the [Files](#files) page repeats it above every listing.
 
-Deleting cannot be undone from inside the application. Recover a mistake by restoring a database backup, as described in [Safe data backup](#10-safe-data-backup).
+Deleting cannot be undone from inside the application, and neither can merging two clients.
+Recover a mistake by restoring a database backup, as described in
+[Safe data backup](#10-safe-data-backup).
 
 ### Settings
 

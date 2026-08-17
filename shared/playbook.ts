@@ -143,11 +143,14 @@ export const DUPLICATE_RULE: string[] = [
   'A task matches when its resolved project already has a task with the same trimmed title, ignoring case, and the same due date — an empty due date counts as a match only against another empty one.',
   'Checklist items and dependencies of a matched record are skipped with it: an existing record is never edited by an import.',
   'Archived clients and projects match too. An import never revives or rewrites them.',
+  'A client that was merged into another one keeps its name as an alias: a playbook naming it attaches to the surviving client instead. A client of that name that was never merged still wins.',
 ];
 
 /** Human wording for a skip, used by the server and shown unchanged in the browser. */
 export const SKIP_REASON = {
   client: 'A client with this name already exists; the import will use it.',
+  clientMergedAlias:
+    'A client with this name was merged into another client; the import will use the surviving client.',
   project: 'This client already has a project with this name.',
   task: 'This project already has a task with this title and due date.',
   checklistItem: 'Its task already exists, so its checklist is left as it is.',

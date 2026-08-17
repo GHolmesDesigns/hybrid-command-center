@@ -19,6 +19,7 @@ Nothing in this app is reachable off loopback by design, and the server enforces
 - Deadline-led dashboard with overdue, due-today, seven-day (today included), and project-health counts, scoped to unarchived work and calculated by the same rules the board filters by
 - **Sync to Folder** on the dashboard — provisions missing Drive folder skeletons for existing clients/projects; it uploads, downloads, and mirrors nothing, and never discovers projects from Drive
 - Client creation, editing, archival, detail views, and Drive status
+- **Merge one client into another** — a previewed, confirmed, single-transaction move of every project from a duplicate client to the client you are keeping. The source is archived and recorded as merged, never deleted; contact details and notes are kept on it rather than combined; no Drive folder moves; and a later playbook naming the merged client resolves to the survivor. There is no undo
 - Project creation, editing, archival, and **record-only delete** that cascades to tasks (Drive files untouched)
 - Projects view with search, client filter, category filter, and seven sort modes, including a **Custom order** where tiles are rearranged by drag or keyboard and the arrangement persists
 - Shared **project categories** — many per project, created from a project or from Settings, reused case-insensitively, filtered from the page address, renamed everywhere at once, and deleted with an affected-project count that never deletes a project
@@ -65,7 +66,7 @@ The browser never receives Google tokens. UI code calls only the local API. Driv
 
 ### Data ownership
 
-- **SQLite:** clients, projects, tasks, board-card and project-tile positions, checklists, dependencies, due dates, notes, task tags, project categories, Signal Campaign's planned posts, channels, and ordered media URL references, settings, branding (including the sidebar palette and the logo's address, never the image itself), Drive IDs/URLs, provisioning steps, import receipts, integration activity records, and timestamps.
+- **SQLite:** clients, projects, tasks, board-card and project-tile positions, checklists, dependencies, due dates, notes, task tags, project categories, client merge aliases, Signal Campaign's planned posts, channels, and ordered media URL references, settings, branding (including the sidebar palette and the logo's address, never the image itself), Drive IDs/URLs, provisioning steps, import receipts, integration activity records, and timestamps.
 - **Google Drive:** every project file. The database stores references, never duplicate file contents. Deleting a project or task in the app does **not** delete Drive folders or files.
 
 Timestamps are stored as UTC ISO strings. Date-only deadlines are interpreted in the browser/server machine's local timezone and become overdue after their local calendar day has passed.
@@ -312,6 +313,47 @@ than a cascade into anyone's work.
 The migration is additive: an existing database gains two empty tables and opens with every
 project intact and uncategorized.
 
+### Merging clients
+
+Duplicate client records split one relationship's work across two portfolios. **Merge client**,
+on a client's own detail page, consolidates them: every project of the source client moves to a
+destination client you choose, in one transaction, and the source is archived and recorded as
+merged into it.
+
+Clients are archive-only here as everywhere else — a merge deletes nothing. `client_merges` holds
+one row per merged client (`source_client_id` → `surviving_client_id`, with the moment it
+happened), which is also what makes the old name resolve to the surviving client on a later
+import.
+
+- **Previewed, then confirmed.** `POST /api/clients/:id/merge/preview` writes nothing and returns
+  both clients, every project that would move, and a `planHash`. `POST /api/clients/:id/merge`
+  re-plans inside its own transaction and refuses a hash that no longer matches with a `409`, so a
+  project added, renamed, or reassigned in the meantime forces a second look. The rules are
+  database-free in `server/domain/client-merge.ts`; the writes are in `server/client-merge.ts`.
+- **The work is moved, not rewritten.** Only `projects.client_id` changes. Project ids, tasks,
+  checklists, dependencies, categories, ordering, dates, `updated_at`, `last_activity_at`, and
+  every Drive reference are left exactly as they were. Every project moves whatever its status,
+  archived and complete included. Identically named projects stay separate.
+- **Metadata is not combined.** The destination's name, contact details, and notes win; the
+  source keeps its own, readable on the archived record. Nothing is copied between them.
+- **The source may be active or archived**, as long as it has not already been merged elsewhere —
+  a duplicate is usually archived already. The destination must be a live, unmerged client.
+- **A merge cannot leak back.** `POST /api/clients/:id/unarchive` answers `409 CLIENT_MERGED` for
+  a merged client, and `PATCH /api/projects/:id` refuses a `clientId` that is merged away
+  (`409 CLIENT_MERGED`) or not `ACTIVE` (`400`), so no single edit can undo it.
+- **Aliases follow the survivor.** Merging a client that is itself a survivor retargets the
+  earlier rows in the same transaction, so A→B then B→C leaves A pointing at C and every lookup
+  is one hop.
+- **The Drive hierarchy is unchanged.** No `DriveProvider` method is called and no folder is
+  moved, renamed, created, or deleted. Files still opens each project at the folder it always
+  had, and the source client's own folder is left where it is. A later **Sync to Folder** does
+  not move a connected folder; it will create a *missing* project folder under the destination
+  client's folder, because provisioning parents new folders on the project's current client.
+- **No `integration_events` row.** A merge is local workspace surgery, like archiving a project —
+  the activity log is for what an *integration* did.
+- **There is no undo.** Recover from a database backup. The migration is additive: an existing
+  database gains one empty table.
+
 ### Campaign playbook import
 
 `/import` imports a campaign playbook — an .xlsx workbook, or the same tabs pasted as
@@ -334,6 +376,10 @@ with a sample workbook in `docs/examples/`.
   its client, a task on title *and* due date within its project — all case-insensitively,
   archived records included. Matched records are attached to, never edited, which is what makes
   re-importing the same playbook create nothing the second time.
+- **A merged client's name is an alias.** A client of that name that was never merged still wins;
+  otherwise the name resolves to the client it was merged into — one hop, because merging a
+  survivor retargets the earlier aliases — and the skip names that rule rather than the ordinary
+  one. New work is never created beneath a client whose portfolio was moved elsewhere.
 - **Receipts persist.** Every import writes an `import_receipts` row — counts created, skipped,
   and failed, with every reason — listed on the Import page after the modal closes and pruned to
   the most recent 50. A failed write rolls back; its receipt is written outside the transaction
@@ -568,7 +614,8 @@ Schedule `db:backup` the same way if you want unattended snapshots — same comm
 
 - Single local user; no collaboration, portals, permissions, billing, or time tracking
 - No automatic Drive-folder rename after local name edits
-- Clients can only be archived; there is no client delete. Projects and tasks delete permanently from SQLite with no in-app undo — recover from a database backup
+- Clients can only be archived; there is no client delete. Merging one client into another archives the source rather than removing it, and cannot be undone or unmerged in the app. Projects and tasks delete permanently from SQLite with no in-app undo — recover from a database backup
+- A merge moves one client at a time and never combines contact fields, notes, or same-named projects; it also moves no Drive folder, so a merged client's folder stays beside the survivor's in Drive
 - **Sync to Folder** provisions folder skeletons only; there is no file-level Drive sync, and nothing is uploaded, downloaded, or mirrored
 - Google shared-drive-specific controls are not exposed
 - The file browser is read-only by decision, not by omission: it lists and opens, and there is no upload, download, move, rename, or delete in the UI or in the API surface behind it. A project is browsable only at its own Drive folder and the subfolders provisioning recorded for it; anything deeper opens in Drive

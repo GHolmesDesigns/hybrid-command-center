@@ -17,6 +17,18 @@ CREATE TABLE IF NOT EXISTS clients (
   drive_folder_url TEXT, drive_status TEXT NOT NULL DEFAULT 'DISCONNECTED', drive_error TEXT,
   created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
+-- One row per client that was merged into another. Clients are archive-only, so a merge never
+-- deletes the source: it archives it and records the survivor here, which is what lets a later
+-- playbook import resolve the old client's name to the client that now owns its work. The
+-- primary key is the source, so a client can be merged away exactly once; when a survivor is
+-- itself merged, the earlier rows are retargeted in the same transaction, keeping every alias
+-- one hop from its current survivor rather than the head of a chain.
+CREATE TABLE IF NOT EXISTS client_merges (
+  source_client_id TEXT PRIMARY KEY REFERENCES clients(id),
+  surviving_client_id TEXT NOT NULL REFERENCES clients(id),
+  merged_at TEXT NOT NULL,
+  CHECK(source_client_id <> surviving_client_id)
+);
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY, client_id TEXT NOT NULL REFERENCES clients(id), name TEXT NOT NULL, description TEXT,
   status TEXT NOT NULL DEFAULT 'ACTIVE', start_date TEXT, target_deadline TEXT, priority TEXT NOT NULL DEFAULT 'MEDIUM',
@@ -117,6 +129,9 @@ CREATE TABLE IF NOT EXISTS signal_publication_targets (
  */
 const indexSchema = `
 CREATE INDEX IF NOT EXISTS idx_projects_client ON projects(client_id);
+-- Retargeting a merge reads every alias pointing at the client being merged away, and the
+-- client list joins the survivor of each one.
+CREATE INDEX IF NOT EXISTS idx_client_merges_surviving ON client_merges(surviving_client_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_project_status ON tasks(project_id, status);
 CREATE INDEX IF NOT EXISTS idx_tasks_due_open ON tasks(due_date) WHERE status <> 'COMPLETE';
 CREATE INDEX IF NOT EXISTS idx_checklist_task ON checklist_items(task_id, position);

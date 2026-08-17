@@ -207,6 +207,7 @@ describe('additive schema migration', () => {
         'integration_events',
         'signal_publications',
         'signal_publication_targets',
+        'client_merges',
       ]),
     );
     // The integration activity log arrives empty: a migration invents no history.
@@ -215,6 +216,8 @@ describe('additive schema migration', () => {
     expect(rows(db, 'SELECT COUNT(*) AS total FROM signal_publication_targets')).toEqual([
       { total: 0 },
     ]);
+    // Merge aliases arrive empty too: an upgrade never claims a client was merged.
+    expect(rows(db, 'SELECT COUNT(*) AS total FROM client_merges')).toEqual([{ total: 0 }]);
   });
 
   it('adds the media join to a populated Signal database without changing existing posts', () => {

@@ -185,7 +185,16 @@ export function readWorkspace(db: Db): WorkspaceSnapshot {
     taskPosition[row.status] = row.high ?? -1;
   const rows = <T>(sql: string) => db.prepare(sql).all() as unknown as T[];
   return {
-    clients: rows<WorkspaceClient>('SELECT id, name FROM clients'),
+    // The merge alias comes along with the name: a playbook naming a client that was merged
+    // away has to resolve to the client that now owns its work, not recreate work beneath the
+    // archived source. See `resolveClientName` in `server/domain/playbook.ts`.
+    clients: rows<{ id: string; name: string; mergedIntoId: string | null }>(
+      `SELECT c.id, c.name, m.surviving_client_id mergedIntoId
+       FROM clients c LEFT JOIN client_merges m ON m.source_client_id = c.id`,
+    ).map(({ mergedIntoId, ...client }): WorkspaceClient => ({
+      ...client,
+      ...(mergedIntoId ? { mergedIntoId } : {}),
+    })),
     projects: rows<WorkspaceProject>('SELECT id, client_id clientId, name FROM projects'),
     tasks: rows<WorkspaceTask>(
       'SELECT id, project_id projectId, title, due_date dueDate FROM tasks',

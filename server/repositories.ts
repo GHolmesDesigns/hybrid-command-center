@@ -11,8 +11,37 @@ const camel = (row: any) =>
     ]),
   );
 
+/**
+ * Every client, each carrying `mergedInto` when it was merged away.
+ *
+ * Two joins rather than a second query: `client_merges` for the alias this client is the source
+ * of, and `clients` again for the survivor's current name — the live name, not a snapshot, so
+ * renaming the surviving client renames it everywhere the merge is reported.
+ */
 export function listClients(db: Db) {
-  return (db.prepare('SELECT * FROM clients ORDER BY status, name').all() as any[]).map(camel);
+  return (
+    db
+      .prepare(
+        `SELECT c.*, m.surviving_client_id merged_into_id, m.merged_at merged_at,
+                s.name merged_into_name
+         FROM clients c
+         LEFT JOIN client_merges m ON m.source_client_id = c.id
+         LEFT JOIN clients s ON s.id = m.surviving_client_id
+         ORDER BY c.status, c.name`,
+      )
+      .all() as any[]
+  ).map((row): any => {
+    const {
+      merged_into_id: mergedIntoId,
+      merged_into_name: mergedIntoName,
+      merged_at: mergedAt,
+      ...client
+    } = row;
+    return {
+      ...camel(client),
+      ...(mergedIntoId ? { mergedInto: { id: mergedIntoId, name: mergedIntoName, mergedAt } } : {}),
+    };
+  });
 }
 /**
  * Every project's categories, grouped by project id, in one statement — so listing
