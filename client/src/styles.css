@@ -3299,6 +3299,28 @@ button.tag-chip.toggle.active {
   width: 10px;
   height: 10px;
 }
+.signal-x-link-warning {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 4px;
+  color: #8d601c;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.signal-x-link-warning svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+}
+.signal-editor-link-warning {
+  margin: -6px 0 0;
+  padding: 10px;
+  border: 1px solid #efd6ae;
+  border-radius: 8px;
+  background: #fff3df;
+  font-size: 12px;
+}
 .signal-loading {
   display: flex;
   align-items: center;

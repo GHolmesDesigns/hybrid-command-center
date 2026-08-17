@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
+  AlertTriangle,
   ArrowDown,
   ArrowUp,
   CalendarClock,
@@ -28,6 +29,7 @@ import {
   SIGNAL_STATUSES,
   isSignalDate,
   signalMediaKind,
+  signalTextHasLink,
   type SignalChannel,
   type SignalCta,
   type SignalFormat,
@@ -157,6 +159,9 @@ function PostMeta({ post }: { post: SignalPost }) {
   );
 }
 
+const X_LINK_WARNING =
+  'X removes links from the post body. Move this link to a reply before publishing.';
+
 /**
  * Editing and expanding are siblings, never nested: a control inside the edit button would be
  * invalid markup and would never receive its own click.
@@ -174,6 +179,7 @@ function Post({
   const [expanded, setExpanded] = useState(false);
   const textId = useId();
   const trimmed = preview && isTrimmed(post.text);
+  const warnsAboutXLink = post.channels.includes('x') && signalTextHasLink(post.text);
 
   return (
     <div className={`signal-post ${expanded ? 'is-expanded' : ''}`}>
@@ -195,6 +201,11 @@ function Post({
             </span>
           )}
         </span>
+        {warnsAboutXLink && (
+          <span className="signal-x-link-warning">
+            <AlertTriangle aria-hidden="true" /> {X_LINK_WARNING}
+          </span>
+        )}
       </button>
       {trimmed && (
         <button
@@ -232,6 +243,7 @@ function Editor({
   const textRef = useRef<HTMLTextAreaElement>(null);
   const hasUnsavedChanges = JSON.stringify(draft) !== JSON.stringify(draftFor(post));
   const hasPublishableChannel = post.channels.some((channel) => channel !== 'blog');
+  const warnsAboutXLink = draft.channels.includes('x') && signalTextHasLink(draft.text);
 
   useEffect(() => {
     textRef.current?.focus();
@@ -424,6 +436,11 @@ function Editor({
               required
             />
           </label>
+          {warnsAboutXLink && (
+            <p className="signal-x-link-warning signal-editor-link-warning" role="status">
+              <AlertTriangle aria-hidden="true" /> {X_LINK_WARNING}
+            </p>
+          )}
           <fieldset className="signal-channel-fieldset">
             <legend>Channels</legend>
             <div>

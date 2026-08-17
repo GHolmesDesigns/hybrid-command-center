@@ -142,6 +142,42 @@ describe('Signal planner', () => {
     expect(screen.queryByText('Not in this month')).not.toBeInTheDocument();
   });
 
+  it('warns on every planner surface when X-bound copy carries a link without rewriting it', async () => {
+    const warning =
+      'X removes links from the post body. Move this link to a reply before publishing.';
+    testState.signalPostsPayload = [
+      signalPost('queued-link', 'Queue link: gholmesdesigns.com', null, { channels: ['x'] }),
+      signalPost('scheduled-link', 'Scheduled link: foo.io/path', '2026-09-14', {
+        channels: ['x'],
+      }),
+      signalPost('other-channel', 'LinkedIn link: gholmesdesigns.com', '2026-09-15', {
+        channels: ['li'],
+      }),
+    ];
+    await openSignal();
+
+    const queue = screen.getByRole('complementary', { name: 'Unscheduled queue' });
+    expect(within(queue).getByText(warning)).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('region', { name: '2026-09-14' })).getByText(warning),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('region', { name: '2026-09-15' })).queryByText(warning),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(
+      within(screen.getByRole('region', { name: '2026-09-14' })).getByRole('button', {
+        name: 'Edit Scheduled link: foo.io/path',
+      }),
+    );
+    expect(screen.getByRole('status')).toHaveTextContent(warning);
+    expect(screen.getByLabelText('Content')).toHaveValue('Scheduled link: foo.io/path');
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'X' }));
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Content')).toHaveValue('Scheduled link: foo.io/path');
+  });
+
   it('shows media count and saves an explicit media reorder from the editor', async () => {
     const first = 'https://cdn.example.com/first.jpg';
     const second = 'https://cdn.example.com/second.mp4';

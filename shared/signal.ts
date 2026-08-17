@@ -40,6 +40,81 @@ export type SignalMediaKind = (typeof SIGNAL_MEDIA_KINDS)[number];
 const SIGNAL_VIDEO_EXTENSION = /\.(mp4|mov|m4v|webm|avi|mkv)$/i;
 const SIGNAL_PDF_EXTENSION = /\.pdf$/i;
 const SIGNAL_IMAGE_EXTENSION = /\.(png|jpe?g|gif|webp|bmp|tiff?)$/i;
+const SIGNAL_LINK_TLDS = [
+  'com',
+  'net',
+  'org',
+  'io',
+  'co',
+  'ai',
+  'app',
+  'dev',
+  'me',
+  'us',
+  'uk',
+  'ca',
+  'au',
+  'de',
+  'fr',
+  'nl',
+  'es',
+  'it',
+  'design',
+  'studio',
+  'video',
+  'agency',
+  'xyz',
+  'info',
+  'biz',
+  'tv',
+  'fm',
+  'link',
+  'page',
+  'site',
+  'online',
+  'store',
+  'shop',
+  'blog',
+  'news',
+  'media',
+  'digital',
+  'email',
+  'live',
+  'life',
+  'world',
+  'tech',
+  'space',
+  'cloud',
+  'club',
+  'art',
+  'photo',
+  'pics',
+  'gallery',
+  'film',
+  'productions',
+  'production',
+  'works',
+  'group',
+  'team',
+  'company',
+  'solutions',
+  'services',
+  'consulting',
+  'marketing',
+  'social',
+].join('|');
+const SIGNAL_LINK_PATTERN = new RegExp(
+  `(?:https?:\\/\\/|www\\.)[^\\s<>()]+|(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+(?:${SIGNAL_LINK_TLDS})\\b(?:\\/[^\\s<>()]*)?`,
+  'i',
+);
+
+/**
+ * Whether text carries a link that X will remove from the post body.
+ *
+ * The TLD anchor is deliberate: it catches bare domains without treating abbreviations and
+ * decimals as links. This detects only; callers warn and never rewrite the post.
+ */
+export const signalTextHasLink = (text: string): boolean => SIGNAL_LINK_PATTERN.test(text);
 
 /**
  * Classifies a media reference from its pathname alone, matching the proven publisher artifact.
