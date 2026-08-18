@@ -52,6 +52,6 @@ describe('App', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Project Status' })).toBeVisible();
     expect(screen.getByLabelText('Current location')).toHaveTextContent('/status?filter=today');
-    expect(screen.getByLabelText('Focus')).toHaveValue('today');
+    expect(screen.getByRole('checkbox', { name: 'Due today' })).toBeChecked();
   });
 });

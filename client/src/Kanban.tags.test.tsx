@@ -70,9 +70,8 @@ describe('Board tag filtering and search', () => {
     expect(cardTitles()).toEqual(['Recap post', 'Deck refresh']);
 
     // Every seeded task is MEDIUM, so the two filters together can only be empty.
-    fireEvent.change(screen.getByRole('combobox', { name: 'Priority' }), {
-      target: { value: 'URGENT' },
-    });
+    fireEvent.click(screen.getByRole('button', { name: /^Priority:/ }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'URGENT' }));
     expect(cardTitles()).toEqual([]);
   });
 
