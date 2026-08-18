@@ -5,7 +5,15 @@ test('a scheduled Signal post is previewed and explicitly confirmed before submi
 }) => {
   const text = `Wave 4 publishing ${Date.now()}`;
   const created = await page.request.post('/api/signal/posts', {
-    data: { text, channels: ['x'], date: '2099-09-14', time: '09:00', status: 'SCHEDULED' },
+    // `blog` rides along so the preview has to report a channel no provider reaches beside one
+    // that resolves, which is the whole point of reporting per channel.
+    data: {
+      text,
+      channels: ['x', 'blog'],
+      date: '2099-09-14',
+      time: '09:00',
+      status: 'SCHEDULED',
+    },
   });
   expect(created.ok()).toBe(true);
 
@@ -20,7 +28,8 @@ test('a scheduled Signal post is previewed and explicitly confirmed before submi
   const preview = editor.getByRole('region', { name: 'Publish confirmation' });
   await expect(preview).toContainText('America/New_York');
   await expect(preview).toContainText('2099-09-14T13:00:00.000Z');
-  await expect(preview).toContainText('X → @gholmes');
+  await expect(preview).toContainText('X → @gholmes · Ready to send');
+  await expect(preview).toContainText('Blog · Not available from this provider');
 
   // Nothing has been submitted while the preview is merely open.
   const before = await page.request.get(

@@ -268,6 +268,28 @@ describe('Signal planner', () => {
       scheduledInstant: '2026-09-14T13:00:00.000Z',
       timezone: 'America/New_York',
       targets: [{ channel: 'x', platform: 'twitter', accountId: 4, handle: '@gholmes' }],
+      channels: [
+        {
+          channel: 'x',
+          platform: 'twitter',
+          kind: 'POST',
+          status: 'READY',
+          accountId: 4,
+          handle: '@gholmes',
+          refusals: [],
+          warnings: [],
+        },
+        {
+          channel: 'blog',
+          platform: null,
+          kind: 'POST',
+          status: 'NOT_AVAILABLE',
+          refusals: [],
+          warnings: [
+            'Blog is not available from this provider. Publish it yourself and mark the post published.',
+          ],
+        },
+      ],
       warnings: [],
       refusals: [],
     };
@@ -290,7 +312,12 @@ describe('Signal planner', () => {
     expect(await screen.findByRole('region', { name: 'Publish confirmation' })).toHaveTextContent(
       'America/New_York',
     );
-    expect(screen.getByText('X → @gholmes')).toBeInTheDocument();
+    // Each channel reports beside the account it resolved to, and the one no provider reaches
+    // says so by name rather than going missing from the preview.
+    const confirmation = await screen.findByRole('region', { name: 'Publish confirmation' });
+    expect(confirmation).toHaveTextContent('X → @gholmes · Ready to send');
+    expect(confirmation).toHaveTextContent('Blog · Not available from this provider');
+    expect(confirmation).toHaveTextContent('Blog is not available from this provider.');
     fireEvent.click(screen.getByRole('button', { name: 'Confirm and submit' }));
     await waitFor(() =>
       expect(

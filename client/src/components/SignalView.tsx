@@ -46,7 +46,12 @@ import { signalChannelStyle } from './ui-shared';
 import { Empty } from './Primitives';
 import { Select } from './FormControls';
 import { PageHead } from './Shell';
-import type { PublishPreview, SignalPublication } from '../../../shared/publish';
+import {
+  publishPreviewRefusals,
+  PUBLISH_CHANNEL_STATUS_LABEL,
+  type PublishPreview,
+  type SignalPublication,
+} from '../../../shared/publish';
 
 type SignalRange = {
   from: string;
@@ -294,7 +299,7 @@ function Editor({
   };
 
   const confirmPublish = async () => {
-    if (!publishPreview || publishPreview.refusals.length) return;
+    if (!publishPreview || publishPreviewRefusals(publishPreview).length) return;
     setBusy(true);
     setError('');
     try {
@@ -649,10 +654,27 @@ function Editor({
                 </p>
               )}
               <p>{publishPreview.caption}</p>
-              <ul>
-                {publishPreview.targets.map((target) => (
-                  <li key={`${target.channel}-${target.accountId}`}>
-                    {SIGNAL_CHANNEL_LABEL[target.channel]} → {target.handle}
+              {/* One block per channel: what it resolved to, and what that account refuses or
+                  warns about. Kept per channel rather than one merged list so a limit is read
+                  beside the account it belongs to. */}
+              <ul className="signal-publish-channels">
+                {publishPreview.channels.map((report) => (
+                  <li key={report.channel} className={`channel-${report.status.toLowerCase()}`}>
+                    <p>
+                      <strong>{SIGNAL_CHANNEL_LABEL[report.channel]}</strong>
+                      {report.handle ? ` → ${report.handle}` : ''} ·{' '}
+                      {PUBLISH_CHANNEL_STATUS_LABEL[report.status]}
+                    </p>
+                    {report.refusals.map((refusal) => (
+                      <p className="form-error" key={refusal}>
+                        {refusal}
+                      </p>
+                    ))}
+                    {report.warnings.map((warning) => (
+                      <p className="form-warning" key={warning}>
+                        {warning}
+                      </p>
+                    ))}
                   </li>
                 ))}
               </ul>
@@ -674,7 +696,7 @@ function Editor({
                   type="button"
                   className="submit"
                   onClick={confirmPublish}
-                  disabled={busy || publishPreview.refusals.length > 0}
+                  disabled={busy || publishPreviewRefusals(publishPreview).length > 0}
                 >
                   Confirm and submit
                 </button>

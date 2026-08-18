@@ -3457,6 +3457,37 @@ button.tag-chip.toggle.active {
   background: #fff3df;
   font-size: 12px;
 }
+/* One block per channel in the publish preview. The status word carries the meaning and the
+   left edge only repeats it, so the three states stay apart with colour turned off. */
+.signal-publish-channels {
+  list-style: none;
+  margin: 10px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.signal-publish-channels li {
+  border-left: 3px solid var(--line);
+  padding: 2px 0 2px 10px;
+  font-size: 12px;
+}
+.signal-publish-channels li p {
+  margin: 0 0 2px;
+}
+.signal-publish-channels li.channel-ready {
+  border-left-color: var(--green);
+}
+.signal-publish-channels li.channel-blocked {
+  border-left-color: var(--red);
+}
+.signal-publish-channels li.channel-not_available {
+  border-left-color: var(--amber);
+}
+.form-warning {
+  color: #8d601c;
+  font-size: 12px;
+}
 .signal-loading {
   display: flex;
   align-items: center;
