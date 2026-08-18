@@ -894,10 +894,20 @@ Publishing is optional. Add both `POST_BRIDGE_API_KEY` and an explicit IANA `PUB
 (for example, `America/New_York`) to `.env`, then restart. The API key stays on the server and is
 never returned to the browser or written to the database or activity log.
 
-To publish, save the scheduled Signal post first, choose **Preview publishing**, and review every
-resolved account, warning, caption, local configured-zone time, and UTC instant. A refusal must be
-fixed before **Confirm and submit** becomes available. A result marked **UNCONFIRMED** is never
-retried automatically; inspect Post Bridge before taking another action to avoid a duplicate.
+To publish, save the scheduled Signal post first, choose **Preview publishing**, and review the
+caption, the local configured-zone time, and the UTC instant, then read each channel in turn. Every
+channel on the post gets its own block naming the account it resolved to and its own state:
+**Ready to send**, **Blocked**, or **Not available from this provider**. Blog is always the last of
+these — no provider publishes to a blog, so post it yourself and mark the post published.
+
+Warnings and refusals sit with the channel they belong to, because a limit is rarely true of a post
+as a whole: a caption over 280 characters blocks X and is fine on LinkedIn. A refusal says what has
+to change — how many media items to remove, what media to add, or which format the platform will not
+take — and every refusal must be fixed before **Confirm and submit** becomes available. What the
+preview checks is what can be known without sending: it cannot tell whether a video is corrupt,
+whether a link will still resolve when Post Bridge fetches it, or what an extensionless URL points
+at, and it says so rather than guessing. A result marked **UNCONFIRMED** is never retried
+automatically; inspect Post Bridge before taking another action to avoid a duplicate.
 
 Delivery state does not change the Signal status. After a delivery is confirmed, **Mark published**
 is an explicit user action. Deleting a post with a live provider submission cancels it first;

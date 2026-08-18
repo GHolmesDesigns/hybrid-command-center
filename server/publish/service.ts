@@ -3,10 +3,11 @@ import type { Db } from '../db.ts';
 import { transaction } from '../db.ts';
 import { recordIntegrationEvent, redactSecrets } from '../integration-log.ts';
 import type { SignalProvider } from '../signal/provider.ts';
-import type { SignalPublication } from '../../shared/publish.ts';
+import type { PublishPreview, SignalPublication } from '../../shared/publish.ts';
+import { publishPreviewRefusals } from '../../shared/publish.ts';
 import type { SignalChannel } from '../../shared/signal.ts';
 import { buildPublishPlan } from './plan.ts';
-import { PublishProviderError, type PublishProvider } from './provider.ts';
+import { PublishProviderError, type PublishProvider, type PublishRequest } from './provider.ts';
 
 interface PublicationRow {
   id: string;
@@ -67,7 +68,7 @@ export class PublishService {
     this.clock = clock;
   }
 
-  async preview(postId: string) {
+  async preview(postId: string): Promise<PublishPreview & { request?: PublishRequest }> {
     if (!this.provider.available || !this.timezone)
       return {
         available: false,
@@ -75,6 +76,7 @@ export class PublishService {
         planHash: '',
         caption: '',
         targets: [],
+        channels: [],
         warnings: [],
         refusals: ['Publishing needs POST_BRIDGE_API_KEY and PUBLISH_TIMEZONE.'],
       };
@@ -88,6 +90,7 @@ export class PublishService {
         planHash: '',
         caption: '',
         targets: [],
+        channels: [],
         warnings: [],
         refusals: ['An unscheduled post has no publishing instant.'],
       };
@@ -100,8 +103,11 @@ export class PublishService {
 
   async submit(postId: string, expectedHash: string): Promise<SignalPublication> {
     const plan = await this.preview(postId);
-    if (!plan.available || plan.refusals.length || !('request' in plan) || !plan.request)
-      throw new PublishRequestError(plan.refusals.join(' ') || 'Publishing is unavailable.', 400);
+    // The gate is every refusal in the plan, per-channel ones included, so a reason the preview
+    // showed the user can never be stepped over at commit.
+    const blockers = publishPreviewRefusals(plan);
+    if (!plan.available || blockers.length || !plan.request)
+      throw new PublishRequestError(blockers.join(' ') || 'Publishing is unavailable.', 400);
     const request = plan.request;
     if (plan.planHash !== expectedHash)
       throw new PublishRequestError(

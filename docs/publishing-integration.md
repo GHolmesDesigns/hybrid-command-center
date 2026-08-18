@@ -141,15 +141,68 @@ place, the first publisher can plan all **seven** Signal social channels:
 | `blog` | *(none)* | never published; see §10 |
 
 The planner carries the artifact's complete platform capability table and preflight rules rather
-than treating media as present-or-absent. Caption limits, media minimums and maximums,
-`videoOnly`, `videoAloneOnly`, `noVideo`, and `stripsLinks` are database-free rules in `plan.ts`.
-An over-limit caption blocks `twitter` and `bluesky` and warns elsewhere. **Post Bridge requires a
-caption on every submission, including media-only platform formats**, so an empty effective
-caption is always a refusal even when the target platform visually emphasizes only the media.
+than treating media as present-or-absent. That table is `shared/publish-capabilities.ts` and §3.2
+below is its contract. An over-limit caption blocks `twitter` and `bluesky` and warns elsewhere.
+**Post Bridge requires a caption on every submission, including media-only platform formats**, so
+an empty effective caption is always a refusal even when the target platform visually emphasizes
+only the media — a provider-wide rule, which is why it is a plan-level refusal in `plan.ts` rather
+than a field on a platform.
 
 Post Bridge also reaches `pinterest`, `threads`, and `google_business`. Signal has no channel for
 them and the mapping is not extended to invent one — a channel exists because content is planned
-for it, not because a provider supports it.
+for it, not because a provider supports it. The capability table still answers for all ten, because
+the contract is about what the provider can do and a channel is about what is planned.
+
+### 3.2 The supported contract
+
+**One definition, in `shared/publish-capabilities.ts`, and no second copy.** The table used to live
+in `server/publish/plan.ts` where the UI could not see it, so anything the composer needed to know
+about a platform was a server round-trip or a re-implementation of the rules in React. It is now in
+`shared/`, which is what lets a limit the server refuses on be a limit the form can show.
+
+What the contract answers for each platform:
+
+| Dimension | Shape | Notes |
+| --- | --- | --- |
+| Caption limit | `captionMax`, `captionOverLimitRefuses` | Over-limit refuses on X and Bluesky, warns elsewhere |
+| Media bounds | `kinds[kind].media.min` / `.max` | `max: null` where the source records no ceiling |
+| Media combinations | `.media.video`, `.media.pdf` | `WITH_OTHERS`, `ALONE_ONLY`, `REQUIRED_ALONE`, `FORBIDDEN`; `DOCUMENT_POST`, `DROPPED`, `FORBIDDEN` |
+| Post shapes | `kinds.POST` / `.CAROUSEL` / `.REEL` / `.STORY` | Every platform answers for all four |
+| Automatic vs manual finish | `automatic`, `manualFinish` | Both false is the shape refusing; TikTok is the one platform reachable both ways |
+| Platform content override | `platformContentOverride` | `platform_configurations`, per platform |
+| Account content override | `accountContentOverride` | False everywhere: tailoring is per platform, so two accounts on one platform get identical text |
+| First comments | `firstComment` | X only |
+| Titles and descriptions | `title`, `description` | YouTube's title is separate and capped at 100; LinkedIn's is a document title and applies only to a PDF |
+| Cover images and thumbnails | `coverImage`, `thumbnail` | False everywhere; the platform picks its own, and a reel says so in the preview |
+| Synthetic-media disclosure | `syntheticMediaDisclosure` | `IN_CAPTION` everywhere: no provider flag exists, so a disclosure is written into the caption |
+| Provider drafts | `providerDraft` | False everywhere; submitting an existing Post Bridge draft is broken upstream (§4) |
+
+A submission's **shape** comes from the post's format, not from its media: `CAROUSEL`, `REEL`, and
+`STORY` map to their own shapes and every other `SignalFormat` submits as a standard post. This is
+what makes "Instagram accepts this" answerable — a carousel, a reel, and a story have different
+media bounds, and a story shows no caption at all, which preflight warns about rather than
+discovering after the text is gone.
+
+**Unknown fails closed.** Every field on `PublishPlatformCapability` is required, so a platform
+cannot be added while leaving a question unanswered. Where the source records no answer the entry
+refuses: a shape with neither delivery route, a media kind marked `FORBIDDEN`, a field marked
+unsupported. A channel whose platform the table does not carry is refused by name and cannot be
+sent, and a channel mapped to no platform at all is a different answer — see §10.
+
+**Preflight reports per target account.** `PublishPreview.channels` carries one
+`PublishChannelReport` per channel on the post: the platform, the shape, the resolved account, and
+that account's own refusals and warnings. Only reasons true of the whole submission — no caption, no
+publishing instant, an instant in the past, a post already marked published — stay on the preview
+itself. A refusal names what has to change, with the number to remove or the media to add, because a
+preview that says a post is wrong without saying how is a preview the user has to guess at.
+`publishPreviewRefusals` is the gate on sending, so a reason shown in the preview cannot be stepped
+over at commit.
+
+**No provider call happens during preflight.** The whole preview is answered from this table and the
+post, which is what lets it be honest without touching Post Bridge. What it cannot know is named
+rather than pretended away: whether a video is corrupt, whether a URL will 404 when the provider
+fetches it, and whether an extensionless URL is an image or a video — the last of these is reported
+as a warning rather than assumed either way.
 
 ### 3.1 The Facebook account rule
 
@@ -171,9 +224,13 @@ pages.
   Bridge. Nothing outside it imports the vendor's vocabulary.
 - `mock-provider.ts` — what every automated test runs against. No test reaches the real API, for
   the same reason no test reaches real Drive.
-- `plan.ts` — database-free rules: channel mapping, the instant conversion (§5), refusal reasons,
-  and the preview. The same function builds the preview and the commit, which is the importer's
-  rule and the reason an import cannot promise one thing and do another.
+- `plan.ts` — database-free rules: the instant conversion (§5), the preflight that turns the
+  capability contract into refusal reasons, target resolution, and the preview. The same function
+  builds the preview and the commit, which is the importer's rule and the reason an import cannot
+  promise one thing and do another.
+- `shared/publish-capabilities.ts` — outside `server/publish/` on purpose. The channel-to-platform
+  map and the platform capability table are the one definition of what a provider will accept, and
+  the composer reads it rather than keeping a second copy of the rules in React (§3.2).
 - `service.ts` — the only code that calls `submit`, the only code that writes the publication
   tables, and the only code that writes `integration_events` for a publish.
 
@@ -470,7 +527,10 @@ syncs") and nothing else. Absence of a documented limit is not absence of a limi
 mapped to something approximate:
 
 - A post targeting `blog` **and** publishable channels publishes to the others and reports `blog`
-  as not sent, by name, in the preview and in the summary afterwards.
+  as not sent, by name, in the preview and in the summary afterwards. The contract says this
+  explicitly rather than by omission: `blog` maps to `null`, its channel report reads **Not
+  available from this provider**, and it carries no refusal — a channel the table has no answer for
+  is a different state, `BLOCKED`, and it refuses (§3.2).
 - A post targeting **only** `blog` has no publish control at all — there is nothing to send it to.
 - `blog` is where `SignalStatus.PUBLISHED` keeps doing its original job unassisted: the user posts
   it themselves and marks it published. The two meanings in §6 are not a transitional awkwardness;
@@ -581,3 +641,6 @@ second provider inside this app.
       the publisher writes neither of them onto the post — §6.
 - [x] Reconciled with the working artifact and signed off before the Version 5 implementation cards
       are opened against FR7 publishing — C46 (#148).
+- [x] One shared capability contract, outside React, answering every dimension for every platform,
+      failing closed on anything it does not record, and reporting refusals and warnings per target
+      account without a provider call — §3.2, C61 (#188).
