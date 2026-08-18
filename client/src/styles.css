@@ -1777,11 +1777,26 @@ button.tag-chip.toggle.active {
   background: #fafaf8;
   color: #555;
 }
+/* Two column stacks, not a grid of cards. The grid places the stacks; each stack places its
+   own cards. A card in a shared row track takes its starting edge from the tallest card beside
+   it, which is how a growing Drive card or a wrapping category list used to open a gap above the
+   card next to it. `align-items: start` stays because it is still what keeps a stack from being
+   stretched to its neighbour's height, and `e2e/settings-card-height.spec.ts` guards the
+   card-sizing half of that. */
 .settings-layout {
   display: grid;
   grid-template-columns: 1.4fr 1fr;
   gap: 18px;
   align-items: start;
+}
+.settings-column {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  /* A flex item's floor is its content, and this stack holds long unbroken values — a logo
+     address, a Drive folder id. Without this the stack refuses to be narrower than the widest
+     of them and pushes the other column out of the viewport. */
+  min-width: 0;
 }
 .settings-icon {
   width: 44px;
@@ -2606,6 +2621,8 @@ button.tag-chip.toggle.active {
   .span2 {
     grid-column: auto;
   }
+  /* One column: the two stacks sit one under the other, separated by the same 18px they
+     separate their own cards by, so the six cards read as one stack in DOM order. */
   .settings-layout {
     grid-template-columns: 1fr;
   }
