@@ -27,7 +27,7 @@ const mixedGrid: Project[] = PROJECT_STATUSES.map((status, index) =>
 const renderGrid = async () => {
   testState.projectsPayload = mixedGrid;
   render(
-    <MemoryRouter initialEntries={['/projects']}>
+    <MemoryRouter initialEntries={['/projects?visibility=all']}>
       <App />
     </MemoryRouter>,
   );
