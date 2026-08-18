@@ -8,6 +8,62 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [4.3.1] - 2026-08-18
+
+### Added
+
+- **One post can now read differently on every channel.** Signal's editor has a **Per-platform
+  content** section with a panel for each platform the post's channels reach. A platform starts from
+  the post and keeps only what you change: a short caption for X with the link as a first comment, a
+  longer one for LinkedIn, a real title for YouTube instead of the caption standing in for it. An
+  account override can sit over a platform's, edited from that account's own preview tab. Clearing a
+  field restores the post's own content rather than sending nothing.
+- **You are offered only the fields the provider will actually carry.** X has a first comment,
+  YouTube has a title, Instagram and Facebook have a story placement, and no platform offers a chosen
+  cover image or thumbnail because none accepts one. The same rule that hides a control refuses it if
+  it arrives another way, so the form and the API never disagree about what is possible.
+- **Per-platform media selection**, chosen from the media the post already carries and in the post's
+  order. Choosing none is allowed: that is a platform that receives the text alone.
+- **A synthetic-media disclosure** you can turn on per platform. No platform gives this provider a
+  disclosure field, so the disclosure is written into the caption — and the character count and the
+  caption limit are both measured against the caption you will actually send, so a disclosure that
+  pushes X past 280 characters is refused before the send rather than after.
+- **A preview that shows each target separately, and only when you ask for it.** **Show preview** is
+  the only thing that loads anything from the internet or contacts the provider. It opens with every
+  channel's verdict in one list, then one tab per target account: the exact text that account
+  receives, a note beside any value an override decided, the title and first comment, the media in
+  that target's order, the post's date and time in the configured zone beside the instant the
+  provider is given, whether the provider sends it or hands it to the platform's app to finish, and
+  that target's own warnings and refusals.
+- Preview media is shown small, because a preview is for checking the order and the crop. **A video
+  never starts on its own** — it takes a second, deliberate press and then arrives with ordinary
+  controls. Media that cannot be shown says so and still offers its address, rather than leaving a
+  gap.
+
+### Changed
+
+- Two limits the provider imposes are now stated as refusals rather than discovered afterwards. It
+  sends one set of media per submission, so channels given different media are refused and named;
+  and it carries one set of content per platform, so an account override is delivered as its
+  platform's content, which the preview says on the target it applies to.
+- A caption limit, a media count, and a post shape are now checked against what a platform will
+  actually receive rather than against the post, so an override that breaks a limit is caught in the
+  preview.
+- Media selected for a platform that the post no longer carries is left out and reported, never
+  silently sent.
+- Previewing is held back until per-platform content is saved, the same way it already waited for the
+  post itself. **Preview publishing** is now called **Show preview**.
+- Editing a platform's content between previewing and confirming refuses the confirmation, exactly as
+  editing the post already did.
+- The publishing preview renders media in your browser, so production responses now allow media from
+  an `https:` host — the same allowance a sidebar logo already had for images. Nothing is fetched by
+  the server: Command Center still never uploads, downloads, or proxies a media file, and responses
+  carry `Referrer-Policy: no-referrer` so a media host is never told which page asked for it.
+
+### Breaking changes
+
+None. A post with no per-platform content is planned, previewed, and submitted exactly as before.
+
 ## [4.3.0] - 2026-08-16
 
 ### Added

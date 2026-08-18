@@ -304,6 +304,23 @@ describe('Signal planner', () => {
           status: 'READY',
           accountId: 4,
           handle: '@gholmes',
+          content: {
+            caption: post.text,
+            mediaUrls: [],
+            postKind: 'POST',
+            discloseSyntheticMedia: false,
+            deliveryMode: 'AUTOMATIC',
+            sources: {
+              caption: 'BASE',
+              mediaUrls: 'BASE',
+              postKind: 'BASE',
+              title: 'BASE',
+              firstComment: 'BASE',
+              discloseSyntheticMedia: 'BASE',
+              coverImageUrl: 'BASE',
+              thumbnailUrl: 'BASE',
+            },
+          },
           refusals: [],
           warnings: [],
         },
@@ -336,7 +353,7 @@ describe('Signal planner', () => {
     };
     await openSignal();
     fireEvent.click(screen.getByRole('button', { name: 'Edit Preview this campaign post' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Preview publishing' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Show preview' }));
     expect(await screen.findByRole('region', { name: 'Publish confirmation' })).toHaveTextContent(
       'America/New_York',
     );
@@ -345,7 +362,11 @@ describe('Signal planner', () => {
     const confirmation = await screen.findByRole('region', { name: 'Publish confirmation' });
     expect(confirmation).toHaveTextContent('X → @gholmes · Ready to send');
     expect(confirmation).toHaveTextContent('Blog · Not available from this provider');
-    expect(confirmation).toHaveTextContent('Blog is not available from this provider.');
+    // The reason a channel gives is in that channel's own tab, beside what it would have received.
+    fireEvent.click(within(confirmation).getByRole('tab', { name: 'Blog' }));
+    expect(within(confirmation).getByRole('tabpanel')).toHaveTextContent(
+      'Blog is not available from this provider.',
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Confirm and submit' }));
     await waitFor(() =>
       expect(
@@ -362,7 +383,7 @@ describe('Signal planner', () => {
     ];
     await openSignal();
     fireEvent.click(screen.getByRole('button', { name: 'Edit Blog stays manual' }));
-    expect(screen.queryByRole('button', { name: 'Preview publishing' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Show preview' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Close editor' }));
     fireEvent.click(screen.getByRole('button', { name: 'Edit Save me first' }));
     fireEvent.change(screen.getByLabelText('Content'), { target: { value: 'Unsaved revision' } });

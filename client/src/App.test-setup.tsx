@@ -18,6 +18,7 @@ import type { IntegrationEvent } from '../../shared/integration-log';
 import type { CalendarRange } from '../../shared/calendar';
 import { SIGNAL_DEFAULT_TIME, type SignalPost } from '../../shared/signal';
 import type { PublishPreview, SignalPublication } from '../../shared/publish';
+import type { PublishVariantRecord } from '../../shared/publish-variants';
 
 export {
   DEFAULT_BRANDING,
@@ -177,6 +178,12 @@ export const testState = {
   publishSubmitPayload: null as SignalPublication | null,
   publishReconcilePayload: null as SignalPublication | null,
   /**
+   * The content overrides the composer reads and writes. Held as state rather than answered from a
+   * fixture, so a case can assert what a `PUT` stored the way the real route would.
+   */
+  signalVariantsPayload: [] as PublishVariantRecord[],
+  signalVariantsError: null as string | null,
+  /**
    * Client merge. Both routes are answered from the client and project state by default — the
    * stub plans the merge the way the server would, and a commit moves the projects, archives the
    * source, and records the alias — so a case only sets one of these to rehearse a refusal.
@@ -310,6 +317,13 @@ const respondTo = (url: string, init?: RequestInit) => {
     });
     testState.signalPostsPayload = [...testState.signalPostsPayload, created];
     return created;
+  }
+  const variantsPath = url.match(/\/api\/signal\/posts\/([^/?]+)\/variants$/);
+  if (variantsPath && method === 'GET') return testState.signalVariantsPayload;
+  if (variantsPath && method === 'PUT') {
+    if (testState.signalVariantsError) return reply(400, { error: testState.signalVariantsError });
+    testState.signalVariantsPayload = (body.variants ?? []) as PublishVariantRecord[];
+    return testState.signalVariantsPayload;
   }
   const publishPreviewPath = url.match(/\/api\/signal\/posts\/([^/?]+)\/publish\/preview$/);
   if (publishPreviewPath && method === 'POST')
@@ -712,6 +726,8 @@ beforeEach(() => {
   testState.publicationsPayload = [];
   testState.publishSubmitPayload = null;
   testState.publishReconcilePayload = null;
+  testState.signalVariantsPayload = [];
+  testState.signalVariantsError = null;
   testState.clientMergePreviewError = null;
   testState.clientMergeCommitError = null;
   requests.length = 0;

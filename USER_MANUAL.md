@@ -576,6 +576,7 @@ never opens the editor by accident. The editor can change:
 - Date and time
 - Format and status
 - Campaign and call to action
+- Per-platform content, when the post has a channel a provider reaches
 
 Clear the date, or use **Move to unscheduled queue**, to return a post to the queue. Giving a
 queued post a date schedules it in that month's grid. Saving reloads both views from the Signal
@@ -586,6 +587,38 @@ change its order, or the trash control to detach it from the post. The planner s
 count on the post. Command Center stores only those URL references: it never downloads, proxies,
 or inspects the file, so an extensionless link remains an unknown media kind until publishing
 preflight asks you to correct it.
+
+#### Per-platform content
+
+**Per-platform content** is under the post's own fields, with one collapsed panel per platform the
+post's channels reach. Each panel starts from the post above and keeps only what you change in it,
+so a caption written for LinkedIn does not have to be repeated for X.
+
+You are offered the fields the provider will actually carry for that platform, and no others. X has
+a caption and a **First comment** — a good home for a link X would otherwise strip out of the post
+body. YouTube has a caption and a **Title**, and setting one stops the caption standing in for it.
+Where a platform supports more than one shape, **Placement** chooses between them: a story on
+Instagram is exactly one image or video and carries no caption, and the preview says so before you
+send it. **Disclose AI-generated or altered media** adds a disclosure; because no platform gives this
+provider a field for one, it is written into the caption, and the character count you are shown
+includes it.
+
+Under **Media** you can either use the post's media or choose which of it this platform receives, in
+the post's order. You can only choose media the post already carries, and choosing none is allowed —
+that is a platform that gets the text alone.
+
+Two limits are worth knowing before you rely on them, because the provider rather than Command
+Center imposes them:
+
+- **Every channel in one submission gets the same media.** If you give two channels different
+  media, the preview refuses and names them; give them the same media or publish them separately.
+- **Content is per platform, not per account.** An override you make for one account is sent as that
+  platform's content. It reaches the right place because a platform must resolve to exactly one
+  account before anything can be sent to it, and the preview says so on the target it applies to.
+
+Overrides are saved with **Save per-platform content**, separately from the post. Previewing is held
+back until both are saved, because a preview of unsaved content is a preview of something that is not
+going out.
 
 **Delete** asks for confirmation and then removes a post that has no publication history
 permanently. There is no in-app undo; restore a database backup to recover it. A status of
@@ -894,11 +927,29 @@ Publishing is optional. Add both `POST_BRIDGE_API_KEY` and an explicit IANA `PUB
 (for example, `America/New_York`) to `.env`, then restart. The API key stays on the server and is
 never returned to the browser or written to the database or activity log.
 
-To publish, save the scheduled Signal post first, choose **Preview publishing**, and review the
-caption, the local configured-zone time, and the UTC instant, then read each channel in turn. Every
-channel on the post gets its own block naming the account it resolved to and its own state:
-**Ready to send**, **Blocked**, or **Not available from this provider**. Blog is always the last of
-these — no provider publishes to a blog, so post it yourself and mark the post published.
+To publish, save the scheduled Signal post and any per-platform content first, then choose
+**Show preview**. Nothing is fetched from the internet, and no provider is contacted, until you press
+it.
+
+The preview opens with every channel's state in one short list — **Ready to send**, **Blocked**, or
+**Not available from this provider** — with the account each one resolved to. Blog is always the last
+of these: no provider publishes to a blog, so post it yourself and mark the post published.
+
+Below that is one tab per target. Its tab shows the channel and the account, and its panel is
+everything that account receives: the exact text, a note beside any value that came from a platform
+or account override, the title and first comment, the media in the order that account gets it, the
+post's own date and time in the configured zone beside the instant the provider is given, whether the
+provider sends it or hands it to the platform's app for you to finish, and that target's own warnings
+and refusals. Move between tabs with the arrow keys or by clicking.
+
+Media in a panel is shown small, because a preview is for checking the order and the crop. An image
+loads with the preview. **A video never starts on its own**: press **Load this video** and it appears
+with ordinary controls. Media that cannot be shown says so and still gives you its address to open,
+which is the honest answer — Command Center never fetches these files on the server, so a preview
+cannot tell you more about one than your own browser can.
+
+You can also tailor content for one account from inside its tab, under **Override for … only**. Saving
+it re-checks the plan, because what you confirm has to be what you last looked at.
 
 Warnings and refusals sit with the channel they belong to, because a limit is rarely true of a post
 as a whole: a caption over 280 characters blocks X and is fine on LinkedIn. A refusal says what has

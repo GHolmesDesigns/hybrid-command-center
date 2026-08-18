@@ -12,12 +12,28 @@ import {
   type SignalPost,
 } from '../../shared/signal.ts';
 import {
+  listPostVariants,
   toSignalPost,
   toSignalPosts,
   channelsByPost,
   mediaByPost,
   type SignalPostRow,
 } from './rows.ts';
+import {
+  PUBLISH_PLATFORMS,
+  PUBLISH_POST_KINDS,
+  PUBLISH_POST_KIND_LABEL,
+  publishCapabilityFor,
+  publishKindSupported,
+} from '../../shared/publish-capabilities.ts';
+import {
+  normalizePublishVariant,
+  publishVariantFieldSupported,
+  publishVariantIsEmpty,
+  PUBLISH_VARIANT_FIELDS,
+  PUBLISH_VARIANT_FIELD_LABEL,
+  type PublishVariantRecord,
+} from '../../shared/publish-variants.ts';
 
 /**
  * Signal's writes, and the only place they live.
@@ -222,4 +238,166 @@ export function updatePost(db: Db, postId: string, patch: SignalPostPatch): Sign
 export function deletePost(db: Db, postId: string): void {
   const result = db.prepare('DELETE FROM signal_posts WHERE id=?').run(postId);
   if (result.changes === 0) throw new SignalPostNotFoundError(`No Signal post ${postId}.`);
+}
+
+/**
+ * Platform and account content overrides: validation, and the one write.
+ *
+ * The layers themselves are `shared/publish-variants.ts`; this is where a layer is checked against
+ * the provider capability contract and stored. The check is here as well as in the composer and in
+ * the publisher's preflight on purpose — a form that hides a field the API would take is a form one
+ * `curl` walks around, and a limit the API refuses that the form still offers is a limit the user
+ * meets after typing.
+ */
+
+/** A layer the contract will not carry, or a media selection the post does not have. */
+export class SignalVariantError extends Error {}
+
+const variantUrl = z
+  .string()
+  .trim()
+  .min(1)
+  .max(2048, 'A media URL is too long.')
+  .url('Use a valid media URL.')
+  .refine((value) => new URL(value).protocol === 'https:', 'Media URLs must use https.');
+
+/**
+ * One stored layer, structurally.
+ *
+ * The lengths here are outer bounds rather than the platform's own: a title's real limit is
+ * `capability.title.maxLength`, which differs per platform and is preflight's refusal to make with
+ * the platform named. What this schema refuses is a value no platform could ever take.
+ */
+const variantInput = z.object({
+  platform: z.enum(PUBLISH_PLATFORMS),
+  /** Null is the platform layer; a provider account id is that account's layer. */
+  accountId: z.number().int().positive('A provider account id is a positive number.').nullable(),
+  caption: z.string().max(20_000).optional(),
+  /** Absent inherits the post's media; `[]` is a platform that deliberately receives none. */
+  mediaUrls: z
+    .array(variantUrl)
+    .max(20, 'A platform can receive at most 20 media items.')
+    .optional(),
+  postKind: z.enum(PUBLISH_POST_KINDS).optional(),
+  title: z.string().max(500).optional(),
+  firstComment: z.string().max(20_000).optional(),
+  discloseSyntheticMedia: z.boolean().optional(),
+  coverImageUrl: variantUrl.optional(),
+  thumbnailUrl: variantUrl.optional(),
+});
+
+export const signalVariantsInput = z.object({
+  /** The whole set for the post: this is a replacement, not a patch. */
+  variants: z
+    .array(variantInput)
+    .max(PUBLISH_PLATFORMS.length * 4)
+    .default([]),
+});
+export type SignalVariantsInput = z.output<typeof signalVariantsInput>;
+
+/**
+ * Refuses a layer the platform's own capability entry does not accept.
+ *
+ * Fail-closed in the same direction the contract itself fails: an unanswered platform refuses
+ * rather than being stored against nothing, and a field the platform has no room for is named
+ * along with the platform, because "unsupported field" without either is a message the user cannot
+ * act on.
+ */
+function checkVariantAgainstContract(variant: PublishVariantRecord, postMedia: string[]): void {
+  const capability = publishCapabilityFor(variant.platform);
+  if (!capability)
+    throw new SignalVariantError(
+      `${variant.platform} is not answered by the provider capability contract, so no override can be stored for it.`,
+    );
+  for (const field of PUBLISH_VARIANT_FIELDS) {
+    if (variant[field] === undefined) continue;
+    if (publishVariantFieldSupported(field, capability)) continue;
+    throw new SignalVariantError(
+      `${capability.label} takes no ${PUBLISH_VARIANT_FIELD_LABEL[field].toLowerCase()} from this provider, so it cannot be overridden there.`,
+    );
+  }
+  if (variant.postKind && !publishKindSupported(capability.kinds[variant.postKind]))
+    throw new SignalVariantError(
+      `${capability.label} does not accept a ${PUBLISH_POST_KIND_LABEL[variant.postKind]} from this provider.`,
+    );
+  if (variant.mediaUrls) {
+    const unknown = variant.mediaUrls.find((url) => !postMedia.includes(url));
+    if (unknown)
+      throw new SignalVariantError(
+        'A platform can only be given media the post already carries. Add the URL to the post first.',
+      );
+    if (new Set(variant.mediaUrls).size !== variant.mediaUrls.length)
+      throw new SignalVariantError('A platform cannot receive the same media item twice.');
+  }
+}
+
+/**
+ * Replaces every layer on one post, in one transaction.
+ *
+ * A replacement rather than a patch, for the reason branding is: the composer holds the whole set
+ * while it is edited, and a half-applied set would leave a platform tailored by a request that was
+ * reported as having failed. An empty layer is dropped rather than stored — a row overriding nothing
+ * would make a platform read as tailored when it is not.
+ */
+export function replacePostVariants(
+  db: Db,
+  postId: string,
+  input: SignalVariantsInput,
+): PublishVariantRecord[] {
+  const post = getPost(db, postId);
+  if (!post) throw new SignalPostNotFoundError(`No Signal post ${postId}.`);
+  const seen = new Set<string>();
+  const layers = input.variants
+    .map((variant) => ({
+      platform: variant.platform,
+      accountId: variant.accountId,
+      ...normalizePublishVariant(variant),
+    }))
+    .filter((variant) => !publishVariantIsEmpty(variant));
+  for (const layer of layers) {
+    const key = `${layer.platform}:${layer.accountId ?? 'platform'}`;
+    if (seen.has(key))
+      throw new SignalVariantError('That platform and account was given two overrides at once.');
+    seen.add(key);
+    checkVariantAgainstContract(layer, post.mediaUrls);
+  }
+  const timestamp = now();
+  db.exec('BEGIN');
+  try {
+    db.prepare('DELETE FROM signal_post_variants WHERE post_id=?').run(postId);
+    const insert = db.prepare(
+      `INSERT INTO signal_post_variants(
+         post_id,platform,account_id,caption,media_urls,post_kind,title,first_comment,
+         disclose_synthetic_media,cover_image_url,thumbnail_url,updated_at
+       ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+    );
+    for (const layer of layers)
+      insert.run(
+        postId,
+        layer.platform,
+        layer.accountId,
+        layer.caption ?? null,
+        // Serialized rather than dropped when empty: `'[]'` is a platform that receives no media
+        // and NULL is one that inherits the post's, and the two must survive the round trip.
+        layer.mediaUrls ? JSON.stringify(layer.mediaUrls) : null,
+        layer.postKind ?? null,
+        layer.title ?? null,
+        layer.firstComment ?? null,
+        layer.discloseSyntheticMedia === undefined ? null : layer.discloseSyntheticMedia ? 1 : 0,
+        layer.coverImageUrl ?? null,
+        layer.thumbnailUrl ?? null,
+        timestamp,
+      );
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+  return listPostVariants(db, postId);
+}
+
+/** Every layer on a post, for the composer to edit. The publisher reads them through the provider. */
+export function getPostVariants(db: Db, postId: string): PublishVariantRecord[] {
+  if (!getPost(db, postId)) throw new SignalPostNotFoundError(`No Signal post ${postId}.`);
+  return listPostVariants(db, postId);
 }

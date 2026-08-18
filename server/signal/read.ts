@@ -1,7 +1,8 @@
 import type { Db } from '../db.ts';
 import { SIGNAL_RANGE_LIMIT } from '../../shared/signal.ts';
 import type { SignalProvider, SignalPostRange } from './provider.ts';
-import { toSignalPosts, type SignalPostRow } from './rows.ts';
+import type { PublishVariantRecord } from '../../shared/publish-variants.ts';
+import { listPostVariants, toSignalPosts, type SignalPostRow } from './rows.ts';
 
 /**
  * The read half of Signal, and the only half the calendar sees.
@@ -52,6 +53,9 @@ export class LocalSignalProvider implements SignalProvider {
   }
   async listPosts(input: { from: string; to: string }): Promise<SignalPostRange> {
     return listPostsInRange(this.db, input.from, input.to);
+  }
+  async listVariants(postId: string): Promise<PublishVariantRecord[]> {
+    return listPostVariants(this.db, postId);
   }
 }
 

@@ -3761,3 +3761,252 @@ button.tag-chip.toggle.active {
     grid-template-columns: 1fr;
   }
 }
+
+/* Per-platform content variants, in the composer. Each platform is a closed disclosure until it is
+   opened, so a post going to seven channels is still one readable form. */
+.signal-variants-fieldset {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.signal-variants-fieldset legend {
+  color: #58605c;
+  font-size: 11px;
+  font-weight: 600;
+}
+.signal-variants-fieldset > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.signal-variant-platform {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.signal-variant-platform > summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+.signal-variant-summary-state {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+.signal-variant-fields {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+.signal-variant-count {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+.signal-variant-check {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 7px;
+  font-size: 12px;
+}
+.signal-variant-check input {
+  width: auto;
+  margin: 0;
+}
+.signal-variant-url {
+  flex-basis: 100%;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 10px;
+}
+.signal-variant-media {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.signal-variant-media legend {
+  padding: 0 4px;
+  color: #58605c;
+  font-size: 11px;
+  font-weight: 600;
+}
+.signal-variant-media ol {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.signal-variant-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.signal-variant-account {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+}
+.signal-variant-account > summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+.signal-variant-account > p {
+  margin: 6px 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* The preview, one tab per target account. The selected tab is carried by its underline and its
+   weight as well as by colour, and the status colour on the left edge only repeats a word the
+   panel also prints. */
+.signal-preview-tabs {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0;
+}
+.signal-preview-tablist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+}
+.signal-preview-tablist button {
+  padding: 6px 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.signal-preview-tablist button[aria-selected='true'] {
+  border-bottom-color: var(--accent, #2f6f52);
+  color: var(--text);
+}
+.signal-preview-tablist button.channel-blocked {
+  color: #96322c;
+}
+.signal-preview-panel {
+  display: grid;
+  gap: 8px;
+}
+.signal-preview-panel h4 {
+  margin: 4px 0 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #58605c;
+}
+.signal-preview-verdict,
+.signal-preview-mode,
+.signal-preview-when,
+.signal-preview-field {
+  margin: 0;
+  font-size: 12px;
+}
+.signal-preview-when,
+.signal-preview-mode {
+  color: var(--muted);
+  font-size: 11px;
+}
+.signal-preview-caption {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface, #fff);
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.signal-preview-sources {
+  margin: 0;
+  padding-left: 16px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.signal-preview-media-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.signal-preview-media {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.signal-preview-media-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  font-size: 12px;
+}
+.signal-preview-media-head a {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+}
+.signal-preview-media-head svg,
+.signal-preview-media-fallback svg,
+.signal-preview-media-note svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+.signal-preview-media-url {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 10px;
+}
+/* Constrained rather than natural size: a preview is for checking the order and the crop, and a
+   full-resolution campaign image would push every other target's tab off the screen. */
+.signal-preview-thumb {
+  width: 100%;
+  max-width: 260px;
+  max-height: 180px;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f2f4f2;
+}
+.signal-preview-media-fallback,
+.signal-preview-media-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  margin: 0;
+  color: #8d601c;
+  font-size: 11px;
+}
+.signal-preview-media-note {
+  color: var(--muted);
+}
+.signal-variant-field {
+  display: grid;
+  gap: 2px;
+}

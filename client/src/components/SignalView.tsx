@@ -54,6 +54,9 @@ import {
   type PublishPreview,
   type SignalPublication,
 } from '../../../shared/publish';
+import type { PublishVariantRecord } from '../../../shared/publish-variants';
+import { PlatformVariantsEditor, PublishPreviewTabs } from './SignalVariants';
+import { previewPlatforms, variantList, variantMap } from './signal-variants';
 
 type SignalRange = {
   from: string;
@@ -267,9 +270,21 @@ function Editor({
   const [publishPreview, setPublishPreview] = useState<PublishPreview | null>(null);
   const [publications, setPublications] = useState<SignalPublication[]>([]);
   const [presetNotice, setPresetNotice] = useState('');
+  /**
+   * The content variants, twice: what the server holds and what the form is holding.
+   *
+   * Two copies rather than a dirty flag, because the preview is gated on them being identical and a
+   * boolean would have to be maintained by every edit path. Comparing the two says the same thing
+   * and cannot fall behind.
+   */
+  const [savedLayers, setSavedLayers] = useState(() => variantMap([]));
+  const [layers, setLayers] = useState(() => variantMap([]));
   const textRef = useRef<HTMLTextAreaElement>(null);
   const hasUnsavedChanges = JSON.stringify(draft) !== JSON.stringify(draftFor(post));
+  const hasUnsavedVariants =
+    JSON.stringify(variantList(layers)) !== JSON.stringify(variantList(savedLayers));
   const hasPublishableChannel = post.channels.some((channel) => channel !== 'blog');
+  const hasTailorablePlatform = previewPlatforms(post).length > 0;
   const warnsAboutXLink = draft.channels.includes('x') && signalTextHasLink(draft.text);
 
   useEffect(() => {
@@ -287,6 +302,45 @@ function Editor({
       .catch(() => setPublications([]));
   }, [post.id]);
 
+  /**
+   * The stored overrides, read as text and nothing else.
+   *
+   * This is the one request the editor makes on open besides the delivery history, and it touches
+   * no remote host: the layers are local rows, and the media addresses in them stay addresses until
+   * the preview is asked for.
+   */
+  useEffect(() => {
+    api<PublishVariantRecord[]>(`/signal/posts/${post.id}/variants`)
+      .then((stored) => {
+        setSavedLayers(variantMap(stored));
+        setLayers(variantMap(stored));
+      })
+      .catch(() => {
+        setSavedLayers(variantMap([]));
+        setLayers(variantMap([]));
+      });
+  }, [post.id]);
+
+  const saveVariants = async (): Promise<boolean> => {
+    setBusy(true);
+    setError('');
+    try {
+      const stored = await send<PublishVariantRecord[]>(
+        `/signal/posts/${post.id}/variants`,
+        'PUT',
+        { variants: variantList(layers) },
+      );
+      setSavedLayers(variantMap(stored));
+      setLayers(variantMap(stored));
+      return true;
+    } catch (reason) {
+      setError((reason as Error).message);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const previewPublish = async () => {
     setBusy(true);
     setError('');
@@ -299,6 +353,17 @@ function Editor({
     } finally {
       setBusy(false);
     }
+  };
+
+  /**
+   * An account override saved from inside the preview, and the preview re-run against it.
+   *
+   * Both halves are this one press: a stored override the open preview does not reflect would be a
+   * plan the user confirmed after looking at a different one, and the plan hash would refuse it at
+   * commit anyway — later and less clearly.
+   */
+  const saveAccountVariant = async () => {
+    if (await saveVariants()) await previewPublish();
   };
 
   const confirmPublish = async () => {
@@ -648,6 +713,18 @@ function Editor({
               onChange={(event) => setDraft({ ...draft, campaign: event.target.value })}
             />
           </label>
+          {/* Tailored from the post as it is saved, not as it is being typed: a platform override
+              of a caption that has not been written yet would be an override of nothing. */}
+          {hasTailorablePlatform && (
+            <PlatformVariantsEditor
+              post={post}
+              layers={layers}
+              onChange={setLayers}
+              onSave={() => void saveVariants()}
+              dirty={hasUnsavedVariants}
+              busy={busy}
+            />
+          )}
           {publications.length > 0 && (
             <section className="signal-publications" aria-label="Publishing history">
               <h3>Delivery</h3>
@@ -684,10 +761,11 @@ function Editor({
                   UTC: {publishPreview.scheduledInstant}
                 </p>
               )}
+              {/* The post's own caption. What each target actually receives is in its own tab,
+                  because after an override there is no single answer to show here. */}
               <p>{publishPreview.caption}</p>
-              {/* One block per channel: what it resolved to, and what that account refuses or
-                  warns about. Kept per channel rather than one merged list so a limit is read
-                  beside the account it belongs to. */}
+              {/* Every channel's verdict at a glance, so the shape of the plan is readable without
+                  opening seven tabs; each channel's detail, media and reasons are in its tab. */}
               <ul className="signal-publish-channels">
                 {publishPreview.channels.map((report) => (
                   <li key={report.channel} className={`channel-${report.status.toLowerCase()}`}>
@@ -696,19 +774,18 @@ function Editor({
                       {report.handle ? ` → ${report.handle}` : ''} ·{' '}
                       {PUBLISH_CHANNEL_STATUS_LABEL[report.status]}
                     </p>
-                    {report.refusals.map((refusal) => (
-                      <p className="form-error" key={refusal}>
-                        {refusal}
-                      </p>
-                    ))}
-                    {report.warnings.map((warning) => (
-                      <p className="form-warning" key={warning}>
-                        {warning}
-                      </p>
-                    ))}
                   </li>
                 ))}
               </ul>
+              <PublishPreviewTabs
+                preview={publishPreview}
+                post={post}
+                layers={layers}
+                savedLayers={savedLayers}
+                onChange={setLayers}
+                onSaveAccount={() => void saveAccountVariant()}
+                busy={busy}
+              />
               {publishPreview.warnings.map((warning) => (
                 <p className="form-warning" key={warning}>
                   {warning}
@@ -759,10 +836,12 @@ function Editor({
               <button
                 type="button"
                 className="secondary"
-                disabled={busy || hasUnsavedChanges}
+                disabled={busy || hasUnsavedChanges || hasUnsavedVariants}
                 onClick={previewPublish}
               >
-                {hasUnsavedChanges ? 'Save changes before preview' : 'Preview publishing'}
+                {hasUnsavedChanges || hasUnsavedVariants
+                  ? 'Save changes before preview'
+                  : 'Show preview'}
               </button>
             )}
           </div>

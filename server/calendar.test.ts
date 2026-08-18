@@ -42,6 +42,9 @@ const post = (text: string, date: string, overrides: Record<string, unknown> = {
 const throwingProvider: SignalProvider = {
   available: true,
   listPosts: () => Promise.reject(new Error('The schedule store is locked.')),
+  // The calendar never asks for content overrides; a provider that failed differently for this
+  // method would make that harder to notice, not easier.
+  listVariants: () => Promise.reject(new Error('The schedule store is locked.')),
 };
 
 describe('reading a calendar range', () => {

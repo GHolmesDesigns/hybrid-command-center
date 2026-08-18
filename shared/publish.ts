@@ -1,5 +1,10 @@
 import type { SignalChannel } from './signal.ts';
-import type { PublishPlatform, PublishPostKind } from './publish-capabilities.ts';
+import type {
+  PublishDeliveryMode,
+  PublishPlatform,
+  PublishPostKind,
+} from './publish-capabilities.ts';
+import type { PublishResolvedContent } from './publish-variants.ts';
 
 export const PUBLICATION_STATES = [
   'SUBMITTING',
@@ -44,16 +49,35 @@ export const PUBLISH_CHANNEL_STATUS_LABEL: Record<PublishChannelStatus, string> 
  * user work out which target each one belongs to. A blocked channel names its account when one
  * resolved, so a refusal points at the thing that must change.
  */
+/**
+ * What one target will actually receive, after base -> platform -> account resolved.
+ *
+ * `caption` is the **effective** caption: the resolved text plus any synthetic-media disclosure the
+ * platform has no field to carry, which is the string the limit was measured against and the string
+ * that will be sent. `sources` still names where the text itself came from, so a preview can say
+ * both what goes out and which layer decided it.
+ */
+export interface PublishChannelContent extends PublishResolvedContent {
+  /** Which route this shape takes on this platform. */
+  deliveryMode: PublishDeliveryMode;
+}
+
 export interface PublishChannelReport {
   channel: SignalChannel;
   /** `null` where no provider platform exists for the channel. */
   platform: PublishPlatform | null;
-  /** The shape this submission takes, from the post's format. */
+  /** The shape this submission takes: the post's format, or the placement an override chose. */
   kind: PublishPostKind;
   status: PublishChannelStatus;
   /** The resolved provider account, present only once one was resolved. */
   accountId?: number;
   handle?: string;
+  /**
+   * The resolved content for this target. Absent only where no platform exists to resolve for —
+   * `blog`, and a channel the capability contract does not answer — because there is nothing there
+   * to tailor and an empty object would read as "tailored to nothing".
+   */
+  content?: PublishChannelContent;
   refusals: string[];
   warnings: string[];
 }

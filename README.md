@@ -10,7 +10,7 @@ Released versions and what changed in each are recorded in the [Changelog](CHANG
 
 The Import module's versioned XLSX contract, pasted text form, and example campaigns are documented in the [Campaign Playbook Import Format](docs/campaign-playbook-import-format.md).
 
-Signal Campaign can preview and explicitly submit scheduled social posts through an optional Post Bridge integration. [Publishing Integration](docs/publishing-integration.md) records its provider boundary, scheduling conversion, and why delivery state remains separate from `PUBLISHED`.
+Signal Campaign can tailor a post per platform and per account, preview what each target would receive, and explicitly submit scheduled social posts through an optional Post Bridge integration. [Publishing Integration](docs/publishing-integration.md) records its provider boundary, the content-variant inheritance, the scheduling conversion, and why delivery state remains separate from `PUBLISHED`.
 
 Nothing in this app is reachable off loopback by design, and the server enforces that itself: a `HOST` outside `127.0.0.1`, `::1`, and `localhost` fails the boot while there is no authentication to put in front of it. The decision record that a cloud deployment would be built from — access model, source of truth, authentication, Drive OAuth continuity, and migration — is [Cloud Hosting](docs/cloud-hosting.md).
 
@@ -66,7 +66,7 @@ The browser never receives Google tokens. UI code calls only the local API. Driv
 
 ### Data ownership
 
-- **SQLite:** clients, projects, tasks, board-card and project-tile positions, checklists, dependencies, due dates, notes, task tags, project categories, client merge aliases, Signal Campaign's planned posts, channels, and ordered media URL references, settings, branding (including the sidebar palette and the logo's address, never the image itself), Drive IDs/URLs, provisioning steps, import receipts, integration activity records, and timestamps.
+- **SQLite:** clients, projects, tasks, board-card and project-tile positions, checklists, dependencies, due dates, notes, task tags, project categories, client merge aliases, Signal Campaign's planned posts, channels, ordered media URL references, and per-platform and per-account content overrides, settings, branding (including the sidebar palette and the logo's address, never the image itself), Drive IDs/URLs, provisioning steps, import receipts, integration activity records, and timestamps.
 - **Google Drive:** every project file. The database stores references, never duplicate file contents. Deleting a project or task in the app does **not** delete Drive folders or files.
 
 Timestamps are stored as UTC ISO strings. Date-only deadlines are interpreted in the browser/server machine's local timezone and become overdue after their local calendar day has passed.
@@ -260,9 +260,13 @@ style attributes remain allowed because React renders the task-progress width, t
 transform, and the sidebar palette as element styles. Automatic HTTP-to-HTTPS upgrading is disabled
 because the packaged app is served on loopback HTTP by default.
 
-Images are the one directive that accepts a remote origin (`img-src 'self' data: https:`), because
-a sidebar logo is referenced by address and its host cannot be known in advance. See
-[Sidebar branding](#sidebar-branding).
+Images and media are the two directives that accept a remote origin
+(`img-src 'self' data: https:` and `media-src 'self' https:`), because both are referenced by
+address and neither host can be known in advance: a sidebar logo, and the media a Signal post
+carries, which the publishing preview renders in the browser. See
+[Sidebar branding](#sidebar-branding) and
+[Publishing Integration](docs/publishing-integration.md) §3.3. Responses also carry
+`Referrer-Policy: no-referrer`, so a media host is never told which page asked for it.
 
 The policy is disabled during `npm run dev` because Vite's development client needs its hot-module
 reload runtime. This exception does not apply to `npm start` or `NODE_ENV=production`.
@@ -463,6 +467,15 @@ it and never writes.
   stores those strings in `signal_post_media`; the app never fetches, downloads, proxies, or
   uploads the referenced files. Kind is inferred from the URL extension and remains `unknown`
   when an extension does not say.
+- **One post can read differently per channel.** A post's content is the base; a platform override
+  sits over it and an account override over that, resolved in that order by
+  `shared/publish-variants.ts`. A layer says only what it changes, and clearing a field restores the
+  post's own. A field is offered only where the provider capability contract carries it — X takes a
+  first comment, YouTube takes a title, no platform takes a chosen cover or thumbnail — and the API
+  refuses one it does not, from the same function the form renders from. What the provider cannot
+  express refuses rather than guesses: it sends one media array per submission, so channels given
+  different media are refused by name, and one set of content per platform, so an account override
+  arrives as its platform's while that platform resolves to a single account.
 
 `npm run signal:import` loads the campaign content Signal already held into `signal_posts`. It is
 real content rather than demo data, which is why it is not part of `db:seed`; it is idempotent by
@@ -623,7 +636,7 @@ Schedule `db:backup` the same way if you want unattended snapshots — same comm
 - Playbook import is create-only: it never edits or merges into a record that already exists, and there is no in-app undo of an import beyond deleting what it created
 - Integration activity is bounded rather than permanent: the newest 200 records are kept and each lists at most 100 affected records, so it is a diagnostic log, not a compliance archive. Keep a database backup if a longer history matters
 - Checklist reordering is supported by the API/data model; the current UI focuses on add, edit-by-state, and removal
-- Publishing is deliberate and optional: a person previews resolved accounts, caption, media, configured-zone time and UTC instant, then confirms. The publisher records delivery separately and never sets `PUBLISHED`; after confirmed delivery, the user may mark the post published
+- Publishing is deliberate and optional: a person presses **Show preview**, reads one tab per target account — the text that account receives, its media in order, its options, the local wall clock beside the provider instant, its delivery mode and its warnings — then confirms. Nothing remote loads before that press, a video needs its own press and never autoplays, and the server fetches no preview URL at all. The publisher records delivery separately and never sets `PUBLISHED`; after confirmed delivery, the user may mark the post published
 - Nothing is hosted off loopback, and a `HOST` outside `127.0.0.1`, `::1`, and `localhost` fails the boot rather than publishing the unauthenticated API. How a cloud deploy would be built is decided in [`docs/cloud-hosting.md`](docs/cloud-hosting.md) and nothing else in that document has been implemented — the gate is not that work, and neither is lifting it
 
 ## Planned extension points

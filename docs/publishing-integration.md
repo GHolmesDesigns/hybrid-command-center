@@ -204,6 +204,110 @@ rather than pretended away: whether a video is corrupt, whether a URL will 404 w
 fetches it, and whether an extensionless URL is an image or a video — the last of these is reported
 as a warning rather than assumed either way.
 
+### 3.3 Content variants, and the preview that shows them
+
+One caption used to go to every channel. C62 (#189) gives a post three layers, resolved in one
+order, in `shared/publish-variants.ts`:
+
+```text
+base content
+  -> platform override
+    -> account override
+```
+
+`resolvePublishContent` is that order and contains nothing else — no database, no network, no
+capability table, no React. It answers, per field, what the effective value is and which layer it
+came from, and `PublishChannelReport.content` carries both to the preview. The order is unit-tested
+in `shared/publish-variants.test.ts` rather than through a form or an HTTP round trip, either of
+which can pass while the order is wrong.
+
+**A layer says only what it changes.** Every field is optional and absent means inherit. Two cases
+are worth stating because they look alike and are not:
+
+- An empty string is **not** an override. It is trimmed and dropped, so clearing a caption field
+  restores the post's caption. Post Bridge requires a caption on every submission, so an empty one
+  could only ever have been a refusal.
+- An empty media array **is** an override: a platform that deliberately receives no media, which is
+  a real thing to want when the PDF goes to LinkedIn and X takes the text alone. `undefined`
+  inherits the post's media; `[]` sends none.
+
+**A field exists where the contract says it does, and nowhere else.**
+`publishVariantFieldSupported` is asked three times from one definition: the composer renders a
+control, `PUT /api/signal/posts/:id/variants` refuses a value, and preflight refuses a value already
+stored against a platform the table has since stopped answering yes for. A form offering what the
+API rejects teaches the user something untrue about the provider, and a limit enforced on one side
+only is a limit met after pressing send. `coverImage` and `thumbnail` are false on every platform,
+so a cover and a thumbnail are offered nowhere — the field is in the model and refused at the
+boundary, and a contract entry that recorded one would be offered it without another edit here.
+
+**What the provider carries, and what it does not.** `platform_configurations` is keyed by platform
+and carries text: a caption, a first comment, a title (`document_title` on LinkedIn), and a
+placement. That vocabulary lives in `post-bridge.ts` and nowhere else. Two consequences are
+refusals rather than guesses:
+
+- **One media array per submission.** The provider takes `media_urls` once for the whole post, so a
+  per-platform media selection is delivered through that array and only while every target agrees on
+  it. Targets given different media refuse, naming each group and its count. Splitting one post into
+  several submissions to honour two selections is not this card; picking a winner silently is not
+  anything.
+- **One set of content per platform.** `accountContentOverride` is false everywhere, so an account
+  override arrives as its platform's configuration. That is unambiguous exactly while the platform
+  resolves to one account — which §3.1's rule already guarantees by refusing zero or several — and
+  the preview says so on the target it applies to rather than leaving the user to infer it.
+
+**A synthetic-media disclosure is written into the caption**, because
+`syntheticMediaDisclosure` is `IN_CAPTION` on every platform the contract answers for. The
+disclosure sentence is appended once, the preview shows the caption with it already in it, and the
+caption limit is measured against that text — a disclosure that pushes X past 280 has to refuse
+before the send rather than after. A platform recording `PROVIDER_FIELD` would carry the flag
+instead and nothing would be appended.
+
+**A placement is a shape, not a decoration.** An override sets the `PublishPostKind` the platform
+submits as, so a story meets a story's media bounds and warns that its caption reaches no reader.
+Only a story is sent as a provider `placement`: a reel is one video in the platform's ordinary post
+(§3.2), so choosing it changes what preflight accepts and sends no placement field, which is what
+the source records and all it records.
+
+**The plan hash covers the overrides.** The tailored configurations and the media that would be sent
+are part of the hashed plan, so a layer edited between preview and confirm refuses the commit
+exactly as an edited caption does.
+
+#### The preview
+
+**Nothing remote loads until Show preview is pressed.** The composer renders media as addresses and
+text; no thumbnail, no video, no provider call. That press is the only trigger, and it is also when
+`listTargets` is first called — which is why the account layer is edited inside the preview tab for
+the account it belongs to, since that is the first moment an account id exists to key it by.
+
+One tab per target, each self-contained: the effective text, which layer each value came from, the
+title and first comment, the media in the order that target receives it, the post's local wall clock
+beside the provider instant, the delivery mode, and that target's own warnings and refusals. A
+merged list would make the reader work out which target each line was about, which is the same
+reason §3.2 reports per channel rather than as one flat list.
+
+Media rendering, and the rules it keeps:
+
+- Images load with the preview, at a constrained size — a preview is for checking the order and the
+  crop, not for downloading a campaign asset at full resolution.
+- **A video never autoplays.** It is not fetched by the preview at all: it takes its own press, and
+  even then it arrives with controls rather than playing. There is no `autoplay` attribute anywhere
+  in the module to be flipped later.
+- Broken media gets a usable fallback — what happened, the address, and a link — rather than a gap.
+- A PDF and an extensionless URL are named as what they are and never embedded.
+- `referrerPolicy="no-referrer"` is set on the elements HTML defines it for. A `<video>` cannot
+  carry it, so the app's `Referrer-Policy: no-referrer` response header is what covers that request;
+  `server/app.test.ts` asserts the header rather than trusting an attribute that would be ignored.
+- **`media-src` gains `https:` in the production CSP.** This is the one browser-visible change the
+  publisher makes, and it corrects §12's "nothing changes in the browser": rendering a video the
+  post already references needs the directive to permit the host, which is not known in advance —
+  the same reason `img-src` already permits one. No other directive widens.
+
+**The server still fetches nothing.** It does not fetch a media URL, a cover, a thumbnail, or
+anything else a preview names, and `server/publish/publish.test.ts` proves it by replacing `fetch`
+with a spy for the duration of a preview and asserting it was never called. The rule recorded on
+`signal_post_media` — this app never uploads, downloads, or proxies media — is not relaxed by this
+card, and a preview is the last place it should be.
+
 ### 3.1 The Facebook account rule
 
 Three Facebook pages are connected in the broader publishing setup: `AdDrive Media`,
@@ -231,6 +335,12 @@ pages.
 - `shared/publish-capabilities.ts` — outside `server/publish/` on purpose. The channel-to-platform
   map and the platform capability table are the one definition of what a provider will accept, and
   the composer reads it rather than keeping a second copy of the rules in React (§3.2).
+- `shared/publish-variants.ts` — outside `server/publish/` for the same reason and beside it. The
+  base → platform → account order, and which fields a platform will carry an override for (§3.3).
+  The layers themselves are Signal's data: they are read through `SignalProvider.listVariants`,
+  written by `replacePostVariants` in `server/signal/service.ts`, and stored in
+  `signal_post_variants`. Reading them added a *read* to the provider interface and no write, which
+  is the line that keeps the publisher unable to change a post it is planning from.
 - `service.ts` — the only code that calls `submit`, the only code that writes the publication
   tables, and the only code that writes `integration_events` for a publish.
 
@@ -561,6 +671,15 @@ write built from data that can change underneath it:
 Nothing publishes without step 3. There is no auto-publish, no publish-on-save, and no scheduled
 job that submits without a person having confirmed that specific submission.
 
+Step 1 is also the only thing that loads anything remote, and the plan it returns now carries each
+target's resolved content rather than one caption for all of them (§3.3). The content overrides
+themselves are a separate pair of routes — `GET` and `PUT /api/signal/posts/:id/variants` — and the
+`PUT` replaces the whole set for a post in one transaction, the way branding does: the composer holds
+every layer while it is being edited, and a patch would let a half-applied set leave a platform
+tailored by a request reported as having failed. A preview is refused while a layer is unsaved, for
+the same reason it is refused while the post is: a preview of unsaved content is a preview of
+something that is not going out.
+
 ---
 
 ## 12. Credentials and secrets
@@ -586,8 +705,11 @@ job that submits without a person having confirmed that specific submission.
 - **The app holds no social credentials at all.** Instagram, X, LinkedIn and the rest are connected
   inside Post Bridge, through Post Bridge's OAuth. This app's blast radius is one key it can
   revoke. That is a real security property of the choice in §2 and worth not giving up casually.
-- **Nothing changes in the browser.** Every provider call is server-side, so the production CSP
-  gains no origin. A `platform_data.url` permalink is rendered as a link, never fetched.
+- **Every provider call is server-side.** No provider origin reaches the browser, and a
+  `platform_data.url` permalink is rendered as a link, never fetched. The production CSP gains
+  exactly one thing, and it is not a provider: `media-src` permits `https:` so the publishing
+  preview can render the video a post already references (§3.3). It is the user's own media host,
+  it is not known in advance, and the browser is what fetches it — the server never does.
 - **The log never sees the key.** `integration_events` gets structured fields, not a request dump
   or a raw provider response, and `redactSecrets` scrubs the one free-text field a provider error
   reaches — the rule already in `AGENTS.md`, restated because this is the first integration whose
@@ -644,3 +766,6 @@ second provider inside this app.
 - [x] One shared capability contract, outside React, answering every dimension for every platform,
       failing closed on anything it does not record, and reporting refusals and warnings per target
       account without a provider call — §3.2, C61 (#188).
+- [x] Platform and account content variants resolving base → platform → account outside React,
+      delivered only where the provider carries them and refused where it does not, with an
+      on-demand preview per target account that the server fetches nothing for — §3.3, C62 (#189).
