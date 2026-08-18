@@ -100,21 +100,42 @@ export function Projects({
   refresh: () => Promise<void>;
   flash: (s: string, t?: 'success' | 'error') => void;
 }) {
-  const [query, setQuery] = useState(''),
-    [clientFilter, setClientFilter] = useState(''),
-    [sortBy, setSortBy] = useState<ProjectSort>('recently-updated');
+  const [query, setQuery] = useState('');
   const [params, setParams] = useSearchParams();
-  // The category selection lives in the page address, as the board's filters do, so a
-  // filtered Projects view survives a reload and can be handed to someone else as a link.
+  // Durable collection state lives in the address. Search stays local because it is transient
+  // text typed for this visit rather than a view someone is likely to bookmark or share.
+  const requestedSort = params.get('sort');
+  const sortBy: ProjectSort = (
+    [
+      'recently-updated',
+      'recently-created',
+      'name-ascending',
+      'name-descending',
+      'deadline',
+      'priority',
+      'custom',
+    ] as const
+  ).includes(requestedSort as ProjectSort)
+    ? (requestedSort as ProjectSort)
+    : 'recently-updated';
+  const clientFilter = params.get('client') || '';
+  const requestedVisibility = params.get('visibility');
+  const visibility =
+    requestedVisibility === 'archived' || requestedVisibility === 'all'
+      ? requestedVisibility
+      : 'live';
   const selectedCategoryIds = (params.get('categories') || '').split(',').filter(Boolean);
-  const setCategoryIds = (ids: string[]) => {
+  const setParam = (key: string, value: string, defaultValue = '') => {
     const next = new URLSearchParams(params);
-    if (ids.length) next.set('categories', ids.join(','));
-    else next.delete('categories');
+    if (value && value !== defaultValue) next.set(key, value);
+    else next.delete(key);
     setParams(next);
   };
+  const setCategoryIds = (ids: string[]) => setParam('categories', ids.join(','));
   const visible = projects.filter(
     (p) =>
+      (visibility === 'all' ||
+        (visibility === 'archived' ? p.status === 'ARCHIVED' : p.status !== 'ARCHIVED')) &&
       (!clientFilter || p.clientId === clientFilter) &&
       // Every selected category must be present, so each chip narrows the list the way the
       // selects beside it do rather than widening it.
@@ -195,11 +216,27 @@ export function Projects({
           </button>
         }
       />
+      <div
+        className="segmented-control project-visibility"
+        role="group"
+        aria-label="Project visibility"
+      >
+        {(['live', 'archived', 'all'] as const).map((value) => (
+          <button
+            type="button"
+            key={value}
+            aria-pressed={visibility === value}
+            onClick={() => setParam('visibility', value, 'live')}
+          >
+            {value[0].toUpperCase() + value.slice(1)}
+          </button>
+        ))}
+      </div>
       <div className="filterbar">
         <SearchBox value={query} set={setQuery} placeholder="Search projects…" />
         <select
           value={clientFilter}
-          onChange={(e) => setClientFilter(e.target.value)}
+          onChange={(e) => setParam('client', e.target.value)}
           aria-label="Filter by client"
         >
           <option value="">All clients</option>
@@ -211,7 +248,7 @@ export function Projects({
         </select>
         <select
           value={sortBy}
-          onChange={(e) => setSortBy(e.target.value as ProjectSort)}
+          onChange={(e) => setParam('sort', e.target.value, 'recently-updated')}
           aria-label="Sort projects by"
         >
           <option value="recently-updated">Recently updated</option>

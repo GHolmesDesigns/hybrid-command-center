@@ -47,6 +47,7 @@
 - The server runs under `node --experimental-strip-types`, which erases annotations without rewriting code. **Constructor parameter properties do not work there** — declare the field and assign it in the constructor instead. Vite transpiles them, so unit tests, typecheck, and the build all pass while the real server refuses to boot; `@typescript-eslint/parameter-properties` is enforced over `server/` and `shared/` so `npm run lint` catches it rather than end-to-end.
 - Keep timestamps as UTC ISO strings and due dates as `YYYY-MM-DD` values interpreted in local time.
 - Keep deadline rules and dependency rules out of React components.
+- Default views and durable URL state follow `docs/view-state-convention.md`; transient text search may stay local.
 - Archive rather than permanently delete top-level **clients**. Projects and tasks may be hard-deleted from SQLite when the user confirms; never delete or modify Drive files as a side effect of those actions.
 - Merging one client into another moves its projects, archives the source and records it in `client_merges` as an alias of the survivor, retargets earlier aliases so every lookup stays one hop, never touches Drive, and never writes an `integration_events` row.
 - Labels are normalized joins, never packed columns: tags label tasks, categories label projects, and both match names case-insensitively through one shared rule in `shared/types.ts`. Renaming a label is one write; deleting one detaches it and never deletes what it was attached to.

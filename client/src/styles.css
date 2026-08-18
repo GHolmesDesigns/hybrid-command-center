@@ -994,6 +994,9 @@ button svg,
   color: #fff;
   font-weight: 700;
 }
+.project-visibility {
+  margin-bottom: 12px;
+}
 .filterbar {
   display: flex;
   gap: 12px;
@@ -2766,11 +2769,13 @@ button.tag-chip.toggle.active {
   .board-filters {
     flex-direction: column;
   }
-  .client-visibility {
+  .client-visibility,
+  .project-visibility {
     display: flex;
     width: 100%;
   }
-  .client-visibility button {
+  .client-visibility button,
+  .project-visibility button {
     flex: 1;
   }
   .client-tools {

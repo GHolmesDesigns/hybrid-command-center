@@ -14,6 +14,20 @@ import {
   testState,
   requests,
 } from './App.test-setup';
+import { useLocation, useNavigate } from 'react-router-dom';
+
+function HistoryProbe() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  return (
+    <>
+      <output aria-label="Current location">{`${location.pathname}${location.search}`}</output>
+      <button type="button" onClick={() => navigate(-1)}>
+        Back
+      </button>
+    </>
+  );
+}
 
 describe('Projects sorting', () => {
   const sortableProjects: Project[] = [
@@ -67,18 +81,68 @@ describe('Projects sorting', () => {
     },
   ];
 
-  const renderProjects = async () => {
+  const renderProjects = async (entry = '/projects?visibility=all') => {
     testState.projectsPayload = sortableProjects;
     testState.clientsPayload = sortableClients;
     render(
-      <MemoryRouter initialEntries={['/projects']}>
+      <MemoryRouter initialEntries={[entry]}>
         <App />
+        <HistoryProbe />
       </MemoryRouter>,
     );
     expect(await screen.findByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
   };
   const renderedProjectNames = () =>
     screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent);
+
+  it('defaults to live projects and keeps explicit visibility, client, and sort state in history', async () => {
+    await renderProjects('/projects');
+
+    expect(renderedProjectNames()).toEqual(['Zulu', 'Alpha']);
+    expect(screen.getByRole('button', { name: 'Live' })).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'All' }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Filter by client' }), {
+      target: { value: 'client-one' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Sort projects by' }), {
+      target: { value: 'name-ascending' },
+    });
+
+    expect(screen.getByLabelText('Current location')).toHaveTextContent(
+      '/projects?visibility=all&client=client-one&sort=name-ascending',
+    );
+    expect(renderedProjectNames()).toEqual(['Middle', 'Zulu']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByRole('combobox', { name: 'Sort projects by' })).toHaveValue(
+      'recently-updated',
+    );
+    expect(screen.getByRole('combobox', { name: 'Filter by client' })).toHaveValue('client-one');
+  });
+
+  it('loads bookmarked state and safely falls back from unsupported values', async () => {
+    await renderProjects(
+      '/projects?visibility=archived&client=client-one&sort=name-descending&campaign=kept',
+    );
+
+    expect(screen.getByRole('button', { name: 'Archived' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByRole('combobox', { name: 'Filter by client' })).toHaveValue('client-one');
+    expect(screen.getByRole('combobox', { name: 'Sort projects by' })).toHaveValue(
+      'name-descending',
+    );
+    expect(renderedProjectNames()).toEqual(['Middle']);
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Sort projects by' }), {
+      target: { value: 'recently-updated' },
+    });
+    expect(screen.getByLabelText('Current location')).toHaveTextContent(
+      '/projects?visibility=archived&client=client-one&campaign=kept',
+    );
+  });
 
   it('offers each sort mode and orders projects correctly', async () => {
     await renderProjects();
