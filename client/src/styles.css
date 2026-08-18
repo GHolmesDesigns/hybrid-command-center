@@ -1563,11 +1563,98 @@ button.tag-chip.toggle.active {
   border-radius: 12px;
   padding: 13px;
   display: flex;
-  /* The selects hold a 160px floor, so they wrap onto a second line at the widths between the
-     desktop bar and the single-column one rather than running off the side of the card. */
+  /* Filter summaries hold a 160px floor, so they wrap onto a second line at the widths between
+     the desktop bar and the single-column one rather than running off the side of the card. */
   flex-wrap: wrap;
   gap: 10px;
   margin-bottom: 18px;
+}
+
+.multi-filter {
+  position: relative;
+  min-width: 10rem;
+}
+
+.multi-filter > span {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.multi-filter details {
+  position: relative;
+}
+
+.multi-filter summary {
+  min-height: 2.65rem;
+  padding: 0.7rem 2.25rem 0.7rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  list-style: none;
+  white-space: nowrap;
+}
+
+.multi-filter summary::-webkit-details-marker {
+  display: none;
+}
+
+.multi-filter summary::after {
+  position: absolute;
+  top: 0.78rem;
+  right: 0.8rem;
+  content: '▾';
+}
+
+.multi-filter summary:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.multi-filter fieldset {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  display: grid;
+  min-width: max(100%, 13rem);
+  max-height: 18rem;
+  margin: 0;
+  padding: 0.45rem;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  background: var(--paper);
+  box-shadow: var(--shadow);
+}
+
+.multi-filter fieldset label {
+  display: flex;
+  flex-direction: row;
+  gap: 0.55rem;
+  align-items: center;
+  padding: 0.5rem;
+  border-radius: 0.45rem;
+  cursor: pointer;
+}
+
+.multi-filter fieldset label:hover {
+  background: #f4f3ef;
+}
+
+.multi-filter fieldset input {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+}
+
+.clear-board-filters {
+  align-self: end;
+  min-height: 2.65rem;
 }
 .board-filters label {
   display: flex;
@@ -2785,6 +2872,7 @@ button.tag-chip.toggle.active {
     width: 100%;
   }
   .filterbar > *:not(.search-box),
+  .board-filters > .multi-filter,
   .board-filters label {
     width: 100%;
   }

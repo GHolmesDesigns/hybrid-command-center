@@ -39,7 +39,7 @@ test('a mixed project grid separates its five statuses, with and without colour'
     })
   ).json();
 
-  await page.goto('/projects');
+  await page.goto('/projects?visibility=all');
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: `Archive ${toArchive.name}` }).click();
   await expect(page.getByText('Project archived.', { exact: false })).toBeVisible();
@@ -73,4 +73,51 @@ test('a mixed project grid separates its five statuses, with and without colour'
   const [archived, ...active] = [...seen].reverse();
   expect(archived.edgeStyle).toBe('dashed');
   expect(active.every((tile) => tile.edgeStyle === 'solid')).toBe(true);
+});
+
+test('multi-select status filters survive deep links, reload, and Back', async ({ page }) => {
+  const run = Date.now();
+  const client = await (
+    await page.request.post('/api/clients', { data: { name: `E2E Filter Client ${run}` } })
+  ).json();
+  const project = await (
+    await page.request.post('/api/projects', {
+      data: { clientId: client.id, name: `E2E Filter Project ${run}`, status: 'ACTIVE' },
+    })
+  ).json();
+  const urgent = `E2E urgent graphics ${run}`;
+  const high = `E2E high graphics ${run}`;
+  const legacy = `E2E high no type ${run}`;
+  await page.request.post('/api/tasks', {
+    data: { projectId: project.id, title: urgent, priority: 'URGENT', taskType: 'GRAPHICS' },
+  });
+  await page.request.post('/api/tasks', {
+    data: { projectId: project.id, title: high, priority: 'HIGH', taskType: 'GRAPHICS' },
+  });
+  await page.request.post('/api/tasks', {
+    data: { projectId: project.id, title: legacy, priority: 'HIGH' },
+  });
+
+  await page.goto(`/status?project=${project.id}&priority=HIGH%2CURGENT&type=GRAPHICS`);
+  await expect(page.getByText(urgent, { exact: true })).toBeVisible();
+  await expect(page.getByText(high, { exact: true })).toBeVisible();
+  await expect(page.getByText(legacy, { exact: true })).toHaveCount(0);
+
+  await page.getByRole('button', { name: /^Task type:/ }).click();
+  await page.getByRole('checkbox', { name: 'No type' }).click();
+  await expect(page.getByText(legacy, { exact: true })).toBeVisible();
+  await page.reload();
+  await page.getByRole('button', { name: /^Task type:/ }).click();
+  await expect(page.getByRole('checkbox', { name: 'Graphics' })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'No type' })).toBeChecked();
+
+  await page.getByRole('button', { name: /^Priority:/ }).click();
+  await page.getByRole('checkbox', { name: 'HIGH' }).click();
+  await expect(page.getByText(urgent, { exact: true })).toBeVisible();
+  await expect(page.getByText(high, { exact: true })).toHaveCount(0);
+
+  await page.goBack();
+  await expect(page.getByRole('button', { name: 'Priority: 2 selected' })).toBeVisible();
+  await expect(page.getByText(high, { exact: true })).toBeVisible();
+  await expect(page.getByText(legacy, { exact: true })).toBeVisible();
 });

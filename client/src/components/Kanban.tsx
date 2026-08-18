@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   DndContext,
@@ -28,6 +28,62 @@ import { PageHead } from './Shell';
  */
 const NO_TASK_TYPE = 'none';
 
+type FilterOption = { value: string; label: string };
+
+function MultiSelectFilter({
+  label,
+  emptyLabel,
+  options,
+  selected,
+  onChange,
+}: {
+  label: string;
+  emptyLabel: string;
+  options: FilterOption[];
+  selected: string[];
+  onChange: (value: string, checked: boolean) => void;
+}) {
+  const labelId = useId();
+  const selectedLabels = options
+    .filter((option) => selected.includes(option.value))
+    .map((option) => option.label);
+  const summary =
+    selectedLabels.length === 0
+      ? emptyLabel
+      : selectedLabels.length === 1
+        ? selectedLabels[0]
+        : `${selectedLabels.length} selected`;
+
+  return (
+    <div className="multi-filter">
+      <span id={labelId}>{label}</span>
+      <details>
+        <summary role="button" aria-label={`${label}: ${summary}`}>
+          {summary}
+        </summary>
+        <fieldset aria-labelledby={labelId}>
+          {options.map((option) => (
+            <label key={option.value}>
+              <input
+                type="checkbox"
+                checked={selected.includes(option.value)}
+                onChange={(event) => onChange(option.value, event.target.checked)}
+              />
+              <span>{option.label}</span>
+            </label>
+          ))}
+        </fieldset>
+      </details>
+    </div>
+  );
+}
+
+const parseValues = (value: string | null) => [
+  ...new Set((value || '').split(',').filter(Boolean)),
+];
+const matchesAny = (selected: string[], value?: string) =>
+  selected.length === 0 || Boolean(value && selected.includes(value));
+
 export function Kanban({
   tasks,
   updateTasks,
@@ -52,38 +108,46 @@ export function Kanban({
   const [params, setParams] = useSearchParams();
   // Every filter lives in the URL, so a filtered board survives a reload and can be handed to
   // someone else as a link. Only the search box is component state: it is typed per visit.
-  const project = params.get('project') || '',
-    client = params.get('client') || '',
-    priority = params.get('priority') || '',
-    taskType = params.get('type') || '',
-    flag = params.get('filter') || '';
+  const selectedProjectKey = params.get('project') || '';
+  const selectedProjects = parseValues(selectedProjectKey),
+    selectedClients = parseValues(params.get('client')),
+    selectedPriorities = parseValues(params.get('priority')),
+    selectedTaskTypes = parseValues(params.get('type')),
+    selectedFlags = parseValues(params.get('filter'));
   const [query, setQuery] = useState('');
-  const selectedTagIds = (params.get('tags') || '').split(',').filter(Boolean);
+  const selectedTagIds = parseValues(params.get('tags'));
+  const rememberedProject = selectedProjects[0];
   useEffect(() => {
-    if (project) remember(project);
-  }, [project, remember]);
+    if (rememberedProject) remember(rememberedProject);
+  }, [rememberedProject, remember]);
   const needle = query.trim().toLowerCase();
   const filtered = tasks.filter(
     (t) =>
-      (!project || t.projectId === project) &&
-      (!client || t.clientId === client) &&
-      (!priority || t.priority === priority) &&
-      (!taskType || (taskType === NO_TASK_TYPE ? !t.taskType : t.taskType === taskType)) &&
+      matchesAny(selectedProjects, t.projectId) &&
+      matchesAny(selectedClients, t.clientId) &&
+      matchesAny(selectedPriorities, t.priority) &&
+      (selectedTaskTypes.length === 0 ||
+        selectedTaskTypes.some((taskType) =>
+          taskType === NO_TASK_TYPE ? !t.taskType : t.taskType === taskType,
+        )) &&
       // Every selected tag must be present, so each chip narrows the board the way the
       // selects above it do rather than widening it.
       selectedTagIds.every((tagId) => t.tags.some((tag) => tag.id === tagId)) &&
       (!needle ||
         t.title.toLowerCase().includes(needle) ||
         t.tags.some((tag) => tag.name.toLowerCase().includes(needle))) &&
-      (!flag ||
-        (flag === 'overdue' && t.overdue) ||
-        (flag === 'blocked' && t.blocked) ||
-        // The same rules the dashboard counts with, so a tile and the board it links to
-        // can never show different sets.
-        (flag === 'today' && isDueToday(t)) ||
-        (flag === 'week' && isDueNextSevenDays(t)) ||
-        (flag === 'none' && !t.dueDate) ||
-        (flag === 'completed' && t.status === 'COMPLETE')),
+      (selectedFlags.length === 0 ||
+        selectedFlags.some(
+          (flag) =>
+            (flag === 'overdue' && t.overdue) ||
+            (flag === 'blocked' && t.blocked) ||
+            // The same rules the dashboard counts with, so a tile and the board it links to
+            // can never show different sets.
+            (flag === 'today' && isDueToday(t)) ||
+            (flag === 'week' && isDueNextSevenDays(t)) ||
+            (flag === 'none' && !t.dueDate) ||
+            (flag === 'completed' && t.status === 'COMPLETE'),
+        )),
   );
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -157,10 +221,99 @@ export function Kanban({
     ) as TaskStatus | undefined;
     if (status) move(task, status, event.over.id);
   };
-  const set = (key: string, value: string) => {
-    const next = new URLSearchParams(params);
-    if (value) next.set(key, value);
+  const setValues = (key: string, values: string[], next = new URLSearchParams(params)) => {
+    const canonical = [...new Set(values)].sort();
+    if (canonical.length > 0) next.set(key, canonical.join(','));
     else next.delete(key);
+    setParams(next);
+  };
+  const toggleValue = (key: string, selected: string[], value: string, checked: boolean) => {
+    const values = checked ? [...selected, value] : selected.filter((item) => item !== value);
+    if (key !== 'client') {
+      setValues(key, values);
+      return;
+    }
+
+    const next = new URLSearchParams(params);
+    const canonicalClients = [...new Set(values)].sort();
+    if (canonicalClients.length > 0) next.set('client', canonicalClients.join(','));
+    else next.delete('client');
+    const validProjects = selectedProjects.filter((projectId) => {
+      const candidate = projects.find((project) => project.id === projectId);
+      return (
+        candidate &&
+        (canonicalClients.length === 0 || canonicalClients.includes(candidate.clientId))
+      );
+    });
+    if (validProjects.length > 0) next.set('project', [...validProjects].sort().join(','));
+    else next.delete('project');
+    setParams(next);
+  };
+  const activeClients = clients.filter((candidate) => candidate.status === 'ACTIVE');
+  const availableProjects = projects.filter(
+    (candidate) => selectedClients.length === 0 || selectedClients.includes(candidate.clientId),
+  );
+  const filterOptions: Array<{
+    paramKey: string;
+    label: string;
+    emptyLabel: string;
+    selected: string[];
+    options: FilterOption[];
+  }> = [
+    {
+      paramKey: 'client',
+      label: 'Client',
+      emptyLabel: 'All clients',
+      selected: selectedClients,
+      options: activeClients.map((candidate) => ({ value: candidate.id, label: candidate.name })),
+    },
+    {
+      paramKey: 'project',
+      label: 'Project',
+      emptyLabel: 'All projects',
+      selected: selectedProjects,
+      options: availableProjects.map((candidate) => ({
+        value: candidate.id,
+        label: candidate.name,
+      })),
+    },
+    {
+      paramKey: 'priority',
+      label: 'Priority',
+      emptyLabel: 'Any priority',
+      selected: selectedPriorities,
+      options: ['URGENT', 'HIGH', 'MEDIUM', 'LOW'].map((value) => ({ value, label: value })),
+    },
+    {
+      paramKey: 'type',
+      label: 'Task type',
+      emptyLabel: 'Any type',
+      selected: selectedTaskTypes,
+      options: [
+        { value: NO_TASK_TYPE, label: 'No type' },
+        ...TASK_TYPES.map((value) => ({ value, label: TASK_TYPE_LABEL[value] })),
+      ],
+    },
+    {
+      paramKey: 'filter',
+      label: 'Focus',
+      emptyLabel: 'All tasks',
+      selected: selectedFlags,
+      options: [
+        { value: 'overdue', label: 'Overdue' },
+        { value: 'today', label: 'Due today' },
+        { value: 'week', label: 'Due this week' },
+        { value: 'none', label: 'No due date' },
+        { value: 'blocked', label: 'Blocked' },
+        { value: 'completed', label: 'Completed' },
+      ],
+    },
+  ];
+  const hasFilters =
+    filterOptions.some((filter) => filter.selected.length > 0) || selectedTagIds.length > 0;
+  const clearAll = () => {
+    const next = new URLSearchParams(params);
+    ['client', 'project', 'priority', 'type', 'filter', 'tags'].forEach((key) => next.delete(key));
     setParams(next);
   };
   return (
@@ -170,71 +323,36 @@ export function Kanban({
         title="Project Status"
         body={`${filtered.length} visible tasks · move work forward with drag, touch, or keyboard controls.`}
         action={
-          <button onClick={() => open({ type: 'task', projectId: project || undefined })}>
+          <button
+            onClick={() =>
+              open({
+                type: 'task',
+                projectId: selectedProjects.length === 1 ? selectedProjects[0] : undefined,
+              })
+            }
+          >
             <Plus /> New task
           </button>
         }
       />
       <div className="board-filters">
-        <label>
-          <span>Client</span>
-          <select value={client} onChange={(e) => set('client', e.target.value)}>
-            <option value="">All clients</option>
-            {clients
-              .filter((c) => c.status === 'ACTIVE')
-              .map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-          </select>
-        </label>
-        <label>
-          <span>Project</span>
-          <select value={project} onChange={(e) => set('project', e.target.value)}>
-            <option value="">All projects</option>
-            {projects
-              .filter((p) => !client || p.clientId === client)
-              .map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-          </select>
-        </label>
-        <label>
-          <span>Priority</span>
-          <select value={priority} onChange={(e) => set('priority', e.target.value)}>
-            <option value="">Any priority</option>
-            {['URGENT', 'HIGH', 'MEDIUM', 'LOW'].map((p) => (
-              <option key={p}>{p}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span>Task type</span>
-          <select value={taskType} onChange={(e) => set('type', e.target.value)}>
-            <option value="">Any type</option>
-            <option value={NO_TASK_TYPE}>No type</option>
-            {TASK_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {TASK_TYPE_LABEL[t]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span>Focus</span>
-          <select value={flag} onChange={(e) => set('filter', e.target.value)}>
-            <option value="">All tasks</option>
-            <option value="overdue">Overdue</option>
-            <option value="today">Due today</option>
-            <option value="week">Due this week</option>
-            <option value="none">No due date</option>
-            <option value="blocked">Blocked</option>
-            <option value="completed">Completed</option>
-          </select>
-        </label>
+        {filterOptions.map((filter) => (
+          <MultiSelectFilter
+            key={filter.paramKey}
+            label={filter.label}
+            emptyLabel={filter.emptyLabel}
+            options={filter.options}
+            selected={filter.selected}
+            onChange={(value, checked) =>
+              toggleValue(filter.paramKey, filter.selected, value, checked)
+            }
+          />
+        ))}
+        {hasFilters && (
+          <button type="button" className="text-btn clear-board-filters" onClick={clearAll}>
+            Clear all
+          </button>
+        )}
       </div>
       <SearchBox value={query} set={setQuery} placeholder="Search task titles and tags…" />
       {tags.length > 0 && (
@@ -253,12 +371,11 @@ export function Kanban({
                   aria-pressed={active}
                   style={{ borderColor: tagAccent(tag) }}
                   onClick={() =>
-                    set(
+                    setValues(
                       'tags',
-                      (active
+                      active
                         ? selectedTagIds.filter((tagId) => tagId !== tag.id)
-                        : [...selectedTagIds, tag.id]
-                      ).join(','),
+                        : [...selectedTagIds, tag.id],
                     )
                   }
                 >
@@ -269,7 +386,7 @@ export function Kanban({
             })}
           </div>
           {selectedTagIds.length > 0 && (
-            <button type="button" className="text-btn" onClick={() => set('tags', '')}>
+            <button type="button" className="text-btn" onClick={() => setValues('tags', [])}>
               Clear tags
             </button>
           )}

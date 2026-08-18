@@ -38,11 +38,16 @@ const cardTitles = () =>
 const headerCount = () =>
   Number(/(\d+) visible tasks/.exec(document.querySelector('.page-head')!.textContent!)![1]);
 const location = () => screen.getByLabelText('Current location').textContent;
-const typeFilter = () => screen.getByRole('combobox', { name: 'Task type' });
+const filterButton = (name: string) =>
+  screen.getByRole('button', { name: new RegExp(`^${name}:`) });
+const filterOption = (name: string) => screen.getByRole('checkbox', { name });
+const choose = (filter: string, option: string) => {
+  fireEvent.click(filterButton(filter));
+  fireEvent.click(filterOption(option));
+};
 /** Badges only: the filter bar now offers every type name as an option text as well. */
 const typeBadges = () =>
   [...document.querySelectorAll('.task-type-badge')].map((n) => n.textContent);
-const priorityFilter = () => screen.getByRole('combobox', { name: 'Priority' });
 
 describe('Task type on the board', () => {
   it('shows the type on the card and again in the task detail', async () => {
@@ -77,13 +82,13 @@ describe('Task type filtering on the board', () => {
     await renderBoard(seeded());
     expect(headerCount()).toBe(4);
 
-    fireEvent.change(typeFilter(), { target: { value: 'GRAPHICS' } });
+    choose('Task type', 'Graphics');
 
     expect(cardTitles()).toEqual(['Launch graphics', 'Sponsor cutdown']);
     expect(headerCount()).toBe(2);
     expect(location()).toBe('/status?type=GRAPHICS');
 
-    fireEvent.change(typeFilter(), { target: { value: '' } });
+    fireEvent.click(filterOption('Graphics'));
 
     expect(cardTitles()).toEqual([
       'Recap post',
@@ -97,7 +102,7 @@ describe('Task type filtering on the board', () => {
   it('shows exactly the tasks with no type under "No type"', async () => {
     await renderBoard(seeded());
 
-    fireEvent.change(typeFilter(), { target: { value: 'none' } });
+    choose('Task type', 'No type');
 
     expect(cardTitles()).toEqual(['Legacy chore']);
     expect(headerCount()).toBe(1);
@@ -107,13 +112,13 @@ describe('Task type filtering on the board', () => {
   it('combines the type with priority rather than replacing it', async () => {
     await renderBoard(seeded());
 
-    fireEvent.change(typeFilter(), { target: { value: 'GRAPHICS' } });
-    fireEvent.change(priorityFilter(), { target: { value: 'URGENT' } });
+    choose('Task type', 'Graphics');
+    choose('Priority', 'URGENT');
 
     // Both filters are still applied: the second Graphics task is MEDIUM and drops out.
     expect(cardTitles()).toEqual(['Launch graphics']);
     expect(headerCount()).toBe(1);
-    expect(typeFilter()).toHaveValue('GRAPHICS');
+    expect(filterOption('Graphics')).toBeChecked();
     expect(location()).toBe('/status?type=GRAPHICS&priority=URGENT');
   });
 
@@ -122,8 +127,8 @@ describe('Task type filtering on the board', () => {
 
     expect(cardTitles()).toEqual(['Launch graphics']);
     expect(headerCount()).toBe(1);
-    expect(typeFilter()).toHaveValue('GRAPHICS');
-    expect(priorityFilter()).toHaveValue('URGENT');
+    expect(filterOption('Graphics')).toBeChecked();
+    expect(filterOption('URGENT')).toBeChecked();
   });
 
   it('keeps the type beside the client, project, focus, tag, and search filters', async () => {
@@ -138,7 +143,7 @@ describe('Task type filtering on the board', () => {
       '/status?project=p1&client=client-p1&filter=week&tags=tag-brand',
     );
 
-    fireEvent.change(typeFilter(), { target: { value: 'GRAPHICS' } });
+    choose('Task type', 'Graphics');
     fireEvent.change(screen.getByRole('textbox', { name: 'Search' }), {
       target: { value: 'launch' },
     });

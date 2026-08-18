@@ -1,4 +1,4 @@
-import { mixHex } from './contrast';
+import { mixHex } from './contrast.ts';
 
 /**
  * Signal Campaign: the scheduled-content vocabulary the API, the planner, and the calendar
