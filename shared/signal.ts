@@ -225,6 +225,43 @@ export const SIGNAL_CHANNEL_NEUTRAL: SignalChannelTreatment = treatment('#5f6764
 export const isSignalChannel = (value: string): value is SignalChannel =>
   (SIGNAL_CHANNELS as readonly string[]).includes(value);
 
+/**
+ * A reusable starting point for channel selection. The stored values deliberately remain strings:
+ * a preset can outlive a channel vocabulary change, and resolving it must be able to name a stale
+ * identifier instead of silently replacing it with a current channel.
+ */
+export interface SignalChannelPreset {
+  id: string;
+  label: string;
+  channelIds: readonly string[];
+}
+
+/** Local app presets only. They are not provider account groups and never leave the app. */
+export const SIGNAL_CHANNEL_PRESETS = [
+  { id: 'all', label: 'All channels', channelIds: SIGNAL_CHANNELS },
+  { id: 'visual', label: 'Visual social', channelIds: ['ig', 'fb'] },
+  { id: 'professional', label: 'Professional', channelIds: ['blog', 'li'] },
+  { id: 'short-video', label: 'Short-form video', channelIds: ['ig', 'tt', 'yt'] },
+] as const satisfies readonly SignalChannelPreset[];
+
+export interface ResolvedSignalChannelPreset {
+  channels: SignalChannel[];
+  excludedChannelIds: string[];
+}
+
+/** Resolve stored IDs without guessing: missing IDs are returned to the UI for a visible warning. */
+export function resolveSignalChannelPreset(
+  preset: Pick<SignalChannelPreset, 'channelIds'>,
+): ResolvedSignalChannelPreset {
+  const channels: SignalChannel[] = [];
+  const excludedChannelIds: string[] = [];
+  for (const channelId of new Set(preset.channelIds)) {
+    if (isSignalChannel(channelId)) channels.push(channelId);
+    else excludedChannelIds.push(channelId);
+  }
+  return { channels, excludedChannelIds };
+}
+
 /** Everything a chip needs to draw itself: the words that identify it and the colours on top. */
 export interface SignalChannelPresentation extends SignalChannelTreatment {
   /** The channel's full name, for the accessible label. */

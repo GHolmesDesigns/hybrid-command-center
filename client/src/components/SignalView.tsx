@@ -19,6 +19,7 @@ import {
 import { api, send } from '../api';
 import {
   SIGNAL_CHANNEL_LABEL,
+  SIGNAL_CHANNEL_PRESETS,
   SIGNAL_CHANNELS,
   SIGNAL_CTA_LABEL,
   SIGNAL_CTAS,
@@ -27,6 +28,7 @@ import {
   SIGNAL_STATUS_LABEL,
   SIGNAL_STATUSES,
   isSignalDate,
+  resolveSignalChannelPreset,
   signalChannelPresentation,
   signalMediaKind,
   signalTextHasLink,
@@ -264,6 +266,7 @@ function Editor({
   const [mediaInput, setMediaInput] = useState('');
   const [publishPreview, setPublishPreview] = useState<PublishPreview | null>(null);
   const [publications, setPublications] = useState<SignalPublication[]>([]);
+  const [presetNotice, setPresetNotice] = useState('');
   const textRef = useRef<HTMLTextAreaElement>(null);
   const hasUnsavedChanges = JSON.stringify(draft) !== JSON.stringify(draftFor(post));
   const hasPublishableChannel = post.channels.some((channel) => channel !== 'blog');
@@ -391,6 +394,18 @@ function Editor({
         : [...current.channels, channel],
     }));
 
+  const applyChannelPreset = (presetId: string) => {
+    const preset = SIGNAL_CHANNEL_PRESETS.find((candidate) => candidate.id === presetId);
+    if (!preset) return;
+    const { channels, excludedChannelIds } = resolveSignalChannelPreset(preset);
+    setDraft((current) => ({ ...current, channels }));
+    setPresetNotice(
+      excludedChannelIds.length > 0
+        ? `${preset.label} applied. Excluded unavailable channels: ${excludedChannelIds.join(', ')}.`
+        : `${preset.label} applied. You can edit the channels below.`,
+    );
+  };
+
   const addMedia = () => {
     const value = mediaInput.trim();
     try {
@@ -467,6 +482,22 @@ function Editor({
           )}
           <fieldset className="signal-channel-fieldset">
             <legend>Channels</legend>
+            <label className="signal-channel-preset">
+              Channel preset
+              <select value="" onChange={(event) => applyChannelPreset(event.target.value)}>
+                <option value="">Choose a preset</option>
+                {SIGNAL_CHANNEL_PRESETS.map((preset) => (
+                  <option value={preset.id} key={preset.id}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {presetNotice && (
+              <p className="signal-preset-notice" role="status">
+                {presetNotice}
+              </p>
+            )}
             <div>
               {SIGNAL_CHANNELS.map((channel) => (
                 <label key={channel}>
