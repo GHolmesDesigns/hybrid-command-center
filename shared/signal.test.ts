@@ -6,10 +6,14 @@ import {
   SIGNAL_CHANNEL_TREATMENT,
   SIGNAL_CHANNELS,
   SIGNAL_CHANNEL_PRESETS,
+  SIGNAL_SLOT_SEARCH_DAYS,
   isSignalChannel,
   resolveSignalChannelPreset,
   signalChannelPresentation,
+  signalNextDate,
+  signalSlotOccupied,
   signalTextHasLink,
+  suggestNextOpenSignalSlot,
 } from './signal.ts';
 import { contrastRatio, meetsAaText, mixHex, normalizeHex } from './contrast.ts';
 
@@ -31,6 +35,68 @@ describe('Signal link detection', () => {
     ['a decimal number', 'The average is 12.75 today.'],
   ])('ignores %s', (_case, text) => {
     expect(signalTextHasLink(text)).toBe(false);
+  });
+});
+
+describe('next open Signal slot', () => {
+  it('walks calendar days without Date, leap years and year-below-100 included', () => {
+    expect(signalNextDate('2026-09-14')).toBe('2026-09-15');
+    expect(signalNextDate('2026-09-30')).toBe('2026-10-01');
+    expect(signalNextDate('2026-12-31')).toBe('2027-01-01');
+    expect(signalNextDate('2027-02-28')).toBe('2027-03-01');
+    expect(signalNextDate('2028-02-28')).toBe('2028-02-29');
+    expect(signalNextDate('2028-02-29')).toBe('2028-03-01');
+    expect(signalNextDate('0001-12-31')).toBe('0002-01-01');
+  });
+
+  it('treats the same date and time as occupied, and nothing else', () => {
+    const occupied = [
+      { date: '2026-09-14', time: '09:00' },
+      { date: '2026-09-15', time: '15:00' },
+    ];
+    expect(signalSlotOccupied(occupied, { date: '2026-09-14', time: '09:00' })).toBe(true);
+    expect(signalSlotOccupied(occupied, { date: '2026-09-14', time: '15:00' })).toBe(false);
+    expect(signalSlotOccupied(occupied, { date: '2026-09-15', time: '09:00' })).toBe(false);
+  });
+
+  it("returns the first free date at the preferred time, skipping the post's own cell", () => {
+    expect(
+      suggestNextOpenSignalSlot({
+        occupied: [{ date: '2026-09-14', time: '09:00' }],
+        time: '09:00',
+        fromDate: '2026-09-14',
+      }),
+    ).toEqual({ date: '2026-09-15', time: '09:00' });
+
+    expect(
+      suggestNextOpenSignalSlot({
+        occupied: [],
+        time: '13:00',
+        fromDate: '2026-09-14',
+        skip: { date: '2026-09-14', time: '13:00' },
+      }),
+    ).toEqual({ date: '2026-09-15', time: '13:00' });
+  });
+
+  it('keeps another post on the same day when the times differ', () => {
+    expect(
+      suggestNextOpenSignalSlot({
+        occupied: [{ date: '2026-09-14', time: '15:00' }],
+        time: '09:00',
+        fromDate: '2026-09-14',
+      }),
+    ).toEqual({ date: '2026-09-14', time: '09:00' });
+  });
+
+  it('gives up after the search window rather than walking forever', () => {
+    const occupied = Array.from({ length: SIGNAL_SLOT_SEARCH_DAYS }, (_, index) => {
+      let date = '2026-01-01';
+      for (let step = 0; step < index; step += 1) date = signalNextDate(date);
+      return { date, time: '09:00' };
+    });
+    expect(
+      suggestNextOpenSignalSlot({ occupied, time: '09:00', fromDate: '2026-01-01' }),
+    ).toBeNull();
   });
 });
 

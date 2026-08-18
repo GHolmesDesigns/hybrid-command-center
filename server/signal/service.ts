@@ -9,7 +9,10 @@ import {
   SIGNAL_STATUSES,
   SIGNAL_TIME_PATTERN,
   isSignalDate,
+  signalSlotOccupied,
+  suggestNextOpenSignalSlot,
   type SignalPost,
+  type SignalSlot,
 } from '../../shared/signal.ts';
 import {
   listPostVariants,
@@ -53,6 +56,22 @@ const now = () => new Date().toISOString();
 
 /** A post that does not exist, answered as a 404 rather than as a silent no-op. */
 export class SignalPostNotFoundError extends Error {}
+
+/**
+ * A suggested slot was refused: either the confirmed cell is now taken, or the search window
+ * found no free cell. Carries a replacement suggestion when one exists, so the editor can show
+ * it without a second round-trip.
+ */
+export class SignalSlotConflictError extends Error {
+  readonly status: 409;
+  readonly suggestion: SignalSlot | null;
+  constructor(message: string, suggestion: SignalSlot | null) {
+    super(message);
+    this.name = 'SignalSlotConflictError';
+    this.status = 409;
+    this.suggestion = suggestion;
+  }
+}
 
 const channel = z.enum(SIGNAL_CHANNELS);
 const mediaUrl = z
@@ -105,6 +124,20 @@ export const signalRangeQuery = z.object({
   from: date,
   to: date,
 });
+
+/** The local day the planner is looking from. The server never derives this from an instant. */
+export const signalSlotFromQuery = z.object({
+  from: date,
+});
+
+/** The cell the user confirmed, plus the local day used to recompute if it is now taken. */
+export const signalSlotInput = z.object({
+  date,
+  time: z.string().regex(SIGNAL_TIME_PATTERN, 'Use a 24-hour HH:MM time.'),
+  from: date,
+});
+
+export type SignalSlotInput = z.output<typeof signalSlotInput>;
 
 /** Where a new unscheduled post sits: after everything already queued. */
 function nextQueuePosition(db: Db): number {
@@ -400,4 +433,71 @@ export function replacePostVariants(
 export function getPostVariants(db: Db, postId: string): PublishVariantRecord[] {
   if (!getPost(db, postId)) throw new SignalPostNotFoundError(`No Signal post ${postId}.`);
   return listPostVariants(db, postId);
+}
+
+/**
+ * Copies composition onto a new unscheduled post. Publication and delivery rows stay on the
+ * original: a duplicate is a new plan, not a second record of a send.
+ */
+export function duplicatePost(db: Db, postId: string): SignalPost {
+  const source = getPost(db, postId);
+  if (!source) throw new SignalPostNotFoundError(`No Signal post ${postId}.`);
+  return createPost(db, {
+    text: source.text,
+    channels: source.channels,
+    mediaUrls: source.mediaUrls,
+    date: null,
+    time: source.time,
+    format: source.format,
+    status: 'DRAFT',
+    campaign: source.campaign,
+    cta: source.cta,
+  });
+}
+
+function occupiedSlots(db: Db, exceptPostId: string): SignalSlot[] {
+  return db
+    .prepare('SELECT date, time FROM signal_posts WHERE date IS NOT NULL AND id != ?')
+    .all(exceptPostId) as unknown as SignalSlot[];
+}
+
+function suggestionFor(
+  post: SignalPost,
+  occupied: SignalSlot[],
+  fromDate: string,
+): SignalSlot | null {
+  return suggestNextOpenSignalSlot({
+    occupied,
+    time: post.time,
+    fromDate,
+    skip: post.date ? { date: post.date, time: post.time } : null,
+  });
+}
+
+/** The next free Signal cell at this post's time, computed from the schedule alone. */
+export function suggestPostSlot(db: Db, postId: string, fromDate: string): SignalSlot {
+  const post = getPost(db, postId);
+  if (!post) throw new SignalPostNotFoundError(`No Signal post ${postId}.`);
+  const suggestion = suggestionFor(post, occupiedSlots(db, postId), fromDate);
+  if (!suggestion)
+    throw new SignalSlotConflictError('No open slot was found in the next two years.', null);
+  return suggestion;
+}
+
+/**
+ * Writes a confirmed slot after recomputing occupancy. A taken cell is refused rather than
+ * overwritten, and the replacement suggestion is whatever the schedule now has free.
+ */
+export function applyPostSlot(db: Db, postId: string, input: SignalSlotInput): SignalPost {
+  const post = getPost(db, postId);
+  if (!post) throw new SignalPostNotFoundError(`No Signal post ${postId}.`);
+  const occupied = occupiedSlots(db, postId);
+  const confirmed = { date: input.date, time: input.time };
+  if (signalSlotOccupied(occupied, confirmed)) {
+    throw new SignalSlotConflictError(
+      'That slot is no longer open.',
+      suggestionFor(post, occupied, input.from),
+    );
+  }
+  return updatePost(db, postId, { date: input.date, time: input.time });
 }

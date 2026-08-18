@@ -3718,6 +3718,27 @@ button.tag-chip.toggle.active {
 .signal-unschedule {
   align-self: flex-start;
 }
+.signal-slot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.signal-slot-suggestion {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line, #d7dbd6);
+  border-radius: 8px;
+  background: var(--paper, #fff);
+}
+.signal-slot-suggestion h3,
+.signal-slot-suggestion p {
+  margin: 0;
+}
+.signal-slot-suggestion p {
+  color: var(--muted);
+  font-size: 12px;
+}
 .signal-editor-actions {
   display: flex;
   justify-content: space-between;

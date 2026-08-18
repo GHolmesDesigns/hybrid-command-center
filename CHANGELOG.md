@@ -8,6 +8,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [4.3.2] - 2026-08-18
+
+### Added
+
+- Signal post editors now offer **Duplicate to unscheduled queue**. The copy keeps the original
+  content, media, campaign, channels, format, CTA, and posting time, and lands in the queue as a
+  new draft with no date. Publication and delivery history stay on the original.
+- **Suggest next open slot** reads the Signal schedule and proposes the next date at that post's
+  time that no other post already occupies. The suggestion is shown until you confirm it; occupancy
+  is checked again at that moment, and a taken cell is refused rather than double-booked.
+
+### Breaking changes
+
+None.
+
 ## [4.3.1] - 2026-08-18
 
 ### Added

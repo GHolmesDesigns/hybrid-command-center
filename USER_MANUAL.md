@@ -582,6 +582,13 @@ Clear the date, or use **Move to unscheduled queue**, to return a post to the qu
 queued post a date schedules it in that month's grid. Saving reloads both views from the Signal
 API, so the same post cannot remain in the queue and the calendar at once.
 
+**Duplicate to unscheduled queue** copies the post's content, media, campaign, channels, format,
+CTA, and posting time into a new draft with no date. The original is left where it is, including
+any publication or delivery history — those records are not copied. **Suggest next open slot**
+then proposes the next date at that time that the Signal schedule does not already occupy. Nothing
+is written until you confirm **Use this slot**. If another post takes that cell first, Signal
+refuses the write and offers the next free cell instead.
+
 Media is added as a public `https:` URL, not uploaded. Use the arrow controls beside a media row to
 change its order, or the trash control to detach it from the post. The planner shows the media
 count on the post. Command Center stores only those URL references: it never downloads, proxies,
