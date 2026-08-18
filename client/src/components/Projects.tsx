@@ -324,6 +324,9 @@ function ProjectTile({
   const mine = tasks.filter((t) => t.projectId === project.id),
     done = mine.filter((t) => t.status === 'COMPLETE').length,
     over = mine.filter((t) => t.overdue).length;
+  // Every block below is a direct child of the tile, because the tile is one column with one
+  // gap in `styles.css` rather than a stack of margins. That is what lets the category list
+  // appear, disappear, or wrap to a second line without changing what surrounds it.
   return (
     <article
       ref={setNodeRef}

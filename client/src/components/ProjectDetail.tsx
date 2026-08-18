@@ -168,53 +168,58 @@ export function ProjectDetail({
           </div>
         }
       />
-      <div className="project-summary">
-        <div>
-          <span>Status</span>
-          <strong>{p.status.replace('_', ' ')}</strong>
+      {/* What the project is, then what can be done to it. One column with one gap, so the
+          categories are the same distance from the actions whether there are none of them, one,
+          or enough to wrap — see `.project-overview` in `styles.css`. */}
+      <div className="project-overview">
+        <div className="project-summary">
+          <div>
+            <span>Status</span>
+            <strong>{p.status.replace('_', ' ')}</strong>
+          </div>
+          <div>
+            <span>Deadline</span>
+            <strong>{p.targetDeadline ? formatDate(p.targetDeadline) : 'Not set'}</strong>
+          </div>
+          <div>
+            <span>Priority</span>
+            <strong>{p.priority}</strong>
+          </div>
+          <div>
+            <span>Task health</span>
+            <strong>{mine.filter((t) => t.overdue).length} overdue</strong>
+          </div>
         </div>
-        <div>
-          <span>Deadline</span>
-          <strong>{p.targetDeadline ? formatDate(p.targetDeadline) : 'Not set'}</strong>
+        {p.categories.length > 0 && (
+          <ul className="tag-list" aria-label={`Categories on ${p.name}`}>
+            {p.categories.map((category) => (
+              <li key={category.id}>
+                <TagChip tag={category} />
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="detail-actions">
+          <Link className="buttonlike" to={`/status?project=${p.id}`}>
+            Open project status <ArrowRight />
+          </Link>
+          <Link className="buttonlike secondary" to={`/files?project=${p.id}`}>
+            <FileText /> Browse files
+          </Link>
+          <button className="secondary" onClick={() => open({ type: 'project', value: p })}>
+            Edit project
+          </button>
+          <button className="secondary danger-outline" onClick={remove}>
+            <Trash2 /> Delete project
+          </button>
         </div>
-        <div>
-          <span>Priority</span>
-          <strong>{p.priority}</strong>
-        </div>
-        <div>
-          <span>Task health</span>
-          <strong>{mine.filter((t) => t.overdue).length} overdue</strong>
-        </div>
+        {/* Stated where deleting is, not only in the confirmation: the Drive folder this page
+            links to outlives the record, and that is easiest to believe before the prompt. */}
+        <p className="field-hint">
+          Deleting this project removes it and its tasks from Command Center only. Its Drive folder
+          and every file in it are left exactly as they are.
+        </p>
       </div>
-      {p.categories.length > 0 && (
-        <ul className="tag-list" aria-label={`Categories on ${p.name}`}>
-          {p.categories.map((category) => (
-            <li key={category.id}>
-              <TagChip tag={category} />
-            </li>
-          ))}
-        </ul>
-      )}
-      <div className="detail-actions">
-        <Link className="buttonlike" to={`/status?project=${p.id}`}>
-          Open project status <ArrowRight />
-        </Link>
-        <Link className="buttonlike secondary" to={`/files?project=${p.id}`}>
-          <FileText /> Browse files
-        </Link>
-        <button className="secondary" onClick={() => open({ type: 'project', value: p })}>
-          Edit project
-        </button>
-        <button className="secondary danger-outline" onClick={remove}>
-          <Trash2 /> Delete project
-        </button>
-      </div>
-      {/* Stated where deleting is, not only in the confirmation: the Drive folder this page
-          links to outlives the record, and that is easiest to believe before the prompt. */}
-      <p className="field-hint">
-        Deleting this project removes it and its tasks from Command Center only. Its Drive folder
-        and every file in it are left exactly as they are.
-      </p>
       <section className="panel">
         <div className="section-title">
           <div>

@@ -1131,7 +1131,7 @@ button svg,
   color: var(--ink);
   text-decoration: none;
   display: block;
-  margin: 18px 0;
+  margin: 0;
 }
 .client-name {
   font-size: 10px;
@@ -1373,7 +1373,7 @@ button.tag-chip.toggle.active {
   height: 5px;
   background: #eee;
   border-radius: 5px;
-  margin: 8px 0 17px;
+  margin: 8px 0 0;
   overflow: hidden;
 }
 .progress-track span {
@@ -1463,7 +1463,6 @@ button.tag-chip.toggle.active {
   background: #fff;
   border: 1px solid var(--line);
   border-radius: 13px;
-  margin-bottom: 14px;
 }
 .project-summary > div {
   padding: 18px;
@@ -1487,7 +1486,6 @@ button.tag-chip.toggle.active {
 .detail-actions {
   display: flex;
   gap: 8px;
-  margin-bottom: 18px;
 }
 .task-table {
   background: #fff;
@@ -1776,6 +1774,39 @@ button.tag-chip.toggle.active {
   border-radius: 6px;
   background: #fafaf8;
   color: #555;
+}
+/* One gap for a project's blocks, in the two places that show them: the tile in the grid and
+   the overview at the top of Project Detail. Both used to space themselves with a chain of
+   one-sided margins on the blocks — 18px under the tile's link, 14px under the summary, 16px
+   over the actions — and the category list carried only a top one. So the distance below the
+   categories was whatever the block after them brought, which was nothing: the chips sat on
+   the progress bar and on the actions, worst when the list wrapped to a second line. Take the
+   list away and the gap became the previous block's margin instead — a different number in
+   the same place.
+
+   The column owns the spacing now and every child brings none, so no categories, one, and six
+   over three lines all measure the same. Nothing here reads a block's height: no fixed
+   heights, no absolute positioning, no `margin-top: auto`, and a tile still sizes to its own
+   content. `e2e/project-spacing.spec.ts` measures the gaps a browser produces. */
+.project-tile,
+.project-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+/* Cancelled here rather than in the shared rules: `.tag-list` also spaces the chips under a
+   board card and inside the chip input, `.card-actions` spaces a client card's buttons, and
+   `.keyboard-move` its own select. Outside these two columns those margins are still the only
+   thing holding those blocks apart. */
+.project-tile > .tag-list,
+.project-tile > .card-actions,
+.project-tile > .keyboard-move,
+.project-overview > .tag-list {
+  margin: 0;
+}
+/* The overview stands off the panel below it the way the page's other sections do. */
+.project-overview {
+  margin-bottom: 18px;
 }
 /* Two column stacks, not a grid of cards. The grid places the stacks; each stack places its
    own cards. A card in a shared row track takes its starting edge from the tallest card beside
