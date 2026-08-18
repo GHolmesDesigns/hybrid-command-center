@@ -3635,7 +3635,7 @@ button.tag-chip.toggle.active {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 7px;
 }
-.signal-channel-fieldset label {
+.signal-channel-fieldset > div > label {
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -3644,9 +3644,27 @@ button.tag-chip.toggle.active {
   border: 1px solid var(--line);
   border-radius: 8px;
 }
-.signal-channel-fieldset input {
+.signal-channel-fieldset > div input {
   width: auto;
   margin: 0;
+}
+.signal-channel-preset {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 7px;
+  color: #58605c;
+  font-size: 11px;
+  font-weight: 600;
+}
+.signal-channel-preset select {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 400;
+}
+.signal-preset-notice {
+  margin: 0 0 7px;
+  color: var(--muted);
+  font-size: 12px;
 }
 .signal-media-fieldset {
   display: grid;

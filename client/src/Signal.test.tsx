@@ -178,6 +178,34 @@ describe('Signal planner', () => {
     expect(screen.getByLabelText('Content')).toHaveValue('Scheduled link: foo.io/path');
   });
 
+  it('applies a channel preset as an editable starting point and saves channel identifiers', async () => {
+    testState.signalPostsPayload = [
+      signalPost('preset', 'Choose a distribution set', '2026-09-14', { channels: ['x'] }),
+    ];
+    await openSignal();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Choose a distribution set' }));
+
+    fireEvent.change(screen.getByLabelText('Channel preset'), { target: { value: 'short-video' } });
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Short-form video applied. You can edit the channels below.',
+    );
+    expect(screen.getByRole('checkbox', { name: 'Instagram' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'TikTok' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'YouTube' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'X' })).not.toBeChecked();
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'LinkedIn' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'TikTok' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save post' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(requests.find((request) => request.method === 'PATCH')?.body.channels).toEqual([
+      'ig',
+      'yt',
+      'li',
+    ]);
+  });
+
   it('shows media count and saves an explicit media reorder from the editor', async () => {
     const first = 'https://cdn.example.com/first.jpg';
     const second = 'https://cdn.example.com/second.mp4';

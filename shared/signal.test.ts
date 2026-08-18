@@ -5,7 +5,9 @@ import {
   SIGNAL_CHANNEL_NEUTRAL,
   SIGNAL_CHANNEL_TREATMENT,
   SIGNAL_CHANNELS,
+  SIGNAL_CHANNEL_PRESETS,
   isSignalChannel,
+  resolveSignalChannelPreset,
   signalChannelPresentation,
   signalTextHasLink,
 } from './signal.ts';
@@ -125,5 +127,24 @@ describe('Signal channel presentation', () => {
     });
     expect(isSignalChannel('mastodon')).toBe(false);
     expect(SIGNAL_CHANNELS.every(isSignalChannel)).toBe(true);
+  });
+});
+
+describe('Signal channel presets', () => {
+  it('stores stable channel identifiers and resolves every built-in preset', () => {
+    for (const preset of SIGNAL_CHANNEL_PRESETS) {
+      expect(preset.channelIds.every((channelId) => typeof channelId === 'string')).toBe(true);
+      expect(resolveSignalChannelPreset(preset)).toEqual({
+        channels: [...preset.channelIds],
+        excludedChannelIds: [],
+      });
+    }
+  });
+
+  it('visibly excludes a channel identifier that no longer exists without substituting one', () => {
+    expect(resolveSignalChannelPreset({ channelIds: ['li', 'retired-network', 'li'] })).toEqual({
+      channels: ['li'],
+      excludedChannelIds: ['retired-network'],
+    });
   });
 });
