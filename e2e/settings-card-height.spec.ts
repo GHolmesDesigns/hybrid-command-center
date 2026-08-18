@@ -13,6 +13,10 @@ import { test, expect, type Locator } from '@playwright/test';
  * as large as the mismatch. That is why the assertion is a couple of pixels of rounding rather
  * than a tolerance: a tolerance loose enough to absorb the padding would also absorb a bug.
  *
+ * The cards are reached through the two column stacks C56 introduced rather than as the grid's
+ * own children; what is measured, and what it proves, is unchanged. Where a card starts is that
+ * card's spec, `settings-column-independence.spec.ts`. This one is only about where it ends.
+ *
  * Both Drive states are covered, because they differ by a couple of hundred pixels and a
  * height assertion that only holds for the short one proves very little. The connected state
  * is faked at the HTTP boundary with `page.route`: this suite has no Google credentials, and
@@ -43,7 +47,7 @@ test('the Settings cards size to their content at desktop width, in both Drive s
   await page.setViewportSize({ width: 1440, height: 900 });
 
   const layout = page.locator('.settings-layout');
-  const cards = layout.locator('> .settings-card');
+  const cards = layout.locator('.settings-card');
   const drive = cards.first();
   const branding = cards.filter({
     has: page.getByRole('heading', { level: 2, name: 'Branding' }),

@@ -138,295 +138,311 @@ export function SettingsView({
         title="Settings"
         body="Connect storage, shape the sidebar brand, and control how this local command center behaves."
       />
+      {/*
+        Two independent stacks rather than six cards sharing a two-column grid's rows. Cards
+        that share a row share a starting edge, so the taller of a pair decided where the next
+        card on the *other* side began: a Drive card that grew on connecting, a validation
+        message that appeared, or a category list that wrapped left a blank strip beside it.
+        A column is its own flow, so only the cards above a card in the same stack move it.
+
+        The stacks are the reading order too. Below 1100px they sit one under the other, and
+        because nothing is reordered in CSS, what the keyboard and a screen reader follow is
+        what is on screen at both widths: what the workspace connects to and organises by,
+        then how it looks and what it shows.
+      */}
       <div className="settings-layout">
-        <section className="panel settings-card">
-          <div className="settings-icon">
-            <ExternalLink />
-          </div>
-          <div className="section-title">
-            <div>
-              <span className="eyebrow">Integration</span>
-              <h2>Google Drive</h2>
+        <div className="settings-column">
+          <section className="panel settings-card">
+            <div className="settings-icon">
+              <ExternalLink />
             </div>
-            <DriveBadge status={state?.connected ? 'CONNECTED' : 'DISCONNECTED'} />
-          </div>
-          <p>
-            Drive stores project files. Clients and projects are owned by Command Center — folder
-            names never create projects. OAuth tokens stay encrypted locally and never reach the
-            browser.
-          </p>
-          {driveError && (
-            <div className="inline-warning" role="alert">
-              <AlertCircle />
+            <div className="section-title">
               <div>
-                <strong>Drive status unavailable</strong>
-                <span>{driveError}</span>
+                <span className="eyebrow">Integration</span>
+                <h2>Google Drive</h2>
               </div>
+              <DriveBadge status={state?.connected ? 'CONNECTED' : 'DISCONNECTED'} />
             </div>
-          )}
-          {!driveError && !state?.configured && (
-            <div className="inline-warning">
-              <AlertCircle />
-              <div>
-                <strong>Credentials required</strong>
-                <span>
-                  Add the Google OAuth values and encryption key from <code>.env.example</code>,
-                  then restart the app.
-                </span>
-              </div>
-            </div>
-          )}
-          {state?.connected ? (
-            <>
-              <form onSubmit={saveRoot} className="root-form">
-                <label>
-                  Command Center root folder URL or ID
-                  <input
-                    value={root}
-                    onChange={(e) => setRoot(e.target.value)}
-                    placeholder={state.rootFolderId || 'Paste a Google Drive folder URL'}
-                    required
-                  />
-                </label>
-                <button type="submit">Verify & save root</button>
-              </form>
-              {state.rootFolderUrl && (
-                <a
-                  className="drive-root"
-                  target="_blank"
-                  rel="noreferrer"
-                  href={state.rootFolderUrl}
-                >
-                  <div>
-                    <FolderKanban />
-                    <span>
-                      <strong>Current root folder</strong>
-                      <small>{state.rootFolderId}</small>
-                    </span>
-                  </div>
-                  <ExternalLink />
-                </a>
-              )}
-              <button className="text-btn danger-text" onClick={disconnect}>
-                Disconnect Google Drive
-              </button>
-            </>
-          ) : (
-            <button onClick={connect} disabled={!state?.configured}>
-              Connect Google Drive
-            </button>
-          )}
-        </section>
-        <section className="panel settings-card">
-          <div className="settings-icon neutral">
-            <Pencil />
-          </div>
-          <div className="section-title">
-            <div>
-              <span className="eyebrow">Sidebar</span>
-              <h2>Branding</h2>
-            </div>
-            <span className="version-pill">v{APP_VERSION}</span>
-          </div>
-          <p>
-            Edit the wording, colours, and logo shown in the sidebar. Defaults also live in{' '}
-            <code>shared/branding.ts</code> if you prefer changing them in code.
-          </p>
-          <form className="form brand-form" onSubmit={saveBranding}>
-            <div className="form-row">
-              <label>
-                Mark
-                <input
-                  value={brandForm.mark}
-                  maxLength={4}
-                  onChange={(e) => setBrandForm({ ...brandForm, mark: e.target.value })}
-                  required
-                />
-              </label>
-              <label>
-                Title
-                <input
-                  value={brandForm.title}
-                  maxLength={40}
-                  onChange={(e) => setBrandForm({ ...brandForm, title: e.target.value })}
-                  required
-                />
-              </label>
-            </div>
-            <label>
-              Subtitle
-              <input
-                value={brandForm.subtitle}
-                maxLength={60}
-                onChange={(e) => setBrandForm({ ...brandForm, subtitle: e.target.value })}
-                required
-              />
-            </label>
-            <label>
-              Tagline
-              <input
-                value={brandForm.tagline}
-                maxLength={80}
-                onChange={(e) => setBrandForm({ ...brandForm, tagline: e.target.value })}
-                required
-              />
-            </label>
-            <div className="color-row">
-              {BRANDING_COLOR_FIELDS.map((field) => (
-                <div className="color-field" key={field}>
-                  <label htmlFor={`brand-${field}`}>{COLOR_LABEL[field]}</label>
-                  <div className="color-input">
-                    <input
-                      id={`brand-${field}`}
-                      type="color"
-                      value={normalizeHex(brandForm[field]) || DEFAULT_BRANDING[field]}
-                      onChange={(e) => setBrandForm({ ...brandForm, [field]: e.target.value })}
-                    />
-                    <input
-                      aria-label={`${COLOR_LABEL[field]} hex value`}
-                      value={brandForm[field]}
-                      maxLength={7}
-                      spellCheck={false}
-                      onChange={(e) => setBrandForm({ ...brandForm, [field]: e.target.value })}
-                      required
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-            <ul className="contrast-list">
-              {contrast.map((reading) => (
-                <li key={reading.field} className={reading.passes ? 'pass' : 'fail'}>
-                  {reading.passes ? <CheckCircle2 /> : <AlertCircle />}
-                  <span>{reading.label}</span>
-                  <strong>
-                    {reading.ratio}:1 · {reading.passes ? 'Passes AA' : 'Fails AA'}
-                  </strong>
-                </li>
-              ))}
-            </ul>
-            <label>
-              Logo address (optional)
-              <input
-                type="url"
-                value={brandForm.logoUrl}
-                maxLength={LOGO_URL_MAX}
-                placeholder="https://example.com/logo.png"
-                spellCheck={false}
-                onChange={(e) => setBrandForm({ ...brandForm, logoUrl: e.target.value })}
-              />
-            </label>
-            <label>
-              Logo alt text
-              <input
-                value={brandForm.logoAlt}
-                maxLength={120}
-                placeholder="Describe the logo, e.g. GHolmes Designs logo"
-                disabled={!brandForm.logoUrl}
-                onChange={(e) => setBrandForm({ ...brandForm, logoAlt: e.target.value })}
-                required={Boolean(brandForm.logoUrl)}
-              />
-            </label>
-            <p className="field-hint">
-              A logo is referenced by address, never uploaded or copied into this device's database.
-              Without one, the text mark is used.
+            <p>
+              Drive stores project files. Clients and projects are owned by Command Center — folder
+              names never create projects. OAuth tokens stay encrypted locally and never reach the
+              browser.
             </p>
-            {logoProblems.length > 0 && (
+            {driveError && (
               <div className="inline-warning" role="alert">
                 <AlertCircle />
                 <div>
-                  <strong>Logo needs one more thing</strong>
-                  <span>{logoProblems.map((issue) => issue.message).join(' ')}</span>
+                  <strong>Drive status unavailable</strong>
+                  <span>{driveError}</span>
                 </div>
               </div>
             )}
-            <div className="brand-preview" style={brandStyle(brandForm)}>
-              <BrandMark branding={brandForm} />
-              <div>
-                <strong>{brandForm.title || DEFAULT_BRANDING.title}</strong>
-                <span>{brandForm.subtitle || DEFAULT_BRANDING.subtitle}</span>
+            {!driveError && !state?.configured && (
+              <div className="inline-warning">
+                <AlertCircle />
+                <div>
+                  <strong>Credentials required</strong>
+                  <span>
+                    Add the Google OAuth values and encryption key from <code>.env.example</code>,
+                    then restart the app.
+                  </span>
+                </div>
               </div>
-              <em>v{APP_VERSION}</em>
-            </div>
-            <div className="brand-actions">
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => setBrandForm({ ...DEFAULT_BRANDING })}
-                disabled={brandBusy}
-              >
-                <RotateCcw /> Reset to defaults
-              </button>
-              <button className="submit" disabled={brandBusy || brandProblems.length > 0}>
-                {brandBusy ? (
-                  <>
-                    <RefreshCw className="spin" /> Saving…
-                  </>
-                ) : (
-                  'Save branding'
-                )}
-              </button>
-            </div>
-            {brandProblems.length > 0 && (
-              <p className="field-hint" role="status">
-                Saving is blocked until every reading above passes AA.
-              </p>
             )}
-          </form>
-        </section>
-        <CategoriesCard
-          categories={categories}
-          projects={projects}
-          refresh={refresh}
-          flash={flash}
-        />
-        <TagsCard tags={tags} tasks={tasks} refresh={refresh} flash={flash} />
-        <section className="panel settings-card">
-          <div className="settings-icon neutral">
-            <Clock3 />
-          </div>
-          <div className="section-title">
-            <div>
-              <span className="eyebrow">Dates & deadlines</span>
-              <h2>Local timezone</h2>
+            {state?.connected ? (
+              <>
+                <form onSubmit={saveRoot} className="root-form">
+                  <label>
+                    Command Center root folder URL or ID
+                    <input
+                      value={root}
+                      onChange={(e) => setRoot(e.target.value)}
+                      placeholder={state.rootFolderId || 'Paste a Google Drive folder URL'}
+                      required
+                    />
+                  </label>
+                  <button type="submit">Verify & save root</button>
+                </form>
+                {state.rootFolderUrl && (
+                  <a
+                    className="drive-root"
+                    target="_blank"
+                    rel="noreferrer"
+                    href={state.rootFolderUrl}
+                  >
+                    <div>
+                      <FolderKanban />
+                      <span>
+                        <strong>Current root folder</strong>
+                        <small>{state.rootFolderId}</small>
+                      </span>
+                    </div>
+                    <ExternalLink />
+                  </a>
+                )}
+                <button className="text-btn danger-text" onClick={disconnect}>
+                  Disconnect Google Drive
+                </button>
+              </>
+            ) : (
+              <button onClick={connect} disabled={!state?.configured}>
+                Connect Google Drive
+              </button>
+            )}
+          </section>
+          <CategoriesCard
+            categories={categories}
+            projects={projects}
+            refresh={refresh}
+            flash={flash}
+          />
+          <TagsCard tags={tags} tasks={tasks} refresh={refresh} flash={flash} />
+        </div>
+        <div className="settings-column">
+          <section className="panel settings-card">
+            <div className="settings-icon neutral">
+              <Pencil />
             </div>
-          </div>
-          <p>
-            Deadlines are interpreted at the end of each date in your current browser timezone.
-            Stored timestamps use UTC for consistency.
-          </p>
-          <div className="timezone">
-            <span>Detected timezone</span>
-            <strong>{Intl.DateTimeFormat().resolvedOptions().timeZone}</strong>
-          </div>
-        </section>
-        <section className="panel settings-card">
-          <div className="settings-icon neutral">
-            <FileText />
-          </div>
-          <div className="section-title">
-            <div>
-              <span className="eyebrow">Modules</span>
-              <h2>Calendar</h2>
+            <div className="section-title">
+              <div>
+                <span className="eyebrow">Sidebar</span>
+                <h2>Branding</h2>
+              </div>
+              <span className="version-pill">v{APP_VERSION}</span>
             </div>
-          </div>
-          <p>
-            One month of Signal Campaign&rsquo;s scheduled content beside the tasks coming due, kept
-            as two groups rather than one merged list. It reads and never writes — content is
-            scheduled in Signal, not here.
-          </p>
-          <div className="module-list">
-            <Link to="/calendar">
-              <CalendarDays /> Open the calendar
-            </Link>
-          </div>
-          <p className="field-hint">
-            Campaign playbook import has shipped too — it lives in the sidebar under{' '}
-            <Link to="/import">Import</Link>. So has read-only Drive browsing, under{' '}
-            <Link to="/files">Files</Link>; it lists and opens files and never uploads, renames,
-            moves, or deletes one.
-          </p>
-        </section>
+            <p>
+              Edit the wording, colours, and logo shown in the sidebar. Defaults also live in{' '}
+              <code>shared/branding.ts</code> if you prefer changing them in code.
+            </p>
+            <form className="form brand-form" onSubmit={saveBranding}>
+              <div className="form-row">
+                <label>
+                  Mark
+                  <input
+                    value={brandForm.mark}
+                    maxLength={4}
+                    onChange={(e) => setBrandForm({ ...brandForm, mark: e.target.value })}
+                    required
+                  />
+                </label>
+                <label>
+                  Title
+                  <input
+                    value={brandForm.title}
+                    maxLength={40}
+                    onChange={(e) => setBrandForm({ ...brandForm, title: e.target.value })}
+                    required
+                  />
+                </label>
+              </div>
+              <label>
+                Subtitle
+                <input
+                  value={brandForm.subtitle}
+                  maxLength={60}
+                  onChange={(e) => setBrandForm({ ...brandForm, subtitle: e.target.value })}
+                  required
+                />
+              </label>
+              <label>
+                Tagline
+                <input
+                  value={brandForm.tagline}
+                  maxLength={80}
+                  onChange={(e) => setBrandForm({ ...brandForm, tagline: e.target.value })}
+                  required
+                />
+              </label>
+              <div className="color-row">
+                {BRANDING_COLOR_FIELDS.map((field) => (
+                  <div className="color-field" key={field}>
+                    <label htmlFor={`brand-${field}`}>{COLOR_LABEL[field]}</label>
+                    <div className="color-input">
+                      <input
+                        id={`brand-${field}`}
+                        type="color"
+                        value={normalizeHex(brandForm[field]) || DEFAULT_BRANDING[field]}
+                        onChange={(e) => setBrandForm({ ...brandForm, [field]: e.target.value })}
+                      />
+                      <input
+                        aria-label={`${COLOR_LABEL[field]} hex value`}
+                        value={brandForm[field]}
+                        maxLength={7}
+                        spellCheck={false}
+                        onChange={(e) => setBrandForm({ ...brandForm, [field]: e.target.value })}
+                        required
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <ul className="contrast-list">
+                {contrast.map((reading) => (
+                  <li key={reading.field} className={reading.passes ? 'pass' : 'fail'}>
+                    {reading.passes ? <CheckCircle2 /> : <AlertCircle />}
+                    <span>{reading.label}</span>
+                    <strong>
+                      {reading.ratio}:1 · {reading.passes ? 'Passes AA' : 'Fails AA'}
+                    </strong>
+                  </li>
+                ))}
+              </ul>
+              <label>
+                Logo address (optional)
+                <input
+                  type="url"
+                  value={brandForm.logoUrl}
+                  maxLength={LOGO_URL_MAX}
+                  placeholder="https://example.com/logo.png"
+                  spellCheck={false}
+                  onChange={(e) => setBrandForm({ ...brandForm, logoUrl: e.target.value })}
+                />
+              </label>
+              <label>
+                Logo alt text
+                <input
+                  value={brandForm.logoAlt}
+                  maxLength={120}
+                  placeholder="Describe the logo, e.g. GHolmes Designs logo"
+                  disabled={!brandForm.logoUrl}
+                  onChange={(e) => setBrandForm({ ...brandForm, logoAlt: e.target.value })}
+                  required={Boolean(brandForm.logoUrl)}
+                />
+              </label>
+              <p className="field-hint">
+                A logo is referenced by address, never uploaded or copied into this device's
+                database. Without one, the text mark is used.
+              </p>
+              {logoProblems.length > 0 && (
+                <div className="inline-warning" role="alert">
+                  <AlertCircle />
+                  <div>
+                    <strong>Logo needs one more thing</strong>
+                    <span>{logoProblems.map((issue) => issue.message).join(' ')}</span>
+                  </div>
+                </div>
+              )}
+              <div className="brand-preview" style={brandStyle(brandForm)}>
+                <BrandMark branding={brandForm} />
+                <div>
+                  <strong>{brandForm.title || DEFAULT_BRANDING.title}</strong>
+                  <span>{brandForm.subtitle || DEFAULT_BRANDING.subtitle}</span>
+                </div>
+                <em>v{APP_VERSION}</em>
+              </div>
+              <div className="brand-actions">
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setBrandForm({ ...DEFAULT_BRANDING })}
+                  disabled={brandBusy}
+                >
+                  <RotateCcw /> Reset to defaults
+                </button>
+                <button className="submit" disabled={brandBusy || brandProblems.length > 0}>
+                  {brandBusy ? (
+                    <>
+                      <RefreshCw className="spin" /> Saving…
+                    </>
+                  ) : (
+                    'Save branding'
+                  )}
+                </button>
+              </div>
+              {brandProblems.length > 0 && (
+                <p className="field-hint" role="status">
+                  Saving is blocked until every reading above passes AA.
+                </p>
+              )}
+            </form>
+          </section>
+          <section className="panel settings-card">
+            <div className="settings-icon neutral">
+              <Clock3 />
+            </div>
+            <div className="section-title">
+              <div>
+                <span className="eyebrow">Dates & deadlines</span>
+                <h2>Local timezone</h2>
+              </div>
+            </div>
+            <p>
+              Deadlines are interpreted at the end of each date in your current browser timezone.
+              Stored timestamps use UTC for consistency.
+            </p>
+            <div className="timezone">
+              <span>Detected timezone</span>
+              <strong>{Intl.DateTimeFormat().resolvedOptions().timeZone}</strong>
+            </div>
+          </section>
+          <section className="panel settings-card">
+            <div className="settings-icon neutral">
+              <FileText />
+            </div>
+            <div className="section-title">
+              <div>
+                <span className="eyebrow">Modules</span>
+                <h2>Calendar</h2>
+              </div>
+            </div>
+            <p>
+              One month of Signal Campaign&rsquo;s scheduled content beside the tasks coming due,
+              kept as two groups rather than one merged list. It reads and never writes — content is
+              scheduled in Signal, not here.
+            </p>
+            <div className="module-list">
+              <Link to="/calendar">
+                <CalendarDays /> Open the calendar
+              </Link>
+            </div>
+            <p className="field-hint">
+              Campaign playbook import has shipped too — it lives in the sidebar under{' '}
+              <Link to="/import">Import</Link>. So has read-only Drive browsing, under{' '}
+              <Link to="/files">Files</Link>; it lists and opens files and never uploads, renames,
+              moves, or deletes one.
+            </p>
+          </section>
+        </div>
       </div>
     </>
   );
