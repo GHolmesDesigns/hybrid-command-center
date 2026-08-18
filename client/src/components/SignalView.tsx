@@ -18,7 +18,6 @@ import {
 } from 'lucide-react';
 import { api, send } from '../api';
 import {
-  SIGNAL_CHANNEL_INITIAL,
   SIGNAL_CHANNEL_LABEL,
   SIGNAL_CHANNELS,
   SIGNAL_CTA_LABEL,
@@ -28,6 +27,7 @@ import {
   SIGNAL_STATUS_LABEL,
   SIGNAL_STATUSES,
   isSignalDate,
+  signalChannelPresentation,
   signalMediaKind,
   signalTextHasLink,
   type SignalChannel,
@@ -42,6 +42,7 @@ import {
   shiftCalendarAnchor,
   type CalendarViewMode,
 } from '../../../shared/calendar';
+import { signalChannelStyle } from './ui-shared';
 import { Empty } from './Primitives';
 import { Select } from './FormControls';
 import { PageHead } from './Shell';
@@ -143,6 +144,27 @@ const StatusIcon = ({ status }: { status: SignalStatus }) =>
     <Circle aria-hidden="true" />
   );
 
+/**
+ * One channel, as a swatch with its initial on it. The colours come from the channel's own
+ * treatment and the initial is drawn on top of them, so the chip still names its channel with
+ * the hue removed. Beside a checkbox the full name is already the label, which is the one place
+ * the chip repeating it would make a screen reader say it twice.
+ */
+function ChannelChip({ channel, labelled = true }: { channel: SignalChannel; labelled?: boolean }) {
+  const { initial, label, ...treatment } = signalChannelPresentation(channel);
+  return (
+    <span
+      className="signal-channel"
+      data-channel={channel}
+      style={signalChannelStyle(treatment)}
+      aria-hidden={labelled ? undefined : 'true'}
+    >
+      <span aria-hidden="true">{initial}</span>
+      {labelled && <span className="sr-only">{label}</span>}
+    </span>
+  );
+}
+
 function PostMeta({ post }: { post: SignalPost }) {
   return (
     <div className="signal-post-meta">
@@ -150,10 +172,7 @@ function PostMeta({ post }: { post: SignalPost }) {
         <StatusIcon status={post.status} /> {SIGNAL_STATUS_LABEL[post.status]}
       </span>
       {post.channels.map((channel) => (
-        <span className={`signal-channel ch-${channel}`} key={channel}>
-          <span aria-hidden="true">{SIGNAL_CHANNEL_INITIAL[channel]}</span>
-          <span className="sr-only">{SIGNAL_CHANNEL_LABEL[channel]}</span>
-        </span>
+        <ChannelChip channel={channel} key={channel} />
       ))}
     </div>
   );
@@ -451,9 +470,7 @@ function Editor({
                     checked={draft.channels.includes(channel)}
                     onChange={() => toggleChannel(channel)}
                   />
-                  <span className={`signal-channel ch-${channel}`} aria-hidden="true">
-                    {SIGNAL_CHANNEL_INITIAL[channel]}
-                  </span>
+                  <ChannelChip channel={channel} labelled={false} />
                   {SIGNAL_CHANNEL_LABEL[channel]}
                 </label>
               ))}

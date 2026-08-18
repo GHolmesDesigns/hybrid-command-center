@@ -1,3 +1,5 @@
+import { mixHex } from './contrast';
+
 /**
  * Signal Campaign: the scheduled-content vocabulary the API, the planner, and the calendar
  * all read.
@@ -159,6 +161,96 @@ export const SIGNAL_CHANNEL_INITIAL: Record<SignalChannel, string> = {
   tt: 'TT',
   yt: 'YT',
 };
+
+/**
+ * The colours one channel chip is painted in. Three tokens and no more: what it sits on, the
+ * outline that separates it from the page, and the text drawn on it.
+ *
+ * They live here, beside the label and the initial, because a channel's treatment is part of
+ * the vocabulary rather than a detail of whichever view happens to be drawing it — the planner
+ * tile, the calendar row, and the editor's channel selector all read this one map, so a chip
+ * cannot mean one thing in one place and another somewhere else.
+ */
+export interface SignalChannelTreatment {
+  /** Chip fill. */
+  surface: string;
+  /** Chip outline, derived below rather than chosen by hand a third time. */
+  border: string;
+  /** Chip text, and the bar every pair here is measured against. */
+  text: string;
+}
+
+/**
+ * How far the outline is faded from the text toward the fill. Kept the same for every channel
+ * so the set reads as one family, and kept this shallow so the outline clears 3:1 against the
+ * fill inside it *and* against the paper outside it — `Signal.channels.test.tsx` measures both
+ * with `shared/contrast.ts` rather than trusting the number.
+ */
+const CHANNEL_BORDER_MIX = 0.22;
+
+const treatment = (text: string, surface: string): SignalChannelTreatment => ({
+  surface,
+  border: mixHex(text, surface, CHANNEL_BORDER_MIX),
+  text,
+});
+
+/**
+ * One treatment per channel. The hues nod to where the post is going without borrowing
+ * anything from anyone: these are ordinary colours, and this app ships no logo, no icon, and
+ * no externally hosted asset for a channel.
+ *
+ * Hue is the fast cue and never the only one — `SIGNAL_CHANNEL_INITIAL` rides on top of every
+ * chip and `SIGNAL_CHANNEL_LABEL` is what a screen reader is handed, so the eight stay apart
+ * in greyscale, with colours turned off, and read aloud.
+ */
+export const SIGNAL_CHANNEL_TREATMENT: Record<SignalChannel, SignalChannelTreatment> = {
+  blog: treatment('#8a5711', '#faead0'),
+  ig: treatment('#a3306b', '#fbe3ef'),
+  x: treatment('#3b3f52', '#e6e8ef'),
+  bsky: treatment('#1a6a86', '#dbeef5'),
+  li: treatment('#2f4b93', '#e2e8f8'),
+  fb: treatment('#5b479f', '#e9e4f8'),
+  tt: treatment('#0f6f6c', '#d9eeed'),
+  yt: treatment('#b03a35', '#fbe0dd'),
+};
+
+/**
+ * What an unrecognised value is painted in: the one neutral in the set, held to the same
+ * contrast bar as the eight. A stored channel is validated against `SIGNAL_CHANNELS` before it
+ * reaches a view, so this is the treatment nothing should need — which is exactly why it has to
+ * be legible rather than absent, since a chip with no colours at all is an invisible chip.
+ */
+export const SIGNAL_CHANNEL_NEUTRAL: SignalChannelTreatment = treatment('#5f6764', '#eff1ef');
+
+export const isSignalChannel = (value: string): value is SignalChannel =>
+  (SIGNAL_CHANNELS as readonly string[]).includes(value);
+
+/** Everything a chip needs to draw itself: the words that identify it and the colours on top. */
+export interface SignalChannelPresentation extends SignalChannelTreatment {
+  /** The channel's full name, for the accessible label. */
+  label: string;
+  /** The short form the chip shows. */
+  initial: string;
+}
+
+/**
+ * How a channel is presented, for any value at all.
+ *
+ * An unrecognised one keeps its own text as the label and initial rather than being drawn as a
+ * blank or a question mark: a chip reading `MASTODON` beside a neutral swatch says what it is,
+ * where a bare grey chip would only say that something is wrong.
+ */
+export function signalChannelPresentation(value: string): SignalChannelPresentation {
+  if (isSignalChannel(value))
+    return {
+      label: SIGNAL_CHANNEL_LABEL[value],
+      initial: SIGNAL_CHANNEL_INITIAL[value],
+      ...SIGNAL_CHANNEL_TREATMENT[value],
+    };
+  const trimmed = value.trim();
+  const label = trimmed || 'Unknown channel';
+  return { label, initial: label.slice(0, 2).toUpperCase(), ...SIGNAL_CHANNEL_NEUTRAL };
+}
 
 /** What a post is, as a piece of work to produce. */
 export const SIGNAL_FORMATS = [

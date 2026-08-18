@@ -3,12 +3,26 @@ import { send } from '../api';
 import type { Category, Tag, TaskStatus, TaskType } from '../../../shared/types';
 import { normalizeTagName } from '../../../shared/types';
 import { sidebarPalette, type Branding } from '../../../shared/branding';
+import type { SignalChannelTreatment } from '../../../shared/signal';
 
 /**
  * The chosen and derived sidebar colours, as custom properties for anything painted in the
  * sidebar's palette — the sidebar itself, the loading splash, and the Settings preview.
  */
 export const brandStyle = (branding: Branding) => sidebarPalette(branding) as CSSProperties;
+
+/**
+ * A channel's three tokens as custom properties, the way `brandStyle` hands the sidebar its
+ * palette: the stylesheet holds the chip's shape and this hands it the colours, so the planner,
+ * the calendar, and the channel selector all paint from the map that was measured for contrast
+ * rather than from a rule each of them keeps for itself.
+ */
+export const signalChannelStyle = ({ surface, border, text }: SignalChannelTreatment) =>
+  ({
+    '--channel-surface': surface,
+    '--channel-border': border,
+    '--channel-text': text,
+  }) as CSSProperties;
 
 export const STATUS_LABEL: Record<TaskStatus, string> = {
   BACKLOG: 'Backlog',

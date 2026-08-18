@@ -22,14 +22,14 @@ import {
   type CalendarViewMode,
 } from '../../../shared/calendar';
 import {
-  SIGNAL_CHANNEL_INITIAL,
-  SIGNAL_CHANNEL_LABEL,
   SIGNAL_FORMAT_LABEL,
   SIGNAL_STATUS_LABEL,
   isSignalDate,
+  signalChannelPresentation,
   type SignalPost,
 } from '../../../shared/signal';
 import type { Task } from '../../../shared/types';
+import { signalChannelStyle } from './ui-shared';
 import { Empty } from './Primitives';
 import { PageHead } from './Shell';
 
@@ -110,13 +110,21 @@ function PostRow({ post }: { post: SignalPost }) {
       <div className="cal-item-foot">
         {post.channels.length > 0 && (
           <ul className="cal-channels">
-            {post.channels.map((channel) => (
-              // The initial is the label; the colour is decoration on top of it.
-              <li key={channel} className={`cal-channel ch-${channel}`}>
-                <span aria-hidden="true">{SIGNAL_CHANNEL_INITIAL[channel]}</span>
-                <span className="sr-only">{SIGNAL_CHANNEL_LABEL[channel]}</span>
-              </li>
-            ))}
+            {post.channels.map((channel) => {
+              const { initial, label, ...treatment } = signalChannelPresentation(channel);
+              return (
+                // The initial is the label; the colour is decoration on top of it.
+                <li
+                  key={channel}
+                  className="cal-channel"
+                  data-channel={channel}
+                  style={signalChannelStyle(treatment)}
+                >
+                  <span aria-hidden="true">{initial}</span>
+                  <span className="sr-only">{label}</span>
+                </li>
+              );
+            })}
           </ul>
         )}
         {post.campaign && <span className="cal-campaign">{post.campaign}</span>}
