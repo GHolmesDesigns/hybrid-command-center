@@ -19,6 +19,7 @@ import {
   vi,
   App,
 } from './App.test-setup';
+import { SIGNAL_CHANNEL_TREATMENT } from '../../shared/signal';
 
 const openCalendar = async (entry = '/calendar?month=2026-09', heading = /September 2026/) => {
   render(
@@ -131,6 +132,16 @@ describe('Calendar', () => {
     // The full name is there for a screen reader, beside the initial rather than instead of it.
     expect(within(day).getByText('LinkedIn')).toBeTruthy();
     expect(within(day).getByText('Instagram')).toBeTruthy();
+
+    // The colour under the initial is the channel's own, from the map the planner reads too, so
+    // one chip cannot mean LinkedIn here and something else a page away.
+    for (const channel of ['li', 'ig'] as const) {
+      const chip = day.querySelector<HTMLElement>(`[data-channel="${channel}"]`)!;
+      const { surface, border, text } = SIGNAL_CHANNEL_TREATMENT[channel];
+      expect(chip.style.getPropertyValue('--channel-surface')).toBe(surface);
+      expect(chip.style.getPropertyValue('--channel-border')).toBe(border);
+      expect(chip.style.getPropertyValue('--channel-text')).toBe(text);
+    }
   });
 
   it('counts the two kinds separately rather than as one total', async () => {

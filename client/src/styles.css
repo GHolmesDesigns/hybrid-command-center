@@ -3044,6 +3044,9 @@ button.tag-chip.toggle.active {
   margin: 0;
   padding: 0;
 }
+/* The three custom properties come from `SIGNAL_CHANNEL_TREATMENT`, which is where the pairs
+   were measured against `shared/contrast.ts`. The fallbacks are the neutral entry, so a chip
+   handed no treatment at all is still a legible chip rather than an invisible one. */
 .cal-channel {
   display: inline-flex;
   align-items: center;
@@ -3051,11 +3054,12 @@ button.tag-chip.toggle.active {
   min-width: 22px;
   height: 19px;
   padding: 0 5px;
+  border: 1px solid var(--channel-border, #7f8583);
   border-radius: 5px;
-  background: rgba(0, 0, 0, 0.07);
+  background: var(--channel-surface, #eff1ef);
   font-size: 10.5px;
   font-weight: 700;
-  color: var(--ink);
+  color: var(--channel-text, #5f6764);
 }
 .cal-campaign,
 .cal-project,
@@ -3388,6 +3392,9 @@ button.tag-chip.toggle.active {
 .signal-status.status-scheduled {
   color: var(--blue);
 }
+/* Painted from the channel's own treatment, the same three properties the calendar's chip
+   reads. The initial sits on top of them and is what identifies the channel; the colours are
+   the second cue and never the first. */
 .signal-channel {
   display: inline-flex;
   align-items: center;
@@ -3395,10 +3402,10 @@ button.tag-chip.toggle.active {
   min-width: 20px;
   height: 18px;
   padding: 0 4px;
-  border: 1px solid rgba(0, 0, 0, 0.12);
+  border: 1px solid var(--channel-border, #7f8583);
   border-radius: 5px;
-  background: #eef1ef;
-  color: var(--ink);
+  background: var(--channel-surface, #eff1ef);
+  color: var(--channel-text, #5f6764);
   font-size: 9px;
   font-weight: 700;
 }
