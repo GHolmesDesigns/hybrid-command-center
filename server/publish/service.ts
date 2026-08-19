@@ -5,6 +5,10 @@ import { recordIntegrationEvent, redactSecrets } from '../integration-log.ts';
 import type { SignalProvider } from '../signal/provider.ts';
 import type {
   DeliveryMode,
+  ProviderAction,
+  ProviderDiffField,
+  ProviderPostRecord,
+  ProviderReconcilePreview,
   PublishPreview,
   SignalPublication,
   SignalPublicationTarget,
@@ -12,13 +16,17 @@ import type {
 import {
   deliveryModeNeedsPerson,
   isReconcilableState,
+  providerActionOffer,
+  publicationDriftFields,
+  publicationTracksProvider,
   publishPreviewRefusals,
   reconcileSchedule,
   RECONCILE_MAX_ATTEMPTS,
 } from '../../shared/publish.ts';
 import { publishPlatformFor } from '../../shared/publish-capabilities.ts';
 import type { SignalChannel } from '../../shared/signal.ts';
-import { buildPublishPlan } from './plan.ts';
+import { buildPublishPlan, publishInstantFor } from './plan.ts';
+import { buildProviderReconcile, providerRecordNeedsWithdrawal } from './reconcile.ts';
 import { PublishProviderError, type PublishProvider, type PublishRequest } from './provider.ts';
 
 interface PublicationRow {
@@ -31,6 +39,9 @@ interface PublicationRow {
   timezone: string;
   sent_caption: string;
   sent_channels: string;
+  /** NULL only on a row written before these columns existed. See `server/db.ts`. */
+  sent_media: string | null;
+  sent_configurations: string | null;
   error: string | null;
   checked_at: string | null;
   check_attempts: number;
@@ -80,6 +91,7 @@ const toPublication = (row: PublicationRow, targets: TargetRow[]): SignalPublica
   timezone: row.timezone,
   sentCaption: row.sent_caption,
   sentChannels: JSON.parse(row.sent_channels) as SignalChannel[],
+  ...(row.sent_media ? { sentMedia: JSON.parse(row.sent_media) as string[] } : {}),
   ...(row.error ? { error: row.error } : {}),
   targets: targets.map(toTarget),
   ...(row.checked_at ? { checkedAt: row.checked_at } : {}),
@@ -170,8 +182,8 @@ export class PublishService {
         this.db
           .prepare(
             `INSERT INTO signal_publications(
-          id,post_id,state,provider,provider_post_id,idempotency_key,scheduled_instant,timezone,sent_caption,sent_channels,error,created_at,updated_at
-        ) VALUES(?,?, 'SUBMITTING','post-bridge',NULL,?,?,?,?,?,NULL,?,?)`,
+          id,post_id,state,provider,provider_post_id,idempotency_key,scheduled_instant,timezone,sent_caption,sent_channels,sent_media,sent_configurations,error,created_at,updated_at
+        ) VALUES(?,?, 'SUBMITTING','post-bridge',NULL,?,?,?,?,?,?,?,NULL,?,?)`,
           )
           .run(
             publicationId,
@@ -181,6 +193,11 @@ export class PublishService {
             request.timezone,
             request.caption,
             JSON.stringify(plan.targets.map((target) => target.channel)),
+            // The media and the tailoring go into the snapshot beside the caption, so a later
+            // comparison against the provider reads the request that was sent rather than
+            // re-deriving one from a post that has since been edited.
+            JSON.stringify(request.mediaUrls),
+            JSON.stringify(request.platformConfigurations ?? []),
             timestamp,
             timestamp,
           );
@@ -302,16 +319,29 @@ export class PublishService {
       .all(publicationId) as unknown as TargetRow[];
   }
 
+  /**
+   * One publication, with the drift the planner paints **Provider update required** from.
+   *
+   * Every read goes through here so that the flag cannot be present on one route and missing on
+   * another — the planner would then show it after a refresh and not after a submit, which reads as
+   * a bug in the flag rather than in the route.
+   */
+  private toPublicationWithDrift(row: PublicationRow, targets: TargetRow[]): SignalPublication {
+    const publication = toPublication(row, targets);
+    const drift = this.localDrift(row, targets);
+    return drift.length ? { ...publication, driftFields: drift } : publication;
+  }
+
   list(postId: string): SignalPublication[] {
     const rows = this.db
       .prepare('SELECT * FROM signal_publications WHERE post_id=? ORDER BY created_at DESC')
       .all(postId) as unknown as PublicationRow[];
-    return rows.map((row) => toPublication(row, this.targetRows(row.id)));
+    return rows.map((row) => this.toPublicationWithDrift(row, this.targetRows(row.id)));
   }
   get(id: string) {
     const row = this.db.prepare('SELECT * FROM signal_publications WHERE id=?').get(id) as
       PublicationRow | undefined;
-    return row ? toPublication(row, this.targetRows(row.id)) : undefined;
+    return row ? this.toPublicationWithDrift(row, this.targetRows(row.id)) : undefined;
   }
 
   /**
@@ -444,6 +474,347 @@ export class PublishService {
       });
     });
     return this.get(publicationId) as SignalPublication;
+  }
+
+  /**
+   * Which of Signal's fields have moved since this publication went out.
+   *
+   * Local rows only, and deliberately so: this is the answer behind **Provider update required**,
+   * and the criterion it serves is that a Signal edit raises the flag and mutates nothing remotely.
+   * A provider call here — even a read — would make the planner touch Post Bridge every time it
+   * listed a post's delivery history, which is both wasteful and the wrong shape for a claim that
+   * is entirely about local disagreement.
+   *
+   * `accounts` cannot be answered without the provider's target list, so it is not answered here.
+   * The reconciliation preview covers it, and it is the only place allowed to read.
+   */
+  private localDrift(row: PublicationRow, targets: TargetRow[]): ProviderDiffField[] {
+    if (!publicationTracksProvider(row.state)) return [];
+    const post = this.db
+      .prepare('SELECT text, date, time FROM signal_posts WHERE id=?')
+      .get(row.post_id) as { text: string; date: string | null; time: string } | undefined;
+    if (!post) return [];
+    const mediaUrls = (
+      this.db
+        .prepare('SELECT url FROM signal_post_media WHERE post_id=? ORDER BY position')
+        .all(row.post_id) as unknown as { url: string }[]
+    ).map((media) => media.url);
+    let scheduledInstant: string | undefined;
+    if (post.date && this.timezone) {
+      try {
+        scheduledInstant = publishInstantFor(post.date, post.time, this.timezone);
+      } catch {
+        // A wall time the zone does not have cannot be turned into an instant to compare. The
+        // publishing preview already refuses that post by name, so saying nothing here is honester
+        // than a second, vaguer complaint about the same clock change.
+        scheduledInstant = undefined;
+      }
+    }
+    const sameTargets = targets.map(toTarget);
+    const drift = publicationDriftFields(
+      {
+        sentCaption: row.sent_caption,
+        ...(row.sent_media ? { sentMedia: JSON.parse(row.sent_media) as string[] } : {}),
+        scheduledInstant: row.scheduled_instant,
+        targets: sameTargets,
+      },
+      {
+        caption: post.text.trim(),
+        ...(scheduledInstant ? { scheduledInstant } : {}),
+        mediaUrls,
+        // The publication's own targets on both sides, so `accounts` never fires from a comparison
+        // this method is not in a position to make.
+        targets: sameTargets.map((target) => ({
+          channel: target.channel,
+          platform: target.platform ?? target.channel,
+          accountId: target.accountId,
+          handle: target.handle,
+          mode: target.mode,
+        })),
+      },
+    );
+    // A live submission whose post has been pulled back into the unscheduled queue is a real
+    // disagreement — the provider is holding an instant the plan no longer claims — and the
+    // comparison above cannot see it, because there is no instant left to compare against.
+    if (!post.date && !drift.includes('schedule')) drift.push('schedule');
+    return drift;
+  }
+
+  /**
+   * The provider's record beside Signal's plan, and what may be done about the difference.
+   *
+   * Reads and nothing else. Two reads, in fact — the plan, which lists the provider's targets, and
+   * the provider's own record of this post — and neither writes anywhere, locally or remotely. That
+   * is the criterion this method is: every action has a no-write diff preview.
+   */
+  async providerPreview(publicationId: string): Promise<ProviderReconcilePreview> {
+    const publication = this.get(publicationId);
+    if (!publication) throw new PublishRequestError('Publication not found.', 404);
+    const plan = await this.preview(publication.postId);
+    // No provider id, or a publication the provider is no longer holding: the comparison refuses
+    // itself without a call, because there is nothing out there to read.
+    if (!publication.providerPostId || !publicationTracksProvider(publication.state))
+      return buildProviderReconcile({ publication, plan });
+    try {
+      return buildProviderReconcile({
+        publication,
+        plan,
+        record: await this.provider.describe(publication.providerPostId),
+      });
+    } catch (error) {
+      // A failed read is a preview that explains itself rather than an error page: the panel still
+      // has a publication to describe, and *the provider could not be read* is the one thing the
+      // user needs to know before pressing anything. Redacted on the way in like every other
+      // external message this app repeats.
+      return buildProviderReconcile({
+        publication,
+        plan,
+        recordError: `The provider could not be read: ${redactSecrets((error as Error).message)}`,
+      });
+    }
+  }
+
+  /** The publication row plus the log entry for one withdrawal, in one transaction. */
+  private recordProviderCancel(publication: SignalPublication, summary: string): void {
+    const timestamp = this.clock().toISOString();
+    transaction(this.db, () => {
+      this.db
+        .prepare(
+          "UPDATE signal_publications SET state='CANCELLED',error=NULL,updated_at=? WHERE id=?",
+        )
+        .run(timestamp, publication.id);
+      recordIntegrationEvent(this.db, {
+        source: 'signal-campaign',
+        operation: 'signal.provider-cancel',
+        outcome: 'SUCCESS',
+        summary,
+        entities: [
+          {
+            type: 'signalPost',
+            id: publication.postId,
+            label: publication.sentCaption.slice(0, 80),
+          },
+        ],
+        correlationId: publication.id,
+      });
+    });
+  }
+
+  /**
+   * One full-state `PATCH`, and the local record of it.
+   *
+   * The snapshot columns are rewritten only on success, and that is the whole retry story: a
+   * failure leaves the row saying what the provider is still holding, so the next comparison is
+   * taken against the truth rather than against what this app hoped to have sent. An ambiguous
+   * failure — no answer at all — moves the publication to `UNCONFIRMED` and records `PARTIAL`,
+   * because *we do not know* is a different fact from *it did not happen* and only one of them is
+   * safe to retry blind.
+   */
+  private async commitProviderUpdate(
+    publication: SignalPublication,
+    action: ProviderAction,
+    outgoing: PublishRequest,
+    configurations: string,
+  ): Promise<SignalPublication> {
+    const providerPostId = publication.providerPostId as string;
+    const what = action === 'UPDATE_SCHEDULE' ? 'schedule' : 'content';
+    try {
+      const result = await this.provider.update(providerPostId, outgoing);
+      const timestamp = this.clock().toISOString();
+      transaction(this.db, () => {
+        this.db
+          .prepare(
+            `UPDATE signal_publications SET state=?,provider_post_id=?,scheduled_instant=?,
+             sent_caption=?,sent_media=?,sent_configurations=?,error=?,updated_at=? WHERE id=?`,
+          )
+          .run(
+            result.state,
+            result.providerPostId || providerPostId,
+            outgoing.scheduledInstant,
+            outgoing.caption,
+            JSON.stringify(outgoing.mediaUrls),
+            configurations,
+            result.error ? redactSecrets(result.error) : null,
+            timestamp,
+            publication.id,
+          );
+        recordIntegrationEvent(this.db, {
+          source: 'signal-campaign',
+          operation: 'signal.provider-update',
+          outcome: result.state === 'FAILED' ? 'FAILURE' : 'SUCCESS',
+          summary: `Updated the provider ${what} from Signal.`,
+          entities: [
+            {
+              type: 'signalPost',
+              id: publication.postId,
+              label: outgoing.caption.slice(0, 80),
+            },
+          ],
+          correlationId: publication.id,
+          ...(result.error ? { error: result.error } : {}),
+        });
+      });
+    } catch (error) {
+      const ambiguous = error instanceof PublishProviderError && error.ambiguous;
+      const timestamp = this.clock().toISOString();
+      transaction(this.db, () => {
+        this.db
+          .prepare('UPDATE signal_publications SET state=?,error=?,updated_at=? WHERE id=?')
+          .run(
+            ambiguous ? 'UNCONFIRMED' : publication.state,
+            redactSecrets((error as Error).message),
+            timestamp,
+            publication.id,
+          );
+        recordIntegrationEvent(this.db, {
+          source: 'signal-campaign',
+          operation: 'signal.provider-update',
+          outcome: ambiguous ? 'PARTIAL' : 'FAILURE',
+          summary: ambiguous
+            ? `The provider ${what} update was never answered; the provider may or may not have taken it.`
+            : `The provider refused the ${what} update; it still holds what it had.`,
+          entities: [
+            {
+              type: 'signalPost',
+              id: publication.postId,
+              label: publication.sentCaption.slice(0, 80),
+            },
+          ],
+          correlationId: publication.id,
+          error: (error as Error).message,
+        });
+      });
+      throw new PublishRequestError(
+        ambiguous
+          ? `The provider never answered the ${what} update. Check this post in Post Bridge before trying again.`
+          : `The provider refused the ${what} update: ${redactSecrets((error as Error).message)}`,
+        409,
+        { cause: error },
+      );
+    }
+    return this.get(publication.id) as SignalPublication;
+  }
+
+  /**
+   * Commits one action against the post the provider is holding.
+   *
+   * The comparison is rebuilt here from scratch — the plan and the provider's record read again —
+   * and the caller's token is checked against the new one. That is what makes a stale preview a
+   * refusal rather than a surprise: anything that moved on either side between looking and pressing
+   * invalidates the token and sends the user back to look again. The action is then checked against
+   * *this* comparison's offers, so the gate the commit passes is the same computation the panel
+   * showed rather than a second, looser one.
+   */
+  async applyProviderAction(
+    publicationId: string,
+    action: ProviderAction,
+    expectedHash: string,
+  ): Promise<SignalPublication> {
+    const preview = await this.providerPreview(publicationId);
+    if (preview.refusals.length) throw new PublishRequestError(preview.refusals.join(' '), 409);
+    if (!preview.reconcileHash || preview.reconcileHash !== expectedHash)
+      throw new PublishRequestError(
+        'The post or the provider changed after this comparison was taken. Compare it again before confirming.',
+        409,
+      );
+    const offer = providerActionOffer(preview, action);
+    if (!offer?.available)
+      throw new PublishRequestError(
+        offer?.refusals.join(' ') || 'That action is not available on this publication.',
+        409,
+      );
+    const publication = this.get(publicationId) as SignalPublication;
+    const record = preview.record as ProviderPostRecord;
+    const providerPostId = publication.providerPostId as string;
+
+    if (action === 'CANCEL') {
+      await this.provider.cancel(providerPostId);
+      this.recordProviderCancel(publication, 'Cancelled the provider post at your request.');
+      return this.get(publicationId) as SignalPublication;
+    }
+
+    if (action === 'RESTORE_AND_RESUBMIT') {
+      // Withdraw first, and only where there is something to withdraw: the provider refuses
+      // `DELETE` on a post it has already failed, and asking anyway would turn a recoverable
+      // situation into an error the user has to read past on the way to the fix.
+      if (providerRecordNeedsWithdrawal(record)) {
+        await this.provider.cancel(providerPostId);
+        this.recordProviderCancel(
+          publication,
+          'Withdrew the provider post before resending this from Signal.',
+        );
+      } else {
+        this.recordProviderCancel(
+          publication,
+          'Released the provider post locally; it had already failed, so there was nothing to withdraw.',
+        );
+      }
+      // Two external operations and two log rows, and the first is kept whatever the second does.
+      // A resubmit that fails leaves a cancelled publication and a recorded cancellation — the
+      // state the user retries from, rather than a half-written one they cannot read.
+      const plan = await this.preview(publication.postId);
+      return this.submit(publication.postId, plan.planHash);
+    }
+
+    const plan = await this.preview(publication.postId);
+    const request = plan.request as PublishRequest;
+    const storedConfigurations = (
+      this.db
+        .prepare('SELECT sent_configurations FROM signal_publications WHERE id=?')
+        .get(publicationId) as unknown as { sent_configurations: string }
+    ).sent_configurations;
+
+    if (action === 'UPDATE_CONTENT') {
+      /**
+       * Signal's content, on the instant the provider already has.
+       *
+       * `scheduled_at` is on the wire either way. The vendor publishes a scheduled post
+       * **immediately** when an update omits it, so the field that reads as optional is the one
+       * that puts a post out early, and it is never left to a default. A record holding no instant
+       * at all — a draft — falls back to Signal's, because sending the provider's `null` would be
+       * asking it to post right now.
+       */
+      const outgoing: PublishRequest = {
+        ...request,
+        scheduledInstant: record.scheduledInstant ?? request.scheduledInstant,
+      };
+      return this.commitProviderUpdate(
+        publication,
+        action,
+        outgoing,
+        JSON.stringify(request.platformConfigurations ?? []),
+      );
+    }
+
+    /**
+     * Signal's instant, on the content the provider already holds.
+     *
+     * The content is echoed from the provider's own record rather than taken from the current post,
+     * which is the entire difference between the two update actions: rescheduling must not smuggle
+     * an unreviewed caption out with it. Echoing the record rather than this app's snapshot of it is
+     * the stricter of the two readings of *leave the content alone* — it is what is actually there,
+     * so a full-state `PATCH` cannot overwrite anything by sending a stale copy of it. The
+     * comparison has already refused this action if the two disagree, so they are the same values;
+     * echoing simply removes the way for them not to be.
+     */
+    const outgoing: PublishRequest = {
+      caption: record.caption,
+      mediaUrls: record.mediaUrls,
+      scheduledInstant: request.scheduledInstant,
+      timezone: request.timezone,
+      targets: publication.targets.map((target) => ({
+        accountId: target.accountId,
+        platform: target.platform ?? target.channel,
+      })),
+      ...(storedConfigurations && storedConfigurations !== '[]'
+        ? {
+            platformConfigurations: JSON.parse(
+              storedConfigurations,
+            ) as PublishRequest['platformConfigurations'],
+          }
+        : {}),
+    };
+    return this.commitProviderUpdate(publication, action, outgoing, storedConfigurations);
   }
 
   async cancelLiveForPost(postId: string): Promise<void> {

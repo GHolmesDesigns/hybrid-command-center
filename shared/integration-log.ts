@@ -26,6 +26,11 @@ export const INTEGRATION_OPERATIONS = [
   'drive.sync',
   'signal.publish',
   'signal.reconcile',
+  // Writes to a post the provider already holds. Separate from `signal.publish` because they are a
+  // different question in the log — *what did we change out there*, not *what did we send* — and
+  // separate from each other because one withdraws a post and the other rewrites it.
+  'signal.provider-update',
+  'signal.provider-cancel',
 ] as const;
 export type IntegrationOperation = (typeof INTEGRATION_OPERATIONS)[number];
 
@@ -102,6 +107,8 @@ export const INTEGRATION_OPERATION_LABEL: Record<IntegrationOperation, string> =
   'drive.sync': 'Drive sync',
   'signal.publish': 'Signal publish',
   'signal.reconcile': 'Signal reconcile',
+  'signal.provider-update': 'Signal provider update',
+  'signal.provider-cancel': 'Signal provider cancel',
 };
 
 export const INTEGRATION_OUTCOME_LABEL: Record<IntegrationOutcome, string> = {

@@ -658,6 +658,47 @@ check and stopping after six, and the section shows when it last checked and whe
 **Refresh delivery** asks immediately and is always available, including after the automatic checks
 have stopped.
 
+
+#### Editing a post you have already sent
+
+Editing a post after it has been submitted is allowed, and it changes nothing about the copy the
+provider is holding. Instead, the Delivery section says **Provider update required** and names the
+fields that have moved — caption, scheduled time, media, or accounts. Nothing has been sent, nothing
+has been asked of the provider, and nothing will be until you say so.
+
+**Compare with provider** reads what the provider currently holds and shows it beside what Signal
+holds, field by field, with the rows that disagree marked. Reading the comparison changes nothing on
+either side.
+
+Four things can then be done, each with its own button and, where it is unavailable, the reason
+instead:
+
+- **Update provider content** sends the caption, media, accounts, and per-platform content Signal now
+  holds, and leaves the provider on the time it already has.
+- **Update provider schedule** moves the provider to Signal's date and time and leaves the content it
+  is already holding alone. This is why the two are separate: moving a post by a day does not
+  quietly send an edit you had not finished reviewing.
+- **Cancel provider post** withdraws the post from the provider. Signal keeps the plan; nothing is
+  deleted here.
+- **Restore from Signal and resubmit** withdraws what the provider holds and sends the post again
+  from Signal as a new submission. Use it when the provider's copy is not worth repairing.
+
+Four things are refused, and the panel says which apply:
+
+- **A post the provider has already published cannot be cancelled or changed.** There is no
+  scheduled-or-draft path left for it. Remove it on the platform itself, if that is what you want.
+- **A post being sent right now** is left alone until the send finishes. A change made mid-send could
+  land on either side of it, and there is no way to know which.
+- **Rescheduling is refused if the provider is holding content this app did not send** — that is,
+  if the post was edited in Post Bridge directly. Rescheduling would send this app's copy over
+  theirs. Update the content from Signal, or cancel and resubmit, once you have decided which
+  version you want.
+- **An action is refused if the post could not be published as it now stands** — an empty caption,
+  for example. The reason is the same one the publishing preview gives.
+
+If the post or the provider changes while the comparison is open, confirming is refused and the
+comparison is taken again, so you are never acting on a difference that has already moved.
+
 ### Import
 
 **Import** creates a whole campaign at once from a *campaign playbook*: a client, its projects,

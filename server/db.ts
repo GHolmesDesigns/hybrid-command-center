@@ -137,6 +137,18 @@ CREATE TABLE IF NOT EXISTS signal_publications (
   state TEXT NOT NULL, provider TEXT NOT NULL, provider_post_id TEXT,
   idempotency_key TEXT NOT NULL UNIQUE, scheduled_instant TEXT NOT NULL, timezone TEXT NOT NULL,
   sent_caption TEXT NOT NULL, sent_channels TEXT NOT NULL, error TEXT,
+  -- What the provider was handed, snapshotted like the caption above: sent_media is the JSON media
+  -- array and sent_configurations the JSON platform_configurations. Both exist so that comparing a
+  -- Signal edit against the provider reads the request that was actually sent rather than
+  -- re-deriving it from a post that has since moved on.
+  --
+  -- Nullable, and NULL is not '[]' -- the same distinction signal_post_variants.media_urls makes.
+  -- '[]' is a submission that deliberately carried no media; NULL is a publication written before
+  -- these columns existed, where what went out is genuinely unknown. Backfilling those to '[]'
+  -- would have made every migrated publication with media report a media difference it has no
+  -- evidence for, so the unknown stays unknown and the comparison says so. Every row written from
+  -- now on carries a value.
+  sent_media TEXT, sent_configurations TEXT,
   checked_at TEXT, check_attempts INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );

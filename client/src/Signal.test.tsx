@@ -444,6 +444,7 @@ describe('Signal planner', () => {
       scheduledInstant: '2026-09-14T13:00:00.000Z',
       timezone: 'America/New_York',
       sentCaption: post.text,
+      sentMedia: [],
       sentChannels: ['x'],
       targets: [
         { channel: 'x', platform: 'twitter', accountId: 4, handle: '@gholmes', mode: 'AUTOMATIC' },
@@ -505,6 +506,7 @@ describe('Signal planner', () => {
       scheduledInstant: '2026-09-14T13:00:00.000Z',
       timezone: 'America/New_York',
       sentCaption: post.text,
+      sentMedia: [],
       sentChannels: ['x'],
       targets: [
         { channel: 'x', platform: 'twitter', accountId: 4, handle: '@gholmes', mode: 'AUTOMATIC' },

@@ -3706,6 +3706,126 @@ button.tag-chip.toggle.active {
   font-size: 12px;
   line-height: 1.4;
 }
+/* The Signal edit that has left the provider behind. Said in words beside the chip, never colour
+   alone, which is the same rule the delivery chips above follow. */
+.signal-provider-drift {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid #efd6ae;
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: #fff9f0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.signal-provider-reconcile {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2, #fafbfc);
+  font-size: 12px;
+}
+.signal-provider-reconcile h4 {
+  margin: 0;
+  font-size: 12px;
+}
+.signal-provider-reconcile > p {
+  margin: 0;
+  line-height: 1.4;
+}
+.signal-provider-state {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--muted);
+}
+.signal-provider-warning {
+  color: #8d601c;
+  line-height: 1.4;
+}
+.signal-provider-diff {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  text-align: left;
+}
+.signal-provider-diff caption {
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: left;
+}
+.signal-provider-diff th,
+.signal-provider-diff td {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  vertical-align: top;
+  /* A caption is the longest value on this table and the only one that can be arbitrary text, so
+     the cells wrap rather than push the panel wider than the editor. */
+  overflow-wrap: anywhere;
+}
+.signal-provider-diff thead th {
+  background: #f1f2ef;
+  font-weight: 700;
+}
+.signal-provider-diff tbody th {
+  width: 26%;
+  font-weight: 600;
+}
+.signal-provider-diff-changed td,
+.signal-provider-diff-changed th {
+  background: #fff9f0;
+}
+.signal-provider-diff-flag {
+  color: #8d601c;
+  font-weight: 700;
+}
+.signal-provider-actions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.signal-provider-actions > li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.signal-provider-actions > li:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+.signal-provider-action-name,
+.signal-provider-action-note {
+  margin: 0;
+  line-height: 1.4;
+}
+.signal-provider-action-note {
+  color: var(--muted);
+  font-size: 11px;
+}
+/* A refused action shows the reason where the button would have been, rather than a disabled
+   control whose reason is hidden in a tooltip nobody hovers. */
+.signal-provider-refusal {
+  margin: 0;
+  color: #8d601c;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .form-warning {
   color: #8d601c;
   font-size: 12px;

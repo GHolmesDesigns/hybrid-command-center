@@ -1,11 +1,13 @@
 /* v8 ignore file -- the live adapter is exercised only by the account owner's manual QA; automated publishing tests must use MockPublishProvider. */
 import {
   PublishProviderError,
+  type ProviderPostRecord,
   type PublishProvider,
   type PublishRequest,
   type PublishSubmission,
   type PublishTarget,
 } from './provider.ts';
+import type { ProviderPostState } from '../../shared/publish.ts';
 
 export class PostBridgeProvider implements PublishProvider {
   readonly available = true;
@@ -127,6 +129,106 @@ export class PostBridgeProvider implements PublishProvider {
             : 'FAILED';
     return { providerPostId: String(post.id), state, targets };
   }
+  /**
+   * The vendor's `status` and `is_draft` collapsed into the one union the rules read.
+   *
+   * `is_draft` wins over `status`, because a draft the vendor also calls `scheduled` is still a
+   * draft — nothing goes out until it is updated — and treating it as scheduled would let the app
+   * tell someone a post is on its way when it is sitting in Post Bridge waiting for them. Anything
+   * unrecognised becomes `PROCESSING`, which is the fail-closed answer: it is the one state the
+   * mutation rules refuse, so a status this adapter has never seen cannot be written over.
+   */
+  private static recordState(status: string | undefined, isDraft: boolean): ProviderPostState {
+    if (isDraft) return 'DRAFT';
+    switch (status) {
+      case 'posted':
+        return 'PUBLISHED';
+      case 'failed':
+        return 'FAILED';
+      case 'scheduled':
+        return 'SCHEDULED';
+      default:
+        return 'PROCESSING';
+    }
+  }
+
+  /**
+   * The provider's media array as plain URLs.
+   *
+   * The vendor documents `media` as an object and returns either bare strings or rows carrying a
+   * `url`, depending on whether the post was created from uploaded media or from public addresses.
+   * Both are read; anything else is dropped rather than stringified, because a diff line reading
+   * `[object Object]` is worse than a diff line that is missing.
+   */
+  private static mediaUrls(media: unknown): string[] {
+    if (!Array.isArray(media)) return [];
+    return media
+      .map((item) =>
+        typeof item === 'string'
+          ? item
+          : typeof (item as { url?: unknown })?.url === 'string'
+            ? (item as { url: string }).url
+            : undefined,
+      )
+      .filter((url): url is string => Boolean(url));
+  }
+
+  async describe(providerPostId: string): Promise<ProviderPostRecord> {
+    const post = (await this.request(`/posts/${encodeURIComponent(providerPostId)}`)) as {
+      id: string;
+      caption?: string;
+      status?: string;
+      scheduled_at?: string | null;
+      social_accounts?: number[];
+      media?: unknown;
+      is_draft?: boolean;
+      updated_at?: string;
+    };
+    return {
+      providerPostId: String(post.id),
+      state: PostBridgeProvider.recordState(post.status, post.is_draft === true),
+      caption: post.caption ?? '',
+      scheduledInstant: post.scheduled_at ?? null,
+      mediaUrls: PostBridgeProvider.mediaUrls(post.media),
+      accountIds: (post.social_accounts ?? []).map(Number),
+      ...(post.updated_at ? { updatedAt: post.updated_at } : {}),
+    };
+  }
+
+  /**
+   * `PATCH /v1/posts/{id}`, always in full.
+   *
+   * **`scheduled_at` is sent on every update, without exception.** The vendor's own note on this
+   * endpoint is that a scheduled post whose update omits it "will process immediately" — so the
+   * field that looks optional is the one that publishes a post early, and the adapter never leaves
+   * the caller's intent to a default. Sending the whole request also makes the call idempotent by
+   * end state, which is the only idempotency this API offers: it documents no idempotency key on
+   * any endpoint, so repeating a `PATCH` is safe and repeating a `POST` is not.
+   */
+  async update(providerPostId: string, request: PublishRequest): Promise<PublishSubmission> {
+    const platformConfigurations = PostBridgeProvider.platformConfigurations(request);
+    const body = (await this.request(`/posts/${encodeURIComponent(providerPostId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        caption: request.caption,
+        media_urls: request.mediaUrls,
+        scheduled_at: request.scheduledInstant,
+        social_accounts: request.targets.map((target) => target.accountId),
+        ...(platformConfigurations ? { platform_configurations: platformConfigurations } : {}),
+      }),
+    })) as { id?: string; status?: string };
+    return {
+      providerPostId: body.id ? String(body.id) : providerPostId,
+      state:
+        body.status === 'posted' ? 'CONFIRMED' : body.status === 'failed' ? 'FAILED' : 'SUBMITTED',
+    };
+  }
+
+  /**
+   * `DELETE /v1/posts/{id}`. The vendor refuses a published post with a `400`, which the service
+   * also refuses ahead of time from the record it read — two guards for the one rule, because the
+   * local one gives a sentence and the remote one is the one that cannot be raced past.
+   */
   async cancel(providerPostId: string): Promise<void> {
     await this.request(`/posts/${encodeURIComponent(providerPostId)}`, { method: 'DELETE' });
   }

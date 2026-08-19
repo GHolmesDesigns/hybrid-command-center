@@ -38,6 +38,7 @@ const publication = (overrides: Partial<SignalPublication> = {}): SignalPublicat
   scheduledInstant: '2026-09-20T13:00:00.000Z',
   timezone: 'America/New_York',
   sentCaption: 'A delivered campaign post',
+  sentMedia: [],
   sentChannels: ['x'],
   targets: [],
   checkAttempts: 0,
