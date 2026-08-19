@@ -48,6 +48,8 @@ export interface TargetRow {
   handle: string;
   mode: string;
   manual_completed_at: string | null;
+  /** The provider's `post-results` row id. NULL until a check has reported one. */
+  post_result_id: string | null;
 }
 
 export const toTarget = (row: TargetRow): SignalPublicationTarget => ({
@@ -57,6 +59,7 @@ export const toTarget = (row: TargetRow): SignalPublicationTarget => ({
   handle: row.handle,
   mode: row.mode as DeliveryMode,
   ...(row.outcome ? { outcome: row.outcome } : {}),
+  ...(row.post_result_id ? { resultId: row.post_result_id } : {}),
   ...(row.permalink ? { permalink: row.permalink } : {}),
   ...(row.error ? { error: row.error } : {}),
   ...(row.manual_completed_at ? { manualCompletedAt: row.manual_completed_at } : {}),

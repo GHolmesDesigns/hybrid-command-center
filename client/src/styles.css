@@ -4464,3 +4464,163 @@ button.tag-chip.toggle.active {
   display: grid;
   gap: 2px;
 }
+
+/* ── Figures ────────────────────────────────────────────────────────────────────────────────────
+   The platforms' own counts, below the delivery rows they belong to. Availability is said in words
+   beside its own icon and only then reinforced with a colour, which is the rule every status in this
+   app follows: measured and unmeasured have to stay apart in greyscale. */
+.signal-metrics {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fbfbf9;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.signal-metrics h3 {
+  margin: 0;
+  font-size: 13px;
+}
+.signal-metrics-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.signal-metrics-targets {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.signal-metric-target {
+  border-left: 3px solid var(--line);
+  padding: 2px 0 2px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.signal-metric-target > p {
+  margin: 0;
+}
+.signal-metric-target.availability-available {
+  border-left-color: var(--green);
+}
+.signal-metric-target-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12px;
+}
+.signal-metric-availability {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.signal-metric-availability svg {
+  width: 13px;
+  height: 13px;
+}
+.availability-available .signal-metric-availability {
+  color: var(--green);
+}
+/* Four figures across, wrapping to two on a narrow pane rather than scrolling sideways. */
+.signal-metric-totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+.signal-metric-total {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+}
+.signal-metric-total dt {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.signal-metric-total dd {
+  margin: 2px 0 0;
+  font-family: 'Manrope', system-ui, sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.signal-metric-days summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 11px;
+}
+.signal-metric-days summary:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+/* A day table can outgrow a narrow editor pane, so it scrolls inside itself rather than pushing the
+   page sideways. */
+.signal-metric-days table {
+  display: block;
+  overflow-x: auto;
+  width: 100%;
+  margin-top: 6px;
+  border-collapse: collapse;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.signal-metric-days caption {
+  caption-side: top;
+  text-align: left;
+  color: var(--muted);
+  font-size: 10px;
+  padding-bottom: 4px;
+}
+.signal-metric-days th,
+.signal-metric-days td {
+  border-bottom: 1px solid var(--line);
+  padding: 3px 8px 3px 0;
+  text-align: right;
+  white-space: nowrap;
+}
+.signal-metric-days thead th:first-child,
+.signal-metric-days tbody th {
+  text-align: left;
+  font-weight: 500;
+}
+.signal-metric-provenance,
+.signal-metric-unavailable {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.signal-metrics-synced {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+/* Why a refresh is not running, or how the last one ended. Amber rather than red: the figures on
+   screen are still the last good ones, so this is a caveat and not a failure. */
+.signal-metrics-reason {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid #efd6ae;
+  border-radius: 8px;
+  background: #fdf6e7;
+  color: #8d601c;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.signal-metrics button {
+  align-self: flex-start;
+}

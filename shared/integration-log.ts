@@ -31,6 +31,10 @@ export const INTEGRATION_OPERATIONS = [
   // separate from each other because one withdraws a post and the other rewrites it.
   'signal.provider-update',
   'signal.provider-cancel',
+  // Reading figures back. Separate from every operation above because it is the one that changes no
+  // post, no publication, and no target -- it stores what the platforms counted -- and a log reader
+  // asking "what did this app do to my schedule" should be able to tell it apart at a glance.
+  'signal.analytics-sync',
 ] as const;
 export type IntegrationOperation = (typeof INTEGRATION_OPERATIONS)[number];
 
@@ -109,6 +113,7 @@ export const INTEGRATION_OPERATION_LABEL: Record<IntegrationOperation, string> =
   'signal.reconcile': 'Signal reconcile',
   'signal.provider-update': 'Signal provider update',
   'signal.provider-cancel': 'Signal provider cancel',
+  'signal.analytics-sync': 'Signal analytics sync',
 };
 
 export const INTEGRATION_OUTCOME_LABEL: Record<IntegrationOutcome, string> = {

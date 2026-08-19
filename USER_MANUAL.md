@@ -659,6 +659,45 @@ check and stopping after six, and the section shows when it last checked and whe
 have stopped.
 
 
+#### Figures
+
+Below Delivery, **Figures** shows what the platforms themselves counted: **views**, **likes**,
+**comments**, and **shares**, one set per account the post went to. Every number there is the
+provider's own. The app calculates nothing from them — no rates, no averages, no comparisons between
+posts — so a figure you read here is a figure the platform reported.
+
+**Figures refresh only when you ask.** Opening a post shows the numbers that were fetched last time
+and asks the provider nothing. **Refresh figures** is the only thing that goes and looks, and the
+line above it says when the last synchronisation happened, or that there has not been one yet.
+
+Three things can be true instead of a number, and the panel says which:
+
+- **Not available from this provider.** This provider reports figures for TikTok, YouTube, and
+  Instagram only. On any other channel — X, LinkedIn, Facebook, Bluesky, or Blog — nothing is
+  counted at all. That is deliberately not shown as a zero: a zero would mean nobody watched, and
+  what is true is that nobody measured.
+- **No delivery result to ask about.** The provider has not yet told the app which of its own results
+  this delivery is, and that identity is the only thing its figures endpoint will answer a question
+  about. Press **Refresh delivery** first, then ask for figures.
+- **No figures yet.** The platform is one this provider measures and it has nothing for this post so
+  far. A post usually needs a day before anything is counted.
+
+Where there is more than one day of history, **days of history** opens the daily table. It shows what
+each day *added* rather than the running total, so a second day that gained nothing reads as nothing
+gained. The date is the provider's own label for the day.
+
+Two things can make a refresh come back without new numbers, and neither of them loses what you
+already had:
+
+- **The provider asks the app to wait.** Post Bridge limits how often figures may be synchronised.
+  When it says so, the panel names the time it is waiting until, the button is unavailable until
+  then, and each refusal in a row waits a little longer than the last. Nothing is asked of the
+  provider in the meantime.
+- **The provider cannot be reached.** The reason is shown and the button stays available.
+
+In both cases the figures on screen are the last ones the provider gave. A failed refresh never
+replaces a good number with a zero or with a blank.
+
 #### Editing a post you have already sent
 
 Editing a post after it has been submitted is allowed, and it changes nothing about the copy the
@@ -1068,6 +1107,8 @@ automatically; inspect Post Bridge before taking another action to avoid a dupli
 
 Delivery never changes the planning status. **Mark published** is always an explicit user action,
 and **Mark … finished** on a manual-finish delivery records only that one delivery, not the post.
+Figures change nothing at all: reading them writes only the figures themselves, and no number a
+platform reports can move a post, a schedule, or a delivery answer.
 Deleting a post with a live provider submission cancels it first; publication history then protects
 the Signal post from deletion so the audit record stays readable.
 

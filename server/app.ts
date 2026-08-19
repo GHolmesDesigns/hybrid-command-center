@@ -69,7 +69,12 @@ import {
 import type { DriveProvider } from './drive/provider.ts';
 import type { PublishProvider } from './publish/provider.ts';
 import { UnavailablePublishProvider } from './publish/provider.ts';
-import { PostBridgeProvider } from './publish/post-bridge.ts';
+import { PostBridgeAnalyticsProvider, PostBridgeProvider } from './publish/post-bridge.ts';
+import { PublishAnalyticsService } from './publish/analytics.ts';
+import {
+  UnavailableAnalyticsProvider,
+  type AnalyticsProvider,
+} from './publish/analytics-provider.ts';
 import { PublishRequestError, PublishService } from './publish/service.ts';
 import { PROVIDER_ACTIONS } from '../shared/publish.ts';
 import {
@@ -178,6 +183,12 @@ export type AppOptions = {
   drive?: (db: Db) => DriveProvider;
   /** Test-only publishing provider; automated tests never contact the real service. */
   publish?: PublishProvider;
+  /**
+   * Test-only analytics provider. Separate from `publish` because the interfaces are separate: the
+   * figures path is handed something that cannot submit, update, or cancel a post, and a suite that
+   * wants to rehearse a rate-limited synchronisation sets only this one.
+   */
+  analytics?: AnalyticsProvider;
   /** Fixed configured zone for publishing tests and deployments. */
   publishTimezone?: string;
   /**
@@ -414,6 +425,16 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     signalProvider(db),
     publishProvider,
     options.publishTimezone ?? config.publish.timezone,
+    clock,
+  );
+  // Beside the publisher and not inside it. It holds its own provider, which has no way to submit,
+  // update, or cancel anything, and it never touches `SignalProvider` at all.
+  const analytics = new PublishAnalyticsService(
+    db,
+    options.analytics ??
+      (publishConfigured()
+        ? new PostBridgeAnalyticsProvider(config.publish.apiKey)
+        : new UnavailableAnalyticsProvider()),
     clock,
   );
   app.use(
@@ -1572,6 +1593,36 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       res.json(
         await publisher.applyProviderAction(req.params.id, input.action, input.reconcileHash),
       );
+    } catch (error) {
+      next(error);
+    }
+  });
+  /**
+   * The figures stored against one post's deliveries. A local read: no provider call on any path.
+   *
+   * A `GET`, and the planner asks for it when a post is opened, which is deliberately not a refresh —
+   * nothing here reaches Post Bridge, so opening a post cannot spend a synchronisation. The card puts
+   * automatic refresh on page load explicitly out of scope, and this is how that stays true while the
+   * figures somebody already fetched are still on screen.
+   */
+  app.get('/api/signal/posts/:id/metrics', (req, res, next) => {
+    try {
+      res.json(analytics.read(req.params.id));
+    } catch (error) {
+      next(error);
+    }
+  });
+  /**
+   * One on-demand refresh: sync the provider's figures, read them back, store what came back.
+   *
+   * The only route in this app that reaches the analytics endpoints, and it runs only because a
+   * person pressed something. A refusal is not an error response — it answers with the stored figures
+   * and the reason, because a failed refresh that returned a `4xx` would leave the panel showing
+   * nothing where it should be showing the last known good values.
+   */
+  app.post('/api/signal/posts/:id/metrics/refresh', async (req, res, next) => {
+    try {
+      res.json(await analytics.refresh(req.params.id));
     } catch (error) {
       next(error);
     }

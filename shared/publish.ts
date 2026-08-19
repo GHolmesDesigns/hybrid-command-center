@@ -404,6 +404,16 @@ export interface SignalPublicationTarget {
   handle: string;
   mode: DeliveryMode;
   outcome?: 'SUCCESS' | 'FAILURE';
+  /**
+   * The provider's own identity for this delivery — its `post-results` row id.
+   *
+   * Captured by reconciliation, because that is the only call that reads `post-results` at all, and
+   * kept here rather than derived because it is the only handle the analytics endpoints accept: a
+   * post id and an account id together will not answer a question about figures
+   * (`shared/publish-analytics.ts`). Absent until the provider has been asked what became of this
+   * submission, which is a state the figures panel reports by name rather than as a zero.
+   */
+  resultId?: string;
   permalink?: string;
   error?: string;
   /** When a person recorded that they finished this delivery where it had to be finished. */

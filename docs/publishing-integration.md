@@ -785,11 +785,14 @@ syncs") and nothing else. Absence of a documented limit is not absence of a limi
   `server/publish/sync-health.ts` keeps two values — when the provider was last reached, and the
   moment a limit it named runs until — and the queue-health summary reports them
   (`shared/queue-health.ts`, `SYNC_BEHIND`). Reaching the provider again clears the limit, because
-  getting an answer is proof it has passed. The record is written by the reconciliation check alone:
-  a preview reading the account list reaches the provider without refreshing a single delivery
-  answer, and stamping that as a synchronisation would keep the record permanently fresh. If
-  analytics is ever read (§14 leaves it undecided), its own sync stamps the same record and needs no
-  new alert.
+  getting an answer is proof it has passed. `lastSyncedAt` is written by the reconciliation check
+  alone: a preview reading the account list reaches the provider without refreshing a single delivery
+  answer, and stamping that as a synchronisation would keep the record permanently fresh. **The
+  analytics sync (§16) honours that rule rather than the earlier note that it would stamp the same
+  record.** It refreshes no delivery answer either, so it writes the *rate limit* here — a limit is a
+  fact about every call this app would make — and keeps its own last-synchronised time for the figures
+  it did read. No new alert kind either way: the rate-limit line already says that any figures read
+  from the connection are as old as the limit.
 - **Only safe requests are retried.** Every `GET`, and `POST /v1/posts` only in the rows marked
   safe in §8. The ambiguous row is never retried by machine.
 - **One submit in flight at a time**, plus a fixed ceiling of 60 submits per rolling hour. A loop
@@ -935,10 +938,13 @@ written in the same transaction as the publication-state change it describes.
 ## 14. What this does not decide
 
 Named so an implementation card does not assume otherwise: media uploading or storage; the planner
-UI beyond the confirmed submit flow and publication state; analytics — Post Bridge's
-`/v1/analytics` exists and this app has no use for it yet; multi-workspace or per-client API keys;
+UI beyond the confirmed submit flow and publication state; multi-workspace or per-client API keys;
 publishing anything that is not a Signal post; Buffer Bridge transport or credentials; and any
 second provider inside this app.
+
+**Analytics is no longer on that list.** It said "`/v1/analytics` exists and this app has no use for
+it yet"; C68 (#195) gave it one, and §16 is the record. What stays undecided there is named in §16
+rather than here.
 
 ## 15. Acceptance
 
@@ -955,3 +961,106 @@ second provider inside this app.
 - [x] Platform and account content variants resolving base → platform → account outside React,
       delivered only where the provider carries them and refused where it does not, with an
       on-demand preview per target account that the server fetches nothing for — §3.3, C62 (#189).
+- [x] Provider result identity captured per delivery, and figures read through a service that has no
+      way to publish, reschedule, or cancel anything — §16, C68 (#195).
+
+---
+
+## 16. Analytics: result identity, and the figures read against it
+
+Added by C68 (#195). §14 previously said analytics was undecided; this section is the decision.
+
+### 16.1 What the provider actually offers
+
+From the same OpenAPI document as §7.2 (`GET https://api.post-bridge.com/reference`), read
+2026-08-19:
+
+| Route | What it takes | What it gives |
+| --- | --- | --- |
+| `POST /v1/analytics/sync` | optional `platform`, enumerated `tiktok`, `youtube`, `instagram`; *"Omit to sync all"* | nothing but a status. Documented `429`: *"Rate limited - please wait between syncs."* |
+| `GET /v1/analytics` | `post_result_id` (repeatable, OR), `platform`, `timeframe`, `offset`, `limit` | `AnalyticsDto`: `view_count`, `like_count`, `comment_count`, `share_count`, `last_synced_at`, `share_url`, `platform_post_id`, `match_confidence` |
+| `GET /v1/analytics/{id}/daily` | the analytics record id | `snapshots` — cumulative totals per `YYYY-MM-DD` — and `deltas`, the per-day gains |
+
+**The document contradicts itself about coverage, and the contradiction is recorded rather than
+resolved by preference.** Its `Analytics` tag reads "Currently supports TikTok"; the sync route
+enumerates three platforms and names all three in its own summary. `shared/publish-analytics.ts`
+takes the enum, because that is the half the API validates against and because the two mistakes are
+not symmetrical: treating a platform as covered costs an empty answer, which the availability rule
+below already has a state for, while treating a covered platform as uncovered hides figures that
+exist.
+
+### 16.2 The identity everything hangs on
+
+`GET /v1/analytics` answers about a **post result**, not about a post and not about an account. So
+`signal_publication_targets` gains `post_result_id`, captured by the reconciliation check — the only
+call that reads `post-results` at all — and coalesced rather than assigned on write, because a later
+response that omits it has said nothing about it. Two new tables carry the figures, keyed the way
+the delivery they describe is keyed:
+
+```sql
+ALTER TABLE signal_publication_targets ADD COLUMN post_result_id TEXT;  -- post-results.id
+
+CREATE TABLE IF NOT EXISTS signal_post_metrics (           -- current totals, one row per delivery
+  publication_id TEXT NOT NULL REFERENCES signal_publications(id) ON DELETE CASCADE,
+  provider_account_id INTEGER NOT NULL,
+  post_result_id TEXT NOT NULL, analytics_id TEXT NOT NULL, platform TEXT NOT NULL,
+  views INTEGER NOT NULL DEFAULT 0, likes INTEGER NOT NULL DEFAULT 0,
+  comments INTEGER NOT NULL DEFAULT 0, shares INTEGER NOT NULL DEFAULT 0,
+  share_url TEXT, provider_synced_at TEXT, synced_at TEXT NOT NULL,
+  PRIMARY KEY(publication_id, provider_account_id)
+);
+CREATE TABLE IF NOT EXISTS signal_post_metric_days (       -- normalized cumulative snapshots
+  publication_id TEXT NOT NULL REFERENCES signal_publications(id) ON DELETE CASCADE,
+  provider_account_id INTEGER NOT NULL, date TEXT NOT NULL,
+  views INTEGER NOT NULL DEFAULT 0, likes INTEGER NOT NULL DEFAULT 0,
+  comments INTEGER NOT NULL DEFAULT 0, shares INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY(publication_id, provider_account_id, date)
+);
+```
+
+Additive, so an existing database gains one nullable column and two empty tables. Only the
+snapshots are stored; the provider's `deltas` are a subtraction between consecutive snapshots, and
+`postMetricDayDeltas` does it on read rather than keeping an answer beside its own derivation.
+
+### 16.3 Four states, and never a zero
+
+`postMetricAvailability` answers per delivery, in this order, because the order is the difference
+between an honest sentence and a wrong one:
+
+1. `NOT_AVAILABLE` — the platform is not one of the three. It reuses the publishing contract's own
+   sentence, **Not available from this provider**, because it is the same claim about the same
+   provider. No `totals` field at all, so nothing downstream can render it as `0`.
+2. `AWAITING_RESULT` — no `post_result_id` yet, so there is nothing to ask about. Refreshing the
+   delivery is what fixes it, and the panel says so.
+3. `AWAITING_SYNC` — measured, asked about, and the provider has nothing yet.
+4. `AVAILABLE` — the provider's four numbers, with its own `last_synced_at` beside them.
+
+### 16.4 The boundaries
+
+- **A separate interface.** `AnalyticsProvider` (`server/publish/analytics-provider.ts`) has
+  `sync`, `list`, and `days` and nothing that could publish, reschedule, or withdraw a post.
+  `SignalProvider` gains nothing: it still has no write method, and the analytics service does not
+  import it. `PostBridgeProvider` and `PostBridgeAnalyticsProvider` share one HTTP helper — one
+  bearer token, one reading of a `429` — and nothing else.
+- **On-demand only.** `PublishAnalyticsService.read` makes no provider call, so the planner shows
+  stored figures the moment a post is opened; `refresh` is the only method that reaches Post Bridge
+  and only a button press calls it. There is no timer and no background job on this path.
+- **A failed refresh cannot overwrite a good value.** Every provider read happens before any write,
+  the writes land in one transaction, and only the results the provider actually named are written.
+  A refusal, a network failure, or a daily-snapshot read that fails leaves the last known good
+  values exactly where they were, and the panel keeps showing them beside the reason.
+- **Backoff is bounded and grows.** A `429` records a wait equal to the longer of the provider's
+  `Retry-After` and §9's own backoff for this attempt — base 1 s doubling per consecutive refusal,
+  capped at 60 s, full jitter, bounded at five. Waiting longer than asked never breaks a limit;
+  waiting less does. Nothing is retried before the wait passes, and at the bound the app reports the
+  refusals rather than refusing a person their next attempt.
+- **One log row per refresh**, `signal.analytics-sync`, `PARTIAL` when the provider had figures for
+  some deliveries and not others.
+
+### 16.5 What this section does not decide
+
+Automatic analytics refresh of any kind; anything derived from a figure — engagement rates,
+per-follower ratios, campaign roll-ups, comparisons between posts; `platform_post_id`,
+`match_confidence`, `video_description`, and `duration`, which are read past rather than stored; the
+`timeframe` and `platform` filters on `GET /v1/analytics`; and any write to `signal_posts` from this
+path, which stays impossible rather than merely unimplemented.

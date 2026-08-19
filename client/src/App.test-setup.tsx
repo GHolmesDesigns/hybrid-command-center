@@ -27,6 +27,7 @@ import type {
   SignalPublication,
 } from '../../shared/publish';
 import type { PublishVariantRecord } from '../../shared/publish-variants';
+import type { PostMetricsSummary } from '../../shared/publish-analytics';
 import {
   DEFAULT_QUEUE_HEALTH_CONFIG,
   type QueueHealthAlert,
@@ -196,6 +197,17 @@ export const testState = {
   providerApplyError: null as string | null,
   providerApplyRequests: [] as { action: string; reconcileHash: string }[],
   /**
+   * The figures panel's two routes. Both answer the same shape, because the server does: a stored
+   * read and a refresh are one summary, and a refusal comes back as that summary carrying its reason
+   * rather than as an error status.
+   *
+   * Unset means a post with no deliveries to measure, which is what most cases want — the panel
+   * renders nothing and no case has to say so.
+   */
+  postMetricsPayload: null as PostMetricsSummary | null,
+  postMetricsRefreshPayload: null as PostMetricsSummary | null,
+  postMetricsRefreshError: null as string | null,
+  /**
    * The content overrides the composer reads and writes. Held as state rather than answered from a
    * fixture, so a case can assert what a `PUT` stored the way the real route would.
    */
@@ -331,6 +343,19 @@ const payloadFor = (url: string) => {
   if (url.endsWith('/api/categories')) return testState.categoriesPayload;
   return [];
 };
+
+/**
+ * A post nothing measures: no deliveries, and a connection with nothing to wait for.
+ *
+ * The default answer for both figures routes, so a case that is not about figures neither sets one up
+ * nor has the panel appear in it. It is the shape the server really answers with for a post that has
+ * never been published, which is why the panel renders nothing from it rather than an empty table.
+ */
+const emptyMetrics = (postId: string): PostMetricsSummary => ({
+  postId,
+  targets: [],
+  refresh: { allowed: true, attempts: 0, exhausted: false },
+});
 
 export const requests: { url: string; method: string; body: any }[] = [];
 
@@ -522,6 +547,21 @@ const respondTo = (url: string, init?: RequestInit) => {
     testState.providerApplyRequests.push(body as { action: string; reconcileHash: string });
     return testState.providerApplyPayload ?? reply(400, { error: 'No result was set up.' });
   }
+  const metricsRefreshPath = url.match(/\/api\/signal\/posts\/([^/?]+)\/metrics\/refresh$/);
+  if (metricsRefreshPath && method === 'POST') {
+    if (testState.postMetricsRefreshError)
+      return reply(500, { error: testState.postMetricsRefreshError });
+    // A refresh answers with the refreshed summary where a case set one, and otherwise with whatever
+    // is stored — the same thing the route does when the provider had nothing new to say.
+    return (
+      testState.postMetricsRefreshPayload ??
+      testState.postMetricsPayload ??
+      emptyMetrics(metricsRefreshPath[1] as string)
+    );
+  }
+  const metricsPath = url.match(/\/api\/signal\/posts\/([^/?]+)\/metrics$/);
+  if (metricsPath && method === 'GET')
+    return testState.postMetricsPayload ?? emptyMetrics(metricsPath[1] as string);
   const finishPath = url.match(/\/api\/signal\/publications\/([^/?]+)\/targets\/(\d+)\/finish$/);
   if (finishPath && method === 'POST')
     return testState.publishFinishPayload ?? reply(409, { error: 'Nothing to finish here.' });
@@ -920,6 +960,9 @@ beforeEach(() => {
   testState.providerApplyPayload = null;
   testState.providerApplyError = null;
   testState.providerApplyRequests = [];
+  testState.postMetricsPayload = null;
+  testState.postMetricsRefreshPayload = null;
+  testState.postMetricsRefreshError = null;
   testState.signalVariantsPayload = [];
   testState.signalVariantsError = null;
   testState.clientMergePreviewError = null;
