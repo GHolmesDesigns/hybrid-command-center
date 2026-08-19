@@ -32,9 +32,11 @@ Nothing in this app is reachable off loopback by design, and the server enforces
 - **Campaign playbook import** — an .xlsx workbook or pasted tabs creating a client, its projects, their tasks, checklists, and dependencies in one confirmed transaction, previewed first, duplicates skipped and reported, with a persisted receipt and no Drive side effect
 - **Files** — read-only browsing of a project's Drive folder and its provisioned subfolders: paginated listing, type/size/modified for every item, and "Open in Drive" on every row. It uploads, downloads, moves, renames, and deletes nothing, and every Drive failure mode has its own state and next step
 - **Integration activity** — an append-only record of what each integration changed, when, and how it ended, naming the affected clients, projects, and tasks by id, bounded to the most recent 200 rows, credential-scrubbed, and shown on the Import page beside the receipt it belongs to
-- **Signal Campaign** — the authoritative store and operable planner for content: month grid, unscheduled queue, quick idea capture, and a full editor for content, channels, ordered public media references, date, time, format, status, campaign, and CTA, with duplicate-to-queue, next-open-slot suggestion, and confirmed deletion
+- **Signal Campaign** — the authoritative store and operable planner for content: month grid, unscheduled queue, quick idea capture, and a full editor for content, channels, ordered public media references, date, time, format, status, campaigns, and CTA, with duplicate-to-queue, next-open-slot suggestion, and confirmed deletion
 - **Queue health** — an in-app summary above the planner deriving six alerts from your own posts and deliveries: a failed or partly delivered post, a manual finish waiting on you, a scheduled slot approaching with nothing submitted, a provider answer that moved at the last check, a channel with nothing planned inside a configurable window, and a provider synchronisation that is rate-limited or behind. Each line links to the post it is about, and acknowledging one changes no planning or delivery state. In-app only — no email, SMS, or push service
 - **Figures** — the platforms’ own counts for a post that went out: provider-reported views, likes, comments, and shares per delivery, with the daily snapshots behind them shown as per-day gains, the time of the last synchronisation, and a refresh that runs only when you press it. A channel this provider does not measure says **Not available from this provider** rather than showing a zero, a rate-limited provider is waited out rather than hammered, and a refresh that fails leaves the last known good figures on screen
+- **Signal campaigns** — a shared vocabulary labelling Signal posts the way categories label projects: a post carries as many as it needs, two spellings of one name are one campaign, renaming one reaches every post in a single write, and deleting one detaches it without deleting a post. Managed in Settings or typed straight into a post
+- **Campaign figures** — the platforms' own counts added up per campaign, below the planner: totals, a compact daily trend, and filters for campaign, channel, account, and date range, with several campaigns read as *or*. Every group says how many of its deliveries are measured beside its total, a group with nothing measured says so rather than showing zeros, unclassified posts stay visible under **No campaign**, and the panel contacts no provider — it reads the figures a post's own refresh already stored
 - **Calendar** — a read-only month agenda putting Signal's scheduled content beside task due dates, kept as two headed groups rather than one merged list of "events", with empty days dropped. It writes nothing, and a schedule it cannot read degrades the page to task due dates alone with the reason shown
 - Server-only Google OAuth 2.0, encrypted token storage, configurable Drive root, and resumable/idempotent folder creation
 - Responsive desktop/tablet/mobile interface with empty, error, loading, disconnected, and confirmation states
@@ -51,8 +53,9 @@ server/                    Express local API
   drive/                   provider interface, Google implementation, provisioning + sync,
                            and read-only project folder browsing (browse.ts)
   signal/                  Signal Campaign's schedule: SignalProvider (provider.ts), the
-                           read-only implementation (read.ts), writes (service.ts), and the
-                           queue-health summary's gathering half (queue-health.ts)
+                           read-only implementation (read.ts), writes (service.ts), the campaign
+                           vocabulary (campaigns.ts), and the queue-health summary's gathering
+                           half (queue-health.ts)
   scripts/                 migration, demo seed, backup, restore, and rehearsal
   backup.ts                SQLite online backup / restore helpers
   calendar.ts              the read-only calendar: schedule and due dates over one range
@@ -69,7 +72,7 @@ The browser never receives Google tokens. UI code calls only the local API. Driv
 
 ### Data ownership
 
-- **SQLite:** clients, projects, tasks, board-card and project-tile positions, checklists, dependencies, due dates, notes, task tags, project categories, client merge aliases, Signal Campaign's planned posts, channels, ordered media URL references, and per-platform and per-account content overrides, settings, branding (including the sidebar palette and the logo's address, never the image itself), Drive IDs/URLs, provisioning steps, import receipts, integration activity records, and timestamps.
+- **SQLite:** clients, projects, tasks, board-card and project-tile positions, checklists, dependencies, due dates, notes, task tags, project categories, client merge aliases, Signal Campaign's planned posts, channels, campaigns, ordered media URL references, and per-platform and per-account content overrides, settings, branding (including the sidebar palette and the logo's address, never the image itself), Drive IDs/URLs, provisioning steps, import receipts, integration activity records, and timestamps.
 - **Google Drive:** every project file. The database stores references, never duplicate file contents. Deleting a project or task in the app does **not** delete Drive folders or files.
 
 Timestamps are stored as UTC ISO strings. Date-only deadlines are interpreted in the browser/server machine's local timezone and become overdue after their local calendar day has passed.
@@ -481,6 +484,28 @@ it and never writes.
   publication, or delivery row — so a figure can never rewrite a plan or a delivery answer. A
   channel outside TikTok, YouTube, and Instagram has no figure at all rather than a figure of zero,
   and a failed refresh keeps the last values instead of replacing them.
+- **Campaigns are a normalized join, and the free-text column they replaced is frozen.** A campaign
+  is a row in `signal_campaigns` attached through `signal_post_campaigns`, exactly as tags label
+  tasks and categories label projects — so a post can belong to several (the campaign *and* the week
+  inside it), two spellings of one name are one campaign through the shared rule in
+  `shared/types.ts`, renaming is one `UPDATE` that every post reads, and deleting cascades the join
+  rows and touches no post. `signal_posts.campaign`, the single nullable free-text column that came
+  before, is read exactly once — `backfillSignalCampaigns` runs on every boot, converts any post that
+  still has a string and no campaign row, and resolves duplicate spellings to the one the earliest
+  post used. It is kept rather than dropped because `server/db.ts` is additive by design and dropping
+  a column is a full table rebuild; nothing reads it for behaviour and nothing writes it, so it is a
+  record of what was there and not a second place a campaign lives. `npm run signal:import` writes
+  the join too, and stays idempotent: it resolves the file's campaign name for the posts it inserts
+  and touches no post it did not.
+- **Figures segmented by campaign add, and say what they added.** A campaign total is the provider's
+  own per-delivery figures summed over a named set of deliveries, and a trend point is the sum of
+  per-day gains already subtracted from stored snapshots — no rate, ratio, or average anywhere.
+  Every group reports how many of its deliveries are measured beside its total, and a group with
+  nothing measured carries no total at all rather than a row of zeros. `GET
+  /api/signal/analytics/campaigns` contacts no provider on any path, so opening the panel or moving a
+  filter cannot spend a synchronisation; the numbers are the ones a post's own **Refresh figures**
+  stored. Its date range asks *which posts*, not *which days* — a post scheduled inside it brings its
+  whole measured history, and an undated post is in no range.
 - **Media stays a reference.** A post may carry an ordered list of public `https:` URLs. SQLite
   stores those strings in `signal_post_media`; the app never fetches, downloads, proxies, or
   uploads the referenced files. Kind is inferred from the URL extension and remains `unknown`

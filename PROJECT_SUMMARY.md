@@ -51,6 +51,7 @@ The first four days built the product and the quality gates. The last three days
 - **Files**: read-only browsing of a project's Drive folder and its provisioned subfolders.
 - **Integration activity**: an append-only, credential-scrubbed log of what each integration changed, bounded to the newest 200 rows.
 - **Signal Campaign**: the only store of planned content — Today/Week/Month views, unscheduled queue, editor, ordered public media URL references, X-link warnings, and an optional Post Bridge publish flow with preview and confirmed submit.
+- **Signal campaigns**: a shared label list over Signal posts — several per post, one write to rename, deletion detaches without deleting a post — with the platforms' own figures added up per campaign below the planner and filterable by campaign, channel, account, and date range. Unclassified posts stay visible under **No campaign**.
 - **Calendar**: a read-only Today/Week/Month agenda that keeps Signal posts and task due dates as two headed groups, and degrades to tasks alone if the schedule cannot be read.
 - **Branding** in Settings (wording, colours, optional `https:` logo) with WCAG AA contrast enforced on both the form and the API.
 - Server-only Google OAuth, encrypted tokens, PKCE, consumed-state delete, loopback-only bind while there is no authentication, backups with retention, and CI gates for typecheck, lint, tests, coverage floors, e2e, supply chain, and version consistency.

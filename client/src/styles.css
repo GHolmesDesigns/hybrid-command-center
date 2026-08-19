@@ -4624,3 +4624,124 @@ button.tag-chip.toggle.active {
 .signal-metrics button {
   align-self: flex-start;
 }
+
+/* ── Campaign figures ───────────────────────────────────────────────────────────────────────────
+   The platforms' own counts grouped by campaign, below the planner. Measured and unmeasured are
+   said in words beside an icon before any colour is applied, the same rule the per-post figures
+   panel follows: a group with nothing measured must read as unmeasured in greyscale too. */
+.signal-campaign-analytics {
+  margin-top: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.signal-campaign-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.signal-campaign-filters fieldset {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin: 0;
+  padding: 8px 10px 10px;
+  min-width: 0;
+}
+.signal-campaign-filters legend {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  font-weight: 700;
+  padding: 0 4px;
+}
+.signal-campaign-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.signal-campaign-hint {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+.signal-campaign-range,
+.signal-campaign-filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+}
+.signal-campaign-filter-actions {
+  align-items: flex-end;
+  padding-bottom: 2px;
+}
+.signal-campaign-range label,
+.signal-campaign-filter-actions label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.signal-campaign-scope {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+.signal-campaign-groups {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.signal-campaign-group {
+  border-left: 3px solid var(--line);
+  padding: 2px 0 2px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.signal-campaign-group.is-measured {
+  border-left-color: var(--green);
+}
+/* Unclassified posts are a residue rather than a campaign, so the row is marked as different
+   without being marked as wrong: a dashed edge, and the words "No campaign" doing the work. */
+.signal-campaign-group.is-uncategorized {
+  border-left-style: dashed;
+}
+.signal-campaign-group-head {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+}
+.signal-campaign-group-scope {
+  color: var(--muted);
+  font-size: 11px;
+}
+.signal-campaign-trend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+/* One bar per snapshotted day, scaled to the busiest day in the run. Decoration only: it carries
+   `aria-hidden`, and the day table under it is what states the numbers. */
+.signal-campaign-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 40px;
+  padding: 2px 0;
+  overflow-x: auto;
+}
+.signal-campaign-bar {
+  flex: 0 0 8px;
+  min-height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--blue);
+}

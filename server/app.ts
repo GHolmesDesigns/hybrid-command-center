@@ -66,6 +66,21 @@ import {
   restoreQueueAlert,
   writeQueueHealthConfig,
 } from './signal/queue-health.ts';
+import {
+  SignalCampaignInUseError,
+  SignalCampaignNameTakenError,
+  SignalCampaignNotFoundError,
+  createCampaign,
+  deleteCampaign,
+  listCampaigns,
+  signalCampaignInput,
+  signalCampaignPatch,
+  updateCampaign,
+} from './signal/campaigns.ts';
+import {
+  readSignalCampaignAnalytics,
+  signalCampaignAnalyticsQuery,
+} from './publish/campaign-analytics.ts';
 import type { DriveProvider } from './drive/provider.ts';
 import type { PublishProvider } from './publish/provider.ts';
 import { UnavailablePublishProvider } from './publish/provider.ts';
@@ -1450,6 +1465,71 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       next(error);
     }
   });
+  /**
+   * Signal campaigns: the shared vocabulary a post's content belongs to.
+   *
+   * The same shape task tags and project categories have, one module over, because it is the same
+   * kind of thing — a shared list of names attached through a join. Which is what gives this card's
+   * criteria their proofs: renaming is one `UPDATE` on the campaign row, so every post carrying it
+   * reads the new name; deleting cascades the join rows and touches no post; and the name is unique
+   * `COLLATE NOCASE`, so two spellings cannot both exist.
+   *
+   * A post's own campaigns are written with the post (`PATCH /api/signal/posts/:id`), by name, so the
+   * editor saves a whole draft in one press the way it does for channels and media.
+   */
+  app.get('/api/signal/campaigns', (_req, res, next) => {
+    try {
+      res.json(listCampaigns(db));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/signal/campaigns', (req, res, next) => {
+    try {
+      // Typing a name that already exists picks that campaign rather than refusing or duplicating
+      // it, which is what makes the chip input safe to type into. `201` is reserved for the case
+      // that genuinely created one, so the browser can say which happened.
+      const { campaign, created } = createCampaign(db, signalCampaignInput.parse(req.body));
+      res.status(created ? 201 : 200).json(campaign);
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.patch('/api/signal/campaigns/:id', (req, res, next) => {
+    try {
+      res.json(updateCampaign(db, req.params.id, signalCampaignPatch.parse(req.body)));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.delete('/api/signal/campaigns/:id', (req, res, next) => {
+    try {
+      const query = z.object({ confirm: z.literal('true').optional() }).parse(req.query);
+      const removed = deleteCampaign(db, req.params.id, query.confirm === 'true');
+      res.json({ ok: true, deleted: 'signalCampaign', ...removed });
+    } catch (error) {
+      next(error);
+    }
+  });
+  /**
+   * Figures, segmented by campaign, channel, account, and date range.
+   *
+   * A local read: no provider is contacted on any path through it, so this page costs no
+   * synchronisation however often it is opened — the numbers are the ones a person's own **Refresh
+   * figures** press already stored against a post. Several campaigns are OR, and so are several
+   * channels and several accounts; the three lists are AND against each other. `campaigns=none` is
+   * the posts that carry no campaign, which is how **No campaign** is asked for by name.
+   *
+   * The range asks *which posts*, not *which days*: a post scheduled inside it brings its whole
+   * measured history. `shared/signal-campaign-analytics.ts` says why, and does the arithmetic.
+   */
+  app.get('/api/signal/analytics/campaigns', (req, res, next) => {
+    try {
+      res.json(readSignalCampaignAnalytics(db, signalCampaignAnalyticsQuery.parse(req.query)));
+    } catch (error) {
+      next(error);
+    }
+  });
   /** The unscheduled queue — posts with no date, which belong to no range and no calendar cell. */
   app.get('/api/signal/queue', (_req, res, next) => {
     try {
@@ -1780,7 +1860,8 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
           error instanceof SignalPostNotFoundError ||
             // Acknowledging an alert that is not in the summary is the same kind of miss: the
             // summary is derived, so an id with nothing behind it names a fact that has moved on.
-            error instanceof QueueAlertNotFoundError
+            error instanceof QueueAlertNotFoundError ||
+            error instanceof SignalCampaignNotFoundError
           ? 404
           : // A refused merge is the caller's problem — the wrong pair, or a preview the
             // workspace moved out from under — and each case carries its own status. A slot
@@ -1789,7 +1870,12 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
               error instanceof ClientMergeError ||
               error instanceof SignalSlotConflictError
             ? error.status
-            : error?.code === 'SQLITE_CONSTRAINT_UNIQUE'
+            : // A rename onto a name another campaign holds, and a deletion that would detach
+              // posts before the caller has confirmed it: both are the same *this needs an answer
+              // first* that tags and categories already answer with a 409 and a code.
+              error instanceof SignalCampaignNameTakenError ||
+                error instanceof SignalCampaignInUseError ||
+                error?.code === 'SQLITE_CONSTRAINT_UNIQUE'
               ? 409
               : 500;
     /**
@@ -1815,6 +1901,14 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
             code: error.suggestion ? 'SLOT_TAKEN' : 'NO_OPEN_SLOT',
             suggestion: error.suggestion,
           }
+        : {}),
+      ...(error instanceof SignalCampaignNameTakenError
+        ? { code: 'SIGNAL_CAMPAIGN_NAME_TAKEN' }
+        : {}),
+      // The count travels with the refusal so the confirmation can name what is about to be
+      // detached, which is the only thing that makes confirming it a decision.
+      ...(error instanceof SignalCampaignInUseError
+        ? { code: 'SIGNAL_CAMPAIGN_IN_USE', attachedPostCount: error.attachedPostCount }
         : {}),
     });
   });

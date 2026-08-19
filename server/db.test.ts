@@ -210,6 +210,8 @@ describe('additive schema migration', () => {
         'signal_alert_acks',
         'signal_post_metrics',
         'signal_post_metric_days',
+        'signal_campaigns',
+        'signal_post_campaigns',
         'client_merges',
       ]),
     );
@@ -232,6 +234,12 @@ describe('additive schema migration', () => {
       { total: 0 },
     ]);
     expect(columnsOf(db, 'signal_publication_targets')).toContain('post_result_id');
+    // The campaign vocabulary arrives empty on a database that had no Signal posts to convert, and
+    // the frozen free-text column is still on the table: it is kept rather than dropped, so what a
+    // post used to say stays readable beside what it now belongs to.
+    expect(rows(db, 'SELECT COUNT(*) AS total FROM signal_campaigns')).toEqual([{ total: 0 }]);
+    expect(rows(db, 'SELECT COUNT(*) AS total FROM signal_post_campaigns')).toEqual([{ total: 0 }]);
+    expect(columnsOf(db, 'signal_posts')).toContain('campaign');
   });
 
   it('adds the media join to a populated Signal database without changing existing posts', () => {
@@ -266,6 +274,17 @@ describe('additive schema migration', () => {
       { post_id: 's1', channel: 'ig' },
     ]);
     expect(rows(db, 'SELECT COUNT(*) AS total FROM signal_post_media')).toEqual([{ total: 0 }]);
+    // The post's free-text campaign arrives as a campaign row and a join, on boot, without the
+    // column being touched: opening the file is the whole of the migration.
+    expect(rows(db, 'SELECT name FROM signal_campaigns')).toEqual([{ name: 'Week 1' }]);
+    expect(
+      rows(
+        db,
+        `SELECT p.post_id, c.name FROM signal_post_campaigns p
+           JOIN signal_campaigns c ON c.id = p.campaign_id`,
+      ),
+    ).toEqual([{ post_id: 's1', name: 'Week 1' }]);
+    expect(rows(db, 'SELECT campaign FROM signal_posts')).toEqual([{ campaign: 'Week 1' }]);
     expect(rows(db, 'PRAGMA integrity_check')).toEqual([{ integrity_check: 'ok' }]);
     expect(rows(db, 'PRAGMA foreign_key_check')).toEqual([]);
   });

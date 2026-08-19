@@ -1,5 +1,6 @@
 import type { Db } from '../db.ts';
-import type { SignalChannel, SignalPost } from '../../shared/signal.ts';
+import type { SignalCampaign, SignalChannel, SignalPost } from '../../shared/signal.ts';
+import { campaignsByPost } from './campaigns.ts';
 import type { PublishPlatform, PublishPostKind } from '../../shared/publish-capabilities.ts';
 import {
   normalizePublishVariant,
@@ -19,7 +20,12 @@ export interface SignalPostRow {
   time: string;
   format: string;
   status: string;
-  campaign: string | null;
+  /**
+   * Deliberately absent. The `campaign` column is still on the table and is frozen — read once by
+   * `backfillSignalCampaigns` and never again — so it is not described here: a row shape that named
+   * it would be an invitation to read it, and what a post belongs to now comes from
+   * `signal_post_campaigns`.
+   */
   cta: string;
   position: number;
   created_at: string;
@@ -68,7 +74,7 @@ export function mediaByPost(db: Db, postIds: string[]): Map<string, string[]> {
 }
 
 /**
- * One row plus its channels. The row's enum columns are passed through as their declared types:
+ * One row plus its joins. The row's enum columns are passed through as their declared types:
  * nothing but this module's own validated writes puts values in these columns, so a cast here is
  * a statement about that invariant rather than a guess about the data.
  */
@@ -76,6 +82,7 @@ export function toSignalPost(
   row: SignalPostRow,
   channels: SignalChannel[],
   mediaUrls: string[],
+  campaigns: SignalCampaign[],
 ): SignalPost {
   return {
     id: row.id,
@@ -87,7 +94,9 @@ export function toSignalPost(
     time: row.time,
     format: row.format as SignalPost['format'],
     status: row.status as SignalPost['status'],
-    campaign: row.campaign,
+    // Empty for a post in no campaign, for the same reason: **No campaign** is a group a reader can
+    // see rather than an absence a caller has to test for.
+    campaigns,
     cta: row.cta as SignalPost['cta'],
     position: row.position,
     createdAt: row.created_at,
@@ -95,12 +104,20 @@ export function toSignalPost(
   };
 }
 
-/** Rows and their channels together, in the order the rows arrived. */
+/** Rows and their joins together, in the order the rows arrived. */
 export function toSignalPosts(db: Db, rows: SignalPostRow[]): SignalPost[] {
   const postIds = rows.map((row) => row.id);
   const channels = channelsByPost(db, postIds);
   const media = mediaByPost(db, postIds);
-  return rows.map((row) => toSignalPost(row, channels.get(row.id) ?? [], media.get(row.id) ?? []));
+  const campaigns = campaignsByPost(db, postIds);
+  return rows.map((row) =>
+    toSignalPost(
+      row,
+      channels.get(row.id) ?? [],
+      media.get(row.id) ?? [],
+      campaigns.get(row.id) ?? [],
+    ),
+  );
 }
 
 export interface SignalPostVariantRow {

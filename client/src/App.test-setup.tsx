@@ -18,9 +18,14 @@ import type { IntegrationEvent } from '../../shared/integration-log';
 import type { CalendarRange } from '../../shared/calendar';
 import {
   SIGNAL_DEFAULT_TIME,
+  normalizeSignalCampaignName,
+  sameSignalCampaignName,
   suggestNextOpenSignalSlot,
+  type SignalCampaign,
+  type SignalCampaignSummary,
   type SignalPost,
 } from '../../shared/signal';
+import type { SignalCampaignAnalytics } from '../../shared/signal-campaign-analytics';
 import type {
   ProviderReconcilePreview,
   PublishPreview,
@@ -229,6 +234,20 @@ export const testState = {
    */
   queueHealthSummary: clearQueueHealth() as QueueHealthSummary,
   queueHealthError: null as string | null,
+  /**
+   * The Signal campaign vocabulary, held as state so a `POST` behaves the way the route does:
+   * typing a name that already exists picks it rather than adding a second row. The planner's chip
+   * input suggests from this list, and the Settings card manages it.
+   */
+  signalCampaignsPayload: [] as SignalCampaignSummary[],
+  /**
+   * The campaign figures panel. Unset answers an empty workspace — no campaigns, no deliveries — so
+   * every suite that is not about campaign figures sees the panel say nothing rather than fail.
+   */
+  signalCampaignAnalyticsPayload: null as SignalCampaignAnalytics | null,
+  signalCampaignAnalyticsError: null as string | null,
+  /** Every campaign-figures request, so a case can prove which filters reached the API. */
+  signalCampaignAnalyticsRequests: [] as string[],
 };
 
 /** A summary with nothing on it, which is what an untouched planner suite should be handed. */
@@ -297,6 +316,49 @@ export const clientMergePlan = (sourceId: string, destinationId: string) => {
   return { source, destination, projects: merging, planHash: `hash-${sourceId}-${merging.length}` };
 };
 
+/**
+ * Campaign names as the API resolves them: matched case-insensitively against the workspace list,
+ * created when new. The write routes take names and answer with records, so the stub has to do the
+ * same or the editor's chips would come back as strings.
+ */
+export function resolveMockCampaigns(names: unknown): SignalCampaign[] {
+  if (!Array.isArray(names)) return [];
+  const resolved: SignalCampaign[] = [];
+  for (const raw of names) {
+    const name = normalizeSignalCampaignName(String(raw));
+    if (!name || resolved.some((campaign) => sameSignalCampaignName(campaign.name, name))) continue;
+    const existing = testState.signalCampaignsPayload.find((campaign) =>
+      sameSignalCampaignName(campaign.name, name),
+    );
+    if (existing) {
+      resolved.push({ id: existing.id, name: existing.name });
+      continue;
+    }
+    const created: SignalCampaignSummary = {
+      id: `campaign-${testState.signalCampaignsPayload.length + 1}`,
+      name,
+      postCount: 0,
+    };
+    testState.signalCampaignsPayload = [...testState.signalCampaignsPayload, created];
+    resolved.push({ id: created.id, name: created.name });
+  }
+  return resolved;
+}
+
+/** A workspace with no campaigns and nothing measured: what the panel answers by default. */
+export const emptyCampaignAnalytics = (
+  overrides: Partial<SignalCampaignAnalytics> = {},
+): SignalCampaignAnalytics => ({
+  filters: { campaignIds: [], channels: [], accountIds: [], from: null, to: null },
+  groups: [],
+  scope: { posts: 0, deliveries: 0, measuredDeliveries: 0 },
+  trend: [],
+  channels: [],
+  accounts: [],
+  campaigns: [],
+  ...overrides,
+});
+
 /** One scheduled post, with only the fields a case cares about spelled out. */
 export const signalPost = (
   id: string,
@@ -312,7 +374,7 @@ export const signalPost = (
   time: SIGNAL_DEFAULT_TIME,
   format: 'TEXT',
   status: 'SCHEDULED',
-  campaign: null,
+  campaigns: [],
   cta: 'NONE',
   position: 0,
   createdAt: '2026-08-01T09:00:00.000Z',
@@ -413,6 +475,75 @@ const respondTo = (url: string, init?: RequestInit) => {
       return reply(404, { error: 'That alert is not in the current summary.' });
     return setQueueHealthAcknowledged(alertId, method === 'POST');
   }
+  if (url.endsWith('/api/signal/campaigns') && method === 'GET')
+    return testState.signalCampaignsPayload;
+  if (url.endsWith('/api/signal/campaigns') && method === 'POST') {
+    const name = normalizeSignalCampaignName(String(body.name ?? ''));
+    const existing = testState.signalCampaignsPayload.find((campaign) =>
+      sameSignalCampaignName(campaign.name, name),
+    );
+    // The route reuses an existing name rather than refusing it, and answers 200 rather than 201
+    // when it does — which is the difference the Settings card's message is written from.
+    if (existing) return existing;
+    const created: SignalCampaignSummary = {
+      id: `campaign-${testState.signalCampaignsPayload.length + 1}`,
+      name,
+      postCount: 0,
+    };
+    testState.signalCampaignsPayload = [...testState.signalCampaignsPayload, created];
+    return reply(201, created);
+  }
+  const campaignPath = url.match(/\/api\/signal\/campaigns\/([^/?]+)(?:\?|$)/);
+  if (campaignPath && method === 'PATCH') {
+    const target = testState.signalCampaignsPayload.find(
+      (campaign) => campaign.id === campaignPath[1],
+    );
+    if (!target) return reply(404, { error: 'Signal campaign not found.' });
+    const name = normalizeSignalCampaignName(String(body.name ?? target.name));
+    const clash = testState.signalCampaignsPayload.find(
+      (campaign) => campaign.id !== target.id && sameSignalCampaignName(campaign.name, name),
+    );
+    // The clashing campaign's own spelling, as the route reports it: a reader looking for what is
+    // in the way needs the name it is listed under, not the one they just typed.
+    if (clash)
+      return reply(409, {
+        error: `Another campaign is already called “${clash.name}”.`,
+        code: 'SIGNAL_CAMPAIGN_NAME_TAKEN',
+      });
+    const renamed = { ...target, name };
+    testState.signalCampaignsPayload = testState.signalCampaignsPayload.map((campaign) =>
+      campaign.id === target.id ? renamed : campaign,
+    );
+    return renamed;
+  }
+  if (campaignPath && method === 'DELETE') {
+    const target = testState.signalCampaignsPayload.find(
+      (campaign) => campaign.id === campaignPath[1],
+    );
+    if (!target) return reply(404, { error: 'Signal campaign not found.' });
+    const confirmed = new URLSearchParams(url.split('?')[1] ?? '').get('confirm') === 'true';
+    if (target.postCount > 0 && !confirmed)
+      return reply(409, {
+        error: 'This campaign is attached to posts. Confirm deletion to detach it everywhere.',
+        code: 'SIGNAL_CAMPAIGN_IN_USE',
+        attachedPostCount: target.postCount,
+      });
+    testState.signalCampaignsPayload = testState.signalCampaignsPayload.filter(
+      (campaign) => campaign.id !== target.id,
+    );
+    return {
+      ok: true,
+      deleted: 'signalCampaign',
+      name: target.name,
+      detachedFromPosts: target.postCount,
+    };
+  }
+  if (url.includes('/api/signal/analytics/campaigns') && method === 'GET') {
+    testState.signalCampaignAnalyticsRequests.push(url.split('?')[1] ?? '');
+    if (testState.signalCampaignAnalyticsError)
+      return reply(400, { error: testState.signalCampaignAnalyticsError });
+    return testState.signalCampaignAnalyticsPayload ?? emptyCampaignAnalytics();
+  }
   if (url.includes('/api/signal/posts?') && method === 'GET') {
     const query = new URLSearchParams(url.split('?')[1] ?? '');
     const from = query.get('from') ?? '';
@@ -436,7 +567,7 @@ const respondTo = (url: string, init?: RequestInit) => {
       mediaUrls: body.mediaUrls ?? [],
       time: body.time ?? SIGNAL_DEFAULT_TIME,
       format: body.format ?? 'TEXT',
-      campaign: body.campaign ?? null,
+      campaigns: resolveMockCampaigns(body.campaigns),
       cta: body.cta ?? 'NONE',
       position: testState.signalPostsPayload.filter((post) => post.date === null).length,
     });
@@ -460,7 +591,7 @@ const respondTo = (url: string, init?: RequestInit) => {
       time: source.time,
       format: source.format,
       status: 'DRAFT',
-      campaign: source.campaign,
+      campaigns: source.campaigns,
       cta: source.cta,
       position: testState.signalPostsPayload.filter((post) => post.date === null).length,
     });
@@ -575,7 +706,17 @@ const respondTo = (url: string, init?: RequestInit) => {
   if (signalPostPath && method === 'PATCH') {
     if (testState.signalMutationError) return reply(400, { error: testState.signalMutationError });
     testState.signalPostsPayload = testState.signalPostsPayload.map((post) =>
-      post.id === signalPostPath[1] ? { ...post, ...body } : post,
+      post.id === signalPostPath[1]
+        ? {
+            ...post,
+            ...body,
+            // The route takes campaign **names** and answers with the resolved records, creating the
+            // ones that are new — which is what the editor's chip input depends on.
+            ...(body.campaigns === undefined
+              ? {}
+              : { campaigns: resolveMockCampaigns(body.campaigns) }),
+          }
+        : post,
     );
     return testState.signalPostsPayload.find((post) => post.id === signalPostPath[1]) ?? {};
   }
@@ -969,6 +1110,10 @@ beforeEach(() => {
   testState.clientMergeCommitError = null;
   testState.queueHealthSummary = clearQueueHealth();
   testState.queueHealthError = null;
+  testState.signalCampaignsPayload = [];
+  testState.signalCampaignAnalyticsPayload = null;
+  testState.signalCampaignAnalyticsError = null;
+  testState.signalCampaignAnalyticsRequests = [];
   requests.length = 0;
   vi.stubGlobal(
     'fetch',

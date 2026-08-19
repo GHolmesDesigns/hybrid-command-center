@@ -289,7 +289,7 @@ describe('Signal planner', () => {
         channels: ['li', 'ig'],
         mediaUrls: ['https://cdn.example.com/launch.jpg'],
         time: '13:00',
-        campaign: 'Wk4',
+        campaigns: [{ id: 'campaign-wk4', name: 'Wk4' }],
         status: 'PUBLISHED',
         cta: 'SOFT',
         format: 'ARTICLE',
@@ -305,7 +305,9 @@ describe('Signal planner', () => {
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).getByLabelText('Date')).toHaveValue('');
     expect(within(dialog).getByLabelText('Time')).toHaveValue('13:00');
-    expect(within(dialog).getByLabelText('Campaign')).toHaveValue('Wk4');
+    // Campaigns come across as chips rather than as text: a duplicate joins the same campaigns the
+    // original belongs to, not second rows with the same names.
+    expect(within(dialog).getByRole('button', { name: 'Remove campaign Wk4' })).toBeInTheDocument();
     expect(within(dialog).getByLabelText('Content')).toHaveValue('The September launch post');
     expect(
       within(screen.getByRole('complementary', { name: 'Unscheduled queue' })).getByText(
