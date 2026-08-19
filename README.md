@@ -19,7 +19,7 @@ Nothing in this app is reachable off loopback by design, and the server enforces
 - Deadline-led dashboard with overdue, due-today, seven-day (today included), and project-health counts, scoped to unarchived work and calculated by the same rules the board filters by
 - **Sync to Folder** on the dashboard — provisions missing Drive folder skeletons for existing clients/projects; it uploads, downloads, and mirrors nothing, and never discovers projects from Drive
 - Client creation, editing, archival, detail views, and Drive status
-- **Merge one client into another** — a previewed, confirmed, single-transaction move of every project from a duplicate client to the client you are keeping. The source is archived and recorded as merged, never deleted; contact details and notes are kept on it rather than combined; no Drive folder moves; and a later playbook naming the merged client resolves to the survivor. There is no undo
+- **Merge one client into another** — a previewed, confirmed, single-transaction move of every project from a duplicate client to the client you are keeping. The source is archived and recorded as merged, never deleted; each of the six contact fields is chosen field by field — keep the survivor's, take the duplicate's, or type a value — with the survivor's own the default for every one of them; no Drive folder moves; and a later playbook naming the merged client resolves to the survivor. There is no undo
 - Project creation, editing, archival, and **record-only delete** that cascades to tasks (Drive files untouched)
 - Projects view with search, client filter, category filter, and seven sort modes, including a **Custom order** where tiles are rearranged by drag or keyboard and the arrangement persists
 - Shared **project categories** — many per project, created from a project or from Settings, reused case-insensitively, filtered from the page address, renamed everywhere at once, and deleted with an affected-project count that never deletes a project
@@ -336,16 +336,31 @@ happened), which is also what makes the old name resolve to the surviving client
 import.
 
 - **Previewed, then confirmed.** `POST /api/clients/:id/merge/preview` writes nothing and returns
-  both clients, every project that would move, and a `planHash`. `POST /api/clients/:id/merge`
-  re-plans inside its own transaction and refuses a hash that no longer matches with a `409`, so a
-  project added, renamed, or reassigned in the meantime forces a second look. The rules are
-  database-free in `server/domain/client-merge.ts`; the writes are in `server/client-merge.ts`.
+  both clients, every project that would move, what each choosable field would end up as, and a
+  `planHash`. `POST /api/clients/:id/merge` re-plans inside its own transaction and refuses a hash
+  that no longer matches with a `409`, so a project added, renamed, or reassigned in the meantime
+  forces a second look. The rules are database-free in `server/domain/client-merge.ts`; the writes
+  are in `server/client-merge.ts`.
 - **The work is moved, not rewritten.** Only `projects.client_id` changes. Project ids, tasks,
   checklists, dependencies, categories, ordering, dates, `updated_at`, `last_activity_at`, and
   every Drive reference are left exactly as they were. Every project moves whatever its status,
   archived and complete included. Identically named projects stay separate.
-- **Metadata is not combined.** The destination's name, contact details, and notes win; the
-  source keeps its own, readable on the archived record. Nothing is copied between them.
+- **Fields are chosen, never combined.** Each of `name`, `contact_name`, `email`, `phone`,
+  `website`, and `notes` is settled one at a time as **Keep destination** (the default),
+  **Use source**, or a **Custom value** typed in the dialog, validated by the same schema a client
+  edit is. Nothing else is choosable: `status` and every `drive_*` column are outside the request
+  by shape, and the source keeps everything it had — a choice copies a value, it does not move one.
+- **A blank value is a value.** The default is the client being kept whether or not it has anything
+  in the field, so a merge nobody touches leaves the survivor reading exactly as it did. Filling a
+  gap from the other record is a decision the person merging makes, not one the merge infers.
+- **The slug follows the surviving name.** `clients.slug` is derived, not chosen: keeping the
+  destination's name keeps its slug untouched, and any other surviving name rebuilds it from that
+  name and the destination's own id — the same rule `PATCH /api/clients/:id` applies to a rename.
+  Nothing is addressed by slug, so no link changes.
+- **The hash covers the choices.** Both records' current values and every selected value are part
+  of the plan, so a confirmation sent with different choices than the preview was taken under, or
+  taken over a contact detail someone edited in the meantime, is refused with a `409` rather than
+  writing a value nobody was shown.
 - **The source may be active or archived**, as long as it has not already been merged elsewhere —
   a duplicate is usually archived already. The destination must be a live, unmerged client.
 - **A merge cannot leak back.** `POST /api/clients/:id/unarchive` answers `409 CLIENT_MERGED` for
@@ -671,7 +686,7 @@ Schedule `db:backup` the same way if you want unattended snapshots — same comm
 - Single local user; no collaboration, portals, permissions, billing, or time tracking
 - No automatic Drive-folder rename after local name edits
 - Clients can only be archived; there is no client delete. Merging one client into another archives the source rather than removing it, and cannot be undone or unmerged in the app. Projects and tasks delete permanently from SQLite with no in-app undo — recover from a database backup
-- A merge moves one client at a time and never combines contact fields, notes, or same-named projects; it also moves no Drive folder, so a merged client's folder stays beside the survivor's in Drive
+- A merge moves one client at a time. It settles each contact field from one record or the other rather than combining the two, never combines same-named projects, and moves no Drive folder, so a merged client's folder stays beside the survivor's in Drive
 - **Sync to Folder** provisions folder skeletons only; there is no file-level Drive sync, and nothing is uploaded, downloaded, or mirrored
 - Google shared-drive-specific controls are not exposed
 - The file browser is read-only by decision, not by omission: it lists and opens, and there is no upload, download, move, rename, or delete in the UI or in the API surface behind it. A project is browsable only at its own Drive folder and the subfolders provisioning recorded for it; anything deeper opens in Drive

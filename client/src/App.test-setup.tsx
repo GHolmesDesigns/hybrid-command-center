@@ -17,6 +17,11 @@ import { DRIVE_FOLDER_MIME, type DriveFile, type DriveListing } from '../../shar
 import type { IntegrationEvent } from '../../shared/integration-log';
 import type { CalendarRange } from '../../shared/calendar';
 import {
+  CLIENT_MERGE_FIELDS,
+  type ClientMergeFieldPlan,
+  type ClientMergeSelections,
+} from '../../shared/client-merge';
+import {
   SIGNAL_DEFAULT_TIME,
   normalizeSignalCampaignName,
   sameSignalCampaignName,
@@ -306,14 +311,42 @@ const setQueueHealthAcknowledged = (alertId: string, acknowledged: boolean) => {
 };
 
 /** The plan the server would answer a preview with, taken from the current client state. */
-export const clientMergePlan = (sourceId: string, destinationId: string) => {
+export const clientMergePlan = (
+  sourceId: string,
+  destinationId: string,
+  selections: ClientMergeSelections = {},
+) => {
+  const record = (id: string) => testState.clientsPayload.find((candidate) => candidate.id === id);
   const party = (id: string) => {
-    const found = testState.clientsPayload.find((candidate) => candidate.id === id);
+    const found = record(id);
     return found ? { id: found.id, name: found.name, status: found.status } : null;
   };
   const source = party(sourceId),
     destination = party(destinationId);
   if (!source || !destination) return null;
+  /**
+   * The six choosable fields, settled the way the planner settles them: `DESTINATION` unless a
+   * choice says otherwise, whether or not either value is blank.
+   */
+  const fields: ClientMergeFieldPlan[] = CLIENT_MERGE_FIELDS.map(({ key }) => {
+    const destinationValue = record(destinationId)?.[key] ?? null;
+    const sourceValue = record(sourceId)?.[key] ?? null;
+    const choice = selections[key]?.choice ?? 'DESTINATION';
+    return {
+      field: key,
+      destination: destinationValue,
+      source: sourceValue,
+      choice,
+      value:
+        choice === 'SOURCE'
+          ? sourceValue
+          : choice === 'CUSTOM'
+            ? (selections[key]?.value ?? null) || null
+            : destinationValue,
+    };
+  });
+  const survivingName = fields[0].value ?? destination.name;
+  const slugOf = (name: string) => `${name.toLowerCase().replace(/\s+/g, '-')}-${destinationId}`;
   const merging = testState.projectsPayload
     .filter((p) => p.clientId === sourceId)
     .map((p) => ({ id: p.id, name: p.name, status: p.status }))
@@ -324,12 +357,28 @@ export const clientMergePlan = (sourceId: string, destinationId: string) => {
     .sort(
       (a, b) => a.namespace.localeCompare(b.namespace) || a.externalId.localeCompare(b.externalId),
     );
+  /**
+   * A hash that moves when the plan does, which is all the dialog can observe about the real
+   * one: the chosen fields are folded in, so a preview taken under one set of choices cannot be
+   * confirmed under another.
+   */
+  const chosen = fields
+    .filter((field) => field.choice !== 'DESTINATION')
+    .map((field) => `${field.field}:${field.choice}:${field.value ?? ''}`);
   return {
     source,
     destination,
     projects: merging,
     aliases,
-    planHash: `hash-${sourceId}-${merging.length}`,
+    fields,
+    slug: {
+      current: record(destinationId)?.slug ?? '',
+      next:
+        survivingName === destination.name
+          ? (record(destinationId)?.slug ?? '')
+          : slugOf(survivingName),
+    },
+    planHash: `hash-${sourceId}-${merging.length}${chosen.length ? `-${chosen.join('-')}` : ''}`,
   };
 };
 
@@ -814,7 +863,7 @@ const respondTo = (url: string, init?: RequestInit) => {
       return reply(testState.clientMergePreviewError.status, {
         error: testState.clientMergePreviewError.error,
       });
-    const plan = clientMergePlan(mergePreview[1], body.destinationId);
+    const plan = clientMergePlan(mergePreview[1], body.destinationId, body.fields);
     return plan ?? reply(404, { error: 'Client not found.' });
   }
   const mergeCommit = url.match(/\/api\/clients\/([^/]+)\/merge$/);
@@ -824,33 +873,45 @@ const respondTo = (url: string, init?: RequestInit) => {
         error: testState.clientMergeCommitError.error,
       });
     const sourceId = mergeCommit[1];
-    const plan = clientMergePlan(sourceId, body.destinationId);
+    const plan = clientMergePlan(sourceId, body.destinationId, body.fields);
     if (!plan) return reply(404, { error: 'Client not found.' });
     const mergedAt = '2026-08-16T12:00:00.000Z';
+    // The chosen values, which the survivor takes along with the work, under whichever name.
+    const chosen = Object.fromEntries(plan.fields.map((field) => [field.field, field.value]));
+    const survivor = { ...plan.destination, name: chosen.name ?? plan.destination.name };
     // The same writes the server makes, so the `refresh()` that follows serves a workspace
     // where the projects moved, the source is archived, and the alias is reported.
     testState.projectsPayload = testState.projectsPayload.map((p) =>
-      p.clientId === sourceId
-        ? { ...p, clientId: plan.destination.id, clientName: plan.destination.name }
-        : p,
+      p.clientId === sourceId ? { ...p, clientId: survivor.id, clientName: survivor.name } : p,
     );
-    testState.clientsPayload = testState.clientsPayload.map((candidate) =>
-      candidate.id === sourceId
-        ? {
-            ...candidate,
-            status: 'ARCHIVED' as const,
-            mergedInto: { id: plan.destination.id, name: plan.destination.name, mergedAt },
-          }
-        : candidate,
-    );
+    testState.clientsPayload = testState.clientsPayload.map((candidate) => {
+      if (candidate.id === sourceId)
+        return {
+          ...candidate,
+          status: 'ARCHIVED' as const,
+          mergedInto: { id: survivor.id, name: survivor.name, mergedAt },
+        };
+      if (candidate.id !== survivor.id) return candidate;
+      return {
+        ...candidate,
+        name: survivor.name,
+        slug: plan.slug.next,
+        contactName: chosen.contactName ?? undefined,
+        email: chosen.email ?? undefined,
+        phone: chosen.phone ?? undefined,
+        website: chosen.website ?? undefined,
+        notes: chosen.notes ?? undefined,
+      };
+    });
     testState.clientImportAliases = testState.clientImportAliases.map((alias) =>
       alias.clientId === sourceId ? { ...alias, clientId: plan.destination.id } : alias,
     );
     return {
       source: { ...plan.source, status: 'ARCHIVED' },
-      destination: plan.destination,
+      destination: survivor,
       projects: plan.projects,
       aliases: plan.aliases,
+      fields: plan.fields,
       movedProjectCount: plan.projects.length,
       mergedAt,
     };

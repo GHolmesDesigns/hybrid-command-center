@@ -434,16 +434,32 @@ duplicate has usually been archived already.
 2. Choose the client to keep. The list offers active clients only, and never one that has itself
    been merged.
 3. Read the summary. It names both clients, lists every project that will move — including
-   archived and completed ones — and states what the merge will not do.
-4. Select **Merge clients**. The application opens the client you kept, and its project list now
+   archived and completed ones — shows what the client you keep would end up with in each of its
+   own fields, and states what the merge will not do.
+4. Set any field you want to change. **Field values** lists **Name**, **Contact name**, **Email**,
+   **Phone**, **Website**, and **Notes** with what each client holds beside them, and each one
+   offers **Keep destination**, **Use source**, or **Custom value** with a box to type in. Every
+   field starts on **Keep destination** — including one the client you keep has left blank while
+   the duplicate has something in it, because which of the two is current is your call rather than
+   the application's. A blank custom value clears the field.
+5. Select **Merge clients**. The application opens the client you kept, and its project list now
    includes the work that moved.
+
+Changing a choice re-reads the summary from the server, which takes a moment; **Merge clients**
+comes back as soon as the summary matches what is on screen, so what you confirm is always what
+you were shown.
 
 What a merge does:
 
 - Moves every project, with its tasks, checklists, dependencies, categories, ordering, dates, and
   Drive links unchanged. Projects with the same name stay separate; nothing is combined.
 - Archives the duplicate and records where its work went. Its own contact details and notes stay
-  readable on it — they are never copied onto the client you kept, whose details win.
+  readable on it whichever values you chose — a choice copies a value across, it never empties the
+  record it came from.
+- Gives the client you kept exactly the values you selected and nothing else. Its status, its
+  Drive folder, and its Drive connection are not part of the choice. If you keep a different name
+  for it, its web address changes to match, exactly as renaming it would; the summary says so
+  before you confirm.
 - Leaves Google Drive exactly as it is. No folder is moved, renamed, created, or deleted, so
   every project's files still open where they always did, and the duplicate's own client folder
   stays in Drive. A later **Sync to Folder** will create a folder for a project that never had
@@ -456,8 +472,9 @@ What a merge does:
   on this client is something you can stop and look at.
 
 A merged client cannot be unarchived, chosen as the destination of another merge, or given a
-project back by editing one. If the summary is out of date — someone added or renamed a project
-while it was on screen — the merge is refused and you are shown the current one to confirm again.
+project back by editing one. If the summary is out of date — someone added or renamed a project,
+or edited a contact detail on either client, while it was on screen — the merge is refused and you
+are shown the current one to confirm again.
 
 **There is no undo.** Recover from a database backup as described in
 [Safe data backup](#10-safe-data-backup) if a merge was a mistake.

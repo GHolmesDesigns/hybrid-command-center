@@ -101,10 +101,17 @@ test('a client identity outlives a rename at its source, and follows a merge', a
   // Nothing was written by the refusal: the rival has no project at all.
   expect((await projects()).filter((project) => project.clientId === rival.id)).toHaveLength(0);
 
-  // Merging the client away carries the identity to the survivor, which the dialog says first.
+  /**
+   * Merging the client away carries the identity to the survivor, which the dialog says first.
+   * C71's half of the milestone rides here: the merge is confirmed with values chosen field by
+   * field — the imported client's notes taken across, a contact name typed in the dialog, the
+   * survivor's own name kept — and the identity has to resolve to the survivor afterwards all
+   * the same, whatever it now calls itself.
+   */
+  const survivorName = `E2E Identity Survivor ${run}`;
   const survivor = await (
     await page.request.post('/api/clients', {
-      data: { name: `E2E Identity Survivor ${run}` },
+      data: { name: survivorName, contactName: 'E2E Survivor Contact' },
     })
   ).json();
   await page.goto(`/clients/${client.id}`);
@@ -114,8 +121,40 @@ test('a client identity outlives a rename at its source, and follows a merge', a
   const plan = merge.getByLabel('Merge preview');
   await expect(plan.getByText('One import identity moves', { exact: false })).toBeVisible();
   await expect(plan.getByLabel('Import identities that move').getByText(externalId)).toBeVisible();
-  await merge.getByRole('button', { name: 'Merge clients' }).click();
-  await expect(page.getByRole('heading', { name: survivor.name })).toBeVisible();
+  // The notes the playbook wrote onto the imported client, offered beside the survivor's blank.
+  const notes = plan.getByRole('group', { name: 'Notes' });
+  await expect(notes.getByText('Imported by the E2E suite')).toBeVisible();
+  await notes.getByRole('radio', { name: /Use source/ }).click();
+  const contact = plan.getByRole('group', { name: 'Contact name' });
+  await contact.getByRole('radio', { name: /Custom value/ }).click();
+  await contact.getByLabel('Custom contact name').fill(`E2E Chosen Contact ${run}`);
+  // The name is left on the survivor, so its web address is not rewritten either.
+  await expect(
+    plan
+      .getByRole('group', { name: 'Name', exact: true })
+      .getByRole('radio', { name: /Keep destination/ }),
+  ).toBeChecked();
+  const confirm = merge.getByRole('button', { name: 'Merge clients' });
+  await expect(confirm).toBeEnabled();
+  await confirm.click();
+  await expect(page.getByRole('heading', { name: survivorName })).toBeVisible();
+
+  // The survivor holds exactly what was chosen: the imported notes, the typed contact, its name.
+  const merged = (
+    (await (await page.request.get('/api/clients')).json()) as {
+      id: string;
+      name: string;
+      slug: string;
+      contactName?: string;
+      notes?: string;
+    }[]
+  ).find((row) => row.id === survivor.id);
+  expect(merged).toMatchObject({
+    name: survivorName,
+    slug: survivor.slug,
+    contactName: `E2E Chosen Contact ${run}`,
+    notes: 'Imported by the E2E suite',
+  });
 
   // The identity now resolves to the survivor, one hop, so the playbook adds nothing to the source.
   await page.goto('/import');

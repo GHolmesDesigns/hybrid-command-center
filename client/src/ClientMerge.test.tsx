@@ -15,10 +15,21 @@ import {
   requests,
   testState,
 } from './App.test-setup';
-import { CLIENT_MERGE_NOTICES } from '../../shared/client-merge';
+import { CLIENT_MERGE_FIELDS, CLIENT_MERGE_NOTICES } from '../../shared/client-merge';
 
-const source = client('client-duplicate', 'Duplicate Studio', 'ARCHIVED');
-const destination = client('client-survivor', 'Surviving Studio');
+/** The choices the dialog sends when nobody has touched a field, which is every merge by default. */
+const keepDestination = Object.fromEntries(
+  CLIENT_MERGE_FIELDS.map(({ key }) => [key, { choice: 'DESTINATION' }]),
+);
+
+const source = client('client-duplicate', 'Duplicate Studio', 'ARCHIVED', {
+  contactName: 'Old Contact',
+  email: 'old@example.com',
+  notes: 'Historic notes',
+});
+const destination = client('client-survivor', 'Surviving Studio', 'ACTIVE', {
+  contactName: 'Current Contact',
+});
 const other = client('client-other', 'Another Studio');
 const sourceProject = project('project-moving', 'Spring Campaign', 'ACTIVE', {
   clientId: source.id,
@@ -157,11 +168,15 @@ describe('Merging one client into another', () => {
         `/clients/${destination.id}`,
       ),
     );
-    // The plan's own hash went back with the confirmation.
+    // The plan's own hash went back with the confirmation, beside the choices it was taken over.
     expect(requests).toContainEqual({
       url: `/api/clients/${source.id}/merge`,
       method: 'POST',
-      body: { destinationId: destination.id, planHash: `hash-${source.id}-1` },
+      body: {
+        destinationId: destination.id,
+        fields: keepDestination,
+        planHash: `hash-${source.id}-1`,
+      },
     });
     expect(
       await screen.findByText(`${source.name} merged into ${destination.name}. 1 project moved.`),
@@ -213,6 +228,137 @@ describe('Merging one client into another', () => {
     expect(await within(dialog).findByText('Choose an active destination client.')).toBeVisible();
     expect(within(dialog).queryByLabelText('Merge preview')).toBeNull();
     expect(within(dialog).getByRole('button', { name: /Merge clients/ })).toBeDisabled();
+  });
+
+  /**
+   * C71. Which record wins, field by field. The dialog's part of that is showing both values
+   * before anything is chosen, defaulting to the client being kept whether or not it has a value
+   * in the field, and never letting a confirmation go out under choices the server has not
+   * planned — which is why every change re-reads the plan before Confirm comes back.
+   */
+  it('offers both records’ values for each field and keeps the destination by default', async () => {
+    testState.clientsPayload = [source, destination];
+    testState.projectsPayload = [sourceProject];
+
+    const dialog = await openMergeDialog();
+    fireEvent.change(within(dialog).getByLabelText('Merge into'), {
+      target: { value: destination.id },
+    });
+    await within(dialog).findByLabelText('Merge preview');
+
+    const email = within(dialog).getByRole('group', { name: 'Email' });
+    // The destination has no email and the source does; that on its own changes nothing.
+    expect(within(email).getByRole('radio', { name: /Keep destination/ })).toBeChecked();
+    expect(within(email).getByText('(none)')).toBeVisible();
+    expect(within(email).getByText('old@example.com')).toBeVisible();
+    const contact = within(dialog).getByRole('group', { name: 'Contact name' });
+    expect(within(contact).getByText('Current Contact')).toBeVisible();
+    expect(within(contact).getByText('Old Contact')).toBeVisible();
+    // Exactly the six, and nothing a merge does not choose.
+    for (const { label } of CLIENT_MERGE_FIELDS)
+      expect(within(dialog).getByRole('group', { name: label })).toBeVisible();
+    for (const excluded of ['Status', 'Drive folder', 'Web address'])
+      expect(within(dialog).queryByRole('group', { name: excluded })).toBeNull();
+  });
+
+  it('re-plans a chosen value and confirms with the hash that covers it', async () => {
+    testState.clientsPayload = [source, destination];
+    testState.projectsPayload = [sourceProject];
+
+    const dialog = await openMergeDialog();
+    fireEvent.change(within(dialog).getByLabelText('Merge into'), {
+      target: { value: destination.id },
+    });
+    await within(dialog).findByLabelText('Merge preview');
+    fireEvent.click(
+      within(within(dialog).getByRole('group', { name: 'Email' })).getByRole('radio', {
+        name: /Use source/,
+      }),
+    );
+
+    // The plan is read again for the new choice, and only then can the merge be confirmed.
+    await waitFor(() =>
+      expect(
+        requests.filter((call) => call.url.endsWith(`/api/clients/${source.id}/merge/preview`)),
+      ).toHaveLength(2),
+    );
+    const confirmButton = within(dialog).getByRole('button', { name: /Merge clients/ });
+    await waitFor(() => expect(confirmButton).toBeEnabled());
+    fireEvent.click(confirmButton);
+
+    await waitFor(() =>
+      expect(screen.getByLabelText('Current location')).toHaveTextContent(
+        `/clients/${destination.id}`,
+      ),
+    );
+    expect(requests).toContainEqual({
+      url: `/api/clients/${source.id}/merge`,
+      method: 'POST',
+      body: {
+        destinationId: destination.id,
+        fields: { ...keepDestination, email: { choice: 'SOURCE' } },
+        planHash: `hash-${source.id}-1-email:SOURCE:old@example.com`,
+      },
+    });
+    expect(await screen.findByText(/1 project moved, 1 field updated\./)).toBeVisible();
+  });
+
+  it('takes a typed value, renames the survivor, and says what the web address becomes', async () => {
+    testState.clientsPayload = [source, destination];
+    testState.projectsPayload = [sourceProject];
+
+    const dialog = await openMergeDialog();
+    fireEvent.change(within(dialog).getByLabelText('Merge into'), {
+      target: { value: destination.id },
+    });
+    await within(dialog).findByLabelText('Merge preview');
+    const name = within(dialog).getByRole('group', { name: 'Name' });
+    fireEvent.click(within(name).getByRole('radio', { name: /Custom value/ }));
+    // The box starts from the value being kept rather than from nothing.
+    const box = within(name).getByLabelText('Custom name');
+    expect(box).toHaveValue(destination.name);
+    fireEvent.change(box, { target: { value: 'Studio Group' } });
+
+    expect(
+      await within(dialog).findByText('studio-group-client-survivor', { exact: false }),
+    ).toBeVisible();
+    const confirmButton = within(dialog).getByRole('button', { name: /Merge clients/ });
+    await waitFor(() => expect(confirmButton).toBeEnabled());
+    fireEvent.click(confirmButton);
+
+    // The survivor is opened under the name the merge gave it.
+    expect(await screen.findByRole('heading', { name: 'Studio Group' })).toBeVisible();
+    expect(
+      requests.find((call) => call.url === `/api/clients/${source.id}/merge`)?.body,
+    ).toMatchObject({
+      fields: expect.objectContaining({ name: { choice: 'CUSTOM', value: 'Studio Group' } }),
+    });
+  });
+
+  it('will not confirm a plan the choices on screen have moved past', async () => {
+    testState.clientsPayload = [source, destination];
+    testState.projectsPayload = [sourceProject];
+
+    const dialog = await openMergeDialog();
+    fireEvent.change(within(dialog).getByLabelText('Merge into'), {
+      target: { value: destination.id },
+    });
+    await within(dialog).findByLabelText('Merge preview');
+    const confirmButton = within(dialog).getByRole('button', { name: /Merge clients/ });
+    expect(confirmButton).toBeEnabled();
+    // The preview behind the dialog now refuses, so the choice can never be planned.
+    testState.clientMergePreviewError = { status: 400, error: 'Enter a valid email address.' };
+    fireEvent.click(
+      within(within(dialog).getByRole('group', { name: 'Notes' })).getByRole('radio', {
+        name: /Use source/,
+      }),
+    );
+
+    expect(await within(dialog).findByText('Enter a valid email address.')).toBeVisible();
+    expect(confirmButton).toBeDisabled();
+    expect(requests.some((call) => call.url.endsWith(`/api/clients/${source.id}/merge`))).toBe(
+      false,
+    );
   });
 
   it('explains itself when there is no client to merge into', async () => {
