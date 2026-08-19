@@ -9,6 +9,7 @@ import {
 } from '../../shared/signal.ts';
 import {
   publishCapabilityFor,
+  publishDeliveryModeFor,
   publishKindSupported,
   publishPlatformFor,
   publishPostKindFor,
@@ -16,9 +17,23 @@ import {
   type PublishPlatformCapability,
   type PublishPostKind,
 } from '../../shared/publish-capabilities.ts';
-import type { PublishChannelReport, PublishPreview } from '../../shared/publish.ts';
+import {
+  publishEffectiveCaption,
+  publishVariantFieldSupported,
+  publishVariantLayers,
+  resolvePublishContent,
+  PUBLISH_VARIANT_FIELDS,
+  PUBLISH_VARIANT_FIELD_LABEL,
+  type PublishVariantField,
+  type PublishVariantRecord,
+} from '../../shared/publish-variants.ts';
+import type {
+  PublishChannelContent,
+  PublishChannelReport,
+  PublishPreview,
+} from '../../shared/publish.ts';
 import { publishPreviewRefusals } from '../../shared/publish.ts';
-import type { PublishRequest, PublishTarget } from './provider.ts';
+import type { PublishPlatformConfiguration, PublishRequest, PublishTarget } from './provider.ts';
 
 const partsInZone = (instant: Date, zone: string) => {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -54,32 +69,84 @@ export function publishInstantFor(date: string, time: string, zone: string): str
   return (matches[0] as Date).toISOString();
 }
 
-/** What preflight is handed about one submission. No database, no network, no `SignalPost`. */
+/**
+ * What preflight is handed about one submission. No database, no network, no `SignalPost`.
+ *
+ * `content` is the **resolved** content for one target — base, then the platform override, then the
+ * account override, with the effective caption already carrying any disclosure the platform has no
+ * field for. Preflight checks what will be sent rather than what was typed, which is the whole
+ * point of resolving before checking: a caption that fits until the LinkedIn override lengthens it
+ * has to be measured after the override, not before.
+ */
 export interface PlatformPreflight {
   capability: PublishPlatformCapability;
-  kind: PublishPostKind;
-  caption: string;
-  mediaKinds: SignalMediaKind[];
+  content: PublishChannelContent;
 }
+
+/** The override fields a platform can refuse outright, and nothing to do with their values. */
+const REFUSABLE_VARIANT_FIELDS: PublishVariantField[] = [
+  'title',
+  'firstComment',
+  'coverImageUrl',
+  'thumbnailUrl',
+];
 
 /**
  * One platform's preflight, answered entirely from the shared capability contract.
  *
  * It takes a capability rather than a platform key so the rules can be exercised against any
  * contract entry — including combinations no connected platform has today, such as a shape that
- * only finishes by hand. Every refusal names what has to change, because a preview that says a
- * post is wrong without saying how is a preview the user has to guess at.
+ * only finishes by hand, or a platform that accepts a chosen thumbnail. Every refusal names what
+ * has to change, because a preview that says a post is wrong without saying how is a preview the
+ * user has to guess at.
  */
 export function preflightPlatform(input: PlatformPreflight): {
   refusals: string[];
   warnings: string[];
 } {
-  const { capability, kind, caption, mediaKinds } = input;
+  const { capability, content } = input;
+  const kind = content.postKind;
+  const caption = content.caption;
+  const mediaKinds: SignalMediaKind[] = content.mediaUrls.map(signalMediaKind);
   const refusals: string[] = [];
   const warnings: string[] = [];
   const label = capability.label;
   const kindLabel = PUBLISH_POST_KIND_LABEL[kind];
   const support = capability.kinds[kind];
+
+  /**
+   * A stored override the contract does not carry.
+   *
+   * The composer never offers these fields where they are unsupported and the HTTP boundary refuses
+   * them, so reaching this means the capability table changed under content that was already
+   * stored. It refuses rather than dropping the field: a title silently discarded is a YouTube video
+   * published under the wrong name.
+   */
+  for (const field of REFUSABLE_VARIANT_FIELDS) {
+    if (content[field] === undefined) continue;
+    if (publishVariantFieldSupported(field, capability)) continue;
+    refusals.push(
+      `${label} takes no ${PUBLISH_VARIANT_FIELD_LABEL[field].toLowerCase()} from this provider, and one is set for it. Remove it.`,
+    );
+  }
+  const titleMax = capability.title.maxLength;
+  if (content.title !== undefined && titleMax !== null && content.title.length > titleMax)
+    refusals.push(
+      `${label} limits the title to ${titleMax} characters and this one is ${content.title.length}. Remove ${content.title.length - titleMax}.`,
+    );
+  const commentMax = capability.firstComment.maxLength;
+  if (
+    content.firstComment !== undefined &&
+    commentMax !== null &&
+    content.firstComment.length > commentMax
+  )
+    refusals.push(
+      `${label} limits the first comment to ${commentMax} characters and this one is ${content.firstComment.length}. Remove ${content.firstComment.length - commentMax}.`,
+    );
+  if (content.discloseSyntheticMedia && capability.syntheticMediaDisclosure === 'IN_CAPTION')
+    warnings.push(
+      `${label} has no synthetic-media disclosure field from this provider, so the disclosure is written into the caption and counts against its limit.`,
+    );
 
   if (!publishKindSupported(support)) {
     refusals.push(
@@ -146,9 +213,11 @@ export function preflightPlatform(input: PlatformPreflight): {
     warnings.push(
       `${label} removes links from the post body; move the link to a reply before publishing.`,
     );
-  if (capability.title.supported && capability.title.required)
+  // Only where none was given. A platform whose title is required and set no longer borrows the
+  // caption, which is the first thing these overrides exist to fix.
+  if (capability.title.supported && capability.title.required && content.title === undefined)
     warnings.push(
-      `${label} takes a title separate from the description and Signal has none, so the caption is used as the title.`,
+      `${label} takes a title separate from the description and none is set, so the caption is used as the title.`,
     );
   if (kind === 'REEL' && !capability.thumbnail)
     warnings.push(`${label} chooses its own thumbnail; this provider sends none.`);
@@ -188,13 +257,63 @@ function resolveTarget(
   };
 }
 
-/** Preflights one channel: what it maps to, what it resolved to, and what it refuses. */
+/**
+ * One channel's resolved content, and what resolving it cost.
+ *
+ * A media selection is intersected with the post's own media, in the selection's order. A post can
+ * lose a media reference after a platform was told to send it, and the two honest answers are to
+ * refuse or to say out loud what was dropped; silently sending a URL the post no longer carries is
+ * not among them.
+ */
+function resolveForTarget(
+  base: { caption: string; mediaUrls: string[]; postKind: PublishPostKind },
+  capability: PublishPlatformCapability,
+  variants: readonly PublishVariantRecord[],
+  accountId: number | undefined,
+): { content: PublishChannelContent; warnings: string[] } {
+  const warnings: string[] = [];
+  const layers = publishVariantLayers(variants, capability.platform, accountId);
+  const resolved = resolvePublishContent(base, layers);
+  if (resolved.sources.mediaUrls !== 'BASE') {
+    const kept = resolved.mediaUrls.filter((url) => base.mediaUrls.includes(url));
+    const dropped = resolved.mediaUrls.length - kept.length;
+    if (dropped > 0)
+      warnings.push(
+        `${capability.label} was given ${dropped} media item${dropped === 1 ? '' : 's'} the post no longer carries, and ${dropped === 1 ? 'it was' : 'they were'} left out. Choose its media again.`,
+      );
+    resolved.mediaUrls = kept;
+  }
+  // Any field from the account layer, not only the caption: the provider keys its overrides by
+  // platform, so an account's title travels the same way an account's caption does.
+  const fromAccount = PUBLISH_VARIANT_FIELDS.filter(
+    (field) => resolved.sources[field] === 'ACCOUNT',
+  );
+  if (fromAccount.length > 0 && !capability.accountContentOverride)
+    warnings.push(
+      `${capability.label} carries one set of content per platform from this provider, so this account's ${fromAccount.map((field) => PUBLISH_VARIANT_FIELD_LABEL[field].toLowerCase()).join(' and ')} is sent as the platform's. That is unambiguous only because ${capability.label} resolved to a single account.`,
+    );
+  const content: PublishChannelContent = {
+    ...resolved,
+    // The effective caption from here on: what the limit is measured against and what is sent.
+    caption: publishEffectiveCaption(resolved, capability),
+    deliveryMode: publishDeliveryModeFor(capability.kinds[resolved.postKind]),
+  };
+  return { content, warnings };
+}
+
+/**
+ * Preflights one channel: what it maps to, what it resolved to, and what it refuses.
+ *
+ * The account is resolved **before** the content, which is the only order that works: the account
+ * layer is keyed by provider account id, so there is nothing to resolve against until the channel
+ * has an account. A channel whose account did not resolve still reports its platform-layer content,
+ * because the refusal is about the connection and the user should still see what would have gone.
+ */
 function reportForChannel(
   channel: SignalChannel,
-  kind: PublishPostKind,
-  caption: string,
-  mediaKinds: SignalMediaKind[],
+  base: { caption: string; mediaUrls: string[]; postKind: PublishPostKind },
   connected: PublishTarget[],
+  variants: readonly PublishVariantRecord[],
 ): PublishChannelReport {
   const channelLabel = SIGNAL_CHANNEL_LABEL[channel] ?? channel;
   const platform = publishPlatformFor(channel);
@@ -202,7 +321,7 @@ function reportForChannel(
     return {
       channel,
       platform: null,
-      kind,
+      kind: base.postKind,
       status: 'NOT_AVAILABLE',
       refusals: [],
       warnings: [
@@ -214,32 +333,113 @@ function reportForChannel(
     return {
       channel,
       platform: platform ?? null,
-      kind,
+      kind: base.postKind,
       status: 'BLOCKED',
       refusals: [
         `${channelLabel} is not answered by the provider capability contract, so nothing can be sent to it. Record it in shared/publish-capabilities.ts before publishing to it.`,
       ],
       warnings: [],
     };
-  const { refusals, warnings } = preflightPlatform({ capability, kind, caption, mediaKinds });
   const { target, refusal } = resolveTarget(capability.platform, capability.label, connected);
+  const { content, warnings } = resolveForTarget(base, capability, variants, target?.id);
+  const preflight = preflightPlatform({ capability, content });
+  const refusals = [...preflight.refusals];
   if (refusal) refusals.push(refusal);
   return {
     channel,
     platform: capability.platform,
-    kind,
+    kind: content.postKind,
     status: refusals.length ? 'BLOCKED' : 'READY',
     ...(target ? { accountId: target.id, handle: target.handle || target.name } : {}),
+    content,
     refusals,
-    warnings,
+    warnings: [...warnings, ...preflight.warnings],
   };
 }
 
+/**
+ * The tailored content the provider is given, one entry per platform that has any.
+ *
+ * `platform_configurations` is keyed by platform and carries text alone (`caption`, `first_comment`,
+ * a title, and a placement), so this is where an override becomes something the provider can act on
+ * and where the ones it cannot carry stop. A configuration is emitted only when it differs from the
+ * submission's own caption or adds a field, which is what keeps an untailored post sending exactly
+ * the request it sent before any of this existed.
+ */
+function platformConfigurationsFor(
+  reports: PublishChannelReport[],
+  baseCaption: string,
+): PublishPlatformConfiguration[] {
+  const configurations: PublishPlatformConfiguration[] = [];
+  for (const report of reports) {
+    const content = report.content;
+    if (report.status !== 'READY' || !report.platform || !content) continue;
+    const capability = publishCapabilityFor(report.platform);
+    const configuration: PublishPlatformConfiguration = { platform: report.platform };
+    if (content.caption !== baseCaption) configuration.caption = content.caption;
+    if (content.title !== undefined) configuration.title = content.title;
+    if (content.firstComment !== undefined) configuration.firstComment = content.firstComment;
+    // A story is a real provider placement and exists only where the contract records one. A reel
+    // is one video in the platform's ordinary post, so it changes what preflight accepts and sends
+    // no placement — see `shared/publish-capabilities.ts` on why `REEL` is not a provider shape.
+    if (content.postKind === 'STORY' && capability && publishKindSupported(capability.kinds.STORY))
+      configuration.story = true;
+    if (Object.keys(configuration).length > 1) configurations.push(configuration);
+  }
+  return configurations;
+}
+
+/**
+ * The media every target agrees on, or a refusal naming the ones that disagree.
+ *
+ * The provider takes one media array for the whole submission, so a per-platform selection is
+ * delivered through that array and only while every target wants the same thing from it. Splitting
+ * one post into several submissions to honour two selections is a different card; guessing which
+ * selection wins is not an option at all.
+ */
+function agreedMedia(
+  reports: PublishChannelReport[],
+  baseMedia: string[],
+): { mediaUrls: string[]; refusals: string[] } {
+  const ready = reports.filter((report) => report.status === 'READY' && report.content);
+  const distinct = new Map<string, PublishChannelReport[]>();
+  for (const report of ready) {
+    const key = JSON.stringify(report.content?.mediaUrls ?? []);
+    distinct.set(key, [...(distinct.get(key) ?? []), report]);
+  }
+  if (distinct.size <= 1)
+    return { mediaUrls: ready[0]?.content?.mediaUrls ?? baseMedia, refusals: [] };
+  const described = [...distinct.values()]
+    .map((group) => {
+      const count = group[0]?.content?.mediaUrls.length ?? 0;
+      const names = group
+        .map((report) => SIGNAL_CHANNEL_LABEL[report.channel] ?? report.channel)
+        .join(', ');
+      return `${names} (${count} item${count === 1 ? '' : 's'})`;
+    })
+    .join('; ');
+  return {
+    mediaUrls: baseMedia,
+    refusals: [
+      `This provider sends one set of media per submission and these channels were given different media: ${described}. Give them the same media, or publish them separately.`,
+    ],
+  };
+}
+
+/**
+ * The whole plan: the instant, every channel's resolved content and verdict, and the request that
+ * would be sent if nothing refuses.
+ *
+ * `variants` defaults to none, so a post with no overrides plans exactly as it did before they
+ * existed. Every channel resolves its own content from the same three layers, which is what lets one
+ * preview answer for seven different targets without the caller assembling anything.
+ */
 export function buildPublishPlan(
   post: SignalPost,
   connected: PublishTarget[],
   zone: string,
   now = new Date(),
+  variants: readonly PublishVariantRecord[] = [],
 ): PublishPreview & { request?: PublishRequest } {
   const refusals: string[] = [];
   const warnings: string[] = [];
@@ -261,10 +461,13 @@ export function buildPublishPlan(
   if (post.status === 'PUBLISHED')
     warnings.push('You marked this published yourself; sending it will post it again.');
 
-  const kind = publishPostKindFor(post.format);
-  const mediaKinds = post.mediaUrls.map(signalMediaKind);
+  const base = {
+    caption,
+    mediaUrls: post.mediaUrls,
+    postKind: publishPostKindFor(post.format),
+  };
   const channels = post.channels.map((channel) =>
-    reportForChannel(channel, kind, caption, mediaKinds, connected),
+    reportForChannel(channel, base, connected, variants),
   );
   const targets: PublishPreview['targets'] = channels
     .filter((report) => report.status === 'READY' && report.platform && report.accountId)
@@ -279,14 +482,23 @@ export function buildPublishPlan(
   if (channels.every((report) => report.accountId === undefined))
     refusals.push('No publishable channel has a resolved provider target.');
 
+  // Provider-wide rather than per platform, like the caption rule above: one submission carries one
+  // media array, whatever each platform would have preferred.
+  const media = agreedMedia(channels, post.mediaUrls);
+  refusals.push(...media.refusals);
+  const platformConfigurations = platformConfigurationsFor(channels, caption);
+
   const stable = {
     postId: post.id,
     updatedAt: post.updatedAt,
     caption,
-    mediaUrls: post.mediaUrls,
+    // The media that would be sent rather than the post's own, so a selection changed between
+    // preview and confirm invalidates the hash exactly as an edited caption does.
+    mediaUrls: media.mediaUrls,
     scheduledInstant,
     timezone: zone,
     targets,
+    platformConfigurations,
   };
   const preview: PublishPreview & { request?: PublishRequest } = {
     available: true,
@@ -303,13 +515,16 @@ export function buildPublishPlan(
   if (scheduledInstant && publishPreviewRefusals(preview).length === 0)
     preview.request = {
       caption,
-      mediaUrls: post.mediaUrls,
+      mediaUrls: media.mediaUrls,
       scheduledInstant,
       timezone: zone,
       targets: targets.map((target) => ({
         accountId: target.accountId,
         platform: target.platform,
       })),
+      // Omitted rather than empty, so the provider adapter sends no key at all for an untailored
+      // post — the artifact's own rule for `platform_configurations`.
+      ...(platformConfigurations.length ? { platformConfigurations } : {}),
     };
   return preview;
 }

@@ -201,7 +201,14 @@ export interface PublishPlatformCapability {
   /**
    * The provider accepts a per-account override. False everywhere: tailoring is per platform, a
    * stated limitation of the working integration, so two accounts on one platform receive the same
-   * text. C62 (#189) builds the overrides themselves against this field.
+   * text.
+   *
+   * C62 (#189) builds the overrides themselves against this field and reads it exactly as written.
+   * An account override is stored and resolved locally either way; what this flag decides is
+   * whether it can be *delivered*. False means one set of content per platform, so an account
+   * override arrives only while that platform resolves to a single account, and two accounts on one
+   * platform whose resolved content differs is a refusal rather than a coin toss over whose text
+   * goes out.
    */
   accountContentOverride: boolean;
   firstComment: PublishTextField;
@@ -509,3 +516,23 @@ export const publishCapabilityFor = (platform: string): PublishPlatformCapabilit
 /** The platform a channel publishes to: `null` for `blog`, `undefined` for anything unrecognised. */
 export const publishPlatformFor = (channel: string): PublishPlatform | null | undefined =>
   SIGNAL_CHANNEL_PLATFORM[channel as SignalChannel];
+
+/**
+ * How a submission of a supported shape reaches the platform.
+ *
+ * Derived from `PublishKindSupport` rather than stored beside it: a shape can be reachable both
+ * ways — TikTok is — and the mode a submission actually uses is then the automatic one, because
+ * that is the route this app takes. Storing it would be a second answer to a question the two
+ * booleans already settle.
+ */
+export const PUBLISH_DELIVERY_MODES = ['AUTOMATIC', 'MANUAL_FINISH'] as const;
+export type PublishDeliveryMode = (typeof PUBLISH_DELIVERY_MODES)[number];
+
+export const PUBLISH_DELIVERY_MODE_LABEL: Record<PublishDeliveryMode, string> = {
+  AUTOMATIC: 'Sent by the provider',
+  MANUAL_FINISH: 'Finished by hand in the platform app',
+};
+
+/** Which route a supported shape takes. Meaningless for a shape neither route reaches. */
+export const publishDeliveryModeFor = (support: PublishKindSupport): PublishDeliveryMode =>
+  support.automatic ? 'AUTOMATIC' : 'MANUAL_FINISH';

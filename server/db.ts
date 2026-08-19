@@ -109,6 +109,26 @@ CREATE TABLE IF NOT EXISTS signal_post_media (
   position INTEGER NOT NULL CHECK(position >= 0), url TEXT NOT NULL,
   PRIMARY KEY(post_id, position)
 );
+-- Platform and account content overrides for one post. The layers resolve base -> platform ->
+-- account in shared/publish-variants.ts, and both live here as one shape: a NULL account_id is the
+-- platform layer and a provider account id is the account layer, so the resolution reads one table
+-- rather than joining two that would drift. Uniqueness is the expression index below, because
+-- SQLite does not enforce NOT NULL on a PRIMARY KEY column and a nullable key column would let a
+-- platform layer be written twice.
+--
+-- media_urls is a JSON array of URLs the post already carries: a selection of its own media, never
+-- a new reference. NULL means the platform inherits the post's media and '[]' means it deliberately
+-- receives none, which are different answers. Nothing here is fetched, uploaded, or proxied by the
+-- server -- the rule signal_post_media above states, restated because cover_image_url and
+-- thumbnail_url are the two columns most likely to tempt someone into breaking it.
+CREATE TABLE IF NOT EXISTS signal_post_variants (
+  post_id TEXT NOT NULL REFERENCES signal_posts(id) ON DELETE CASCADE,
+  platform TEXT NOT NULL, account_id INTEGER,
+  caption TEXT, media_urls TEXT, post_kind TEXT, title TEXT, first_comment TEXT,
+  disclose_synthetic_media INTEGER, cover_image_url TEXT, thumbnail_url TEXT,
+  updated_at TEXT NOT NULL,
+  CHECK(account_id IS NULL OR account_id > 0)
+);
 CREATE TABLE IF NOT EXISTS signal_publications (
   id TEXT PRIMARY KEY, post_id TEXT NOT NULL REFERENCES signal_posts(id) ON DELETE RESTRICT,
   state TEXT NOT NULL, provider TEXT NOT NULL, provider_post_id TEXT,
@@ -145,6 +165,10 @@ CREATE INDEX IF NOT EXISTS idx_integration_events_correlation ON integration_eve
 -- dated rows order by day, and the NULL dates group together at the front.
 CREATE INDEX IF NOT EXISTS idx_signal_posts_date ON signal_posts(date, time);
 CREATE INDEX IF NOT EXISTS idx_signal_post_channels_channel ON signal_post_channels(channel);
+-- One layer per platform and one per account, enforced over the coalesced key because the platform
+-- layer's account_id is NULL and SQLite's PRIMARY KEY would not have refused a duplicate.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_signal_post_variants_layer
+  ON signal_post_variants(post_id, platform, COALESCE(account_id, -1));
 CREATE UNIQUE INDEX IF NOT EXISTS idx_signal_publications_live ON signal_publications(post_id)
   WHERE state IN ('SUBMITTING','SUBMITTED','UNCONFIRMED');
 CREATE INDEX IF NOT EXISTS idx_signal_publications_post ON signal_publications(post_id);

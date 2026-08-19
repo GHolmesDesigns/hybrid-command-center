@@ -39,13 +39,17 @@ import { signalProvider } from './signal/read.ts';
 import { readCalendarRange } from './calendar.ts';
 import {
   SignalPostNotFoundError,
+  SignalVariantError,
   createPost,
   deletePost,
   getPost,
+  getPostVariants,
   listQueue,
+  replacePostVariants,
   signalPostInput,
   signalPostPatch,
   signalRangeQuery,
+  signalVariantsInput,
   updatePost,
 } from './signal/service.ts';
 import type { DriveProvider } from './drive/provider.ts';
@@ -132,7 +136,12 @@ const productionContentSecurityPolicy = {
     // Only images widen: no other directive accepts a remote origin.
     imgSrc: ["'self'", 'data:', 'https:'],
     manifestSrc: ["'self'"],
-    mediaSrc: ["'self'"],
+    // Media widens for the same reason images do, and for one screen: the publishing preview
+    // renders the video a post already references, from the public URL the post carries, so the
+    // host is the user's and is not known in advance. The browser fetches it and the server never
+    // does -- this app uploads, downloads and proxies no media, the rule recorded on
+    // signal_post_media and in docs/publishing-integration.md section 3.3.
+    mediaSrc: ["'self'", 'https:'],
     objectSrc: ["'none'"],
     scriptSrc: ["'self'"],
     scriptSrcAttr: ["'none'"],
@@ -1376,6 +1385,30 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     if (!post) return res.status(404).json({ error: 'Signal post not found.' });
     res.json(post);
   });
+  /**
+   * Platform and account content overrides for one post.
+   *
+   * `PUT` replaces the whole set, the way branding does and for the same reason: the composer holds
+   * every layer while it is edited, and a patch would let a half-applied set leave a platform
+   * tailored by a request that was reported as having failed. What the provider will accept is
+   * checked here from `shared/publish-variants.ts` — the same function the composer renders its
+   * fields from — so a field the form hides is a field this route refuses rather than one a `curl`
+   * walks around.
+   */
+  app.get('/api/signal/posts/:id/variants', (req, res, next) => {
+    try {
+      res.json(getPostVariants(db, req.params.id));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.put('/api/signal/posts/:id/variants', (req, res, next) => {
+    try {
+      res.json(replacePostVariants(db, req.params.id, signalVariantsInput.parse(req.body)));
+    } catch (error) {
+      next(error);
+    }
+  });
   app.post('/api/signal/posts/:id/publish/preview', async (req, res, next) => {
     try {
       res.json(await publisher.preview(req.params.id));
@@ -1539,7 +1572,10 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     const status =
       error instanceof z.ZodError ||
       error instanceof ImportInputError ||
-      error instanceof DriveScopeError
+      error instanceof DriveScopeError ||
+      // An override the capability contract will not carry is the caller naming something the
+      // provider cannot do, which is their problem to fix and not a failure of the write.
+      error instanceof SignalVariantError
         ? 400
         : // Editing or deleting a post that is not there is the caller addressing something
           // that does not exist, not a failure of the write.

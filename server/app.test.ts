@@ -86,11 +86,18 @@ describe('command center API', () => {
     expect(policy).toContain("script-src-attr 'none'");
     expect(policy).toContain("style-src 'self' https://fonts.googleapis.com");
     expect(policy).toContain("style-src-attr 'unsafe-inline'");
-    // Images are the one directive that accepts a remote origin, because a Settings-set
-    // logo is referenced by address and its host cannot be known when this is written.
+    // Images and media are the two directives that accept a remote origin, because both are
+    // referenced by address: a Settings-set logo, and the media a Signal post already carries,
+    // which the publishing preview renders. Neither host can be known when this is written.
     expect(policy).toContain("img-src 'self' data: https:");
+    expect(policy).toContain("media-src 'self' https:");
     expect(policy).toContain("connect-src 'self'");
     expect(policy).not.toContain('upgrade-insecure-requests');
+    // What keeps a media host from learning which page asked for it. `referrerpolicy` is an
+    // attribute HTML defines for images and links and not for a `<video>`, so the preview's video
+    // element relies on this header rather than on an attribute it cannot carry.
+    expect(production.headers['referrer-policy']).toBe('no-referrer');
+    expect(development.headers['referrer-policy']).toBe('no-referrer');
   });
 
   it('does not expose the E2E cooperative-stop route', async () => {

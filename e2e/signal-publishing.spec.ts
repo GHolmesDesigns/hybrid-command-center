@@ -24,7 +24,7 @@ test('a scheduled Signal post is previewed and explicitly confirmed before submi
     .filter({ hasText: text });
   await post.getByRole('button', { name: `Edit ${text}` }).click();
   const editor = page.getByRole('dialog');
-  await editor.getByRole('button', { name: 'Preview publishing' }).click();
+  await editor.getByRole('button', { name: 'Show preview' }).click();
   const preview = editor.getByRole('region', { name: 'Publish confirmation' });
   await expect(preview).toContainText('America/New_York');
   await expect(preview).toContainText('2099-09-14T13:00:00.000Z');

@@ -17,9 +17,12 @@ console.log(`Reset E2E database at ${databasePath}`);
 const db = getDb();
 const app = createApp(db, {
   publishTimezone: 'America/New_York',
+  // One account per platform, which is what target resolution requires and what makes a
+  // per-account override deliverable as its platform's configuration.
   publish: new MockPublishProvider([
     { id: 901, platform: 'twitter', handle: '@gholmes', name: 'G.Holmes Designs' },
     { id: 902, platform: 'facebook', handle: 'gholmesdesigns', name: 'G.Holmes Designs' },
+    { id: 903, platform: 'linkedin', handle: '@gholmes-designs', name: 'G.Holmes Designs' },
   ]),
 });
 const server: Server = app.listen(config.port, config.host, () =>
