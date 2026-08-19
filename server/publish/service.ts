@@ -28,6 +28,7 @@ import {
   PUBLISH_RATE_LIMIT_FALLBACK_SECONDS,
   type PublishProvider,
   type PublishRequest,
+  type PublishSubmission,
 } from './provider.ts';
 import { recordSyncHealth } from './sync-health.ts';
 import { toPublication, toTarget, type PublicationRow, type TargetRow } from './rows.ts';
@@ -177,18 +178,7 @@ export class PublishService {
             updated,
             publicationId,
           );
-        for (const target of result.targets ?? [])
-          this.db
-            .prepare(
-              'UPDATE signal_publication_targets SET outcome=?,permalink=?,error=? WHERE publication_id=? AND provider_account_id=?',
-            )
-            .run(
-              target.outcome,
-              target.permalink ?? null,
-              target.error ? redactSecrets(target.error) : null,
-              publicationId,
-              target.accountId,
-            );
+        for (const target of result.targets ?? []) this.recordTargetResult(publicationId, target);
         const succeeded = (result.targets ?? [])
           .filter((target) => target.outcome === 'SUCCESS')
           .map(
@@ -257,6 +247,38 @@ export class PublishService {
    */
   private targetRows(publicationId: string): TargetRow[] {
     return targetRowsFor(this.db, publicationId);
+  }
+
+  /**
+   * What the provider said about one delivery, written onto its target row.
+   *
+   * One statement for both callers — the submit response and the reconciliation check — because
+   * they are the same fact arriving at two moments, and two copies of the write would eventually be
+   * two different sets of columns.
+   *
+   * `post_result_id` is coalesced rather than assigned. It is the provider's own identity for this
+   * delivery and the only handle its analytics endpoints accept, so a later response that omits it
+   * must not erase it: an answer that says nothing about a field has said nothing about it. Every
+   * other column here is what the provider just reported and is written as given.
+   */
+  private recordTargetResult(
+    publicationId: string,
+    target: NonNullable<PublishSubmission['targets']>[number],
+  ): void {
+    this.db
+      .prepare(
+        `UPDATE signal_publication_targets
+            SET outcome=?,permalink=?,error=?,post_result_id=COALESCE(?, post_result_id)
+          WHERE publication_id=? AND provider_account_id=?`,
+      )
+      .run(
+        target.outcome,
+        target.permalink ?? null,
+        target.error ? redactSecrets(target.error) : null,
+        target.resultId ?? null,
+        publicationId,
+        target.accountId,
+      );
   }
 
   /**
@@ -370,18 +392,7 @@ export class PublishService {
           timestamp,
           publicationId,
         );
-      for (const target of result.targets ?? [])
-        this.db
-          .prepare(
-            'UPDATE signal_publication_targets SET outcome=?,permalink=?,error=? WHERE publication_id=? AND provider_account_id=?',
-          )
-          .run(
-            target.outcome,
-            target.permalink ?? null,
-            target.error ? redactSecrets(target.error) : null,
-            publicationId,
-            target.accountId,
-          );
+      for (const target of result.targets ?? []) this.recordTargetResult(publicationId, target);
       recordIntegrationEvent(this.db, {
         source: 'signal-campaign',
         operation: 'signal.reconcile',

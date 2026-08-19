@@ -34,6 +34,7 @@ Nothing in this app is reachable off loopback by design, and the server enforces
 - **Integration activity** — an append-only record of what each integration changed, when, and how it ended, naming the affected clients, projects, and tasks by id, bounded to the most recent 200 rows, credential-scrubbed, and shown on the Import page beside the receipt it belongs to
 - **Signal Campaign** — the authoritative store and operable planner for content: month grid, unscheduled queue, quick idea capture, and a full editor for content, channels, ordered public media references, date, time, format, status, campaign, and CTA, with duplicate-to-queue, next-open-slot suggestion, and confirmed deletion
 - **Queue health** — an in-app summary above the planner deriving six alerts from your own posts and deliveries: a failed or partly delivered post, a manual finish waiting on you, a scheduled slot approaching with nothing submitted, a provider answer that moved at the last check, a channel with nothing planned inside a configurable window, and a provider synchronisation that is rate-limited or behind. Each line links to the post it is about, and acknowledging one changes no planning or delivery state. In-app only — no email, SMS, or push service
+- **Figures** — the platforms’ own counts for a post that went out: provider-reported views, likes, comments, and shares per delivery, with the daily snapshots behind them shown as per-day gains, the time of the last synchronisation, and a refresh that runs only when you press it. A channel this provider does not measure says **Not available from this provider** rather than showing a zero, a rate-limited provider is waited out rather than hammered, and a refresh that fails leaves the last known good figures on screen
 - **Calendar** — a read-only month agenda putting Signal's scheduled content beside task due dates, kept as two headed groups rather than one merged list of "events", with empty days dropped. It writes nothing, and a schedule it cannot read degrades the page to task due dates alone with the reason shown
 - Server-only Google OAuth 2.0, encrypted token storage, configurable Drive root, and resumable/idempotent folder creation
 - Responsive desktop/tablet/mobile interface with empty, error, loading, disconnected, and confirmation states
@@ -473,6 +474,13 @@ it and never writes.
   Acknowledging one writes a single row to `signal_alert_acks` and touches nothing it reports; the
   row carries the fingerprint of the facts that were seen, so a situation that changes comes back as
   a live alert. No email, SMS, or push service is involved — the summary lives in the app.
+- **Figures are read, never computed, and never written back.** The four numbers are the
+  provider’s own; a per-day gain is a subtraction between two of its stored snapshots and nothing
+  else. `server/publish/analytics.ts` holds an `AnalyticsProvider` with no way to publish,
+  reschedule, or withdraw anything, it never touches `SignalProvider`, and it writes no post,
+  publication, or delivery row — so a figure can never rewrite a plan or a delivery answer. A
+  channel outside TikTok, YouTube, and Instagram has no figure at all rather than a figure of zero,
+  and a failed refresh keeps the last values instead of replacing them.
 - **Media stays a reference.** A post may carry an ordered list of public `https:` URLs. SQLite
   stores those strings in `signal_post_media`; the app never fetches, downloads, proxies, or
   uploads the referenced files. Kind is inferred from the URL extension and remains `unknown`
@@ -655,7 +663,7 @@ Schedule `db:backup` the same way if you want unattended snapshots — same comm
 
 **Files:** `/files` has shipped read-only — `DriveProvider.listFiles` plus `server/drive/browse.ts` and the `GET /api/projects/:id/files` boundary. Extending it means adding upload/download/move/rename/search methods to the provider and a write path beside `browse.ts`, which stays read-only; a mutation belongs in its own module with its own confirmation flow. Continue storing only Drive IDs and metadata locally. UI components should never import `googleapis`.
 
-**Publishing:** the first Post Bridge implementation follows [`docs/publishing-integration.md`](docs/publishing-integration.md). It previews and confirms one scheduled Signal post, preflights its channels and ordered media, records delivery per publication, and blocks ambiguous retries. A post the provider already holds can then be updated, rescheduled, withdrawn, or resubmitted — each from a no-write comparison the user confirms, never as a side effect of a Signal edit, and never against a post the provider has already published (§7.2). `blog` remains outside every provider.
+**Publishing:** the first Post Bridge implementation follows [`docs/publishing-integration.md`](docs/publishing-integration.md). It previews and confirms one scheduled Signal post, preflights its channels and ordered media, records delivery per publication, and blocks ambiguous retries. A post the provider already holds can then be updated, rescheduled, withdrawn, or resubmitted — each from a no-write comparison the user confirms, never as a side effect of a Signal edit, and never against a post the provider has already published (§7.2). `blog` remains outside every provider. Figures are read back against the provider’s own result identity per delivery, captured by reconciliation, through a service beside the publisher rather than inside it (§16).
 
 **Cloud hosting:** recommended, awaiting sign-off, unbuilt. [`docs/cloud-hosting.md`](docs/cloud-hosting.md) names a private single-instance remote deploy for one operator, SQLite on the host as authoritative, password-session authentication before any non-loopback bind, production Drive redirect URIs, and a C10 backup/restore cutover. Read it before opening an Infra 2 implementation card. Its §5.1 bind gate is the one part now enforced in `server/config.ts`, which refuses a non-loopback `HOST` outright; an implementation card widens that check to the full checklist — password hash, session secret, `https:` `APP_ORIGIN`, TLS acknowledgement — rather than removing it.
 

@@ -87,6 +87,7 @@ import {
 import type { PublishVariantRecord } from '../../../shared/publish-variants';
 import { PlatformVariantsEditor, PublishPreviewTabs } from './SignalVariants';
 import { SignalHealthPanel } from './SignalHealth';
+import { SignalMetrics } from './SignalMetrics';
 import { previewPlatforms, variantList, variantMap } from './signal-variants';
 
 type SignalRange = {
@@ -543,6 +544,26 @@ function Editor({
           'UNSUPPORTED',
     );
   }, [post.channels, post.format, publications]);
+  /**
+   * The result identities the deliveries are carrying, as one string.
+   *
+   * The figures panel re-reads its stored rows when this changes, which is exactly when a refreshed
+   * delivery has captured an identity there was none of before — until then the panel is correctly
+   * saying it has nothing to ask about. A string rather than the publications themselves so a render
+   * that captured nothing new re-reads nothing.
+   */
+  const metricsKey = useMemo(
+    () =>
+      publications
+        .map(
+          (publication) =>
+            `${publication.id}:${publication.targets
+              .map((target) => `${target.accountId}=${target.resultId ?? ''}`)
+              .join(',')}`,
+        )
+        .join('|'),
+    [publications],
+  );
 
   useEffect(() => {
     textRef.current?.focus();
@@ -1316,6 +1337,10 @@ function Editor({
                   Mark published
                 </button>
               )}
+              {/* Figures sit below the delivery rows they belong to and above nothing: they are the
+                  last thing said about a post, they are read from stored rows on open, and the only
+                  control in them that touches the provider is the one a person presses. */}
+              <SignalMetrics key={metricsKey} postId={post.id} busy={busy} />
             </section>
           )}
           {publishPreview && (

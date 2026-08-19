@@ -208,6 +208,8 @@ describe('additive schema migration', () => {
         'signal_publications',
         'signal_publication_targets',
         'signal_alert_acks',
+        'signal_post_metrics',
+        'signal_post_metric_days',
         'client_merges',
       ]),
     );
@@ -222,6 +224,14 @@ describe('additive schema migration', () => {
     // And no alert is acknowledged on arrival: the summary is derived, so an upgrade cannot know
     // which of the lines it is about to show have already been seen.
     expect(rows(db, 'SELECT COUNT(*) AS total FROM signal_alert_acks')).toEqual([{ total: 0 }]);
+    // Figures arrive empty as well, and the delivery rows gain the provider result identity as a
+    // nullable column: a migration cannot know what the provider called a delivery it never asked
+    // about, and inventing an id would be inventing something to ask analytics for.
+    expect(rows(db, 'SELECT COUNT(*) AS total FROM signal_post_metrics')).toEqual([{ total: 0 }]);
+    expect(rows(db, 'SELECT COUNT(*) AS total FROM signal_post_metric_days')).toEqual([
+      { total: 0 },
+    ]);
+    expect(columnsOf(db, 'signal_publication_targets')).toContain('post_result_id');
   });
 
   it('adds the media join to a populated Signal database without changing existing posts', () => {

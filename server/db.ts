@@ -161,11 +161,56 @@ CREATE TABLE IF NOT EXISTS signal_publications (
 -- the outcome rather than derived later: the contract can change, and what a delivery needed from
 -- a person when it was sent is a fact about that submission. manual_completed_at is the person's
 -- own record that they finished it where it had to be finished, and it never touches the post.
+-- post_result_id is the provider's own identity for this one delivery -- the id of the
+-- post-results row, which is not the post id and not the account id. It is the only thing the
+-- analytics endpoints will answer a question about, so without it there is nothing to ask for
+-- figures against. Captured by reconciliation, which is the only call that reads post-results,
+-- and never overwritten with NULL: a response that omits it has said nothing about it.
 CREATE TABLE IF NOT EXISTS signal_publication_targets (
   publication_id TEXT NOT NULL REFERENCES signal_publications(id) ON DELETE CASCADE,
   channel TEXT NOT NULL, provider_account_id INTEGER NOT NULL, outcome TEXT, permalink TEXT, error TEXT,
   handle TEXT NOT NULL DEFAULT '', mode TEXT NOT NULL DEFAULT 'AUTOMATIC', manual_completed_at TEXT,
+  post_result_id TEXT,
   PRIMARY KEY(publication_id, provider_account_id)
+);
+-- Current totals per delivery, and the daily snapshots behind them.
+--
+-- Two tables rather than one because they answer different questions and arrive separately: a total
+-- is one row that is rewritten, and a day is a row that is never rewritten once the provider has
+-- moved past it. Both are keyed the way the delivery they describe is keyed --
+-- (publication_id, provider_account_id) -- rather than by the provider's analytics id, so a figure
+-- is joinable to the target row it belongs to and survives the provider reissuing an id.
+-- signal_publication_targets has no id column of its own, which is why the key is the pair and not
+-- a foreign key to one column.
+--
+-- Nothing here is ever written by a failed refresh. The service writes only rows the provider
+-- actually returned, in one transaction, so a refusal or a network failure leaves the last known
+-- good values exactly as they were rather than replacing them with zeros or with nothing.
+--
+-- provider_synced_at is the provider's own last_synced_at for the record; synced_at is when this
+-- app stored it. Both are kept because they answer different questions -- how old the platform's
+-- reading is, and how old this app's copy of it is -- and one of them being fresh does not make the
+-- other one fresh.
+CREATE TABLE IF NOT EXISTS signal_post_metrics (
+  publication_id TEXT NOT NULL REFERENCES signal_publications(id) ON DELETE CASCADE,
+  provider_account_id INTEGER NOT NULL,
+  post_result_id TEXT NOT NULL, analytics_id TEXT NOT NULL, platform TEXT NOT NULL,
+  views INTEGER NOT NULL DEFAULT 0, likes INTEGER NOT NULL DEFAULT 0,
+  comments INTEGER NOT NULL DEFAULT 0, shares INTEGER NOT NULL DEFAULT 0,
+  share_url TEXT, provider_synced_at TEXT, synced_at TEXT NOT NULL,
+  PRIMARY KEY(publication_id, provider_account_id)
+);
+-- One row per day the provider snapshotted, carrying the cumulative totals as of that date. The
+-- date is a YYYY-MM-DD value and never an instant, the same rule signal_posts.date follows: it is
+-- the provider's own label for a day, and deriving a moment from it would put a snapshot on the
+-- wrong side of midnight in half the world's zones. Per-day gains are subtracted from these on
+-- read (shared/publish-analytics.ts) rather than stored beside them.
+CREATE TABLE IF NOT EXISTS signal_post_metric_days (
+  publication_id TEXT NOT NULL REFERENCES signal_publications(id) ON DELETE CASCADE,
+  provider_account_id INTEGER NOT NULL, date TEXT NOT NULL,
+  views INTEGER NOT NULL DEFAULT 0, likes INTEGER NOT NULL DEFAULT 0,
+  comments INTEGER NOT NULL DEFAULT 0, shares INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY(publication_id, provider_account_id, date)
 );
 -- Queue-health acknowledgements: one row per alert a person has said they have seen.
 --
@@ -215,6 +260,13 @@ CREATE INDEX IF NOT EXISTS idx_signal_publications_post ON signal_publications(p
 -- Retention over acknowledgements keeps the newest rows and prunes the rest, so the oldest are
 -- what it has to find.
 CREATE INDEX IF NOT EXISTS idx_signal_alert_acks_time ON signal_alert_acks(acknowledged_at);
+-- A refresh asks the provider about the result ids it holds, so it looks them up from the targets
+-- of one post's publications; the analytics read then walks the same rows back. Both are the
+-- publication prefix of the primary keys above, so the only index worth adding is the one that
+-- finds a delivery from the provider's own identity for it -- which is how an analytics row that
+-- arrives with a result id and nothing else is matched back to the delivery it belongs to.
+CREATE INDEX IF NOT EXISTS idx_signal_publication_targets_result
+  ON signal_publication_targets(post_result_id);
 `;
 
 const schema = `${tableSchema}${indexSchema}`;

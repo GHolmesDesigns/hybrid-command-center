@@ -5,6 +5,12 @@ import type {
   PublishSubmission,
   PublishTarget,
 } from './provider.ts';
+import type {
+  AnalyticsProvider,
+  ProviderAnalyticsDay,
+  ProviderAnalyticsRecord,
+} from './analytics-provider.ts';
+import { ANALYTICS_PLATFORMS, type AnalyticsPlatform } from '../../shared/publish-analytics.ts';
 
 /**
  * The provider every automated test runs against. Nothing here contacts Post Bridge.
@@ -28,6 +34,16 @@ export class MockPublishProvider implements PublishProvider {
   readonly cancels: string[] = [];
   targets: PublishTarget[];
   result: PublishSubmission = { providerPostId: 'mock-publication', state: 'SUBMITTED' };
+  /**
+   * What `check` answers, where that differs from what `submit` did.
+   *
+   * Two fields because they are two questions: `submit` is *did you take this*, and `check` is *what
+   * became of it*, and only the second one can carry per-account rows at all — `post-results` does
+   * not exist until the provider has tried to deliver. A case that needs a delivered submission to
+   * report its result identities sets this and leaves the submission alone. Unset falls back to
+   * `result`, so every case written before this existed behaves exactly as it did.
+   */
+  checkResult?: PublishSubmission;
   failure?: Error;
   /** Raised by `update` alone, so a partial outcome can be exercised without failing the read. */
   updateFailure?: Error;
@@ -71,7 +87,7 @@ export class MockPublishProvider implements PublishProvider {
   }
   async check(providerPostId: string) {
     this.checks.push(providerPostId);
-    return this.result;
+    return this.checkResult ?? this.result;
   }
   async describe(providerPostId: string) {
     this.describes.push(providerPostId);
@@ -95,5 +111,49 @@ export class MockPublishProvider implements PublishProvider {
     this.cancels.push(providerPostId);
     if (this.cancelFailure) throw this.cancelFailure;
     return;
+  }
+}
+
+/**
+ * The analytics provider every automated test runs against. Nothing here contacts Post Bridge.
+ *
+ * Stateful for the same reason `MockPublishProvider` is: the behaviours worth proving are about a
+ * refresh meeting a provider that remembers — a sync that gets through, a `429` that does not, a
+ * second refusal that has to wait longer than the first, and a failure that must leave yesterday's
+ * figures exactly where they were. `records` and `daysByRecord` are that memory; the call logs are
+ * what a test asserts against when it needs to prove a call did *not* happen.
+ */
+export class MockAnalyticsProvider implements AnalyticsProvider {
+  readonly available = true;
+  /** One entry per `sync`, carrying the platforms that call covered. */
+  readonly syncs: (readonly AnalyticsPlatform[])[] = [];
+  /** Every result-id set `list` was asked about, so a test can prove which deliveries were asked. */
+  readonly lists: string[][] = [];
+  /** Every analytics id `days` was asked about. */
+  readonly dayReads: string[] = [];
+  /** What the provider is holding, keyed by the result id it measures. */
+  records: ProviderAnalyticsRecord[] = [];
+  /** Daily snapshots per analytics id. A record with no entry here supplies no days at all. */
+  daysByRecord: Record<string, ProviderAnalyticsDay[]> = {};
+  /** Raised by `sync` alone — the rate-limit and outage paths. */
+  syncFailure?: Error;
+  /** Raised by `list` alone, so a sync that got through can still fail to answer. */
+  listFailure?: Error;
+  /** Raised by `days` alone, so a total can arrive while its history does not. */
+  daysFailure?: Error;
+  async sync() {
+    this.syncs.push(ANALYTICS_PLATFORMS);
+    if (this.syncFailure) throw this.syncFailure;
+    return { platforms: ANALYTICS_PLATFORMS };
+  }
+  async list(postResultIds: readonly string[]) {
+    this.lists.push([...postResultIds]);
+    if (this.listFailure) throw this.listFailure;
+    return this.records.filter((record) => postResultIds.includes(record.postResultId));
+  }
+  async days(analyticsId: string) {
+    this.dayReads.push(analyticsId);
+    if (this.daysFailure) throw this.daysFailure;
+    return this.daysByRecord[analyticsId] ?? [];
   }
 }

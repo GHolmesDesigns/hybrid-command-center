@@ -55,6 +55,16 @@ export interface PublishSubmission {
   targets?: {
     accountId: number;
     outcome: 'SUCCESS' | 'FAILURE';
+    /**
+     * The provider's own identity for this one delivery — the `post-results` row id, which is
+     * neither the post id nor the account id.
+     *
+     * It is the only handle the analytics endpoints accept, and this response is the only place it
+     * appears, which is why reconciliation is where it gets captured. Optional because a response
+     * that omits it has said nothing about it: the service stores what it is given and never
+     * overwrites a known identity with an absent one.
+     */
+    resultId?: string;
     permalink?: string;
     error?: string;
   }[];
