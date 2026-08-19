@@ -39,12 +39,21 @@ contain an unknown or retired value.
 | Projects | Collection | Live projects by recent activity | `visibility`, `client`, `sort`, and `categories` |
 | Status | Workflow board | Canonical task-status order | Project, client, priority, type, focus, and tag filters |
 | Calendar | Time view | Current week | View and selected date/month when away from the default |
-| Signal | Time view | Current week | View and selected date/month when away from the default, and `post` for an open post |
+| Signal | Time view | Current week | View and selected date/month when away from the default, `post` for an open post, and `campaigns`, `channels`, `accounts`, `from`, and `to` for the campaign-figures filters |
 | Files | Context browser | Explicit project, remembered project, then first live project | Project and folder selections |
 
 Projects uses `live`, `archived`, and `all`; Clients uses its domain term `active` in place of
 `live`. The default live/active value is omitted from the address; choosing Archived or All is
 explicit.
+
+Signal's campaign-figures filters are durable for the reason every filter is: a campaign comparison is worth
+linking to, and a reload should land on the same answer. Each is omitted when it is the default — an empty
+list means *no restriction*, so the unfiltered panel keeps a short address — and each is read defensively:
+a campaign id the workspace no longer has simply matches nothing, and a date that is not a real day is
+ignored rather than failing the page. `campaigns=none` is the reserved value for the posts carrying no
+campaign, so **No campaign** can be asked for by name rather than only reached by clearing everything
+else. They are the panel's own parameters and share the address with the planner's period, so clearing the
+filters leaves the month exactly where it was.
 
 Signal's `post` is a selection rather than a period: it names the post whose editor is open, so a
 queue-health alert can link straight to the post it is about. It is read defensively like every other

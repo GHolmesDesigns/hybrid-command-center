@@ -22,6 +22,7 @@ import {
   mediaByPost,
   type SignalPostRow,
 } from './rows.ts';
+import { campaignsByPost, signalPostCampaignNames, writePostCampaigns } from './campaigns.ts';
 import {
   PUBLISH_PLATFORMS,
   PUBLISH_POST_KINDS,
@@ -106,7 +107,15 @@ const postFields = {
     .default(SIGNAL_DEFAULT_TIME),
   format: z.enum(SIGNAL_FORMATS).default('TEXT'),
   status: z.enum(SIGNAL_STATUSES).default('DRAFT'),
-  campaign: z.string().trim().max(200).nullable().default(null),
+  /**
+   * The campaigns this post belongs to, by name.
+   *
+   * Names rather than ids: the editor saves a whole draft in one press, so a campaign typed into
+   * the form has no id yet, and each name is resolved against the shared list — matched
+   * case-insensitively, created when it is new — inside the same transaction as the post. Defaults
+   * to none, which is a post under **No campaign** and the ordinary state of a fresh idea.
+   */
+  campaigns: signalPostCampaignNames.default([]),
   cta: z.enum(SIGNAL_CTAS).default('NONE'),
 };
 
@@ -172,6 +181,7 @@ export function getPost(db: Db, postId: string): SignalPost | undefined {
     row,
     channelsByPost(db, [postId]).get(postId) ?? [],
     mediaByPost(db, [postId]).get(postId) ?? [],
+    campaignsByPost(db, [postId]).get(postId) ?? [],
   );
 }
 
@@ -189,13 +199,16 @@ export function listQueue(db: Db): SignalPost[] {
 export function createPost(db: Db, input: SignalPostInput): SignalPost {
   const postId = id();
   const timestamp = now();
-  // The post, channels, and media land together: a post missing part of the requested plan would
-  // be a half-written record the caller was told succeeded.
+  // The post, channels, media, and campaigns land together: a post missing part of the requested
+  // plan would be a half-written record the caller was told succeeded. A campaign created for a
+  // post that then failed to write would be a name in the shared list nobody asked for.
   db.exec('BEGIN');
   try {
+    // `campaign`, the frozen free-text column, is deliberately not in this statement: it is left
+    // NULL on every post written from now on, and what a post belongs to lives in the join below.
     db.prepare(
-      `INSERT INTO signal_posts(id,text,date,time,format,status,campaign,cta,position,created_at,updated_at)
-       VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO signal_posts(id,text,date,time,format,status,cta,position,created_at,updated_at)
+       VALUES(?,?,?,?,?,?,?,?,?,?)`,
     ).run(
       postId,
       input.text,
@@ -203,7 +216,6 @@ export function createPost(db: Db, input: SignalPostInput): SignalPost {
       input.time,
       input.format,
       input.status,
-      input.campaign,
       input.cta,
       input.date === null ? nextQueuePosition(db) : 0,
       timestamp,
@@ -211,6 +223,7 @@ export function createPost(db: Db, input: SignalPostInput): SignalPost {
     );
     writeChannels(db, postId, input.channels);
     writeMedia(db, postId, input.mediaUrls);
+    writePostCampaigns(db, postId, input.campaigns);
     db.exec('COMMIT');
   } catch (error) {
     db.exec('ROLLBACK');
@@ -229,7 +242,6 @@ export function updatePost(db: Db, postId: string, patch: SignalPostPatch): Sign
     time: patch.time ?? existing.time,
     format: patch.format ?? existing.format,
     status: patch.status ?? existing.status,
-    campaign: patch.campaign === undefined ? existing.campaign : patch.campaign,
     cta: patch.cta ?? existing.cta,
   };
   // A post returning to the queue joins the end of it; one leaving keeps a position nothing
@@ -240,7 +252,7 @@ export function updatePost(db: Db, postId: string, patch: SignalPostPatch): Sign
   db.exec('BEGIN');
   try {
     db.prepare(
-      `UPDATE signal_posts SET text=?,date=?,time=?,format=?,status=?,campaign=?,cta=?,position=?,updated_at=?
+      `UPDATE signal_posts SET text=?,date=?,time=?,format=?,status=?,cta=?,position=?,updated_at=?
        WHERE id=?`,
     ).run(
       next.text,
@@ -248,7 +260,6 @@ export function updatePost(db: Db, postId: string, patch: SignalPostPatch): Sign
       next.time,
       next.format,
       next.status,
-      next.campaign,
       next.cta,
       position,
       now(),
@@ -256,6 +267,9 @@ export function updatePost(db: Db, postId: string, patch: SignalPostPatch): Sign
     );
     if (patch.channels !== undefined) writeChannels(db, postId, patch.channels);
     if (patch.mediaUrls !== undefined) writeMedia(db, postId, patch.mediaUrls);
+    // A patch changes only what it names, campaigns included: an edit to the time leaves the
+    // campaigns alone, and `[]` is the deliberate answer *this post belongs to none*.
+    if (patch.campaigns !== undefined) writePostCampaigns(db, postId, patch.campaigns);
     db.exec('COMMIT');
   } catch (error) {
     db.exec('ROLLBACK');
@@ -450,7 +464,9 @@ export function duplicatePost(db: Db, postId: string): SignalPost {
     time: source.time,
     format: source.format,
     status: 'DRAFT',
-    campaign: source.campaign,
+    // The names, not the ids: `createPost` resolves them, and they already exist, so the duplicate
+    // joins the same campaigns rather than creating second rows with the same names.
+    campaigns: source.campaigns.map((campaign) => campaign.name),
     cta: source.cta,
   });
 }

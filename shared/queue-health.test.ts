@@ -53,7 +53,7 @@ const post = (overrides: Partial<SignalPost> = {}): SignalPost => ({
   time: '18:00',
   format: 'TEXT',
   status: 'SCHEDULED',
-  campaign: null,
+  campaigns: [],
   cta: 'NONE',
   position: 0,
   createdAt: '2026-08-01T00:00:00.000Z',

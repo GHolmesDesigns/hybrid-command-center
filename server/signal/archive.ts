@@ -7,6 +7,7 @@ import {
   SIGNAL_STATUSES,
 } from '../../shared/signal.ts';
 import archive from './campaign-archive.json' with { type: 'json' };
+import { writePostCampaigns } from './campaigns.ts';
 
 /**
  * The campaign content Signal already held, carried across when Signal was re-hosted here.
@@ -21,6 +22,23 @@ import archive from './campaign-archive.json' with { type: 'json' };
  * primary key: a second run inserts nothing, and a post edited after import keeps the row the
  * edit was made on rather than being duplicated beside it or overwritten by the file. Nothing
  * here updates an existing row — this brings content in, it does not push it back over yours.
+ *
+ * ## What it writes for a campaign
+ *
+ * The file still names one campaign per post, because that is what Signal held; the importer
+ * resolves that name through the shared list and writes the **join**, leaving the frozen
+ * `signal_posts.campaign` column NULL like every other write in this app. Resolving is
+ * case-insensitive and creates the campaign only when it is new, so importing does not duplicate a
+ * campaign a workspace already has under a different spelling.
+ *
+ * Idempotency is unchanged and for the same reason: the join rows are written only for the posts
+ * this run inserts. A post already present is skipped whole, so a second run writes no campaign, no
+ * attachment, and no post — and a campaign detached by hand afterwards stays detached, because the
+ * importer never revisits a post it did not just create.
+ *
+ * The archive's labels are `Clarity Campaign — Wk1: The Problem` and its siblings, so a workspace
+ * importing it gains one campaign per week rather than one per campaign. That is what the file says,
+ * and splitting a label on its dash would be this importer inventing a vocabulary nobody typed.
  *
  * This is not `db:seed`. That invents demo data for an empty workspace; this restores real
  * content the user wrote.
@@ -72,8 +90,8 @@ export function importCampaignArchive(
 
   const stamp = new Date().toISOString();
   const insertPost = db.prepare(
-    `INSERT INTO signal_posts(id,text,date,time,format,status,campaign,cta,position,created_at,updated_at)
-     VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO signal_posts(id,text,date,time,format,status,cta,position,created_at,updated_at)
+     VALUES(?,?,?,?,?,?,?,?,?,?)`,
   );
   const insertChannel = db.prepare(
     'INSERT INTO signal_post_channels(post_id, channel) VALUES(?,?)',
@@ -89,13 +107,15 @@ export function importCampaignArchive(
         post.time,
         post.format,
         post.status,
-        post.campaign,
         post.cta,
         post.position,
         stamp,
         stamp,
       );
       for (const channel of post.channels) insertChannel.run(post.id, channel);
+      // The file's campaign name, resolved through the shared list into the join. A blank or
+      // whitespace-only value is a post in no campaign rather than a campaign called nothing.
+      if (post.campaign !== null) writePostCampaigns(db, post.id, [post.campaign]);
     }
     db.exec('COMMIT');
   } catch (error) {

@@ -575,14 +575,14 @@ never opens the editor by accident. The editor can change:
 - Ordered public media URLs
 - Date and time
 - Format and planning status
-- Campaign and call to action
+- Campaigns and call to action
 - Per-platform content, when the post has a channel a provider reaches
 
 Clear the date, or use **Move to unscheduled queue**, to return a post to the queue. Giving a
 queued post a date schedules it in that month's grid. Saving reloads both views from the Signal
 API, so the same post cannot remain in the queue and the calendar at once.
 
-**Duplicate to unscheduled queue** copies the post's content, media, campaign, channels, format,
+**Duplicate to unscheduled queue** copies the post's content, media, campaigns, channels, format,
 CTA, and posting time into a new draft with no date. The original is left where it is, including
 any publication or delivery history — those records are not copied. **Suggest next open slot**
 then proposes the next date at that time that the Signal schedule does not already occupy. Nothing
@@ -697,6 +697,75 @@ already had:
 
 In both cases the figures on screen are the last ones the provider gave. A failed refresh never
 replaces a good number with a zero or with a blank.
+
+#### Campaigns
+
+Campaigns group Signal posts the way categories group projects. A post can carry as many as it needs —
+the campaign and the week inside it, for instance — and every post shares one workspace list, so the
+same campaign always means the same thing. Buffer calls this idea tags; here tags label tasks, so
+Signal has its own word for it.
+
+To put a post in a campaign:
+
+1. Open the post from the queue or the grid.
+2. Under **Campaigns**, type a name and press <kbd>Enter</kbd>, type a comma, or select **Add**.
+3. Repeat for each campaign. Names already in use appear as suggestions while you type.
+4. Remove one with the **×** beside its chip, or press <kbd>Backspace</kbd> in an empty campaign
+   field to remove the last one.
+5. Select **Save post**. Campaigns are applied when the post is saved, and a name that is new to the
+   workspace is created then.
+
+Capitalisation and extra spaces do not make a second campaign: `Clarity Campaign` typed on one post
+and `clarity campaign` typed on another are the same campaign, listed under whichever spelling was
+used first.
+
+**Settings › Signal campaigns** is where the list itself is managed. It shows every campaign beside
+how many posts carry it, and lets you add, rename, and delete one:
+
+- **Renaming** reaches every post at once, because the name lives on the campaign rather than on the
+  posts. There is nothing to repeat per post.
+- **Deleting** only removes the label. Every post that carried it stays exactly where it was,
+  scheduled as it was, and simply reads under **No campaign** afterwards. When posts are attached you
+  are told how many before anything happens, and the confirmation says the posts are not deleted.
+
+Posts you have never given a campaign are not hidden anywhere. They are grouped under **No campaign**,
+which is a group you can also ask for directly in the filters below.
+
+#### Campaign figures
+
+Below the planner, **Campaign figures** adds up what the platforms counted for each campaign: the same
+four numbers — **views**, **likes**, **comments**, and **shares** — summed across the deliveries of
+the posts in that campaign, with a compact daily trend under them.
+
+Nothing here goes and looks. These are the figures a post's own **Refresh figures** has already
+stored, so opening this panel, or moving a filter, asks the provider nothing. To fetch new numbers,
+open a post and refresh its figures there.
+
+Every campaign says how many of its deliveries are measured beside its total — *3 of 5 deliveries
+measured* — because a total over five deliveries where three carry numbers is a true statement about
+three of them. A campaign with nothing measured yet says so in words and shows no numbers at all,
+rather than a row of zeros: a zero would mean nobody watched, and what is true is that nobody has
+looked.
+
+Four filters narrow the panel, and each one stays in the address, so a comparison can be
+bookmarked or shared and a reload lands on the same answer:
+
+- **Campaigns.** Select as many as you like. Several are read as *or* — a post in any of them is
+  counted — and each is reported only under the campaigns you selected. **No campaign** is one of the
+  choices, so unclassified posts can be looked at directly.
+- **Channels** and **Accounts.** The same *or*, over the channels and provider accounts this
+  workspace has actually delivered to. The lists do not shrink as you select from them.
+- **From** and **To.** A date range over the posts' own scheduled dates. It asks *which posts*, not
+  *which days*: a post scheduled inside the range brings its whole measured history with it, so a
+  total is never half a post's numbers. A post still in the unscheduled queue has no date and so is
+  in no range.
+
+**Clear filters** resets all four at once and leaves the month the planner is showing exactly where
+it was.
+
+The daily trend is one bar per day the provider snapshotted, and each bar is what that day *added*
+rather than a running total. **days of history** under it opens the same days as a table, with all
+four figures, so the trend reads the same way without relying on the bars.
 
 #### Editing a post you have already sent
 
@@ -869,8 +938,7 @@ each with its own icon and count. They are never mixed into one list, because th
 same kind of thing: one is content going out, the other is work coming due.
 
 - A **scheduled post** shows its time, whether it is a draft, scheduled, or published, what kind
-  of piece it is, the text itself, the channels it goes out on, and the campaign it belongs to if
-  it has one. Each channel shows its initials as well as its colour, so the channel is readable
+  of piece it is, the text itself, the channels it goes out on, and every campaign it belongs to. Each channel shows its initials as well as its colour, so the channel is readable
   without relying on being able to tell the colours apart.
 - A **task deadline** shows whether it is due or complete, is marked **Overdue** when it is, names
   the project and client, and its title is a link that opens the task on the Status board.
@@ -905,8 +973,9 @@ Removal works differently for each kind of record:
 | Task | Delete. Its checklist items, tag links, and dependency links go with it. |
 | Tag | Delete from Settings. It is removed from every task carrying it; no task is deleted. |
 | Category | Delete from Settings. It is removed from every project carrying it; no project is deleted. |
+| Signal campaign | Delete from Settings. It is removed from every post carrying it; no post is deleted, and each one keeps its date and its planning status. |
 
-Every removal asks for confirmation first — except a tag no task is using, or a category no project is using, which have nothing to lose — and none of them touch Google Drive. Deleting a project or task in the application leaves its Drive folders and files exactly as they are — remove those in Google Drive yourself if you want them gone. The project detail page says so beside its delete button, and the [Files](#files) page repeats it above every listing.
+Every removal asks for confirmation first — except a tag no task is using, a category no project is using, or a Signal campaign no post is using, which have nothing to lose — and none of them touch Google Drive. Deleting a project or task in the application leaves its Drive folders and files exactly as they are — remove those in Google Drive yourself if you want them gone. The project detail page says so beside its delete button, and the [Files](#files) page repeats it above every listing.
 
 Deleting cannot be undone from inside the application, and neither can merging two clients.
 Recover a mistake by restoring a database backup, as described in
@@ -919,6 +988,7 @@ Settings contains, in the order it reads:
 - Google Drive connection and root-folder setup
 - **Project categories** — every category in the workspace, with how many projects carry it, and the only place a category is renamed or deleted
 - **Task tags** — every tag in the workspace, with how many tasks carry it, and the only place a tag is deleted
+- **Signal campaigns** — every campaign in the workspace, with how many posts carry it, and the only place a campaign is renamed or deleted
 - Sidebar branding — the mark, title, subtitle, tagline, colours, and logo shown in the left navigation
 - The current application version
 - Detected local timezone
@@ -926,7 +996,7 @@ Settings contains, in the order it reads:
 
 On a wide screen these sit in two columns: the connection and the labels on the left, the sidebar's
 appearance and the rest on the right. Each column is its own stack, so a card that grows — Drive as
-you connect it, a validation message appearing, a long list of categories — moves only the cards
+you connect it, a validation message appearing, a long list of campaigns — moves only the cards
 under it in the same column and never leaves a blank strip beside it. A narrower screen shows one
 column, and the cards read top to bottom in the order listed above.
 

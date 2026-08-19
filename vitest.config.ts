@@ -56,16 +56,16 @@ export default defineConfig({
       // this branch, floored to a whole percent; a round number would be a target rather than
       // a baseline, and this way a drop reads as a drop.
       thresholds: {
-        // 99.09 statements / 95.97 branches / 100 functions / 100 lines
-        'shared/**': { statements: 99, branches: 95, functions: 100, lines: 100 },
-        // 92.19 statements / 85.52 branches / 95.29 functions / 93.49 lines
+        // 99.20 statements / 96.21 branches / 100 functions / 100 lines
+        'shared/**': { statements: 99, branches: 96, functions: 100, lines: 100 },
+        // 92.42 statements / 85.68 branches / 95.51 functions / 93.70 lines
         '{server,e2e}/**': { statements: 92, branches: 85, functions: 95, lines: 93 },
-        // 81.12 statements / 79.83 branches / 81.23 functions / 82.56 lines. One block in
-        // `ImportView.tsx` renders on some runs and not others, which is worth about 0.65 of a
-        // point, so a floor is only raised where the measurement clears it by more than that: the
-        // gate measures the suite rather than the coin flip. Statements and functions are inside
-        // that margin on this branch and so stay where they were.
-        'client/src/**': { statements: 80, branches: 79, functions: 80, lines: 82 },
+        // 82.06–82.13 statements / 80.41–80.85 branches / 82.42–82.54 functions / 83.52–83.58 lines,
+        // measured over two runs. One block in `ImportView.tsx` renders on some runs and not others,
+        // which is worth about 0.65 of a point, so a floor is only raised where the measurement
+        // clears it by more than that: the gate measures the suite rather than the coin flip.
+        // Branches lands inside that margin of the next whole percent and so stays where it was.
+        'client/src/**': { statements: 81, branches: 79, functions: 81, lines: 82 },
       },
     },
     projects: [

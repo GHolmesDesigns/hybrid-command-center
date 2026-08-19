@@ -91,11 +91,32 @@ CREATE TABLE IF NOT EXISTS drive_steps (
 -- Signal Campaign's schedule: the authoritative store for planned content (decision 5.7).
 -- The date column is a YYYY-MM-DD value in local time, never an instant, and NULL means the
 -- post is in the unscheduled queue rather than on any day. See shared/signal.ts for the rule.
+--
+-- The campaign column is frozen. It held one nullable free-text campaign-and-week label per post
+-- until signal_campaigns replaced it with a normalized join; backfillSignalCampaigns below reads it
+-- once into that join, and from then on nothing in this app reads it for behaviour and nothing
+-- writes it. It is kept rather than dropped for two reasons: this module is additive by design
+-- (see applyAdditiveMigrations), so removing a column means a full table rebuild and is its own
+-- decision; and while it is here the backfill stays auditable and reversible, because what each
+-- post used to say is still on the row that says it.
 CREATE TABLE IF NOT EXISTS signal_posts (
   id TEXT PRIMARY KEY, text TEXT NOT NULL, date TEXT, time TEXT NOT NULL DEFAULT '09:00',
   format TEXT NOT NULL DEFAULT 'TEXT', status TEXT NOT NULL DEFAULT 'DRAFT', campaign TEXT,
   cta TEXT NOT NULL DEFAULT 'NONE', position INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+-- Signal campaigns: the shared vocabulary a post's content belongs to, modelled exactly as tags
+-- and categories are one level up -- a name-unique row here and a join below, so a post can carry
+-- several, renaming one is a single write that reaches every post, and deleting one detaches it
+-- without touching a post. COLLATE NOCASE is what makes the shared normalisation rule in
+-- shared/types.ts enforceable rather than advisory: two spellings of one name cannot both exist.
+CREATE TABLE IF NOT EXISTS signal_campaigns (
+  id TEXT PRIMARY KEY, name TEXT NOT NULL COLLATE NOCASE UNIQUE, color TEXT
+);
+CREATE TABLE IF NOT EXISTS signal_post_campaigns (
+  post_id TEXT NOT NULL REFERENCES signal_posts(id) ON DELETE CASCADE,
+  campaign_id TEXT NOT NULL REFERENCES signal_campaigns(id) ON DELETE CASCADE,
+  PRIMARY KEY (post_id, campaign_id)
 );
 -- Channels are a normalized join rather than a packed column, for the same reason tags and
 -- categories are: one row per channel a post goes out on, queryable without parsing a string.
@@ -250,6 +271,10 @@ CREATE INDEX IF NOT EXISTS idx_integration_events_correlation ON integration_eve
 -- dated rows order by day, and the NULL dates group together at the front.
 CREATE INDEX IF NOT EXISTS idx_signal_posts_date ON signal_posts(date, time);
 CREATE INDEX IF NOT EXISTS idx_signal_post_channels_channel ON signal_post_channels(channel);
+-- The campaign side of the join: what a campaign's deletion has to detach, what its post count
+-- counts, and what the segmented analytics read walks. The post side is the primary key's prefix.
+CREATE INDEX IF NOT EXISTS idx_signal_post_campaigns_campaign
+  ON signal_post_campaigns(campaign_id);
 -- One layer per platform and one per account, enforced over the coalesced key because the platform
 -- layer's account_id is NULL and SQLite's PRIMARY KEY would not have refused a duplicate.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_signal_post_variants_layer
@@ -446,6 +471,78 @@ export function backfillProjectActivity(db: Db): number {
   return Number(result.changes);
 }
 
+/**
+ * Turns the free text in `signal_posts.campaign` into `signal_campaigns` rows and the join that
+ * attaches them, and returns how many campaigns it created and how many posts it attached.
+ *
+ * ## What resolves to what
+ *
+ * Names are normalised by the one shared rule (`normalizeSignalCampaignName`, which is
+ * `normalizeTagName`): the ends trimmed and runs of inner whitespace collapsed. Matching is
+ * case-insensitive, enforced by the `COLLATE NOCASE` uniqueness on the name column, so two
+ * spellings of one campaign become one row. **The spelling kept is the one the earliest post
+ * carrying it used** — ordered by `created_at` then `id`, which is deterministic and reproducible
+ * from the rows themselves. `CAMPAIGN` on a post written in March and `Campaign` on one written in
+ * May resolve to a single campaign named `CAMPAIGN`, and both posts are attached to it.
+ *
+ * The archive's labels are `Clarity Campaign — Wk1: The Problem` and its siblings, so a workspace
+ * carrying it gains one campaign per week rather than one per campaign. That is deliberately not
+ * unpicked here: splitting on a dash would be this migration inventing a vocabulary the user never
+ * typed, where keeping the label whole preserves exactly what they wrote. A post can belong to
+ * several campaigns now, so anyone who wants the coarser grouping can add it and keep the week.
+ *
+ * ## Why it runs on every boot
+ *
+ * The same reason `backfillProjectActivity` does: the tables are created by one statement and
+ * filled by another, so a crash between them would otherwise leave those posts unclassified for
+ * good. Idempotent — it reads only posts that have a campaign string and no join row yet, so a
+ * second run writes nothing, and a post deliberately detached afterwards is **not** re-attached,
+ * because the detach left a row that no longer has the string's campaign among its own.
+ *
+ * A post whose campaign column is empty or whitespace is left alone: that is a post with no
+ * campaign, not a post with a campaign called nothing.
+ */
+export function backfillSignalCampaigns(db: Db): { campaigns: number; attachments: number } {
+  const pending = db
+    .prepare(
+      `SELECT id, campaign FROM signal_posts
+        WHERE campaign IS NOT NULL AND TRIM(campaign) <> ''
+          AND id NOT IN (SELECT post_id FROM signal_post_campaigns)
+        ORDER BY created_at, id`,
+    )
+    .all() as unknown as { id: string; campaign: string }[];
+  if (pending.length === 0) return { campaigns: 0, attachments: 0 };
+
+  // The lookup and both writes are one transaction: a post attached to a campaign that was not
+  // created, or a campaign created with nothing attached to it, would be a half-migrated row.
+  return transaction(db, () => {
+    const find = db.prepare('SELECT id FROM signal_campaigns WHERE name=? COLLATE NOCASE');
+    const insertCampaign = db.prepare(
+      'INSERT INTO signal_campaigns(id,name,color) VALUES(?,?,NULL)',
+    );
+    const attach = db.prepare(
+      'INSERT OR IGNORE INTO signal_post_campaigns(post_id,campaign_id) VALUES(?,?)',
+    );
+    let campaigns = 0;
+    let attachments = 0;
+    for (const post of pending) {
+      // The rule is one line of `shared/types.ts`, restated here rather than imported: this module
+      // is the schema and deliberately imports nothing from `shared/`, and the rule is a trim and a
+      // whitespace collapse. `sameTagName`'s case-insensitivity is the `COLLATE NOCASE` lookup.
+      const name = post.campaign.trim().replace(/\s+/g, ' ');
+      if (!name) continue;
+      let campaignId = (find.get(name) as { id: string } | undefined)?.id;
+      if (!campaignId) {
+        campaignId = crypto.randomUUID();
+        insertCampaign.run(campaignId, name);
+        campaigns += 1;
+      }
+      attachments += Number(attach.run(post.id, campaignId).changes);
+    }
+    return { campaigns, attachments };
+  });
+}
+
 export function createDb(
   filename = config.databasePath,
   onMigration?: (statements: readonly string[]) => void,
@@ -459,6 +556,7 @@ export function createDb(
   db.exec(tableSchema);
   const applied = applyAdditiveMigrations(db);
   backfillProjectActivity(db);
+  backfillSignalCampaigns(db);
   db.exec(indexSchema);
   db.exec('PRAGMA optimize');
   onMigration?.(applied);

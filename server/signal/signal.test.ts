@@ -17,6 +17,7 @@ import {
   suggestPostSlot,
   updatePost,
 } from './service.ts';
+import { listCampaigns } from './campaigns.ts';
 import {
   SIGNAL_RANGE_LIMIT,
   isSignalPostInRange,
@@ -135,23 +136,59 @@ describe('writing posts', () => {
     const created = add({
       date: '2026-09-14',
       time: '13:00',
-      campaign: 'Wk4',
+      campaigns: ['Wk4'],
       status: 'SCHEDULED',
     });
     const patched = updatePost(db, created.id, { status: 'PUBLISHED' });
     expect(patched).toMatchObject({
       date: '2026-09-14',
       time: '13:00',
-      campaign: 'Wk4',
       status: 'PUBLISHED',
       text: created.text,
     });
+    expect(patched.campaigns.map((campaign) => campaign.name)).toEqual(['Wk4']);
   });
 
   it('distinguishes clearing a nullable field from leaving it alone', () => {
-    const created = add({ campaign: 'Wk4', date: '2026-09-14' });
-    expect(updatePost(db, created.id, { text: 'Reworded' }).campaign).toBe('Wk4');
-    expect(updatePost(db, created.id, { campaign: null }).campaign).toBeNull();
+    const created = add({ date: '2026-09-14', time: '13:00' });
+    expect(updatePost(db, created.id, { text: 'Reworded' }).date).toBe('2026-09-14');
+    expect(updatePost(db, created.id, { date: null }).date).toBeNull();
+  });
+
+  /**
+   * Campaigns are a join and behave like the channel and media joins: a patch that names them
+   * replaces the set, a patch that omits them leaves it alone, and an empty array is the deliberate
+   * answer *this post belongs to none* rather than a request to leave it as it was.
+   */
+  it('replaces campaigns on patch, leaves them alone when omitted, and takes an empty set', () => {
+    const created = add({ campaigns: ['Clarity Campaign'] });
+    expect(created.campaigns.map((campaign) => campaign.name)).toEqual(['Clarity Campaign']);
+
+    const both = updatePost(db, created.id, { campaigns: ['Clarity Campaign', 'Wk1'] });
+    expect(both.campaigns.map((campaign) => campaign.name)).toEqual(['Clarity Campaign', 'Wk1']);
+    expect(updatePost(db, created.id, { text: 'Reworded' }).campaigns).toHaveLength(2);
+    expect(updatePost(db, created.id, { campaigns: [] }).campaigns).toEqual([]);
+    // Detaching a post never removes the campaign from the workspace's own list.
+    expect(listCampaigns(db).map((campaign) => campaign.name)).toEqual(['Clarity Campaign', 'Wk1']);
+  });
+
+  it('resolves two spellings of one campaign to a single row, keeping the first', () => {
+    const first = add({ campaigns: ['Clarity Campaign'] });
+    const second = add({ campaigns: ['CLARITY campaign'] });
+    expect(second.campaigns.map((campaign) => campaign.name)).toEqual(['Clarity Campaign']);
+    expect(second.campaigns[0]!.id).toBe(first.campaigns[0]!.id);
+    expect(listCampaigns(db)).toHaveLength(1);
+  });
+
+  it('refuses more campaigns than a post may carry, and deduplicates what it takes', () => {
+    const created = add({ campaigns: ['Wk1', 'wk1  ', ' Wk1'] });
+    expect(created.campaigns.map((campaign) => campaign.name)).toEqual(['Wk1']);
+    expect(() =>
+      signalPostInput.parse({
+        text: 'Too many',
+        campaigns: Array.from({ length: 13 }, (_, index) => `Campaign ${index}`),
+      }),
+    ).toThrow();
   });
 
   it('takes the channel and media rows with the post when it is deleted', () => {
@@ -180,7 +217,7 @@ describe('writing posts', () => {
       time: '13:00',
       format: 'ARTICLE',
       status: 'PUBLISHED',
-      campaign: 'Wk4',
+      campaigns: ['Wk4'],
       cta: 'SOFT',
     });
     db.prepare(
@@ -214,9 +251,11 @@ describe('writing posts', () => {
       time: '13:00',
       format: 'ARTICLE',
       status: 'DRAFT',
-      campaign: 'Wk4',
       cta: 'SOFT',
     });
+    // The duplicate joins the campaigns the original belongs to rather than creating second rows.
+    expect(copy.campaigns.map((campaign) => campaign.name)).toEqual(['Wk4']);
+    expect(copy.campaigns[0]!.id).toBe(source.campaigns[0]!.id);
     expect(listQueue(db).map((item) => item.id)).toEqual([copy.id]);
     expect(getPost(db, source.id)).toMatchObject({
       date: '2026-09-14',
@@ -463,7 +502,7 @@ describe('the HTTP boundary', () => {
         mediaUrls: ['https://cdn.example.com/launch.jpg'],
         date: '2026-09-14',
         time: '09:00',
-        campaign: 'Wk4',
+        campaigns: ['Wk4'],
         status: 'SCHEDULED',
       })
       .expect(201);
@@ -477,9 +516,9 @@ describe('the HTTP boundary', () => {
       mediaUrls: ['https://cdn.example.com/launch.jpg'],
       date: null,
       time: '09:00',
-      campaign: 'Wk4',
       status: 'DRAFT',
     });
+    expect(copy.body.campaigns.map((c: { name: string }) => c.name)).toEqual(['Wk4']);
     expect(copy.body.id).not.toBe(created.body.id);
 
     const suggestion = await request(app())

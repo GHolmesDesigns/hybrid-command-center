@@ -29,6 +29,7 @@ import { BrandMark, DriveBadge } from './Primitives';
 import { PageHead } from './Shell';
 import { brandStyle } from './ui-shared';
 import { CategoriesCard } from './CategoriesCard';
+import { SignalCampaignsCard } from './SignalCampaignsCard';
 import { TagsCard } from './TagsCard';
 
 const COLOR_LABEL: Record<BrandingColorField, string> = {
@@ -237,6 +238,9 @@ export function SettingsView({
             flash={flash}
           />
           <TagsCard tags={tags} tasks={tasks} refresh={refresh} flash={flash} />
+          {/* Beside the other two label lists, because it is the same kind of thing one module over:
+              campaigns label Signal posts, categories label projects, tags label tasks. */}
+          <SignalCampaignsCard flash={flash} />
         </div>
         <div className="settings-column">
           <section className="panel settings-card">

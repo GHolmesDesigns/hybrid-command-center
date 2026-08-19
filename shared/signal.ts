@@ -1,4 +1,5 @@
 import { mixHex } from './contrast.ts';
+import { normalizeTagName, sameTagName } from './types.ts';
 
 /**
  * Signal Campaign: the scheduled-content vocabulary the API, the planner, and the calendar
@@ -349,6 +350,53 @@ export const SIGNAL_CTA_LABEL: Record<SignalCta, string> = {
   CONVERSION: 'Conversion',
 };
 
+/**
+ * A Signal campaign: the name a run of content belongs to.
+ *
+ * Buffer calls this concept tags; this repository reserves tags for tasks, so the same idea is
+ * modelled here under Signal's own word. It is a label in exactly the sense `Tag` and `Category`
+ * are — a shared workspace list, attached through a join, matched case-insensitively — which is why
+ * it borrows their spelling rule below rather than inventing a second one.
+ *
+ * A post can carry several. That is the difference from the single free-text column campaigns
+ * replaced: a piece of content belongs to a campaign *and* to the week inside it, and one column
+ * could only ever hold whichever of the two happened to be typed.
+ */
+export interface SignalCampaign {
+  id: string;
+  name: string;
+  color?: string;
+}
+
+/**
+ * Campaign names follow the one shared rule in `shared/types.ts`, aliased so call sites read in
+ * their own terms — the same construction `normalizeCategoryName` uses.
+ *
+ * Trims the ends, collapses runs of inner whitespace, preserves case for display, and ignores case
+ * when comparing. `Clarity Campaign` typed on one post and `clarity campaign` typed on another are
+ * one campaign, which is what the `COLLATE NOCASE` uniqueness on `signal_campaigns.name` enforces.
+ */
+export const normalizeSignalCampaignName = normalizeTagName;
+export const sameSignalCampaignName = sameTagName;
+
+/** The longest campaign name the API stores. The same bound tags and categories use. */
+export const SIGNAL_CAMPAIGN_NAME_MAX = 60;
+
+/** How many campaigns one post may carry. A plan belongs to a few things, not to a taxonomy. */
+export const SIGNAL_POST_CAMPAIGN_MAX = 12;
+
+/** A campaign beside how many posts carry it, which is what the management list shows. */
+export interface SignalCampaignSummary extends SignalCampaign {
+  postCount: number;
+}
+
+/**
+ * Campaign order, wherever one is listed: case- and accent-insensitive by name, tie-broken by id
+ * so two spellings that compare equal cannot swap places between renders.
+ */
+export const compareSignalCampaigns = (a: SignalCampaign, b: SignalCampaign) =>
+  a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) || a.id.localeCompare(b.id);
+
 /** One planned piece of content. */
 export interface SignalPost {
   id: string;
@@ -363,8 +411,13 @@ export interface SignalPost {
   time: string;
   format: SignalFormat;
   status: SignalStatus;
-  /** Free text naming the campaign and week this belongs to. Null when it stands alone. */
-  campaign: string | null;
+  /**
+   * The campaigns this post belongs to, name-ordered. Zero or more, from the shared workspace
+   * list, so the same campaign on two posts is the same row and renaming it renames it on both.
+   * Always present, and empty for a post that belongs to none — which is **No campaign** wherever
+   * campaigns are grouped, rather than a missing value for a reader to guess at.
+   */
+  campaigns: SignalCampaign[];
   cta: SignalCta;
   /** Order within the unscheduled queue. Meaningless once the post has a date. */
   position: number;

@@ -33,6 +33,7 @@ import {
   signalChannelPresentation,
   signalMediaKind,
   signalTextHasLink,
+  type SignalCampaignSummary,
   type SignalChannel,
   type SignalCta,
   type SignalFormat,
@@ -46,9 +47,10 @@ import {
   shiftCalendarAnchor,
   type CalendarViewMode,
 } from '../../../shared/calendar';
-import { signalChannelStyle } from './ui-shared';
+import { signalChannelStyle, type TagDraft } from './ui-shared';
 import { Empty } from './Primitives';
-import { Select } from './FormControls';
+import { Select, TagChipInput } from './FormControls';
+import { SignalCampaignAnalyticsPanel } from './SignalCampaignAnalytics';
 import { PageHead } from './Shell';
 import {
   deliveryModeFor,
@@ -105,7 +107,14 @@ type Draft = {
   time: string;
   format: SignalFormat;
   status: SignalStatus;
-  campaign: string;
+  /**
+   * The campaigns the draft carries, as chips.
+   *
+   * A chip typed into the form has a name and no id yet, which is exactly the shape
+   * `TagChipInput` works in and the reason the save sends **names**: the server resolves each one
+   * against the shared list, so a campaign is never created by a save that then fails.
+   */
+  campaigns: TagDraft[];
   cta: SignalCta;
 };
 
@@ -148,7 +157,7 @@ const draftFor = (post: SignalPost): Draft => ({
   time: post.time,
   format: post.format,
   status: post.status,
-  campaign: post.campaign ?? '',
+  campaigns: post.campaigns,
   cta: post.cta,
 });
 
@@ -483,12 +492,15 @@ function Post({
 
 function Editor({
   post,
+  campaigns,
   close,
   saved,
   opened,
   removed,
 }: {
   post: SignalPost;
+  /** The workspace's campaigns, for the chip input to suggest from. Loaded once by the planner. */
+  campaigns: SignalCampaignSummary[];
   close: () => void;
   saved: (post: SignalPost) => Promise<void>;
   opened: (post: SignalPost) => Promise<void>;
@@ -836,7 +848,9 @@ function Editor({
         ...draft,
         text: draft.text.trim(),
         date: draft.date || null,
-        campaign: draft.campaign.trim() || null,
+        // Names, so a campaign typed here is resolved or created inside the same transaction as the
+        // post. An empty array is *this post belongs to none*, which is why it is always sent.
+        campaigns: draft.campaigns.map((campaign) => campaign.name),
       });
       await saved(next);
     } catch (reason) {
@@ -1205,14 +1219,16 @@ function Editor({
               onChange={(event) => setDraft({ ...draft, cta: event.target.value as SignalCta })}
             />
           </div>
-          <label>
-            Campaign
-            <input
-              value={draft.campaign}
-              maxLength={200}
-              onChange={(event) => setDraft({ ...draft, campaign: event.target.value })}
-            />
-          </label>
+          {/* Campaigns are chips from the shared list, not free text: a post belongs to a campaign
+              and to the week inside it, and the same run typed twice has to be the same campaign or
+              nothing can be grouped by it. Typing a new name creates it when the post is saved. */}
+          <TagChipInput
+            label="Campaigns"
+            noun="campaign"
+            chosen={draft.campaigns}
+            available={campaigns}
+            onChange={(next) => setDraft({ ...draft, campaigns: next })}
+          />
           {/* Tailored from the post as it is saved, not as it is being typed: a platform override
               of a caption that has not been written yet would be an override of nothing. */}
           {hasTailorablePlatform && (
@@ -1460,6 +1476,13 @@ export function SignalView() {
   const bounds = useMemo(() => calendarViewRange(view, anchor), [view, anchor]);
   const [posts, setPosts] = useState<SignalPost[]>([]);
   const [queue, setQueue] = useState<SignalPost[]>([]);
+  /**
+   * The workspace's campaigns, for the editor's chip input to suggest from.
+   *
+   * Loaded here rather than in the editor so opening a post costs no extra request, and reloaded
+   * with the range so a campaign typed into one post is offered on the next one.
+   */
+  const [campaigns, setCampaigns] = useState<SignalCampaignSummary[]>([]);
   const [editing, setEditing] = useState<SignalPost | null>(null);
   const [idea, setIdea] = useState('');
   const [loading, setLoading] = useState(true);
@@ -1488,13 +1511,15 @@ export function SignalView() {
     setError('');
     const { from, to } = bounds;
     try {
-      const [range, nextQueue] = await Promise.all([
+      const [range, nextQueue, nextCampaigns] = await Promise.all([
         api<SignalRange>(`/signal/posts?from=${from}&to=${to}`),
         api<SignalPost[]>('/signal/queue'),
+        api<SignalCampaignSummary[]>('/signal/campaigns'),
       ]);
       setPosts(range.posts);
       setTruncated(range.truncated);
       setQueue(nextQueue);
+      setCampaigns(nextCampaigns);
     } catch (reason) {
       setError((reason as Error).message);
     } finally {
@@ -1745,10 +1770,16 @@ export function SignalView() {
           )}
         </section>
       </div>
+      {/* Below the planner, because it is what happened rather than what is planned — and because it
+          reads the figures a post's own panel already stored, so it belongs after the posts and not
+          in front of them. `healthKey` is bumped by every save here, which is also every edit that
+          can move a post between campaigns. */}
+      <SignalCampaignAnalyticsPanel reloadKey={healthKey} />
       {editing && (
         <Editor
           key={editing.id}
           post={editing}
+          campaigns={campaigns}
           close={closeEditor}
           saved={refreshed}
           opened={async (post) => {

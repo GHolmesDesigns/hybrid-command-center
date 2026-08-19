@@ -127,7 +127,13 @@ function PostRow({ post }: { post: SignalPost }) {
             })}
           </ul>
         )}
-        {post.campaign && <span className="cal-campaign">{post.campaign}</span>}
+        {/* Every campaign the post belongs to, not the first one: a post carries a campaign and the
+            week inside it, and showing one of the two would name the wrong half half the time. */}
+        {post.campaigns.map((campaign) => (
+          <span className="cal-campaign" key={campaign.id}>
+            {campaign.name}
+          </span>
+        ))}
       </div>
     </li>
   );
