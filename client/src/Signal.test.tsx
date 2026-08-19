@@ -388,12 +388,15 @@ describe('Signal planner', () => {
       caption: post.text,
       scheduledInstant: '2026-09-14T13:00:00.000Z',
       timezone: 'America/New_York',
-      targets: [{ channel: 'x', platform: 'twitter', accountId: 4, handle: '@gholmes' }],
+      targets: [
+        { channel: 'x', platform: 'twitter', accountId: 4, handle: '@gholmes', mode: 'AUTOMATIC' },
+      ],
       channels: [
         {
           channel: 'x',
           platform: 'twitter',
           kind: 'POST',
+          mode: 'AUTOMATIC',
           status: 'READY',
           accountId: 4,
           handle: '@gholmes',
@@ -421,6 +424,7 @@ describe('Signal planner', () => {
           channel: 'blog',
           platform: null,
           kind: 'POST',
+          mode: 'UNSUPPORTED',
           status: 'NOT_AVAILABLE',
           refusals: [],
           warnings: [
@@ -441,6 +445,10 @@ describe('Signal planner', () => {
       timezone: 'America/New_York',
       sentCaption: post.text,
       sentChannels: ['x'],
+      targets: [
+        { channel: 'x', platform: 'twitter', accountId: 4, handle: '@gholmes', mode: 'AUTOMATIC' },
+      ],
+      checkAttempts: 0,
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
     };
@@ -498,6 +506,10 @@ describe('Signal planner', () => {
       timezone: 'America/New_York',
       sentCaption: post.text,
       sentChannels: ['x'],
+      targets: [
+        { channel: 'x', platform: 'twitter', accountId: 4, handle: '@gholmes', mode: 'AUTOMATIC' },
+      ],
+      checkAttempts: 0,
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
     };
@@ -520,7 +532,9 @@ describe('Signal planner', () => {
     await openSignal();
     fireEvent.click(await screen.findByRole('button', { name: 'Edit Schedule this' }));
     fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-09-20' } });
-    fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'SCHEDULED' } });
+    fireEvent.change(screen.getByLabelText('Planning status'), {
+      target: { value: 'SCHEDULED' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Save post' }));
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());

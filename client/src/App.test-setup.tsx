@@ -181,6 +181,7 @@ export const testState = {
   publicationsPayload: [] as SignalPublication[],
   publishSubmitPayload: null as SignalPublication | null,
   publishReconcilePayload: null as SignalPublication | null,
+  publishFinishPayload: null as SignalPublication | null,
   /**
    * The content overrides the composer reads and writes. Held as state rather than answered from a
    * fixture, so a case can assert what a `PUT` stored the way the real route would.
@@ -414,6 +415,9 @@ const respondTo = (url: string, init?: RequestInit) => {
     return (
       testState.publishReconcilePayload ?? reply(400, { error: 'No reconciliation was set up.' })
     );
+  const finishPath = url.match(/\/api\/signal\/publications\/([^/?]+)\/targets\/(\d+)\/finish$/);
+  if (finishPath && method === 'POST')
+    return testState.publishFinishPayload ?? reply(409, { error: 'Nothing to finish here.' });
   const signalPostPath = url.match(/\/api\/signal\/posts\/([^/?]+)$/);
   if (signalPostPath && method === 'PATCH') {
     if (testState.signalMutationError) return reply(400, { error: testState.signalMutationError });
@@ -798,6 +802,7 @@ beforeEach(() => {
   testState.publicationsPayload = [];
   testState.publishSubmitPayload = null;
   testState.publishReconcilePayload = null;
+  testState.publishFinishPayload = null;
   testState.signalVariantsPayload = [];
   testState.signalVariantsError = null;
   testState.clientMergePreviewError = null;

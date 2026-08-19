@@ -37,8 +37,8 @@ test('a scheduled Signal post is previewed and explicitly confirmed before submi
   );
   expect(await before.json()).toEqual([]);
   await preview.getByRole('button', { name: 'Confirm and submit' }).click();
-  await expect(editor.getByRole('region', { name: 'Publishing history' })).toContainText(
-    'SUBMITTED',
+  await expect(editor.getByRole('region', { name: 'Delivery' })).toContainText(
+    'Accepted, not out yet',
   );
-  await expect(editor.getByLabel('Status')).toHaveValue('SCHEDULED');
+  await expect(editor.getByLabel('Planning status')).toHaveValue('SCHEDULED');
 });

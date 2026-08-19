@@ -574,7 +574,7 @@ never opens the editor by accident. The editor can change:
 - One or more channels
 - Ordered public media URLs
 - Date and time
-- Format and status
+- Format and planning status
 - Campaign and call to action
 - Per-platform content, when the post has a channel a provider reaches
 
@@ -628,9 +628,35 @@ back until both are saved, because a preview of unsaved content is a preview of 
 going out.
 
 **Delete** asks for confirmation and then removes a post that has no publication history
-permanently. There is no in-app undo; restore a database backup to recover it. A status of
+permanently. There is no in-app undo; restore a database backup to recover it. A planning status of
 **Published** is your own record that the post went out. Provider delivery uses a separate
 publication record and never changes that status automatically.
+
+#### Planning status and Delivery
+
+The editor keeps two different facts apart, and it says which is which.
+
+**Planning status** — Draft, Scheduled, Published — is yours. It is what you say about the post,
+and nothing the app or a provider does ever writes it.
+
+**Delivery**, below it, is what actually happened, with one row per account the post was sent to.
+Each row carries two things:
+
+- **Mode**, the route that delivery takes, decided before anything is sent. **Automatic
+  publishing** needs nothing from you. **Provider draft** means Post Bridge is holding it and you
+  submit it there. **Manual finish required** means the post reached the platform's own app and you
+  finish it there — the row says which app to open, and **Mark … finished** records that you did.
+  **Unsupported** means nothing was sent at all, which is Blog's permanent answer: publish it
+  yourself and set the planning status to Published.
+- **State**, how far the submission got — *Sending*, *Accepted, not out yet*, *Delivered*, *Partly
+  delivered*, *Not delivered*, *Unconfirmed*, or *Cancelled*. A row reports its own answer where it
+  differs from the submission's, so when two accounts go out and one of them fails, both say so and
+  the failure names its reason.
+
+The app checks with the provider on its own after the scheduled time, waiting longer between each
+check and stopping after six, and the section shows when it last checked and when it will next.
+**Refresh delivery** asks immediately and is always available, including after the automatic checks
+have stopped.
 
 ### Import
 
@@ -967,9 +993,10 @@ whether a link will still resolve when Post Bridge fetches it, or what an extens
 at, and it says so rather than guessing. A result marked **UNCONFIRMED** is never retried
 automatically; inspect Post Bridge before taking another action to avoid a duplicate.
 
-Delivery state does not change the Signal status. After a delivery is confirmed, **Mark published**
-is an explicit user action. Deleting a post with a live provider submission cancels it first;
-publication history then protects the Signal post from deletion so the audit record stays readable.
+Delivery never changes the planning status. **Mark published** is always an explicit user action,
+and **Mark … finished** on a manual-finish delivery records only that one delivery, not the post.
+Deleting a post with a live provider submission cancels it first; publication history then protects
+the Signal post from deletion so the audit record stays readable.
 
 ### The root folder is rejected
 

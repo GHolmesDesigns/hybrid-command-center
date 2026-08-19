@@ -59,7 +59,7 @@ test('platform overrides reach the preview per target and publish through the mo
   await expect(panel).toContainText('First comment: gholmesdesigns.com');
   await expect(panel).toContainText('2099-11-12 at 09:00 in America/New_York');
   await expect(panel).toContainText('2099-11-12T14:00:00.000Z');
-  await expect(panel).toContainText('Sent by the provider');
+  await expect(panel).toContainText('Automatic publishing');
   // The media is listed in order, by its own address. `cdn.example.com` does not resolve from a
   // test machine, so this run also exercises the fallback: a real browser fails the request and the
   // preview says so instead of showing a gap. The `referrerPolicy` attribute is asserted in
@@ -78,11 +78,11 @@ test('platform overrides reach the preview per target and publish through the mo
   await expect(linkedin).not.toContainText('The short version, for X.');
 
   await preview.getByRole('button', { name: 'Confirm and submit' }).click();
-  await expect(editor.getByRole('region', { name: 'Publishing history' })).toContainText(
-    'SUBMITTED',
+  await expect(editor.getByRole('region', { name: 'Delivery' })).toContainText(
+    'Accepted, not out yet',
   );
   // The post's own status is still the user's to set, and the tailored content is still stored.
-  await expect(editor.getByLabel('Status')).toHaveValue('SCHEDULED');
+  await expect(editor.getByLabel('Planning status')).toHaveValue('SCHEDULED');
   const stored = await (await page.request.get(`/api/signal/posts/${postId}/variants`)).json();
   expect(stored).toMatchObject([
     { platform: 'twitter', accountId: null, caption: 'The short version, for X.' },

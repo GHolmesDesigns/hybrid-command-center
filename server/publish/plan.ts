@@ -9,7 +9,6 @@ import {
 } from '../../shared/signal.ts';
 import {
   publishCapabilityFor,
-  publishDeliveryModeFor,
   publishKindSupported,
   publishPlatformFor,
   publishPostKindFor,
@@ -32,7 +31,7 @@ import type {
   PublishChannelReport,
   PublishPreview,
 } from '../../shared/publish.ts';
-import { publishPreviewRefusals } from '../../shared/publish.ts';
+import { deliveryModeForCapability, publishPreviewRefusals } from '../../shared/publish.ts';
 import type { PublishPlatformConfiguration, PublishRequest, PublishTarget } from './provider.ts';
 
 const partsInZone = (instant: Date, zone: string) => {
@@ -296,7 +295,7 @@ function resolveForTarget(
     ...resolved,
     // The effective caption from here on: what the limit is measured against and what is sent.
     caption: publishEffectiveCaption(resolved, capability),
-    deliveryMode: publishDeliveryModeFor(capability.kinds[resolved.postKind]),
+    deliveryMode: deliveryModeForCapability(capability, resolved.postKind),
   };
   return { content, warnings };
 }
@@ -322,6 +321,7 @@ function reportForChannel(
       channel,
       platform: null,
       kind: base.postKind,
+      mode: 'UNSUPPORTED',
       status: 'NOT_AVAILABLE',
       refusals: [],
       warnings: [
@@ -334,6 +334,7 @@ function reportForChannel(
       channel,
       platform: platform ?? null,
       kind: base.postKind,
+      mode: 'UNSUPPORTED',
       status: 'BLOCKED',
       refusals: [
         `${channelLabel} is not answered by the provider capability contract, so nothing can be sent to it. Record it in shared/publish-capabilities.ts before publishing to it.`,
@@ -349,6 +350,9 @@ function reportForChannel(
     channel,
     platform: capability.platform,
     kind: content.postKind,
+    // The resolved kind, not the post's: a placement override changes what the shape is and can
+    // change how it is delivered, so the route is read after the layers resolved.
+    mode: content.deliveryMode,
     status: refusals.length ? 'BLOCKED' : 'READY',
     ...(target ? { accountId: target.id, handle: target.handle || target.name } : {}),
     content,
@@ -476,6 +480,7 @@ export function buildPublishPlan(
       platform: report.platform as string,
       accountId: report.accountId as number,
       handle: report.handle as string,
+      mode: report.mode,
     }));
   // Plan-level only when nothing resolved at all. A channel that resolved and is blocked has
   // already said why, and repeating it here as "nothing resolved" would contradict its own report.

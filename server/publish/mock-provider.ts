@@ -8,6 +8,8 @@ import type {
 export class MockPublishProvider implements PublishProvider {
   readonly available = true;
   readonly submissions: PublishRequest[] = [];
+  /** Every provider id `check` was asked about, so a test can prove a check did not happen. */
+  readonly checks: string[] = [];
   targets: PublishTarget[];
   result: PublishSubmission = { providerPostId: 'mock-publication', state: 'SUBMITTED' };
   failure?: Error;
@@ -22,8 +24,8 @@ export class MockPublishProvider implements PublishProvider {
     if (this.failure) throw this.failure;
     return this.result;
   }
-  async check(_providerPostId: string) {
-    void _providerPostId;
+  async check(providerPostId: string) {
+    this.checks.push(providerPostId);
     return this.result;
   }
   async cancel(_providerPostId: string) {

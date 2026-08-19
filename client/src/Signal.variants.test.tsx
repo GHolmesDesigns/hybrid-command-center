@@ -59,6 +59,7 @@ const report = (
 ): PublishChannelReport => ({
   platform: 'twitter',
   kind: 'POST',
+  mode: 'AUTOMATIC',
   status: 'READY',
   refusals: [],
   warnings: [],
@@ -288,7 +289,7 @@ describe('Signal content variants', () => {
     expect(panel).toHaveTextContent('First comment from the account override');
     expect(panel).toHaveTextContent('2026-09-14 at 09:00 in America/New_York');
     expect(panel).toHaveTextContent('Provider instant: 2026-09-14T13:00:00.000Z');
-    expect(panel).toHaveTextContent('Sent by the provider');
+    expect(panel).toHaveTextContent('Automatic publishing');
 
     // Arrow keys move between targets, and the second target answers for itself.
     fireEvent.keyDown(tabs[0] as HTMLElement, { key: 'ArrowRight' });
@@ -296,7 +297,7 @@ describe('Signal content variants', () => {
     expect(panel).toHaveTextContent('The long form post');
     expect(panel).toHaveTextContent('Title: A title');
     expect(panel).toHaveTextContent('reel or short');
-    expect(panel).toHaveTextContent('Finished by hand in the platform app');
+    expect(panel).toHaveTextContent('Manual finish required');
     expect(panel).toHaveTextContent('Synthetic-media disclosure: included');
     expect(panel).toHaveTextContent('YouTube limits the title to 100 characters');
     // A blocked target blocks the send, whichever tab happens to be open.

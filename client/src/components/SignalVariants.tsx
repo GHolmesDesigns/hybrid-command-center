@@ -3,7 +3,6 @@ import { AlertTriangle, ExternalLink, FileText, Play, RefreshCw } from 'lucide-r
 import { SIGNAL_CHANNEL_LABEL, signalMediaKind, type SignalPost } from '../../../shared/signal';
 import {
   publishCapabilityFor,
-  PUBLISH_DELIVERY_MODE_LABEL,
   PUBLISH_POST_KIND_LABEL,
   type PublishPlatform,
   type PublishPlatformCapability,
@@ -19,6 +18,7 @@ import {
   type PublishVariantRecord,
 } from '../../../shared/publish-variants';
 import {
+  DELIVERY_MODE_LABEL,
   PUBLISH_CHANNEL_STATUS_LABEL,
   type PublishChannelReport,
   type PublishPreview,
@@ -465,8 +465,7 @@ function PreviewPanel({
       </p>
       {content && (
         <p className="signal-preview-mode">
-          {PUBLISH_POST_KIND_LABEL[content.postKind]} ·{' '}
-          {PUBLISH_DELIVERY_MODE_LABEL[content.deliveryMode]}
+          {PUBLISH_POST_KIND_LABEL[content.postKind]} · {DELIVERY_MODE_LABEL[content.deliveryMode]}
         </p>
       )}
       {preview.scheduledInstant && (

@@ -129,16 +129,25 @@ CREATE TABLE IF NOT EXISTS signal_post_variants (
   updated_at TEXT NOT NULL,
   CHECK(account_id IS NULL OR account_id > 0)
 );
+-- Delivery, which is a different fact from the planning status on signal_posts. checked_at is
+-- the last reconciliation of either kind and check_attempts is the automatic budget alone, so a
+-- manual refresh can update what the planner shows without spending a scheduled check.
 CREATE TABLE IF NOT EXISTS signal_publications (
   id TEXT PRIMARY KEY, post_id TEXT NOT NULL REFERENCES signal_posts(id) ON DELETE RESTRICT,
   state TEXT NOT NULL, provider TEXT NOT NULL, provider_post_id TEXT,
   idempotency_key TEXT NOT NULL UNIQUE, scheduled_instant TEXT NOT NULL, timezone TEXT NOT NULL,
   sent_caption TEXT NOT NULL, sent_channels TEXT NOT NULL, error TEXT,
+  checked_at TEXT, check_attempts INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
+-- mode is the delivery route decided at submit time from the capability contract, kept beside
+-- the outcome rather than derived later: the contract can change, and what a delivery needed from
+-- a person when it was sent is a fact about that submission. manual_completed_at is the person's
+-- own record that they finished it where it had to be finished, and it never touches the post.
 CREATE TABLE IF NOT EXISTS signal_publication_targets (
   publication_id TEXT NOT NULL REFERENCES signal_publications(id) ON DELETE CASCADE,
   channel TEXT NOT NULL, provider_account_id INTEGER NOT NULL, outcome TEXT, permalink TEXT, error TEXT,
+  handle TEXT NOT NULL DEFAULT '', mode TEXT NOT NULL DEFAULT 'AUTOMATIC', manual_completed_at TEXT,
   PRIMARY KEY(publication_id, provider_account_id)
 );
 `;

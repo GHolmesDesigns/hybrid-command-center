@@ -3572,6 +3572,140 @@ button.tag-chip.toggle.active {
 .signal-publish-channels li.channel-not_available {
   border-left-color: var(--amber);
 }
+/* Delivery, which is a section of its own rather than a decoration on the planning status: the
+   two facts are separated in the schema and they are separated here. Every group states its
+   words, carries its own icon shape, and only then takes a colour, so the four stay apart in
+   greyscale and with colours turned off. */
+.signal-delivery {
+  margin: 4px 0 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.signal-delivery h3 {
+  margin: 0;
+  font-size: 13px;
+}
+.signal-delivery-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.signal-delivery-record {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 12px;
+}
+.signal-delivery-record > p {
+  margin: 0;
+}
+.signal-delivery-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.signal-delivery-instant {
+  color: var(--muted);
+}
+.signal-delivery-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.signal-delivery-chip svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+}
+.signal-delivery-chip.delivery-in_flight {
+  border-color: #b9c6dd;
+  background: #eaf0fa;
+  color: #2f4b93;
+}
+.signal-delivery-chip.delivery-delivered {
+  border-color: #a9cfb4;
+  background: #e6f4ea;
+  color: #1d6b36;
+}
+.signal-delivery-chip.delivery-attention {
+  border-color: #efd6ae;
+  background: #fff3df;
+  color: #8d601c;
+}
+.signal-delivery-chip.delivery-stopped {
+  border-color: var(--line);
+  background: #f1f2ef;
+  color: #4a4f57;
+}
+.signal-delivery-targets {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.signal-delivery-target {
+  border-left: 3px solid var(--line);
+  padding: 2px 0 2px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.signal-delivery-target > p {
+  margin: 0;
+}
+.signal-delivery-target.delivery-delivered {
+  border-left-color: var(--green);
+}
+.signal-delivery-target.delivery-attention {
+  border-left-color: var(--amber);
+}
+.signal-delivery-target.delivery-stopped {
+  border-left-color: var(--red);
+}
+.signal-delivery-target-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.signal-delivery-target button {
+  align-self: flex-start;
+}
+.signal-delivery-mode {
+  color: var(--muted);
+  line-height: 1.4;
+}
+.signal-delivery-checked {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.signal-delivery-unsupported {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
 .form-warning {
   color: #8d601c;
   font-size: 12px;
