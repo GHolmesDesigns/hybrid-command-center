@@ -56,15 +56,24 @@ import {
   deliveryTargetAwaitsPerson,
   deliveryTargetSummary,
   isReconcilableState,
+  providerRecordIsMutable,
+  providerRecordIsPublished,
+  publicationTracksProvider,
   publishPreviewRefusals,
   reconcileSchedule,
   DELIVERY_GROUP_LABEL,
   DELIVERY_MODE_LABEL,
+  PROVIDER_ACTION_DESCRIPTION,
+  PROVIDER_ACTION_LABEL,
+  PROVIDER_DIFF_FIELD_LABEL,
+  PROVIDER_POST_STATE_LABEL,
   PUBLICATION_STATE_DESCRIPTION,
   PUBLICATION_STATE_GROUP,
   PUBLICATION_STATE_LABEL,
   PUBLISH_CHANNEL_STATUS_LABEL,
   type DeliveryGroup,
+  type ProviderAction,
+  type ProviderReconcilePreview,
   type PublishPreview,
   type SignalPublication,
   type SignalPublicationTarget,
@@ -237,6 +246,126 @@ function DeliveryChip({ group, children }: { group: DeliveryGroup; children: str
   );
 }
 
+/**
+ * The provider comparison, side by side, above the buttons that act on it.
+ *
+ * Two columns rather than a merged "what changed" sentence, because the whole point of the panel is
+ * that two systems hold two values and the user is choosing which one wins. A merged line would say
+ * *the caption changed* and leave them to remember what it used to be.
+ *
+ * Every action carries its own refusals, so a button is either pressable or replaced by the reason
+ * it is not — there is no disabled control here whose reason lives in a tooltip.
+ */
+function ProviderReconcilePanel({
+  preview,
+  busy,
+  apply,
+  close,
+}: {
+  preview: ProviderReconcilePreview;
+  busy: boolean;
+  apply: (action: ProviderAction) => void;
+  close: () => void;
+}) {
+  return (
+    <section className="signal-provider-reconcile" aria-label="Provider comparison">
+      <h4>Signal and the provider</h4>
+      {preview.record && (
+        <p className="signal-provider-state">
+          <DeliveryChip
+            group={
+              providerRecordIsPublished(preview.record.state)
+                ? 'DELIVERED'
+                : providerRecordIsMutable(preview.record.state)
+                  ? 'IN_FLIGHT'
+                  : 'ATTENTION'
+            }
+          >
+            {PROVIDER_POST_STATE_LABEL[preview.record.state]}
+          </DeliveryChip>{' '}
+          <span>Provider post {preview.record.providerPostId}</span>
+        </p>
+      )}
+      {preview.refusals.map((refusal) => (
+        <p className="form-error" key={refusal}>
+          {refusal}
+        </p>
+      ))}
+      {preview.warnings.map((warning) => (
+        <p className="signal-provider-warning" key={warning}>
+          {warning}
+        </p>
+      ))}
+      {preview.record && (
+        <table className="signal-provider-diff">
+          <caption>
+            {preview.changed.length === 1
+              ? '1 field differs.'
+              : preview.changed.length
+                ? `${preview.changed.length} fields differ.`
+                : 'Signal and the provider agree on every field.'}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Field</th>
+              <th scope="col">Signal</th>
+              <th scope="col">Provider</th>
+            </tr>
+          </thead>
+          <tbody>
+            {preview.diffs.map((diff) => (
+              <tr
+                key={diff.field}
+                className={diff.changed ? 'signal-provider-diff-changed' : undefined}
+              >
+                <th scope="row">
+                  {PROVIDER_DIFF_FIELD_LABEL[diff.field]}
+                  {/* The state is said as well as painted, so the row that differs is legible
+                      without colour — the same rule the delivery chips follow. */}
+                  {diff.changed && <span className="signal-provider-diff-flag"> · differs</span>}
+                </th>
+                <td>{diff.local}</td>
+                <td>{diff.remote}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <ul className="signal-provider-actions">
+        {preview.actions.map((offer) => (
+          <li key={offer.action}>
+            <p className="signal-provider-action-name">
+              <strong>{PROVIDER_ACTION_LABEL[offer.action]}</strong>
+            </p>
+            <p className="signal-provider-action-note">
+              {PROVIDER_ACTION_DESCRIPTION[offer.action]}
+            </p>
+            {offer.available ? (
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => apply(offer.action)}
+                disabled={busy}
+              >
+                {PROVIDER_ACTION_LABEL[offer.action]}
+              </button>
+            ) : (
+              offer.refusals.map((refusal) => (
+                <p className="signal-provider-refusal" key={refusal}>
+                  {refusal}
+                </p>
+              ))
+            )}
+          </li>
+        ))}
+      </ul>
+      <button type="button" className="secondary" onClick={close} disabled={busy}>
+        Close comparison
+      </button>
+    </section>
+  );
+}
+
 /** What a delivery's platform is called in a sentence, falling back to the channel's own name. */
 const platformLabelFor = (platform: PublishPlatform | null, channel: SignalChannel) =>
   platform ? PUBLISH_PLATFORM_LABEL[platform] : SIGNAL_CHANNEL_LABEL[channel];
@@ -369,6 +498,14 @@ function Editor({
   const [mediaInput, setMediaInput] = useState('');
   const [publishPreview, setPublishPreview] = useState<PublishPreview | null>(null);
   const [publications, setPublications] = useState<SignalPublication[]>([]);
+  /**
+   * The open provider comparison, keyed by the publication it belongs to.
+   *
+   * One at a time, and never opened on its own: it is a read of somebody else's record, so it
+   * happens when a person asks for it and is dropped the moment an action lands, which forces the
+   * next decision to be taken against a freshly read record rather than a stale panel.
+   */
+  const [providerPreview, setProviderPreview] = useState<ProviderReconcilePreview | null>(null);
   const [deliveryTick, setDeliveryTick] = useState(0);
   const [presetNotice, setPresetNotice] = useState('');
   const checked = useRef(new Set<string>());
@@ -531,6 +668,61 @@ function Editor({
       );
     } catch (reason) {
       setError((reason as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * Reads the provider's record beside Signal's plan. Writes nothing on either side.
+   *
+   * `keepError` is for the one caller that already has something to say: a refused action retakes
+   * the comparison, and clearing the message on the way would erase the refusal that explains why
+   * the panel just changed under the reader.
+   */
+  const compareProvider = async (publicationId: string, keepError = false) => {
+    setBusy(true);
+    if (!keepError) setError('');
+    try {
+      setProviderPreview(
+        await send<ProviderReconcilePreview>(
+          `/signal/publications/${publicationId}/provider/preview`,
+          'POST',
+        ),
+      );
+    } catch (reason) {
+      setError((reason as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * Commits one action against the provider's copy, carrying the token the comparison returned.
+   *
+   * The publication list is replaced from the response rather than patched, and the panel is
+   * closed: a restore-and-resubmit answers with a *different* publication, so a panel still open on
+   * the old one would be describing a record that no longer exists. The delivery history is reread
+   * for the same reason.
+   */
+  const applyProviderAction = async (publicationId: string, action: ProviderAction) => {
+    if (!providerPreview) return;
+    setBusy(true);
+    setError('');
+    try {
+      await send<SignalPublication>(
+        `/signal/publications/${publicationId}/provider/apply`,
+        'POST',
+        { action, reconcileHash: providerPreview.reconcileHash },
+      );
+      setProviderPreview(null);
+      setPublications(await api<SignalPublication[]>(`/signal/posts/${post.id}/publications`));
+    } catch (reason) {
+      setError((reason as Error).message);
+      // A refused action leaves the panel open on a comparison that is now known to be stale, so
+      // it is taken again rather than left showing what the refusal just contradicted — and the
+      // refusal itself is kept, because it is the reason the panel changed.
+      await compareProvider(publicationId, true).catch(() => undefined);
     } finally {
       setBusy(false);
     }
@@ -1056,6 +1248,20 @@ function Editor({
                           ? `Next automatic check ${new Date(schedule.dueAt).toLocaleString()}.`
                           : 'No further checks are due.'}
                     </p>
+                    {/* A Signal edit says so here and stops. Nothing about this banner has asked
+                        the provider anything — it is the local snapshot against the local post —
+                        and nothing changes out there until someone opens the comparison below and
+                        confirms an action from it. */}
+                    {!!publication.driftFields?.length && (
+                      <p className="signal-provider-drift" role="status">
+                        <DeliveryChip group="ATTENTION">Provider update required</DeliveryChip>{' '}
+                        {publication.driftFields
+                          .map((field) => PROVIDER_DIFF_FIELD_LABEL[field])
+                          .join(', ')}{' '}
+                        {publication.driftFields.length === 1 ? 'has' : 'have'} changed in Signal
+                        since this was sent. The provider still holds the earlier version.
+                      </p>
+                    )}
                     {/* Manual refresh outlives the automatic schedule on purpose: `UNCONFIRMED`
                         is the state a person resolves, and it is exactly the state the timer has
                         stopped asking about. */}
@@ -1071,6 +1277,25 @@ function Editor({
                           <RefreshCw /> Refresh delivery
                         </button>
                       )}
+                    {publication.providerPostId &&
+                      publicationTracksProvider(publication.state) &&
+                      (providerPreview?.publicationId === publication.id ? (
+                        <ProviderReconcilePanel
+                          preview={providerPreview}
+                          busy={busy}
+                          apply={(action) => void applyProviderAction(publication.id, action)}
+                          close={() => setProviderPreview(null)}
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => void compareProvider(publication.id)}
+                          disabled={busy}
+                        >
+                          Compare with provider
+                        </button>
+                      ))}
                   </article>
                 );
               })}

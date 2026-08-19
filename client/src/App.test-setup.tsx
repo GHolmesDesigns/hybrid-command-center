@@ -21,7 +21,11 @@ import {
   suggestNextOpenSignalSlot,
   type SignalPost,
 } from '../../shared/signal';
-import type { PublishPreview, SignalPublication } from '../../shared/publish';
+import type {
+  ProviderReconcilePreview,
+  PublishPreview,
+  SignalPublication,
+} from '../../shared/publish';
 import type { PublishVariantRecord } from '../../shared/publish-variants';
 
 export {
@@ -182,6 +186,10 @@ export const testState = {
   publishSubmitPayload: null as SignalPublication | null,
   publishReconcilePayload: null as SignalPublication | null,
   publishFinishPayload: null as SignalPublication | null,
+  providerReconcilePayload: null as ProviderReconcilePreview | null,
+  providerApplyPayload: null as SignalPublication | null,
+  providerApplyError: null as string | null,
+  providerApplyRequests: [] as { action: string; reconcileHash: string }[],
   /**
    * The content overrides the composer reads and writes. Held as state rather than answered from a
    * fixture, so a case can assert what a `PUT` stored the way the real route would.
@@ -415,6 +423,18 @@ const respondTo = (url: string, init?: RequestInit) => {
     return (
       testState.publishReconcilePayload ?? reply(400, { error: 'No reconciliation was set up.' })
     );
+  const providerPreviewPath = url.match(
+    /\/api\/signal\/publications\/([^/?]+)\/provider\/preview$/,
+  );
+  if (providerPreviewPath && method === 'POST')
+    return testState.providerReconcilePayload ?? reply(400, { error: 'No comparison was set up.' });
+  const providerApplyPath = url.match(/\/api\/signal\/publications\/([^/?]+)\/provider\/apply$/);
+  if (providerApplyPath && method === 'POST') {
+    if (testState.providerApplyError) return reply(409, { error: testState.providerApplyError });
+    // The request body is kept so a case can prove which action, and which token, went out.
+    testState.providerApplyRequests.push(body as { action: string; reconcileHash: string });
+    return testState.providerApplyPayload ?? reply(400, { error: 'No result was set up.' });
+  }
   const finishPath = url.match(/\/api\/signal\/publications\/([^/?]+)\/targets\/(\d+)\/finish$/);
   if (finishPath && method === 'POST')
     return testState.publishFinishPayload ?? reply(409, { error: 'Nothing to finish here.' });
@@ -803,6 +823,10 @@ beforeEach(() => {
   testState.publishSubmitPayload = null;
   testState.publishReconcilePayload = null;
   testState.publishFinishPayload = null;
+  testState.providerReconcilePayload = null;
+  testState.providerApplyPayload = null;
+  testState.providerApplyError = null;
+  testState.providerApplyRequests = [];
   testState.signalVariantsPayload = [];
   testState.signalVariantsError = null;
   testState.clientMergePreviewError = null;

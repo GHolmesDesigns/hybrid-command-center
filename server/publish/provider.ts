@@ -1,3 +1,7 @@
+import type { ProviderPostRecord } from '../../shared/publish.ts';
+
+export type { ProviderPostRecord };
+
 export interface PublishTarget {
   id: number;
   platform: string;
@@ -71,6 +75,24 @@ export interface PublishProvider {
   listTargets(): Promise<PublishTarget[]>;
   submit(request: PublishRequest): Promise<PublishSubmission>;
   check(providerPostId: string): Promise<PublishSubmission>;
+  /**
+   * The provider's own record of one post — what it is holding, not what became of it.
+   *
+   * Distinct from `check`, which answers *how did the delivery go* out of `post-results`. This
+   * answers *what does it currently say*, which is the only honest left-hand side of a difference
+   * the user is about to act on. It is read fresh every time and never cached.
+   */
+  describe(providerPostId: string): Promise<ProviderPostRecord>;
+  /**
+   * Rewrites a post the provider is still holding, in full.
+   *
+   * Full-state rather than a partial patch, and that is a safety property rather than a preference:
+   * Post Bridge processes a scheduled post **immediately** when an update omits `scheduled_at`, so
+   * an adapter that forwarded only the changed fields would publish a post early the first time
+   * someone edited a caption. Every implementation sends the whole request, which also makes the
+   * call idempotent by end state — the same request twice leaves the same post.
+   */
+  update(providerPostId: string, request: PublishRequest): Promise<PublishSubmission>;
   cancel(providerPostId: string): Promise<void>;
 }
 
@@ -92,6 +114,15 @@ export class UnavailablePublishProvider implements PublishProvider {
   }
   async check(_providerPostId: string): Promise<PublishSubmission> {
     void _providerPostId;
+    return this.fail();
+  }
+  async describe(_providerPostId: string): Promise<ProviderPostRecord> {
+    void _providerPostId;
+    return this.fail();
+  }
+  async update(_providerPostId: string, _request: PublishRequest): Promise<PublishSubmission> {
+    void _providerPostId;
+    void _request;
     return this.fail();
   }
   async cancel(_providerPostId: string): Promise<void> {

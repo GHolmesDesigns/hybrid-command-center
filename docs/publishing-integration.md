@@ -350,10 +350,14 @@ export interface PublishProvider {
   readonly available: boolean;
   /** The accounts the provider has connected, so a channel can be resolved to a real target. */
   listTargets(): Promise<PublishTarget[]>;
-  /** The one write. Everything else on this interface reads. */
+  /** The first write. `update` is the second, and §7.2 says why there are only two. */
   submit(request: PublishRequest): Promise<PublishSubmission>;
   /** Reconciliation: what the provider currently believes about a submission we made. */
   check(providerPostId: string): Promise<PublishSubmission>;
+  /** What the provider is currently holding, as against what became of it (§7.2). */
+  describe(providerPostId: string): Promise<ProviderPostRecord>;
+  /** Rewrite a post the provider still holds — in full, and always with `scheduled_at` (§7.2). */
+  update(providerPostId: string, request: PublishRequest): Promise<PublishSubmission>;
   /** Withdraw a submission that has not gone out yet. Required before a post is deleted (§7). */
   cancel(providerPostId: string): Promise<void>;
 }
@@ -570,12 +574,12 @@ of it. Concretely:
   `signal_posts` holds, **the provider is wrong by definition** and the disagreement is *reported*
   on the publication row, not resolved by copying it back. This is the whole difference between
   "Signal is authoritative" and "Signal is one of two systems".
-- **What was sent is snapshotted.** The publication row keeps the caption, the channel set, the
-  instant, and the zone as they were at submit time — the same reason `IntegrationEntity` keeps a
-  `label`, so a record stays readable after the thing it names has changed. Editing a post after
-  submission is allowed and changes nothing about what is already with the provider; the planner
-  shows *scheduled with the provider from an earlier version of this post*, and re-sending is an
-  explicit cancel-and-resubmit.
+- **What was sent is snapshotted.** The publication row keeps the caption, the media, the
+  per-platform tailoring, the channel set, the instant, and the zone as they were at submit time —
+  the same reason `IntegrationEntity` keeps a `label`, so a record stays readable after the thing it
+  names has changed. Editing a post after submission is allowed and changes nothing about what is
+  already with the provider: the planner shows **Provider update required** and stops there. Putting
+  the two back in step is a separate act a person confirms — §7.2.
 - **Deleting a post with a live submission cancels first.** `cancel()` runs, and if it fails the
   delete is refused with the reason. The alternative is an app that has forgotten about a post the
   world is still going to see.
@@ -597,6 +601,8 @@ CREATE TABLE IF NOT EXISTS signal_publications (
   timezone TEXT NOT NULL,              -- the IANA zone it was computed in
   sent_caption TEXT NOT NULL,          -- snapshot, so "what went out" survives an edit
   sent_channels TEXT NOT NULL,         -- snapshot, JSON array of SignalChannel
+  sent_media TEXT,                     -- snapshot, JSON array of media URLs; NULL is not '[]' (§7.2)
+  sent_configurations TEXT,            -- snapshot, JSON platform_configurations (§7.2)
   error TEXT,
   created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
@@ -620,11 +626,117 @@ CREATE INDEX IF NOT EXISTS idx_signal_publications_post ON signal_publications(p
 
 ---
 
+### 7.2 The provider update path, and the four actions
+
+**The question this section exists to settle:** the interface was `listTargets`, `submit`, `check`,
+and `cancel`. Nothing in the earlier sources established that Post Bridge had an update path at all,
+and the alternative — every content or schedule change becoming a cancel-and-resubmit, losing the
+`provider_post_id` and any permalink with it — would have changed the rules below rather than the
+wording of them.
+
+**It has one.** From Post Bridge's own OpenAPI document (`GET https://api.post-bridge.com/reference`,
+served inline in the Scalar page's configuration):
+
+| Route | What it takes | What it refuses |
+| --- | --- | --- |
+| `PATCH /v1/posts/{id}` | `caption`, `scheduled_at`, `media` / `media_urls`, `social_accounts`, `platform_configurations`, `account_configurations`, `is_draft` | `400` invalid, `404` unknown post |
+| `DELETE /v1/posts/{id}` | — | `400` — "Can only delete scheduled or draft posts." |
+| `GET /v1/posts/{id}` | — | `404` |
+
+`status` is `posted | scheduled | processing | failed` beside an `is_draft` flag, and there is **no
+idempotency key anywhere in the document** — which is the same finding §8 already recorded for
+`POST /v1/posts`, now confirmed for the update path too.
+
+Three consequences, each of which is a rule in the code rather than a note here.
+
+**1. `scheduled_at` is on the wire for every update, without exception.** The vendor's own words on
+`PATCH`: *"If updating a 'scheduled' post make sure to always pass 'scheduled_at' otherwise the post
+will process immediately."* The field that reads as optional is the one that publishes a post early,
+and `null` means *post now*. So the adapter sends the whole request every time and never a partial
+patch — a diff-shaped adapter that forwarded only the changed fields would put a post out the first
+time somebody fixed a typo. `PostBridgeProvider.update` carries that rule and
+`server/publish/publish.test.ts` asserts the field is present.
+
+**2. Full-state sending is also the only idempotency available.** There is no key to send, so the
+guarantee is by end state: the same `PATCH` twice leaves the same post. `POST /v1/posts` has no such
+property, which is why *update* is an update and *restore* is the only action that resubmits.
+
+**3. A published post is out of reach, and it is refused twice.** The vendor refuses `DELETE` on
+anything that is not scheduled or draft; the app refuses it first, from the record it read, so the
+user gets a sentence instead of a `400`. `PROCESSING` is refused as well — a post being sent as the
+request is made would land on either side of the send, and that is the ambiguity §8 exists to decline
+rather than gamble on.
+
+#### The four actions
+
+Read first, act second, always. `describe` returns the provider's record; `buildProviderReconcile`
+in `server/publish/reconcile.ts` puts it beside the plan and produces the difference, the offers, and
+the refusals; nothing writes until a person confirms one offer. The same function builds the panel
+and gates the commit — the importer's rule, for the importer's reason.
+
+| Action | What goes out | Refused when |
+| --- | --- | --- |
+| **Update provider content** | Signal's caption, media, accounts, and tailoring, on the instant the provider already has | not scheduled or draft; nothing about the content differs; the plan itself refuses |
+| **Update provider schedule** | Signal's instant, on the content the provider already holds | as above; the instant already matches; **the provider holds content this app did not send** |
+| **Cancel provider post** | `DELETE` | not scheduled or draft — a published post explicitly |
+| **Restore from Signal and resubmit** | withdraw, then a fresh `submit` | published or processing; the plan itself refuses |
+
+Two of those refusals are worth their own sentence.
+
+**Rescheduling fails closed against an outside edit.** *Update provider schedule* sends the content
+this app believes is out there, taken from the publication snapshot. If somebody edited the post in
+Post Bridge directly, that snapshot is no longer what the provider holds and sending it would quietly
+overwrite their edit — so the disagreement is reported and rescheduling is refused until the user
+chooses a side. *Update provider content* stays available, because replacing their copy with Signal's
+is a legitimate choice; it just has to be the one that was made on purpose.
+
+**Restore withdraws only what is there to withdraw.** A post the provider has already failed has
+nothing out and cannot be `DELETE`d, so restore skips the call, releases the publication locally, and
+resubmits. That is two external operations, two `integration_events` rows, and the first is kept
+whatever the second does: a resend that fails leaves a cancelled publication and a recorded
+cancellation — the state a person retries from, not a half-written one they cannot read.
+
+#### Staleness, over both sides
+
+The commit token is `reconcileHash`, over the plan hash **and** the provider record. One side alone
+would not do: a plan hash misses a provider that moved under an open panel, and a record hash misses
+a Signal edit. The service rebuilds the whole comparison at commit and refuses a token that no longer
+matches, so anything that moved between looking and pressing sends the user back to look again.
+
+#### The snapshot that may not be there
+
+`sent_media` and `sent_configurations` are **nullable, and NULL is not `'[]'`** — the same
+distinction `signal_post_variants.media_urls` already makes. `'[]'` is a submission that carried no
+media on purpose; NULL is a publication written before the columns existed, whose media nobody
+recorded. Defaulting the second to the first was the tempting migration and the wrong one: every
+migrated publication carrying media would have reported a media difference on the strength of a
+backfill rather than of evidence.
+
+So the unknown stays unknown. Drift says nothing about media it cannot evidence, the comparison says
+plainly that the submission predates the snapshot, and exactly one action stops — **Update provider
+schedule**, which is the only one that has to prove it is leaving the provider's content alone.
+Updating the content records a snapshot and clears it for good.
+
+#### What a Signal edit does, and does not do
+
+It raises **Provider update required** and stops. That flag is `publicationDriftFields` in
+`shared/publish.ts`, computed from the publication's snapshot against the post as it stands — local
+rows on both sides, no provider call, and therefore no possibility of a remote mutation following a
+local edit. The account set is deliberately *not* answered there: resolving it needs the provider's
+target list, so it belongs to the comparison, which is allowed to read.
+
+---
+
 ## 8. Idempotency, and the ambiguous submit
 
 **Neither provider offers an idempotency key.** Post Bridge's OpenAPI document contains no such
-header or field, and Buffer's standards guide does not mention one. So the app builds what it can
-and is honest about what it cannot.
+header or field on any route — re-checked against the whole document when the update path was
+settled in §7.2, not only against `POST /v1/posts` — and Buffer's standards guide does not mention
+one. So the app builds what it can and is honest about what it cannot.
+
+One thing did improve with §7.2: `PATCH /v1/posts/{id}` is sent in full, so it is idempotent by end
+state even without a key. That property belongs to the update path alone. `POST /v1/posts` has no
+equivalent, which is why the table below still governs every submission.
 
 **What the app can guarantee — one submission per post.** The publication row is written *before*
 the HTTP call, in its own transaction, in state `SUBMITTING`, carrying a locally minted

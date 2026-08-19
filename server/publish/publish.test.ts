@@ -15,6 +15,8 @@ import {
   deliveryTargetAwaitsPerson,
   deliveryTargetSummary,
   isReconcilableState,
+  providerActionOffer,
+  publicationDriftFields,
   publishPreviewRefusals,
   publishPreviewWarnings,
   reconcileSchedule,
@@ -23,9 +25,11 @@ import {
   PUBLICATION_STATE_GROUP,
   PUBLICATION_STATE_LABEL,
   PUBLICATION_STATES,
+  PROVIDER_ACTIONS,
   RECONCILE_INTERVALS_MINUTES,
   RECONCILE_MAX_ATTEMPTS,
   type DeliveryMode,
+  type ProviderAction,
   type PublishChannelContent,
   type PublishChannelReport,
   type PublishPreview,
@@ -1254,5 +1258,702 @@ describe('storing content variants', () => {
         },
       ],
     });
+  });
+});
+
+/**
+ * Updating, rescheduling, and withdrawing a post the provider is already holding.
+ *
+ * The card behind these cases opened on a question rather than a plan: the interface had
+ * `listTargets`, `submit`, `check`, and `cancel`, and nothing established that Post Bridge had an
+ * update path at all. It does — `PATCH /v1/posts/{id}` — and the shape of everything below follows
+ * from two things it says. First, a post keeps its id and its permalinks across an update, so these
+ * are edits to one publication rather than a cancel-and-resubmit that loses both. Second, the
+ * vendor processes a scheduled post **immediately** when an update omits `scheduled_at`, which is
+ * why every request on the wire here carries one and why a test asserts that it does.
+ */
+describe('a post the provider is already holding', () => {
+  const serviceAt = (provider: MockPublishProvider, instant = '2026-01-01T00:00:00.000Z') =>
+    new PublishService(
+      db,
+      new LocalSignalProvider(db),
+      provider,
+      'America/New_York',
+      () => new Date(instant),
+    );
+
+  /** Submits a post and hands back everything a reconciliation case needs to act on it. */
+  const submitted = async (overrides: Parameters<typeof add>[0] = {}) => {
+    const post = add({ channels: ['x'], ...overrides });
+    const provider = new MockPublishProvider(targets);
+    const service = serviceAt(provider);
+    const plan = await service.preview(post.id);
+    const publication = await service.submit(post.id, plan.planHash);
+    return { post, provider, service, publication };
+  };
+
+  /** A Signal edit, written the way the app writes one — the post row and nothing else. */
+  const editPost = (
+    id: string,
+    changes: { text?: string; date?: string | null; time?: string },
+  ) => {
+    if (changes.text !== undefined)
+      db.prepare('UPDATE signal_posts SET text=? WHERE id=?').run(changes.text, id);
+    if (changes.date !== undefined)
+      db.prepare('UPDATE signal_posts SET date=? WHERE id=?').run(changes.date, id);
+    if (changes.time !== undefined)
+      db.prepare('UPDATE signal_posts SET time=? WHERE id=?').run(changes.time, id);
+  };
+
+  it('raises Provider update required on a Signal edit and mutates nothing remotely', async () => {
+    const { post, provider, service, publication } = await submitted();
+    expect(publication.driftFields).toBeUndefined();
+
+    editPost(post.id, { text: 'A rewritten campaign post' });
+
+    const [drifted] = service.list(post.id);
+    expect(drifted?.driftFields).toEqual(['caption']);
+    // The whole criterion, stated as the two call logs that would have to be non-empty for it to
+    // be false. Reading the drift is local arithmetic; nothing was asked of the provider and
+    // nothing was done to it.
+    expect(provider.describes).toEqual([]);
+    expect(provider.updates).toEqual([]);
+    expect(provider.cancels).toEqual([]);
+    // Nor did the snapshot move: the publication still says what actually went out.
+    expect(drifted?.sentCaption).toBe('A clear campaign post');
+  });
+
+  it('reports a reschedule and a post pulled back into the queue as schedule drift', async () => {
+    const { post, service } = await submitted();
+    editPost(post.id, { time: '15:30' });
+    expect(service.list(post.id)[0]?.driftFields).toEqual(['schedule']);
+
+    // A live submission whose post has lost its date is a disagreement the instant comparison
+    // cannot see, because there is no instant left on the Signal side to compare.
+    editPost(post.id, { date: null });
+    expect(service.list(post.id)[0]?.driftFields).toEqual(['schedule']);
+  });
+
+  it('previews the difference without writing anywhere, and offers only what applies', async () => {
+    const { post, provider, service, publication } = await submitted();
+    editPost(post.id, { text: 'A rewritten campaign post' });
+
+    const preview = await service.providerPreview(publication.id);
+    expect(preview.record?.state).toBe('SCHEDULED');
+    expect(preview.changed).toEqual(['caption']);
+    expect(preview.diffs.find((diff) => diff.field === 'caption')).toMatchObject({
+      changed: true,
+      local: 'A rewritten campaign post',
+      remote: 'A clear campaign post',
+    });
+    // Reading is allowed; writing is not. One describe, no update, no cancel.
+    expect(provider.describes).toEqual([publication.providerPostId]);
+    expect(provider.updates).toEqual([]);
+    expect(provider.cancels).toEqual([]);
+    expect(
+      db.prepare('SELECT sent_caption FROM signal_publications WHERE id=?').get(publication.id),
+    ).toMatchObject({ sent_caption: 'A clear campaign post' });
+
+    const offer = (action: ProviderAction) => providerActionOffer(preview, action);
+    expect(offer('UPDATE_CONTENT')?.available).toBe(true);
+    // Nothing moved the instant, so there is nothing for a schedule update to do and it says so
+    // rather than offering a request that would change nothing.
+    expect(offer('UPDATE_SCHEDULE')?.available).toBe(false);
+    expect(offer('UPDATE_SCHEDULE')?.refusals.join(' ')).toMatch(/already on this instant/);
+    expect(offer('CANCEL')?.available).toBe(true);
+    expect(offer('RESTORE_AND_RESUBMIT')?.available).toBe(true);
+  });
+
+  it('sends the whole post on a content update, scheduled_at included, and keeps the provider id', async () => {
+    const { post, provider, service, publication } = await submitted();
+    editPost(post.id, { text: 'A rewritten campaign post' });
+    const preview = await service.providerPreview(publication.id);
+
+    const updated = await service.applyProviderAction(
+      publication.id,
+      'UPDATE_CONTENT',
+      preview.reconcileHash,
+    );
+
+    expect(provider.updates).toHaveLength(1);
+    const sent = provider.updates[0];
+    expect(sent?.providerPostId).toBe(publication.providerPostId);
+    expect(sent?.request.caption).toBe('A rewritten campaign post');
+    // The sharpest edge on this endpoint: omitting `scheduled_at` publishes a scheduled post
+    // immediately, so it is always on the wire and it is the instant the provider already had.
+    expect(sent?.request.scheduledInstant).toBe(publication.scheduledInstant);
+    // One publication throughout. An update is not a resubmission.
+    expect(updated.id).toBe(publication.id);
+    expect(updated.providerPostId).toBe(publication.providerPostId);
+    expect(service.list(post.id)).toHaveLength(1);
+    // The snapshot caught up, so the drift it was raised for is gone.
+    expect(updated.sentCaption).toBe('A rewritten campaign post');
+    expect(updated.driftFields).toBeUndefined();
+  });
+
+  it('is idempotent by end state: the same update twice leaves the same post', async () => {
+    const { post, provider, service, publication } = await submitted();
+    editPost(post.id, { text: 'A rewritten campaign post' });
+
+    const first = await service.providerPreview(publication.id);
+    await service.applyProviderAction(publication.id, 'UPDATE_CONTENT', first.reconcileHash);
+    const after = { ...provider.record };
+
+    // Applying the same intent again is refused as a no-op rather than sent twice — and had it
+    // been sent, the full-state request would have left the record exactly as it is.
+    const second = await service.providerPreview(publication.id);
+    expect(providerActionOffer(second, 'UPDATE_CONTENT')?.refusals.join(' ')).toMatch(
+      /already has this caption/,
+    );
+    expect(provider.record).toEqual(after);
+    expect(provider.updates).toHaveLength(1);
+  });
+
+  it('moves the instant without carrying an unreviewed caption out with it', async () => {
+    const { post, provider, service, publication } = await submitted();
+    editPost(post.id, { text: 'A rewritten campaign post', time: '15:30' });
+
+    const preview = await service.providerPreview(publication.id);
+    expect(preview.changed).toEqual(['caption', 'schedule']);
+
+    const updated = await service.applyProviderAction(
+      publication.id,
+      'UPDATE_SCHEDULE',
+      preview.reconcileHash,
+    );
+
+    const sent = provider.updates[0]?.request;
+    expect(sent?.scheduledInstant).toBe('2027-08-14T19:30:00.000Z');
+    // The content the provider was already holding, not the edit sitting unreviewed in Signal.
+    // Two actions exist precisely so that moving a post by a day cannot rewrite it.
+    expect(sent?.caption).toBe('A clear campaign post');
+    expect(updated.sentCaption).toBe('A clear campaign post');
+    // And the caption edit is still outstanding, still reported, still nobody's surprise.
+    expect(updated.driftFields).toEqual(['caption']);
+  });
+
+  it('refuses a stale comparison at commit, on either side of it', async () => {
+    const { post, service, publication } = await submitted();
+    editPost(post.id, { text: 'A rewritten campaign post' });
+    const preview = await service.providerPreview(publication.id);
+
+    // Signal moves after the comparison was taken.
+    editPost(post.id, { text: 'A third caption entirely' });
+    await expect(
+      service.applyProviderAction(publication.id, 'UPDATE_CONTENT', preview.reconcileHash),
+    ).rejects.toThrow(/changed after this comparison/);
+  });
+
+  it('refuses a comparison taken before the provider moved under it', async () => {
+    const { post, provider, service, publication } = await submitted();
+    editPost(post.id, { text: 'A rewritten campaign post' });
+    const preview = await service.providerPreview(publication.id);
+
+    // Somebody rescheduled it in Post Bridge while the panel was open. The plan is untouched, so
+    // only a token covering both sides can catch this.
+    provider.record = { ...provider.record, scheduledInstant: '2027-09-01T13:00:00.000Z' };
+    await expect(
+      service.applyProviderAction(publication.id, 'UPDATE_CONTENT', preview.reconcileHash),
+    ).rejects.toThrow(/changed after this comparison/);
+    expect(provider.updates).toEqual([]);
+  });
+
+  it('keeps a published post off the scheduled-or-draft cancellation path', async () => {
+    const { provider, service, publication } = await submitted();
+    provider.record = { ...provider.record, state: 'PUBLISHED' };
+
+    const preview = await service.providerPreview(publication.id);
+    expect(providerActionOffer(preview, 'CANCEL')?.available).toBe(false);
+    expect(providerActionOffer(preview, 'CANCEL')?.refusals.join(' ')).toMatch(
+      /already published.*cannot be cancelled/i,
+    );
+    // Every write is refused, not only the cancellation: a published post is not ours to rewrite.
+    for (const action of PROVIDER_ACTIONS)
+      expect(providerActionOffer(preview, action)?.available).toBe(false);
+
+    await expect(
+      service.applyProviderAction(publication.id, 'CANCEL', preview.reconcileHash),
+    ).rejects.toThrow(/already published/i);
+    expect(provider.cancels).toEqual([]);
+  });
+
+  it('refuses to act on a post the provider is sending right now', async () => {
+    const { provider, service, publication } = await submitted();
+    provider.record = { ...provider.record, state: 'PROCESSING' };
+
+    const preview = await service.providerPreview(publication.id);
+    for (const action of PROVIDER_ACTIONS)
+      expect(providerActionOffer(preview, action)?.available).toBe(false);
+    expect(preview.warnings.join(' ')).toMatch(/sending this right now/);
+  });
+
+  it('cancels a scheduled post and records one redacted event beside the local update', async () => {
+    const { provider, service, publication } = await submitted();
+    const preview = await service.providerPreview(publication.id);
+
+    const cancelled = await service.applyProviderAction(
+      publication.id,
+      'CANCEL',
+      preview.reconcileHash,
+    );
+
+    expect(provider.cancels).toEqual([publication.providerPostId]);
+    expect(cancelled.state).toBe('CANCELLED');
+    const events = listIntegrationEvents(db, { limit: 10 });
+    const event = events.find((row) => row.operation === 'signal.provider-cancel');
+    expect(event).toMatchObject({ outcome: 'SUCCESS', correlationId: publication.id });
+    // A cancelled publication is no longer tracking anything, so drift stops being a claim about
+    // it and the comparison refuses itself rather than reading a record that is gone.
+    expect(cancelled.driftFields).toBeUndefined();
+    const after = await service.providerPreview(publication.id);
+    expect(after.refusals.join(' ')).toMatch(/no longer holding it/);
+  });
+
+  it('withdraws and resends as a new publication, keeping the withdrawal when the resend fails', async () => {
+    const { post, provider, service, publication } = await submitted();
+    editPost(post.id, { text: 'A rewritten campaign post' });
+    const preview = await service.providerPreview(publication.id);
+    provider.failure = new PublishProviderError('Post Bridge refused the request (400).', false);
+
+    const resent = await service.applyProviderAction(
+      publication.id,
+      'RESTORE_AND_RESUBMIT',
+      preview.reconcileHash,
+    );
+
+    // The first external operation landed and is kept: the provider no longer holds the old post,
+    // the local row says so, and the log has the row that explains it. Only the resend failed.
+    expect(provider.cancels).toEqual([publication.providerPostId]);
+    expect(service.get(publication.id)?.state).toBe('CANCELLED');
+    expect(resent.id).not.toBe(publication.id);
+    expect(resent.state).toBe('FAILED');
+    expect(resent.sentCaption).toBe('A rewritten campaign post');
+    const operations = listIntegrationEvents(db, { limit: 10 }).map((row) => row.operation);
+    expect(operations).toContain('signal.provider-cancel');
+    expect(operations).toContain('signal.publish');
+    // And it is retryable: the live-publication index is free again, because the old row is
+    // cancelled and the failed one is not live either.
+    provider.failure = undefined;
+    const retry = await service.preview(post.id);
+    await expect(service.submit(post.id, retry.planHash)).resolves.toMatchObject({
+      state: 'SUBMITTED',
+    });
+  });
+
+  it('resends a failed provider post without asking the provider to delete it', async () => {
+    const { provider, service, publication } = await submitted();
+    // The vendor refuses `DELETE` on anything that is not scheduled or draft, so a failed post has
+    // nothing to withdraw and asking anyway would be an error on the way to the fix.
+    provider.record = { ...provider.record, state: 'FAILED' };
+
+    const preview = await service.providerPreview(publication.id);
+    expect(providerActionOffer(preview, 'RESTORE_AND_RESUBMIT')?.available).toBe(true);
+    expect(providerActionOffer(preview, 'CANCEL')?.available).toBe(false);
+
+    await service.applyProviderAction(
+      publication.id,
+      'RESTORE_AND_RESUBMIT',
+      preview.reconcileHash,
+    );
+    expect(provider.cancels).toEqual([]);
+    expect(service.get(publication.id)?.state).toBe('CANCELLED');
+  });
+
+  it('refuses to reschedule over content the provider was given elsewhere', async () => {
+    const { post, provider, service, publication } = await submitted();
+    editPost(post.id, { time: '15:30' });
+    // Somebody edited the post in Post Bridge itself. Rescheduling sends the content this app
+    // believes is out there, which would quietly overwrite theirs — so it fails closed.
+    provider.record = { ...provider.record, caption: 'Edited in Post Bridge' };
+
+    const preview = await service.providerPreview(publication.id);
+    expect(preview.warnings.join(' ')).toMatch(/holding content this app did not send/);
+    expect(providerActionOffer(preview, 'UPDATE_SCHEDULE')?.available).toBe(false);
+    expect(providerActionOffer(preview, 'UPDATE_SCHEDULE')?.refusals.join(' ')).toMatch(
+      /Update the content from Signal/,
+    );
+    // Replacing their copy with Signal's is still offered — that is the deliberate choice.
+    expect(providerActionOffer(preview, 'UPDATE_CONTENT')?.available).toBe(true);
+  });
+
+  it('keeps the snapshot and stays retryable when an update is refused', async () => {
+    const { post, provider, service, publication } = await submitted();
+    editPost(post.id, { text: 'A rewritten campaign post' });
+    const preview = await service.providerPreview(publication.id);
+    provider.updateFailure = new PublishProviderError('Post Bridge refused the request (400).');
+
+    await expect(
+      service.applyProviderAction(publication.id, 'UPDATE_CONTENT', preview.reconcileHash),
+    ).rejects.toThrow(/refused the content update/);
+
+    // The provider still holds the old caption, and the row still says so — which is what makes
+    // the next comparison honest rather than a diff against something never sent.
+    const after = service.get(publication.id) as SignalPublication;
+    expect(after.sentCaption).toBe('A clear campaign post');
+    expect(after.state).toBe('SUBMITTED');
+    expect(after.driftFields).toEqual(['caption']);
+    expect(
+      listIntegrationEvents(db, { limit: 10 }).find(
+        (row) => row.operation === 'signal.provider-update',
+      ),
+    ).toMatchObject({ outcome: 'FAILURE' });
+
+    provider.updateFailure = undefined;
+    const retry = await service.providerPreview(publication.id);
+    await expect(
+      service.applyProviderAction(publication.id, 'UPDATE_CONTENT', retry.reconcileHash),
+    ).resolves.toMatchObject({ sentCaption: 'A rewritten campaign post' });
+  });
+
+  it('treats an unanswered update as unconfirmed rather than as a failure', async () => {
+    const { post, provider, service, publication } = await submitted();
+    editPost(post.id, { text: 'A rewritten campaign post' });
+    const preview = await service.providerPreview(publication.id);
+    provider.updateFailure = new PublishProviderError('socket hang up', true);
+
+    await expect(
+      service.applyProviderAction(publication.id, 'UPDATE_CONTENT', preview.reconcileHash),
+    ).rejects.toThrow(/never answered/);
+
+    // *We do not know* is a different fact from *it did not happen*, and only one of them is safe
+    // to retry blind. The publication says so, and the log calls it partial.
+    expect(service.get(publication.id)?.state).toBe('UNCONFIRMED');
+    expect(
+      listIntegrationEvents(db, { limit: 10 }).find(
+        (row) => row.operation === 'signal.provider-update',
+      ),
+    ).toMatchObject({ outcome: 'PARTIAL' });
+  });
+
+  it('never writes a credential into the log or the publication row', async () => {
+    const { post, provider, service, publication } = await submitted();
+    editPost(post.id, { text: 'A rewritten campaign post' });
+    const preview = await service.providerPreview(publication.id);
+    provider.updateFailure = new PublishProviderError(
+      'Post Bridge refused: Authorization: Bearer pb_live_abcdef123456 api_key=pb_secret',
+    );
+
+    await expect(
+      service.applyProviderAction(publication.id, 'UPDATE_CONTENT', preview.reconcileHash),
+    ).rejects.toThrow(/\[redacted\]/);
+
+    const event = listIntegrationEvents(db, { limit: 10 }).find(
+      (row) => row.operation === 'signal.provider-update',
+    );
+    expect(event?.error).not.toMatch(/pb_live_abcdef123456|pb_secret/);
+    expect(event?.error).toMatch(/\[redacted\]/);
+    expect(service.get(publication.id)?.error).not.toMatch(/pb_live_abcdef123456/);
+  });
+
+  it('explains itself when the provider cannot be read, and offers nothing', async () => {
+    const { service, publication } = await submitted();
+    const provider = new MockPublishProvider(targets);
+    void provider;
+    const failing = serviceAt(
+      Object.assign(new MockPublishProvider(targets), {
+        describeFailure: new PublishProviderError('connect ECONNREFUSED'),
+      }),
+    );
+    const preview = await failing.providerPreview(publication.id);
+    expect(preview.refusals.join(' ')).toMatch(/could not be read/);
+    expect(preview.reconcileHash).toBe('');
+    for (const action of PROVIDER_ACTIONS)
+      expect(providerActionOffer(preview, action)?.available).toBe(false);
+    // A comparison that produced no token cannot be committed against by any means.
+    await expect(service.applyProviderAction(publication.id, 'CANCEL', '')).rejects.toThrow();
+  });
+});
+
+describe('the provider reconciliation over HTTP', () => {
+  it('previews, refuses a stale token, and applies an update', async () => {
+    const provider = new MockPublishProvider(targets);
+    const app = createApp(db, {
+      publish: provider,
+      publishTimezone: 'America/New_York',
+      now: () => new Date('2026-01-01'),
+    });
+    const post = add({ channels: ['x'] });
+
+    const planned = await request(app).post(`/api/signal/posts/${post.id}/publish/preview`).send();
+    const submission = await request(app)
+      .post(`/api/signal/posts/${post.id}/publish`)
+      .send({ planHash: planned.body.planHash });
+    expect(submission.status).toBe(201);
+    const publicationId = submission.body.id as string;
+
+    // The editor saves the whole draft, so the edit is sent the way the form sends it rather
+    // than as a lone field the route would read as clearing the rest.
+    const edited = await request(app)
+      .patch(`/api/signal/posts/${post.id}`)
+      .send({ text: 'Rewritten in Signal', channels: ['x'], date: post.date, time: post.time });
+    expect(edited.status).toBe(200);
+
+    const preview = await request(app)
+      .post(`/api/signal/publications/${publicationId}/provider/preview`)
+      .send();
+    expect(preview.status).toBe(200);
+    expect(preview.body.changed).toEqual(['caption']);
+    // Nothing in the payload is a raw provider response or a credential: it is the normalized
+    // record and nothing else.
+    expect(JSON.stringify(preview.body)).not.toMatch(/Bearer|api_key|authorization/i);
+
+    const stale = await request(app)
+      .post(`/api/signal/publications/${publicationId}/provider/apply`)
+      .send({ action: 'UPDATE_CONTENT', reconcileHash: 'a'.repeat(64) });
+    expect(stale.status).toBe(409);
+
+    const applied = await request(app)
+      .post(`/api/signal/publications/${publicationId}/provider/apply`)
+      .send({ action: 'UPDATE_CONTENT', reconcileHash: preview.body.reconcileHash });
+    expect(applied.status).toBe(200);
+    expect(applied.body.sentCaption).toBe('Rewritten in Signal');
+    expect(applied.body.driftFields).toBeUndefined();
+  });
+
+  it('refuses an action the boundary does not know', async () => {
+    const app = createApp(db, {
+      publish: new MockPublishProvider(targets),
+      publishTimezone: 'America/New_York',
+      now: () => new Date('2026-01-01'),
+    });
+    const response = await request(app)
+      .post('/api/signal/publications/whatever/provider/apply')
+      .send({ action: 'DELETE_EVERYTHING', reconcileHash: 'a'.repeat(64) });
+    expect(response.status).toBe(400);
+  });
+});
+
+/**
+ * The drift rule on its own, over the cases the service cannot reach.
+ *
+ * `publicationDriftFields` answers for the whole request, account set included, but the planner only
+ * ever hands it the publication's own targets on both sides — it has no provider target list to
+ * resolve a new one from, and reading one would make the local flag a remote call. So the account
+ * comparison, and the ordering rule underneath it, are exercised here directly. The reconciliation
+ * preview is the caller that does compare account sets, and it is covered against the provider.
+ */
+describe('the provider drift rule', () => {
+  const target = (accountId: number): SignalPublicationTarget => ({
+    channel: 'x',
+    platform: 'twitter',
+    accountId,
+    handle: `@account-${accountId}`,
+    mode: 'AUTOMATIC',
+  });
+  const sent = {
+    sentCaption: 'A clear campaign post',
+    sentMedia: ['https://cdn.example.com/a.jpg'],
+    scheduledInstant: '2027-08-14T13:00:00.000Z',
+    targets: [target(4), target(1)],
+  };
+  const planned = {
+    caption: 'A clear campaign post',
+    scheduledInstant: '2027-08-14T13:00:00.000Z',
+    mediaUrls: ['https://cdn.example.com/a.jpg'],
+    targets: [
+      {
+        channel: 'x' as const,
+        platform: 'twitter',
+        accountId: 1,
+        handle: '@a',
+        mode: 'AUTOMATIC' as const,
+      },
+      {
+        channel: 'fb' as const,
+        platform: 'facebook',
+        accountId: 4,
+        handle: '@b',
+        mode: 'AUTOMATIC' as const,
+      },
+    ],
+  };
+
+  it('finds nothing when the two sides agree, whatever order the accounts arrive in', () => {
+    // The provider promises no ordering, and an ordering difference is not a difference anyone
+    // wants to be asked to reconcile — so both sides sort before they are compared.
+    expect(publicationDriftFields(sent, planned)).toEqual([]);
+  });
+
+  it('reports an account the plan added and one it dropped', () => {
+    expect(
+      publicationDriftFields(sent, {
+        ...planned,
+        targets: [...planned.targets.slice(0, 1), { ...planned.targets[1], accountId: 9 } as never],
+      }),
+    ).toEqual(['accounts']);
+    expect(
+      publicationDriftFields(sent, { ...planned, targets: planned.targets.slice(0, 1) }),
+    ).toEqual(['accounts']);
+  });
+
+  it('reports every field that moved, in one answer', () => {
+    expect(
+      publicationDriftFields(sent, {
+        ...planned,
+        caption: 'A rewritten campaign post',
+        scheduledInstant: '2027-08-15T13:00:00.000Z',
+        mediaUrls: [],
+        targets: planned.targets.slice(0, 1),
+      }),
+    ).toEqual(['caption', 'schedule', 'media', 'accounts']);
+  });
+
+  it('says nothing about a schedule the plan no longer has an instant for', () => {
+    // An unscheduled post has no instant to compare, and claiming the schedule "differs" from
+    // nothing would be a guess. The service adds that case explicitly, from the post's own date.
+    const { scheduledInstant: _dropped, ...withoutInstant } = planned;
+    void _dropped;
+    expect(publicationDriftFields(sent, withoutInstant)).toEqual([]);
+  });
+});
+
+/**
+ * The comparison's own refusals — the cases where there is nothing to compare, or nothing that
+ * could be sent even if there were.
+ */
+describe('a provider comparison that refuses itself', () => {
+  const serviceAt = (provider: MockPublishProvider) =>
+    new PublishService(
+      db,
+      new LocalSignalProvider(db),
+      provider,
+      'America/New_York',
+      () => new Date('2026-01-01T00:00:00.000Z'),
+    );
+
+  it('refuses a publication whose provider id was never learned', async () => {
+    const post = add({ channels: ['x'] });
+    const provider = new MockPublishProvider(targets);
+    // An ambiguous submit is exactly how a publication ends up live with no id: the request may
+    // have arrived and there is no answer saying so.
+    provider.failure = new PublishProviderError('socket hang up', true);
+    const service = serviceAt(provider);
+    const plan = await service.preview(post.id);
+    const publication = await service.submit(post.id, plan.planHash);
+    expect(publication.state).toBe('UNCONFIRMED');
+    expect(publication.providerPostId).toBeUndefined();
+
+    const preview = await service.providerPreview(publication.id);
+    expect(preview.refusals.join(' ')).toMatch(/no provider id/);
+    expect(preview.reconcileHash).toBe('');
+    // Nothing was read, because there is nothing out there this app can name.
+    expect(provider.describes).toEqual([]);
+    for (const action of PROVIDER_ACTIONS)
+      expect(providerActionOffer(preview, action)?.available).toBe(false);
+  });
+
+  it('repeats the plan’s own refusal instead of offering an update it could not build', async () => {
+    const post = add({ channels: ['x'] });
+    const provider = new MockPublishProvider(targets);
+    const service = serviceAt(provider);
+    const plan = await service.preview(post.id);
+    const publication = await service.submit(post.id, plan.planHash);
+
+    // The post is edited into something that cannot be sent at all.
+    db.prepare('UPDATE signal_posts SET text=? WHERE id=?').run('   ', post.id);
+
+    const preview = await service.providerPreview(publication.id);
+    // The reason is the publishing preview's reason, said here too: a panel that reported only
+    // "no update available" would send the user looking for a cause it already knew.
+    expect(providerActionOffer(preview, 'UPDATE_CONTENT')?.refusals.join(' ')).toMatch(
+      /requires a caption/,
+    );
+    expect(providerActionOffer(preview, 'RESTORE_AND_RESUBMIT')?.refusals.join(' ')).toMatch(
+      /requires a caption/,
+    );
+    // Withdrawing it needs no plan at all, so that one still stands — which is the whole reason
+    // the actions carry their refusals separately rather than sharing one.
+    expect(providerActionOffer(preview, 'CANCEL')?.available).toBe(true);
+  });
+
+  it('notices an account set the provider was given elsewhere, whatever order it reports it in', async () => {
+    const post = add({ channels: ['x', 'fb'] });
+    const provider = new MockPublishProvider(targets);
+    const service = serviceAt(provider);
+    const plan = await service.preview(post.id);
+    const publication = await service.submit(post.id, plan.planHash);
+    // Sorted, because the channel order the post is read back in is not this assertion's subject.
+    expect([...publication.targets.map((target) => target.accountId)].sort()).toEqual([1, 2]);
+
+    // The same two accounts, reported back the other way round. Ordering is not a disagreement.
+    provider.record = { ...provider.record, accountIds: [2, 1] };
+    const same = await service.providerPreview(publication.id);
+    expect(same.warnings.join(' ')).not.toMatch(/did not send/);
+    expect(same.changed).toEqual([]);
+
+    // A third account nobody here asked for is.
+    provider.record = { ...provider.record, accountIds: [1, 2, 3] };
+    const different = await service.providerPreview(publication.id);
+    expect(different.changed).toEqual(['accounts']);
+    expect(different.warnings.join(' ')).toMatch(/did not send/);
+    expect(providerActionOffer(different, 'UPDATE_SCHEDULE')?.available).toBe(false);
+    // Bringing it back to Signal's own target set is the offered way out.
+    expect(providerActionOffer(different, 'UPDATE_CONTENT')?.available).toBe(true);
+  });
+});
+
+/**
+ * A publication written before the media snapshot existed.
+ *
+ * `sent_media` is nullable rather than defaulted for this case, and NULL is not `'[]'`: one is a
+ * submission that carried no media on purpose, the other is a submission whose media nobody
+ * recorded. Backfilling the second to the first would have made every migrated publication with
+ * media report a difference it has no evidence for, so the unknown stays unknown and the one action
+ * that needs the evidence is the only one refused.
+ */
+describe('a publication migrated from before the media snapshot', () => {
+  const clear = (publicationId: string) =>
+    db
+      .prepare(
+        'UPDATE signal_publications SET sent_media=NULL, sent_configurations=NULL WHERE id=?',
+      )
+      .run(publicationId);
+
+  it('claims no media difference it cannot evidence, and refuses only the reschedule', async () => {
+    const post = add({ channels: ['x'], mediaUrls: ['https://cdn.example.com/a.jpg'] });
+    const provider = new MockPublishProvider(targets);
+    const service = new PublishService(
+      db,
+      new LocalSignalProvider(db),
+      provider,
+      'America/New_York',
+      () => new Date('2026-01-01T00:00:00.000Z'),
+    );
+    const plan = await service.preview(post.id);
+    const publication = await service.submit(post.id, plan.planHash);
+    clear(publication.id);
+
+    // The post still holds its media and the snapshot no longer says what went out. Reporting
+    // `media` here would send the user to reconcile something nobody can show them.
+    const reread = service.get(publication.id) as SignalPublication;
+    expect(reread.sentMedia).toBeUndefined();
+    expect(reread.driftFields).toBeUndefined();
+
+    // Both a reschedule and a caption edit, so the reschedule's refusal can be read beside a
+    // content update that is genuinely available.
+    db.prepare('UPDATE signal_posts SET time=?, text=? WHERE id=?').run(
+      '15:30',
+      'A rewritten campaign post',
+      post.id,
+    );
+    const preview = await service.providerPreview(publication.id);
+    expect(preview.warnings.join(' ')).toMatch(/predates the media snapshot/);
+    // Rescheduling is the one action that has to prove it leaves the content alone, so it is the
+    // one that stops. The others do not depend on the proof.
+    expect(providerActionOffer(preview, 'UPDATE_SCHEDULE')?.available).toBe(false);
+    expect(providerActionOffer(preview, 'UPDATE_SCHEDULE')?.refusals.join(' ')).toMatch(
+      /predates the media snapshot/,
+    );
+    expect(providerActionOffer(preview, 'UPDATE_CONTENT')?.available).toBe(true);
+    expect(providerActionOffer(preview, 'CANCEL')?.available).toBe(true);
+    expect(providerActionOffer(preview, 'RESTORE_AND_RESUBMIT')?.available).toBe(true);
+
+    // Updating the content records a snapshot, which is what clears the refusal for good.
+    const updated = await service.applyProviderAction(
+      publication.id,
+      'UPDATE_CONTENT',
+      preview.reconcileHash,
+    );
+    expect(updated.sentMedia).toEqual(['https://cdn.example.com/a.jpg']);
   });
 });

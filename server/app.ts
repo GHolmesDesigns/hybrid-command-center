@@ -63,6 +63,7 @@ import type { PublishProvider } from './publish/provider.ts';
 import { UnavailablePublishProvider } from './publish/provider.ts';
 import { PostBridgeProvider } from './publish/post-bridge.ts';
 import { PublishRequestError, PublishService } from './publish/service.ts';
+import { PROVIDER_ACTIONS } from '../shared/publish.ts';
 import {
   OAuthStateError,
   beginAuthorization,
@@ -1480,6 +1481,40 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     try {
       const input = z.object({ automatic: z.boolean().default(false) }).parse(req.body ?? {});
       res.json(await publisher.reconcile(req.params.id, { automatic: input.automatic }));
+    } catch (error) {
+      next(error);
+    }
+  });
+  /**
+   * The no-write comparison between Signal and the post the provider is holding.
+   *
+   * `POST` rather than `GET` because it reaches the provider — the same reason the publishing
+   * preview is a `POST` — but it writes nothing on either side, locally or remotely, and there is
+   * no route here that mutates the provider without a token taken from this one first.
+   */
+  app.post('/api/signal/publications/:id/provider/preview', async (req, res, next) => {
+    try {
+      res.json(await publisher.providerPreview(req.params.id));
+    } catch (error) {
+      next(error);
+    }
+  });
+  /**
+   * Commit one action against the provider's copy. `reconcileHash` is the token the preview
+   * returned, covering both the plan and the provider's record, and the service rebuilds the
+   * comparison and refuses anything that has moved since.
+   */
+  app.post('/api/signal/publications/:id/provider/apply', async (req, res, next) => {
+    try {
+      const input = z
+        .object({
+          action: z.enum(PROVIDER_ACTIONS),
+          reconcileHash: z.string().length(64),
+        })
+        .parse(req.body);
+      res.json(
+        await publisher.applyProviderAction(req.params.id, input.action, input.reconcileHash),
+      );
     } catch (error) {
       next(error);
     }

@@ -139,9 +139,28 @@ export interface SignalPublication {
   timezone: string;
   sentCaption: string;
   sentChannels: SignalChannel[];
+  /**
+   * The media that went out, snapshotted beside the caption and for the same reason: a provider
+   * comparison has to weigh what the provider was handed, not what the post happens to hold now.
+   *
+   * Absent — not empty — on a publication written before it was recorded. An empty array is a
+   * submission that deliberately carried no media; absent means nobody knows, and the comparison
+   * refuses to turn that into a difference or into an agreement.
+   */
+  sentMedia?: string[];
   error?: string;
   /** One row per provider account, in the order the plan resolved them. */
   targets: SignalPublicationTarget[];
+  /**
+   * Which of Signal's fields have moved since this went out, derived rather than stored.
+   *
+   * Computed from local rows alone — the snapshot above against the post as it stands — so an edit
+   * raises **Provider update required** without anything being asked of, or done to, the provider.
+   * `accounts` is deliberately never reported here: resolving the account set needs the provider's
+   * own target list, so it belongs to the reconciliation preview, which is allowed to read.
+   * Absent on a publication the provider is no longer holding.
+   */
+  driftFields?: ProviderDiffField[];
   /** The last check of either kind, which is what "last checked" means on the planner. */
   checkedAt?: string;
   /** Automatic checks only. A manual refresh never spends one — see `reconcileSchedule`. */
@@ -403,3 +422,209 @@ export function deliveryTargetSummary(
 /** Whether a person may record this target as finished. Nothing else is theirs to finish. */
 export const deliveryTargetAwaitsPerson = (target: SignalPublicationTarget): boolean =>
   deliveryModeNeedsPerson(target.mode) && !target.manualCompletedAt;
+
+/**
+ * ## The provider record, and the four things that can be done to it
+ *
+ * Post Bridge has an update path: `PATCH /v1/posts/{id}` takes a caption, a `scheduled_at`, media,
+ * social accounts, and `platform_configurations` (`docs/publishing-integration.md` §7.2). That is
+ * what makes an *update* an action here rather than a cancel-and-resubmit, and it is why a
+ * publication keeps its `provider_post_id` and its permalinks across one.
+ *
+ * The vendor's own status vocabulary is `posted | scheduled | processing | failed` beside an
+ * `is_draft` flag, which is five facts in two fields. They are normalized to one union on the way
+ * in, because every rule below turns on exactly one question — *is it already out?* — and a rule
+ * that has to read two fields to answer it is a rule someone will one day read half of.
+ */
+export const PROVIDER_POST_STATES = [
+  'DRAFT',
+  'SCHEDULED',
+  'PROCESSING',
+  'PUBLISHED',
+  'FAILED',
+] as const;
+export type ProviderPostState = (typeof PROVIDER_POST_STATES)[number];
+
+export const PROVIDER_POST_STATE_LABEL: Record<ProviderPostState, string> = {
+  DRAFT: 'Held as a draft',
+  SCHEDULED: 'Scheduled with the provider',
+  PROCESSING: 'Going out now',
+  PUBLISHED: 'Already published',
+  FAILED: 'Failed at the provider',
+};
+
+/**
+ * What the provider says it is holding, read and never inferred.
+ *
+ * This is the *remote* half of every comparison below. It is read fresh for each preview and never
+ * stored: a cached copy of somebody else's record is the thing that makes a diff lie.
+ */
+export interface ProviderPostRecord {
+  providerPostId: string;
+  state: ProviderPostState;
+  caption: string;
+  /** Null is the provider's "post instantly", which this app never sends. */
+  scheduledInstant: string | null;
+  mediaUrls: string[];
+  accountIds: number[];
+  /** The provider's own last-modified stamp, where it gives one. Part of the staleness token. */
+  updatedAt?: string;
+}
+
+/**
+ * The two states in which the provider still owns a decision.
+ *
+ * `PROCESSING` is deliberately not one of them. The post is being sent as the question is asked, so
+ * an update racing it would land on either side of the send and there is no way to know which —
+ * exactly the ambiguity §8 exists to refuse rather than gamble on.
+ */
+export const providerRecordIsMutable = (state: ProviderPostState): boolean =>
+  state === 'DRAFT' || state === 'SCHEDULED';
+
+/** Whether the provider has already put this in front of readers. */
+export const providerRecordIsPublished = (state: ProviderPostState): boolean =>
+  state === 'PUBLISHED';
+
+export const PROVIDER_ACTIONS = [
+  'UPDATE_CONTENT',
+  'UPDATE_SCHEDULE',
+  'CANCEL',
+  'RESTORE_AND_RESUBMIT',
+] as const;
+export type ProviderAction = (typeof PROVIDER_ACTIONS)[number];
+
+export const PROVIDER_ACTION_LABEL: Record<ProviderAction, string> = {
+  UPDATE_CONTENT: 'Update provider content',
+  UPDATE_SCHEDULE: 'Update provider schedule',
+  CANCEL: 'Cancel provider post',
+  RESTORE_AND_RESUBMIT: 'Restore from Signal and resubmit',
+};
+
+export const PROVIDER_ACTION_DESCRIPTION: Record<ProviderAction, string> = {
+  UPDATE_CONTENT:
+    'Sends the caption, media, and per-platform tailoring Signal now holds, and leaves the provider on the instant it already has.',
+  UPDATE_SCHEDULE:
+    'Moves the provider to the date and time Signal now holds, and leaves the content it is already holding alone.',
+  CANCEL: 'Withdraws the post from the provider. Signal keeps the plan; nothing is deleted here.',
+  RESTORE_AND_RESUBMIT:
+    'Withdraws what the provider holds and sends this post again from Signal as a new submission.',
+};
+
+/**
+ * The fields a provider record and a Signal plan can disagree about.
+ *
+ * Four rather than one flat "changed" flag, because the two update actions split along them: a
+ * caption edit and a reschedule are different requests carrying different risk, and someone who
+ * moved a post by a day should not be offered a button that also rewrites its text.
+ */
+export const PROVIDER_DIFF_FIELDS = ['caption', 'schedule', 'media', 'accounts'] as const;
+export type ProviderDiffField = (typeof PROVIDER_DIFF_FIELDS)[number];
+
+export const PROVIDER_DIFF_FIELD_LABEL: Record<ProviderDiffField, string> = {
+  caption: 'Caption',
+  schedule: 'Scheduled for',
+  media: 'Media',
+  accounts: 'Accounts',
+};
+
+/** Which action carries which field. `accounts` rides with content, as one `PATCH` body does. */
+export const PROVIDER_DIFF_FIELD_ACTION: Record<ProviderDiffField, ProviderAction> = {
+  caption: 'UPDATE_CONTENT',
+  media: 'UPDATE_CONTENT',
+  accounts: 'UPDATE_CONTENT',
+  schedule: 'UPDATE_SCHEDULE',
+};
+
+/** One field, said twice — what Signal holds and what the provider holds. */
+export interface ProviderFieldDiff {
+  field: ProviderDiffField;
+  changed: boolean;
+  /** Signal's value, rendered for a reader. */
+  local: string;
+  /** The provider's value, rendered the same way so the two lines compare. */
+  remote: string;
+}
+
+/**
+ * Whether a Signal edit has left the provider holding something else.
+ *
+ * Answered from stored columns alone — the snapshot on the publication against the plan the post
+ * would produce now — so the planner can say **Provider update required** the moment an edit is
+ * saved, with no provider call and therefore no remote mutation. That is the acceptance criterion
+ * this function is: an edit raises the flag and stops there.
+ */
+export function publicationDriftFields(
+  publication: Pick<
+    SignalPublication,
+    'sentCaption' | 'sentMedia' | 'scheduledInstant' | 'targets'
+  >,
+  plan: Pick<PublishPreview, 'caption' | 'scheduledInstant' | 'targets'> & {
+    mediaUrls: readonly string[];
+  },
+): ProviderDiffField[] {
+  const fields: ProviderDiffField[] = [];
+  if (publication.sentCaption !== plan.caption) fields.push('caption');
+  if (plan.scheduledInstant && publication.scheduledInstant !== plan.scheduledInstant)
+    fields.push('schedule');
+  // Only where the snapshot says what went out. An unrecorded one is not evidence of a difference,
+  // and reporting one would send the user to reconcile something nobody can show them.
+  if (
+    publication.sentMedia &&
+    JSON.stringify(publication.sentMedia) !== JSON.stringify([...plan.mediaUrls])
+  )
+    fields.push('media');
+  const sent = publication.targets.map((target) => target.accountId).sort((a, b) => a - b);
+  const planned = plan.targets.map((target) => target.accountId).sort((a, b) => a - b);
+  if (JSON.stringify(sent) !== JSON.stringify(planned)) fields.push('accounts');
+  return fields;
+}
+
+/**
+ * The states in which drift is worth reporting.
+ *
+ * A cancelled, confirmed, or failed publication is not "out of date with the provider" — there is
+ * nothing at the provider left to be out of date with, or nothing that can still be changed. Only a
+ * submission the provider is still holding can be.
+ */
+export const publicationTracksProvider = (state: PublicationState): boolean =>
+  state === 'SUBMITTING' || state === 'SUBMITTED' || state === 'UNCONFIRMED';
+
+/** One action, offered with the reasons it would be turned down already attached. */
+export interface ProviderActionOffer {
+  action: ProviderAction;
+  /** True only when nothing refuses it and it would change something. */
+  available: boolean;
+  refusals: string[];
+}
+
+/**
+ * A no-write comparison of one publication against the provider and against Signal.
+ *
+ * Every action is offered with its refusals attached, so the panel never shows a button whose press
+ * would be turned down. `reconcileHash` covers both sides of the comparison — the plan and the
+ * provider record — which is what lets the commit reject a preview taken before either of them
+ * moved.
+ */
+export interface ProviderReconcilePreview {
+  publicationId: string;
+  postId: string;
+  /** Absent when the provider could not be read; `refusals` then says why. */
+  record?: ProviderPostRecord;
+  /** Empty string when there is nothing safe to commit against. */
+  reconcileHash: string;
+  /** One entry per field, in `PROVIDER_DIFF_FIELDS` order, changed or not. */
+  diffs: ProviderFieldDiff[];
+  /** The fields that actually differ, in the same order. */
+  changed: ProviderDiffField[];
+  /** One entry per action, in `PROVIDER_ACTIONS` order. */
+  actions: ProviderActionOffer[];
+  warnings: string[];
+  /** Reasons that stop every action, rather than one of them. */
+  refusals: string[];
+}
+
+/** The offer for one action, or undefined when the preview carries none. */
+export const providerActionOffer = (
+  preview: ProviderReconcilePreview,
+  action: ProviderAction,
+): ProviderActionOffer | undefined => preview.actions.find((offer) => offer.action === action);

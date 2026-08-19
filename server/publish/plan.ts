@@ -224,7 +224,14 @@ export function preflightPlatform(input: PlatformPreflight): {
   return { refusals, warnings };
 }
 
-const planHash = (value: unknown) =>
+/**
+ * The staleness token, over whatever a caller says the plan is made of.
+ *
+ * Exported because the provider reconciliation in `reconcile.ts` needs the same token over a wider
+ * subject — the plan *and* the provider's own record — and two hashing rules for two things that
+ * both mean "this is what you looked at" is how one of them ends up weaker than the other.
+ */
+export const planHash = (value: unknown) =>
   crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
 /**
