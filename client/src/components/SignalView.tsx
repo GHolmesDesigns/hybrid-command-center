@@ -10,6 +10,7 @@ import {
   ChevronRight,
   Circle,
   Clock3,
+  Copy,
   Plus,
   Paperclip,
   RefreshCw,
@@ -36,6 +37,7 @@ import {
   type SignalCta,
   type SignalFormat,
   type SignalPost,
+  type SignalSlot,
   type SignalStatus,
 } from '../../../shared/signal';
 import {
@@ -256,11 +258,13 @@ function Editor({
   post,
   close,
   saved,
+  opened,
   removed,
 }: {
   post: SignalPost;
   close: () => void;
   saved: (post: SignalPost) => Promise<void>;
+  opened: (post: SignalPost) => Promise<void>;
   removed: (id: string) => Promise<void>;
 }) {
   const [draft, setDraft] = useState(() => draftFor(post));
@@ -279,6 +283,7 @@ function Editor({
    */
   const [savedLayers, setSavedLayers] = useState(() => variantMap([]));
   const [layers, setLayers] = useState(() => variantMap([]));
+  const [suggestedSlot, setSuggestedSlot] = useState<SignalSlot | null>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const hasUnsavedChanges = JSON.stringify(draft) !== JSON.stringify(draftFor(post));
   const hasUnsavedVariants =
@@ -447,6 +452,48 @@ function Editor({
       await removed(post.id);
     } catch (reason) {
       setError((reason as Error).message);
+      setBusy(false);
+    }
+  };
+
+  const duplicate = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      await opened(await send<SignalPost>(`/signal/posts/${post.id}/duplicate`, 'POST'));
+    } catch (reason) {
+      setError((reason as Error).message);
+      setBusy(false);
+    }
+  };
+
+  const suggestSlot = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      setSuggestedSlot(await api<SignalSlot>(`/signal/posts/${post.id}/next-slot?from=${today()}`));
+    } catch (reason) {
+      setError((reason as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmSlot = async () => {
+    if (!suggestedSlot) return;
+    setBusy(true);
+    setError('');
+    try {
+      const next = await send<SignalPost>(`/signal/posts/${post.id}/slot`, 'POST', {
+        ...suggestedSlot,
+        from: today(),
+      });
+      setSuggestedSlot(null);
+      await opened(next);
+    } catch (reason) {
+      const failure = reason as Error & { data?: { suggestion?: SignalSlot | null } };
+      setError(failure.message);
+      if (failure.data?.suggestion) setSuggestedSlot(failure.data.suggestion);
       setBusy(false);
     }
   };
@@ -666,14 +713,65 @@ function Editor({
               />
             </label>
           </div>
-          {draft.date && (
+          <div className="signal-slot-actions">
             <button
               type="button"
-              className="secondary signal-unschedule"
-              onClick={() => setDraft({ ...draft, date: '' })}
+              className="secondary"
+              disabled={busy || hasUnsavedChanges}
+              onClick={() => void duplicate()}
             >
-              Move to unscheduled queue
+              <Copy aria-hidden="true" /> Duplicate to unscheduled queue
             </button>
+            <button
+              type="button"
+              className="secondary"
+              disabled={busy || hasUnsavedChanges}
+              onClick={() => void suggestSlot()}
+            >
+              Suggest next open slot
+            </button>
+            {draft.date && (
+              <button
+                type="button"
+                className="secondary signal-unschedule"
+                onClick={() => setDraft({ ...draft, date: '' })}
+              >
+                Move to unscheduled queue
+              </button>
+            )}
+          </div>
+          {hasUnsavedChanges && (
+            <p className="signal-preset-notice">
+              Save changes before duplicating or suggesting a slot.
+            </p>
+          )}
+          {suggestedSlot && (
+            <section className="signal-slot-suggestion" aria-label="Suggested slot">
+              <h3>Suggested slot</h3>
+              <p>
+                {dayHeading(suggestedSlot.date, {
+                  weekday: 'long',
+                  month: 'long',
+                  day: 'numeric',
+                  year: 'numeric',
+                })}{' '}
+                at {suggestedSlot.time}
+              </p>
+              <p>Nothing is saved until you confirm. Occupancy is checked again at that moment.</p>
+              <div className="signal-editor-actions">
+                <button type="button" className="secondary" onClick={() => setSuggestedSlot(null)}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="submit"
+                  onClick={() => void confirmSlot()}
+                  disabled={busy}
+                >
+                  Use this slot
+                </button>
+              </div>
+            </section>
           )}
           <div className="form-row triple">
             <Select
@@ -1101,9 +1199,14 @@ export function SignalView() {
       </div>
       {editing && (
         <Editor
+          key={editing.id}
           post={editing}
           close={() => setEditing(null)}
           saved={refreshed}
+          opened={async (post) => {
+            await load();
+            setEditing(post);
+          }}
           removed={refreshed}
         />
       )}

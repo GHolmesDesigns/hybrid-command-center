@@ -16,7 +16,11 @@ import {
 import { DRIVE_FOLDER_MIME, type DriveFile, type DriveListing } from '../../shared/drive';
 import type { IntegrationEvent } from '../../shared/integration-log';
 import type { CalendarRange } from '../../shared/calendar';
-import { SIGNAL_DEFAULT_TIME, type SignalPost } from '../../shared/signal';
+import {
+  SIGNAL_DEFAULT_TIME,
+  suggestNextOpenSignalSlot,
+  type SignalPost,
+} from '../../shared/signal';
 import type { PublishPreview, SignalPublication } from '../../shared/publish';
 import type { PublishVariantRecord } from '../../shared/publish-variants';
 
@@ -324,6 +328,74 @@ const respondTo = (url: string, init?: RequestInit) => {
     if (testState.signalVariantsError) return reply(400, { error: testState.signalVariantsError });
     testState.signalVariantsPayload = (body.variants ?? []) as PublishVariantRecord[];
     return testState.signalVariantsPayload;
+  }
+  const duplicatePath = url.match(/\/api\/signal\/posts\/([^/?]+)\/duplicate$/);
+  if (duplicatePath && method === 'POST') {
+    const source = testState.signalPostsPayload.find((post) => post.id === duplicatePath[1]);
+    if (!source) return reply(404, { error: 'Signal post not found.' });
+    const copy = signalPost(`copy-${source.id}`, source.text, null, {
+      channels: [...source.channels],
+      mediaUrls: [...source.mediaUrls],
+      time: source.time,
+      format: source.format,
+      status: 'DRAFT',
+      campaign: source.campaign,
+      cta: source.cta,
+      position: testState.signalPostsPayload.filter((post) => post.date === null).length,
+    });
+    testState.signalPostsPayload = [...testState.signalPostsPayload, copy];
+    return copy;
+  }
+  const nextSlotPath = url.match(/\/api\/signal\/posts\/([^/?]+)\/next-slot(?:\?|$)/);
+  if (nextSlotPath && method === 'GET') {
+    const post = testState.signalPostsPayload.find((candidate) => candidate.id === nextSlotPath[1]);
+    if (!post) return reply(404, { error: 'Signal post not found.' });
+    const from = new URLSearchParams(url.split('?')[1] ?? '').get('from') ?? '';
+    const occupied = testState.signalPostsPayload
+      .filter((candidate) => candidate.id !== post.id && candidate.date !== null)
+      .map((candidate) => ({ date: candidate.date as string, time: candidate.time }));
+    const suggestion = suggestNextOpenSignalSlot({
+      occupied,
+      time: post.time,
+      fromDate: from,
+      skip: post.date ? { date: post.date, time: post.time } : null,
+    });
+    return suggestion
+      ? suggestion
+      : reply(409, {
+          error: 'No open slot was found in the next two years.',
+          code: 'NO_OPEN_SLOT',
+          suggestion: null,
+        });
+  }
+  const applySlotPath = url.match(/\/api\/signal\/posts\/([^/?]+)\/slot$/);
+  if (applySlotPath && method === 'POST') {
+    const post = testState.signalPostsPayload.find(
+      (candidate) => candidate.id === applySlotPath[1],
+    );
+    if (!post) return reply(404, { error: 'Signal post not found.' });
+    const occupied = testState.signalPostsPayload
+      .filter((candidate) => candidate.id !== post.id && candidate.date !== null)
+      .map((candidate) => ({ date: candidate.date as string, time: candidate.time }));
+    const confirmed = { date: body.date as string, time: body.time as string };
+    if (occupied.some((slot) => slot.date === confirmed.date && slot.time === confirmed.time)) {
+      return reply(409, {
+        error: 'That slot is no longer open.',
+        code: 'SLOT_TAKEN',
+        suggestion: suggestNextOpenSignalSlot({
+          occupied,
+          time: post.time,
+          fromDate: body.from,
+          skip: post.date ? { date: post.date, time: post.time } : null,
+        }),
+      });
+    }
+    testState.signalPostsPayload = testState.signalPostsPayload.map((candidate) =>
+      candidate.id === post.id
+        ? { ...candidate, date: confirmed.date, time: confirmed.time }
+        : candidate,
+    );
+    return testState.signalPostsPayload.find((candidate) => candidate.id === post.id) ?? {};
   }
   const publishPreviewPath = url.match(/\/api\/signal\/posts\/([^/?]+)\/publish\/preview$/);
   if (publishPreviewPath && method === 'POST')

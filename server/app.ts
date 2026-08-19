@@ -40,8 +40,11 @@ import { readCalendarRange } from './calendar.ts';
 import {
   SignalPostNotFoundError,
   SignalVariantError,
+  SignalSlotConflictError,
+  applyPostSlot,
   createPost,
   deletePost,
+  duplicatePost,
   getPost,
   getPostVariants,
   listQueue,
@@ -50,6 +53,9 @@ import {
   signalPostPatch,
   signalRangeQuery,
   signalVariantsInput,
+  signalSlotFromQuery,
+  signalSlotInput,
+  suggestPostSlot,
   updatePost,
 } from './signal/service.ts';
 import type { DriveProvider } from './drive/provider.ts';
@@ -1409,6 +1415,40 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       next(error);
     }
   });
+  /**
+   * Duplicate copies composition into the unscheduled queue and leaves publication rows on the
+   * original. The copy is a new plan: new id, no date, draft status.
+   */
+  app.post('/api/signal/posts/:id/duplicate', (req, res, next) => {
+    try {
+      res.status(201).json(duplicatePost(db, req.params.id));
+    } catch (error) {
+      next(error);
+    }
+  });
+  /**
+   * Next free cell at this post's time, from the Signal schedule. Nothing is written; the
+   * planner shows it until the user confirms.
+   */
+  app.get('/api/signal/posts/:id/next-slot', (req, res, next) => {
+    try {
+      const { from } = signalSlotFromQuery.parse(req.query);
+      res.json(suggestPostSlot(db, req.params.id, from));
+    } catch (error) {
+      next(error);
+    }
+  });
+  /**
+   * Confirm a suggested slot. Occupancy is recalculated here, immediately before the write, so
+   * a cell taken between suggestion and confirmation is refused rather than double-booked.
+   */
+  app.post('/api/signal/posts/:id/slot', (req, res, next) => {
+    try {
+      res.json(applyPostSlot(db, req.params.id, signalSlotInput.parse(req.body)));
+    } catch (error) {
+      next(error);
+    }
+  });
   app.post('/api/signal/posts/:id/publish/preview', async (req, res, next) => {
     try {
       res.json(await publisher.preview(req.params.id));
@@ -1582,8 +1622,11 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
           error instanceof SignalPostNotFoundError
           ? 404
           : // A refused merge is the caller's problem — the wrong pair, or a preview the
-            // workspace moved out from under — and each case carries its own status.
-            error instanceof PublishRequestError || error instanceof ClientMergeError
+            // workspace moved out from under — and each case carries its own status. A slot
+            // that is no longer free is the same kind of refusal.
+            error instanceof PublishRequestError ||
+              error instanceof ClientMergeError ||
+              error instanceof SignalSlotConflictError
             ? error.status
             : error?.code === 'SQLITE_CONSTRAINT_UNIQUE'
               ? 409
@@ -1606,6 +1649,12 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
           : error instanceof Error
             ? error.message
             : 'Unexpected error',
+      ...(error instanceof SignalSlotConflictError
+        ? {
+            code: error.suggestion ? 'SLOT_TAKEN' : 'NO_OPEN_SLOT',
+            suggestion: error.suggestion,
+          }
+        : {}),
     });
   });
   return app;
