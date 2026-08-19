@@ -490,3 +490,46 @@ export function suggestNextOpenSignalSlot(input: {
   }
   return null;
 }
+
+const slotDayIndex = (date: string): number => {
+  const [year, month, day] = date.split('-').map(Number) as [number, number, number];
+  return Date.UTC(year, month - 1, day) / 86_400_000;
+};
+
+const slotMinuteOfDay = (time: string): number => {
+  const [hour, minute] = time.split(':').map(Number) as [number, number];
+  return hour * 60 + minute;
+};
+
+/**
+ * How many minutes separate two calendar slots, counted as a reader would count them.
+ *
+ * Label arithmetic, not instant arithmetic. Neither side is turned into a moment: the day part is
+ * a Gregorian day number and the time part is a minute of the day, so the answer is the distance
+ * between two cells on a wall calendar and it is the same answer in every zone. That is the cell
+ * rule above, extended to a difference — the one thing a rule about *approaching* a slot needs and
+ * the one thing string comparison cannot give.
+ *
+ * `Date.UTC` is used purely as a Gregorian surface, the same way `shared/calendar.ts` uses it, and
+ * it maps a year below 100 into the 1900s. Both sides go through it, so a difference between two
+ * four-digit years is exact; a two-digit year is not a date this app stores.
+ *
+ * Positive when `to` is later than `from`. A slot already past is negative, which is what lets a
+ * caller tell *soon* from *missed* without a second function.
+ */
+export const signalSlotMinutesBetween = (from: SignalSlot, to: SignalSlot): number =>
+  (slotDayIndex(to.date) - slotDayIndex(from.date)) * 1440 +
+  slotMinuteOfDay(to.time) -
+  slotMinuteOfDay(from.time);
+
+/**
+ * Enough of a post to name it in a list, from its first line.
+ *
+ * Alerts, log summaries, and anything else that has to say *which post* read this rather than
+ * slicing the text themselves, so one post is named the same way wherever it is mentioned.
+ */
+export function signalPostName(text: string, limit = 60): string {
+  const line = (text.split('\n')[0] as string).trim();
+  if (!line) return 'Untitled post';
+  return line.length > limit ? `${line.slice(0, limit).trimEnd()}…` : line;
+}

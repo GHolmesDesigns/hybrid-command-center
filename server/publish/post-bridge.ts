@@ -1,6 +1,7 @@
 /* v8 ignore file -- the live adapter is exercised only by the account owner's manual QA; automated publishing tests must use MockPublishProvider. */
 import {
   PublishProviderError,
+  PUBLISH_RATE_LIMIT_FALLBACK_SECONDS,
   type ProviderPostRecord,
   type PublishProvider,
   type PublishRequest,
@@ -32,11 +33,24 @@ export class PostBridgeProvider implements PublishProvider {
       throw new PublishProviderError((error as Error).message, true);
     }
     const body: unknown = await response.json().catch(() => ({}));
-    if (!response.ok)
+    if (!response.ok) {
+      // A 429 is a fact about the connection rather than about this request, so it is marked as one
+      // and `Retry-After` is honoured where the response carries it (§9).
+      const retryAfter = Number(response.headers.get('Retry-After'));
       throw new PublishProviderError(
         `Post Bridge refused the request (${response.status}).`,
         false,
+        response.status === 429
+          ? {
+              rateLimited: true,
+              retryAfterSeconds:
+                Number.isFinite(retryAfter) && retryAfter > 0
+                  ? retryAfter
+                  : PUBLISH_RATE_LIMIT_FALLBACK_SECONDS,
+            }
+          : {},
       );
+    }
     return body;
   }
   async listTargets(): Promise<PublishTarget[]> {

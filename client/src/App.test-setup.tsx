@@ -27,6 +27,11 @@ import type {
   SignalPublication,
 } from '../../shared/publish';
 import type { PublishVariantRecord } from '../../shared/publish-variants';
+import {
+  DEFAULT_QUEUE_HEALTH_CONFIG,
+  type QueueHealthAlert,
+  type QueueHealthSummary,
+} from '../../shared/queue-health';
 
 export {
   DEFAULT_BRANDING,
@@ -203,6 +208,65 @@ export const testState = {
    */
   clientMergePreviewError: null as { status: number; error: string } | null,
   clientMergeCommitError: null as { status: number; error: string } | null,
+  /**
+   * The queue-health summary the planner loads beside the grid.
+   *
+   * Held as state rather than answered from a fixture, so acknowledging behaves the way the route
+   * does: the alert comes back marked and the counts move, without the case restating the summary.
+   * The default is a clear one, which is what every suite that is not about health should see.
+   */
+  queueHealthSummary: clearQueueHealth() as QueueHealthSummary,
+  queueHealthError: null as string | null,
+};
+
+/** A summary with nothing on it, which is what an untouched planner suite should be handed. */
+export function clearQueueHealth(): QueueHealthSummary {
+  return {
+    generatedAt: '2026-09-14T12:00:00.000Z',
+    config: { ...DEFAULT_QUEUE_HEALTH_CONFIG },
+    alerts: [],
+    counts: { action: 0, watch: 0, acknowledged: 0 },
+  };
+}
+
+/** One alert, with only the fields a case cares about spelled out. */
+export const queueHealthAlert = (
+  overrides: Partial<QueueHealthAlert> & Pick<QueueHealthAlert, 'id' | 'kind'>,
+): QueueHealthAlert => ({
+  severity: 'ACTION',
+  subject: 'A delivered campaign post',
+  title: 'Not delivered',
+  detail: 'Nothing went out.',
+  href: '/signal',
+  fingerprint: 'fingerprint-1',
+  acknowledged: false,
+  ...overrides,
+});
+
+/** The counts a summary's own alerts imply, so a stubbed acknowledgement cannot disagree with them. */
+const queueHealthCounts = (alerts: QueueHealthAlert[]): QueueHealthSummary['counts'] => ({
+  action: alerts.filter((alert) => !alert.acknowledged && alert.severity === 'ACTION').length,
+  watch: alerts.filter((alert) => !alert.acknowledged && alert.severity === 'WATCH').length,
+  acknowledged: alerts.filter((alert) => alert.acknowledged).length,
+});
+
+/** Marks or unmarks one alert and answers with the whole summary, as the route does. */
+const setQueueHealthAcknowledged = (alertId: string, acknowledged: boolean) => {
+  const alerts = testState.queueHealthSummary.alerts.map((alert) =>
+    alert.id === alertId
+      ? {
+          ...alert,
+          acknowledged,
+          ...(acknowledged ? { acknowledgedAt: '2026-09-14T12:30:00.000Z' } : {}),
+        }
+      : alert,
+  );
+  testState.queueHealthSummary = {
+    ...testState.queueHealthSummary,
+    alerts,
+    counts: queueHealthCounts(alerts),
+  };
+  return testState.queueHealthSummary;
 };
 
 /** The plan the server would answer a preview with, taken from the current client state. */
@@ -300,6 +364,29 @@ const respondTo = (url: string, init?: RequestInit) => {
     return testState.calendarPayload
       ? testState.calendarPayload(from, to)
       : calendarRange({ from, to });
+  }
+  /**
+   * Queue health. The summary is derived on the server, so the stub answers with whatever the case
+   * set up and moves it the way the route would: an acknowledgement marks the alert and the counts
+   * follow from the alerts rather than being restated.
+   */
+  if (url.endsWith('/api/signal/health') && method === 'GET')
+    return testState.queueHealthError
+      ? reply(503, { error: testState.queueHealthError })
+      : testState.queueHealthSummary;
+  if (url.endsWith('/api/signal/health/config') && method === 'PUT') {
+    testState.queueHealthSummary = {
+      ...testState.queueHealthSummary,
+      config: { ...testState.queueHealthSummary.config, ...body },
+    };
+    return testState.queueHealthSummary;
+  }
+  const acknowledgePath = url.match(/\/api\/signal\/health\/alerts\/([^/]+)\/acknowledge$/);
+  if (acknowledgePath && (method === 'POST' || method === 'DELETE')) {
+    const alertId = decodeURIComponent(acknowledgePath[1] as string);
+    if (!testState.queueHealthSummary.alerts.some((alert) => alert.id === alertId))
+      return reply(404, { error: 'That alert is not in the current summary.' });
+    return setQueueHealthAcknowledged(alertId, method === 'POST');
   }
   if (url.includes('/api/signal/posts?') && method === 'GET') {
     const query = new URLSearchParams(url.split('?')[1] ?? '');
@@ -439,6 +526,12 @@ const respondTo = (url: string, init?: RequestInit) => {
   if (finishPath && method === 'POST')
     return testState.publishFinishPayload ?? reply(409, { error: 'Nothing to finish here.' });
   const signalPostPath = url.match(/\/api\/signal\/posts\/([^/?]+)$/);
+  // One post by id, which is how the planner opens the post an address names.
+  if (signalPostPath && method === 'GET')
+    return (
+      testState.signalPostsPayload.find((post) => post.id === signalPostPath[1]) ??
+      reply(404, { error: 'Signal post not found.' })
+    );
   if (signalPostPath && method === 'PATCH') {
     if (testState.signalMutationError) return reply(400, { error: testState.signalMutationError });
     testState.signalPostsPayload = testState.signalPostsPayload.map((post) =>
@@ -831,6 +924,8 @@ beforeEach(() => {
   testState.signalVariantsError = null;
   testState.clientMergePreviewError = null;
   testState.clientMergeCommitError = null;
+  testState.queueHealthSummary = clearQueueHealth();
+  testState.queueHealthError = null;
   requests.length = 0;
   vi.stubGlobal(
     'fetch',

@@ -163,6 +163,20 @@ export interface SignalPublication {
   driftFields?: ProviderDiffField[];
   /** The last check of either kind, which is what "last checked" means on the planner. */
   checkedAt?: string;
+  /**
+   * What the most recent provider check concluded, and what this publication held before it.
+   *
+   * Two fields rather than one "it changed" flag, because a reader wants the move and not the fact
+   * of a move: *accepted, then not delivered* is a different sentence from *accepted, then
+   * delivered*. They are written by a check and by nothing else, which is what makes `checkedState`
+   * a usable guard — anything the user does afterwards moves `state` away from it, and a rule
+   * comparing the two stops reporting a change that has already been answered.
+   *
+   * Both are absent until the provider has been asked once, and `priorState` stays absent when a
+   * check found nothing new.
+   */
+  checkedState?: PublicationState;
+  priorState?: PublicationState;
   /** Automatic checks only. A manual refresh never spends one — see `reconcileSchedule`. */
   checkAttempts: number;
   createdAt: string;

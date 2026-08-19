@@ -86,6 +86,7 @@ import {
 } from '../../../shared/publish-capabilities';
 import type { PublishVariantRecord } from '../../../shared/publish-variants';
 import { PlatformVariantsEditor, PublishPreviewTabs } from './SignalVariants';
+import { SignalHealthPanel } from './SignalHealth';
 import { previewPlatforms, variantList, variantMap } from './signal-variants';
 
 type SignalRange = {
@@ -1440,6 +1441,22 @@ export function SignalView() {
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState('');
   const [truncated, setTruncated] = useState(false);
+  /**
+   * Bumped whenever this page changes something the health summary is derived from.
+   *
+   * The summary is a reading of posts and deliveries, so an edit here can move a line there — and
+   * the panel has no way of knowing that on its own. This is the planner saying *ask again*.
+   */
+  const [healthKey, setHealthKey] = useState(0);
+  /**
+   * The post named in the address, per `docs/view-state-convention.md`.
+   *
+   * Durable rather than local state so a queue-health alert, or anything else, can link straight to
+   * one post — which is the whole of what makes an alert actionable. It is read defensively: an id
+   * that no longer resolves reports itself and leaves the planner usable.
+   */
+  const requestedPost = params.get('post');
+  const opened = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1463,6 +1480,40 @@ export function SignalView() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  /**
+   * Opens the post the address names, from the range if it is there and from the API if it is not.
+   *
+   * An alert can point at a post in another month, so the planner cannot assume the id is one of the
+   * cells it is drawing. `opened` records the id this effect has already acted on, so a failed
+   * lookup reports once instead of retrying every time the range reloads.
+   */
+  useEffect(() => {
+    if (!requestedPost || opened.current === requestedPost) return;
+    opened.current = requestedPost;
+    const local = [...posts, ...queue].find((post) => post.id === requestedPost);
+    if (local) {
+      setEditing(local);
+      return;
+    }
+    void api<SignalPost>(`/signal/posts/${requestedPost}`)
+      .then(setEditing)
+      .catch((reason: Error) => setError(reason.message));
+  }, [requestedPost, posts, queue]);
+
+  /** Closes the editor and drops the post from the address, leaving every other parameter alone. */
+  const closeEditor = useCallback(() => {
+    setEditing(null);
+    opened.current = null;
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete('post');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setParams]);
 
   const byDate = useMemo(() => {
     const grouped = new Map<string, SignalPost[]>();
@@ -1491,7 +1542,8 @@ export function SignalView() {
   };
 
   const refreshed = async () => {
-    setEditing(null);
+    closeEditor();
+    setHealthKey((key) => key + 1);
     await load();
   };
 
@@ -1550,6 +1602,9 @@ export function SignalView() {
           This {spanLabel} has more than 500 posts. Only the first 500 are shown.
         </div>
       )}
+      {/* Above the planner, because it is the thing to read first: a failed delivery and an empty
+          channel are not visible anywhere in the grid below. */}
+      <SignalHealthPanel reloadKey={healthKey} />
       <div className="signal-layout">
         <aside className="signal-queue" aria-labelledby="signal-queue-title">
           <div className="signal-section-head">
@@ -1669,10 +1724,11 @@ export function SignalView() {
         <Editor
           key={editing.id}
           post={editing}
-          close={() => setEditing(null)}
+          close={closeEditor}
           saved={refreshed}
           opened={async (post) => {
             await load();
+            opened.current = post.id;
             setEditing(post);
           }}
           removed={refreshed}

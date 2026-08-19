@@ -63,12 +63,39 @@ export interface PublishSubmission {
 
 export class PublishProviderError extends Error {
   readonly ambiguous: boolean;
-  constructor(message: string, ambiguous = false) {
+  /**
+   * Whether the provider refused because we are asking too often.
+   *
+   * Kept apart from `ambiguous`, which is about whether the request may have landed. A rate limit
+   * landed nothing and is not a fact about this post at all — it is a fact about the connection, and
+   * `docs/publishing-integration.md` §9 makes any 429 authoritative. The app reports it rather than
+   * hiding it inside one post's error, which is what `server/publish/sync-health.ts` records.
+   */
+  readonly rateLimited: boolean;
+  /** How long the provider asked us to wait, in seconds, where it said. */
+  readonly retryAfterSeconds?: number;
+  constructor(
+    message: string,
+    ambiguous = false,
+    rateLimit: { rateLimited?: boolean; retryAfterSeconds?: number } = {},
+  ) {
     super(message);
     this.name = 'PublishProviderError';
     this.ambiguous = ambiguous;
+    this.rateLimited = rateLimit.rateLimited ?? false;
+    if (rateLimit.retryAfterSeconds !== undefined)
+      this.retryAfterSeconds = rateLimit.retryAfterSeconds;
   }
 }
+
+/**
+ * How long to treat the connection as rate-limited when the provider named no delay.
+ *
+ * The cap §9 sets on backoff, used as the deadline here for the same reason: a limit whose length
+ * nobody stated is not a limit to guess low on, and reporting a minute is a claim the next manual
+ * refresh can disprove immediately.
+ */
+export const PUBLISH_RATE_LIMIT_FALLBACK_SECONDS = 60;
 
 export interface PublishProvider {
   readonly available: boolean;

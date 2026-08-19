@@ -58,6 +58,14 @@ import {
   suggestPostSlot,
   updatePost,
 } from './signal/service.ts';
+import {
+  QueueAlertNotFoundError,
+  acknowledgeQueueAlert,
+  queueHealthConfigInput,
+  readQueueHealth,
+  restoreQueueAlert,
+  writeQueueHealthConfig,
+} from './signal/queue-health.ts';
 import type { DriveProvider } from './drive/provider.ts';
 import type { PublishProvider } from './publish/provider.ts';
 import { UnavailablePublishProvider } from './publish/provider.ts';
@@ -1372,6 +1380,55 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       next(error);
     }
   });
+  /**
+   * Queue health: what this workspace's own rows say is wrong with it.
+   *
+   * A read, derived on every request from posts, deliveries, and the record of the last provider
+   * synchronisation — there is no alerts table and nothing here writes one. The rules are in
+   * `shared/queue-health.ts`; this route gathers and returns.
+   *
+   * No provider is contacted. Every alert is a conclusion about local rows, which is what makes the
+   * summary safe to load with the planner rather than behind a button.
+   */
+  app.get('/api/signal/health', (_req, res, next) => {
+    try {
+      res.json(readQueueHealth(db, clock()));
+    } catch (error) {
+      next(error);
+    }
+  });
+  /** The windows the rules measure against. A partial body moves one and leaves the rest. */
+  app.put('/api/signal/health/config', (req, res, next) => {
+    try {
+      writeQueueHealthConfig(db, queueHealthConfigInput.parse(req.body));
+      res.json(readQueueHealth(db, clock()));
+    } catch (error) {
+      next(error);
+    }
+  });
+  /**
+   * *I have seen this*, and nothing more.
+   *
+   * The write lands in `signal_alert_acks` and touches no post, publication, or target — the
+   * acceptance criterion of this card, kept by the module having no statement that could. The
+   * acknowledgement records the fingerprint it was shown, so a situation that changes afterwards
+   * comes back as a live alert rather than staying dismissed for a problem that has moved.
+   */
+  app.post('/api/signal/health/alerts/:id/acknowledge', (req, res, next) => {
+    try {
+      res.json(acknowledgeQueueAlert(db, req.params.id, clock()));
+    } catch (error) {
+      next(error);
+    }
+  });
+  /** Puts one back on the list. Already absent is the state asked for, so this never refuses. */
+  app.delete('/api/signal/health/alerts/:id/acknowledge', (req, res, next) => {
+    try {
+      res.json(restoreQueueAlert(db, req.params.id, clock()));
+    } catch (error) {
+      next(error);
+    }
+  });
   /** The unscheduled queue — posts with no date, which belong to no range and no calendar cell. */
   app.get('/api/signal/queue', (_req, res, next) => {
     try {
@@ -1669,7 +1726,10 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         ? 400
         : // Editing or deleting a post that is not there is the caller addressing something
           // that does not exist, not a failure of the write.
-          error instanceof SignalPostNotFoundError
+          error instanceof SignalPostNotFoundError ||
+            // Acknowledging an alert that is not in the summary is the same kind of miss: the
+            // summary is derived, so an id with nothing behind it names a fact that has moved on.
+            error instanceof QueueAlertNotFoundError
           ? 404
           : // A refused merge is the caller's problem — the wrong pair, or a preview the
             // workspace moved out from under — and each case carries its own status. A slot

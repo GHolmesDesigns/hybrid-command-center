@@ -781,6 +781,15 @@ syncs") and nothing else. Absence of a documented limit is not absence of a limi
 
 - **Any 429 from any endpoint is authoritative.** Honour `Retry-After` when the response carries
   one; otherwise exponential backoff with full jitter — base 1 s, cap 60 s, at most 5 attempts.
+- **A rate limit is a fact about the connection, not about one post**, so it is recorded as one.
+  `server/publish/sync-health.ts` keeps two values — when the provider was last reached, and the
+  moment a limit it named runs until — and the queue-health summary reports them
+  (`shared/queue-health.ts`, `SYNC_BEHIND`). Reaching the provider again clears the limit, because
+  getting an answer is proof it has passed. The record is written by the reconciliation check alone:
+  a preview reading the account list reaches the provider without refreshing a single delivery
+  answer, and stamping that as a synchronisation would keep the record permanently fresh. If
+  analytics is ever read (§14 leaves it undecided), its own sync stamps the same record and needs no
+  new alert.
 - **Only safe requests are retried.** Every `GET`, and `POST /v1/posts` only in the rows marked
   safe in §8. The ambiguous row is never retried by machine.
 - **One submit in flight at a time**, plus a fixed ceiling of 60 submits per rolling hour. A loop
