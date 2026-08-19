@@ -450,6 +450,10 @@ What a merge does:
   one under the client you kept.
 - Makes the duplicate's name an alias. A future playbook import naming it attaches to the client
   you kept instead of recreating work under the archived one.
+- Moves any **import identity** the duplicate carried — the id a playbook's own source knows it by —
+  onto the client you kept, so a playbook written from that source lands on the work rather than
+  beside it. The summary lists each one before you confirm, so an identity you did not expect to see
+  on this client is something you can stop and look at.
 
 A merged client cannot be unarchived, chosen as the destination of another merge, or given a
 project back by editing one. If the summary is out of date — someone added or renamed a project
@@ -890,6 +894,38 @@ passwords, keys, and access tokens are stripped out before a record is written.
 
 Importing never touches Google Drive. Imported clients and projects start as **Drive offline**;
 use **Sync to Folder** on the dashboard to create their folders when you are ready.
+
+#### When a client is renamed where the playbook comes from
+
+Matching a client by name works until the name changes. Rename a client in the spreadsheet or the
+system your playbooks are written from, and the next import sees a client this workspace has never
+heard of — so it creates a second one, and the work splits across two records.
+
+The `Clients` tab has two optional columns that prevent that: `client_import_source`, the source the
+playbook was written from, written as a UUID, and `client_import_id`, the id the client has there.
+Fill both in, or neither. The sample workbook has them filled in for both of its clients.
+
+The first import records that pair against the client, and from then on it is what the client is
+found by:
+
+- A **renamed** client still resolves to the client it has always been. The check reports it as
+  skipped, saying the identity is what matched. Its name in this workspace is left alone — an import
+  never renames anything you already have — so rename it here too if you want the two to agree.
+- A client whose identity is **new** but whose name already matches one here attaches to that client
+  and records the identity against it, so the next import is safe even if the name has changed by
+  then.
+- When the identity points at one client and the name points at a **different** one, the whole import
+  is refused and nothing is written. The check names both clients. Either the row is wrong, or the
+  two are duplicates that want [merging](#merging-a-duplicate-client) first, and neither is something
+  the application should decide for you.
+- An identity is never quietly moved from one client to another. Merging clients moves it, and that
+  is the only thing that does.
+- One client can carry several identities — one per source it came from, and more than one from a
+  single source once two of that source's clients have been merged together here.
+
+A playbook with neither column, or with the cells left blank, matches by name exactly as it always
+has. Identity is for clients only: projects and tasks still match by name under the client or project
+they belong to.
 
 ### Files
 

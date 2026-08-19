@@ -4,8 +4,9 @@
  *
  * A merge is a local workspace operation. It moves every project of the source client to the
  * destination, archives the source, and records the source as an alias of the destination so a
- * later playbook import resolves the old name to the surviving client. It moves no Drive folder,
- * combines no contact field, and cannot be undone in the app.
+ * later playbook import resolves the old name to the surviving client. Any import identity the
+ * source carried moves with the work, for the same reason and to the same end. It moves no Drive
+ * folder, combines no contact field, and cannot be undone in the app.
  */
 import type { Project } from './types.ts';
 
@@ -23,11 +24,25 @@ export interface ClientMergeProject {
   status: Project['status'];
 }
 
+/**
+ * One source identity recorded against the client being merged away, which the merge retargets to
+ * the survivor. Without that, a playbook naming the client by the id it has at its source would
+ * resolve to a client whose work has moved somewhere else.
+ */
+export interface ClientMergeAlias {
+  /** The source the identity belongs to, e.g. `campaign-playbook:<source-uuid>`. */
+  namespace: string;
+  /** What the client is called at that source. */
+  externalId: string;
+}
+
 export interface ClientMergePreview {
   source: ClientMergeParty;
   destination: ClientMergeParty;
   /** Every project under the source, sorted by id — the same order the hash is taken over. */
   projects: ClientMergeProject[];
+  /** Every import identity that moves with them, sorted the same way and for the same reason. */
+  aliases: ClientMergeAlias[];
   /**
    * SHA-256 of the plan. The commit sends it back and is refused with a 409 if the workspace
    * moved underneath it, so a confirmation always applies to the merge that was shown.
@@ -40,6 +55,8 @@ export interface ClientMergeResult {
   destination: ClientMergeParty;
   /** The projects that moved, in the order the preview listed them. */
   projects: ClientMergeProject[];
+  /** The import identities that moved, in the order the preview listed them. */
+  aliases: ClientMergeAlias[];
   movedProjectCount: number;
   mergedAt: string;
 }
@@ -54,5 +71,6 @@ export const CLIENT_MERGE_NOTICES: string[] = [
   'The destination client keeps its own name, contact details, and notes.',
   'No Drive folder is moved, renamed, created, or deleted. Files still open exactly where they are now.',
   'Projects with the same name stay separate; nothing is combined.',
+  'Any import identity recorded for the source client moves to the destination, so a later playbook naming that source still lands on the client keeping the work.',
   'There is no undo. Recover from a database backup if this was a mistake.',
 ];

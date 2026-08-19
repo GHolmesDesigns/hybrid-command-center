@@ -33,6 +33,12 @@ const PROJECT_HEADER =
 const TASK_HEADER =
   'task_key\tproject_key\ttitle\ttask_type\tstatus\tpriority\tstart_date\tdue_date\tdescription\tnotes\tposition';
 
+/** A client identity as a workbook carries it: the source it came from, and its id there. */
+interface Identity {
+  source: string;
+  externalId: string;
+}
+
 /** The pasted form of a two-task playbook, which every case here varies. */
 const playbookText = ({
   client = 'Acme Studio',
@@ -43,17 +49,22 @@ const playbookText = ({
   ],
   checklist = ['TSK-1\t1\tDraft the post\tTRUE', 'TSK-1\t2\tEdit for clarity\tFALSE'],
   dependencies = ['TSK-2\tTSK-1'],
+  identity,
 }: {
   client?: string;
   project?: string;
   tasks?: string[];
   checklist?: string[];
   dependencies?: string[];
+  /** Adds the two optional identity columns. Absent leaves them off the tab entirely. */
+  identity?: Identity;
 } = {}) =>
   [
     '[Clients]',
-    CLIENT_HEADER,
-    `CLI-A\t${client}\tDana Holmes\tdana@example.com\t\thttps://example.com\tRetainer`,
+    identity ? `${CLIENT_HEADER}\tclient_import_source\tclient_import_id` : CLIENT_HEADER,
+    `CLI-A\t${client}\tDana Holmes\tdana@example.com\t\thttps://example.com\tRetainer${
+      identity ? `\t${identity.source}\t${identity.externalId}` : ''
+    }`,
     '[Projects]',
     PROJECT_HEADER,
     `PRJ-A\tCLI-A\t${project}\tACTIVE\tHIGH\t2026-03-01\t2026-04-30\tSix weeks\t\t1`,
@@ -573,21 +584,21 @@ describe('campaign playbook import', () => {
    * that name that was never merged wins, and only when every match was merged away does the
    * name resolve — one hop — to the survivor.
    */
-  describe('matching a client name through a merge', () => {
-    const mergeClients = async (sourceId: string, destinationId: string) => {
-      const planned = (
-        await request(createApp(db))
-          .post(`/api/clients/${sourceId}/merge/preview`)
-          .send({ destinationId })
-      ).body;
-      const done = await request(createApp(db))
-        .post(`/api/clients/${sourceId}/merge`)
-        .send({ destinationId, planHash: planned.planHash });
-      expect(done.status).toBe(200);
-    };
-    const newClient = async (name: string) =>
-      (await request(createApp(db)).post('/api/clients').send({ name })).body;
+  const mergeClients = async (sourceId: string, destinationId: string) => {
+    const planned = (
+      await request(createApp(db))
+        .post(`/api/clients/${sourceId}/merge/preview`)
+        .send({ destinationId })
+    ).body;
+    const done = await request(createApp(db))
+      .post(`/api/clients/${sourceId}/merge`)
+      .send({ destinationId, planHash: planned.planHash });
+    expect(done.status).toBe(200);
+  };
+  const newClient = async (name: string) =>
+    (await request(createApp(db)).post('/api/clients').send({ name })).body;
 
+  describe('matching a client name through a merge', () => {
     it('resolves a playbook naming a merged-away client to the surviving client', async () => {
       const source = await newClient('Acme Studio');
       const survivor = await newClient('Acme Group');
@@ -654,6 +665,145 @@ describe('campaign playbook import', () => {
           { id: survivor.id, name: 'Acme Group' },
         ]),
       );
+    });
+  });
+
+  /**
+   * C70. Matching by name holds until the name changes at the source the playbook is written from.
+   * A `Clients` row may carry the identity it has there, and once that pair is recorded the client
+   * is resolved by it — so a rename at the source stops being a second client here.
+   */
+  describe('a client identity that survives a rename', () => {
+    const SOURCE = '9d3f1c62-5a47-4e8b-b0d2-7c6841ae5f30';
+    const NAMESPACE = `campaign-playbook:${SOURCE}`;
+    const identity: Identity = { source: SOURCE, externalId: 'ghd-studio' };
+    const identities = () =>
+      db
+        .prepare(
+          `SELECT source_namespace ns, external_id ext, client_id id FROM client_import_aliases
+           ORDER BY source_namespace, external_id`,
+        )
+        .all();
+    const clientList = () =>
+      db.prepare('SELECT id, name FROM clients ORDER BY name').all() as { id: string }[];
+
+    it('records the identity it created a client under, then resolves it after a rename', () => {
+      commitPlaybook(db, { text: playbookText({ identity }) });
+      const [client] = clientList();
+      expect(identities()).toEqual([{ ns: NAMESPACE, ext: 'ghd-studio', id: client.id }]);
+
+      // The source renames the client, so the next playbook calls it something else entirely.
+      const renamed = playbookText({ client: 'Acme Worldwide', identity });
+      const preview = previewPlaybook(db, { text: renamed });
+      expect(preview.ok).toBe(true);
+      expect(preview.creates.Clients).toBe(0);
+      expect(preview.skipped[0]).toMatchObject({
+        existingId: client.id,
+        reason: SKIP_REASON.clientIdentity,
+      });
+
+      expect(commitPlaybook(db, { text: renamed }).receipt.outcome).toBe('COMMITTED');
+      expect(counts()).toEqual({
+        clients: 1,
+        projects: 1,
+        tasks: 2,
+        checklist: 2,
+        dependencies: 1,
+      });
+      // Nothing about the client was edited, its name included, and no second identity was added.
+      expect(clientList()).toEqual([{ id: client.id, name: 'Acme Studio' }]);
+      expect(identities()).toHaveLength(1);
+    });
+
+    it('refuses the whole import when the identity and the name are different clients', async () => {
+      commitPlaybook(db, { text: playbookText({ identity }) });
+      const app = createApp(db);
+      const other = await newClient('Beta Studio');
+      const before = counts();
+
+      // The identity belongs to Acme Studio; the name on the row belongs to Beta Studio.
+      const response = await request(app)
+        .post('/api/import/playbook')
+        .send({ text: playbookText({ client: 'Beta Studio', project: 'Autumn Push', identity }) });
+
+      expect(response.status).toBe(409);
+      expect(response.body.receipt.outcome).toBe('REJECTED');
+      expect(response.body.preview.issues[0].message).toMatch(
+        /source identity on this row belongs to/,
+      );
+      // Nothing at all: not the project the row would have created, and not a retargeted identity.
+      expect(counts()).toEqual(before);
+      expect(identities()).toEqual([{ ns: NAMESPACE, ext: 'ghd-studio', id: clientList()[0]!.id }]);
+      expect(db.prepare('SELECT COUNT(*) n FROM projects WHERE client_id=?').get(other.id)).toEqual(
+        { n: 0 },
+      );
+    });
+
+    it('records a new identity against the client its name matched, with the import', async () => {
+      const existing = await newClient('Acme Studio');
+
+      const preview = previewPlaybook(db, { text: playbookText({ identity }) });
+      expect(preview.skipped[0]).toMatchObject({
+        existingId: existing.id,
+        reason: SKIP_REASON.clientIdentityAttach,
+      });
+      // A preview writes nothing, identities included.
+      expect(identities()).toEqual([]);
+
+      const { receipt } = commitPlaybook(db, { text: playbookText({ identity }) });
+      expect(receipt.outcome).toBe('COMMITTED');
+      // Not a created record: the client was already here, and what changed is what it is known by.
+      expect(receipt.creates.Clients).toBe(0);
+      expect(identities()).toEqual([{ ns: NAMESPACE, ext: 'ghd-studio', id: existing.id }]);
+    });
+
+    it('holds an identity per source for one client', () => {
+      commitPlaybook(db, { text: playbookText({ identity }) });
+      commitPlaybook(db, {
+        text: playbookText({
+          identity: { source: '11111111-2222-3333-4444-555555555555', externalId: 'acme-42' },
+        }),
+      });
+
+      const [client] = clientList();
+      expect(identities()).toEqual([
+        {
+          ns: 'campaign-playbook:11111111-2222-3333-4444-555555555555',
+          ext: 'acme-42',
+          id: client.id,
+        },
+        { ns: NAMESPACE, ext: 'ghd-studio', id: client.id },
+      ]);
+      expect(counts().clients).toBe(1);
+    });
+
+    it('moves every identity to the survivor when its client is merged away', async () => {
+      commitPlaybook(db, { text: playbookText({ identity }) });
+      const [source] = clientList();
+      const survivor = await newClient('Acme Group');
+
+      await mergeClients(source.id, survivor.id);
+
+      expect(identities()).toEqual([{ ns: NAMESPACE, ext: 'ghd-studio', id: survivor.id }]);
+      // One hop, so the playbook resolves straight to the client that now holds the work.
+      const preview = previewPlaybook(db, {
+        text: playbookText({ client: 'Renamed Again', identity }),
+      });
+      expect(preview.ok).toBe(true);
+      expect(preview.creates.Clients).toBe(0);
+      expect(preview.skipped[0]).toMatchObject({
+        existingId: survivor.id,
+        reason: SKIP_REASON.clientIdentity,
+      });
+    });
+
+    it('carries the recorded identities on the workspace snapshot', () => {
+      commitPlaybook(db, { text: playbookText({ identity }) });
+      const [client] = clientList();
+
+      expect(readWorkspace(db).clientAliases).toEqual([
+        { namespace: NAMESPACE, externalId: 'ghd-studio', clientId: client.id },
+      ]);
     });
   });
 

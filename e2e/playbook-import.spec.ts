@@ -64,12 +64,17 @@ test('a campaign playbook previews, imports once, and refuses to duplicate itsel
       entityCount: number;
       entities: { type: string; id: string; label: string }[];
     }[];
-  const newestReceiptId = async () =>
-    ((await (await page.request.get('/api/import/receipts')).json()) as { id: string }[])[0].id;
+  const receipts = async () =>
+    (await (await page.request.get('/api/import/receipts')).json()) as { id: string }[];
+  const newestReceiptId = async () => (await receipts())[0].id;
 
   await page.goto('/import');
   await expect(page.getByRole('heading', { level: 1, name: 'Import' })).toBeVisible();
-  await expect(page.getByText('No imports yet')).toBeVisible();
+  // The receipts panel is here to read; whether it is empty is not this spec's claim to make,
+  // because every spec shares one database and another may have imported before this one ran.
+  // What this spec owns is the number it started from and the one receipt it goes on to add.
+  await expect(page.getByRole('heading', { name: 'Import receipts' })).toBeVisible();
+  const receiptsBefore = (await receipts()).length;
 
   // The dry run. It reports what it would do and writes nothing at all.
   await page.getByRole('button', { name: /Import a playbook/ }).click();
@@ -82,6 +87,7 @@ test('a campaign playbook previews, imports once, and refuses to duplicate itsel
   // The commit. One action, the whole hierarchy.
   await dialog.getByRole('button', { name: /Import 7 records/ }).click();
   await expect(dialog.getByText('Imported 7 records')).toBeVisible();
+  expect(await receipts()).toHaveLength(receiptsBefore + 1);
   const [client] = await clientsNamed();
   expect(client).toBeTruthy();
   // Nothing about the import touches Drive, so the imported client is simply not connected.

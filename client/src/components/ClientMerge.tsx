@@ -14,11 +14,11 @@ import { Empty } from './Primitives';
  * Merging one client into another, confirmed against a preview rather than a `window.confirm`.
  *
  * There is nothing to type: choosing a destination loads the server's own plan, and the plan is
- * what the dialog reads out — both names, every project that would move whatever its status, and
- * the fixed statements in `CLIENT_MERGE_NOTICES` about what a merge does not do. Confirm stays
- * disabled until a clean preview is on screen, and it sends that preview's hash back, so a
- * workspace that moved in the meantime is refused with a 409 instead of merging something
- * nobody was shown.
+ * what the dialog reads out — both names, every project that would move whatever its status, every
+ * import identity that follows them, and the fixed statements in `CLIENT_MERGE_NOTICES` about what
+ * a merge does not do. Confirm stays disabled until a clean preview is on screen, and it sends that
+ * preview's hash back, so a workspace that moved in the meantime is refused with a 409 instead of
+ * merging something nobody was shown.
  */
 export function ClientMergeForm({
   source,
@@ -158,6 +158,30 @@ export function ClientMergeForm({
                 </li>
               ))}
             </ul>
+          )}
+          {/*
+            The identities the source is known by outside this workspace. Listed rather than
+            counted: which id follows the work is the fact a later import turns on, and an
+            identity nobody expected to see here is worth catching before the merge, not after.
+          */}
+          {preview.aliases.length > 0 && (
+            <>
+              <p>
+                {preview.aliases.length === 1
+                  ? 'One import identity moves'
+                  : `${preview.aliases.length} import identities move`}{' '}
+                with it, so a playbook naming {preview.source.name} at its own source will resolve
+                to {preview.destination.name} afterwards:
+              </p>
+              <ul className="merge-aliases" aria-label="Import identities that move">
+                {preview.aliases.map((alias) => (
+                  <li key={`${alias.namespace} ${alias.externalId}`}>
+                    <strong>{alias.externalId}</strong>
+                    <code>{alias.namespace}</code>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
           <ul className="merge-notices">
             {CLIENT_MERGE_NOTICES.map((notice) => (

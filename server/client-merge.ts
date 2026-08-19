@@ -27,6 +27,7 @@ import {
   clientMergePlanHash,
   type ClientMergePlan,
   type ClientMergeWorkspace,
+  type MergeWorkspaceAlias,
   type MergeWorkspaceClient,
   type MergeWorkspaceProject,
 } from './domain/client-merge.ts';
@@ -35,9 +36,9 @@ import type { ClientMergePreview, ClientMergeResult } from '../shared/client-mer
 const now = () => new Date().toISOString();
 
 /**
- * The clients and projects the merge rules compare, read in two statements. Archived records
- * are included on both sides: an archived duplicate is the ordinary source, and its archived
- * projects move with the rest.
+ * The clients, projects, and import identities the merge rules compare, read in three statements.
+ * Archived records are included on both sides: an archived duplicate is the ordinary source, and
+ * its archived projects move with the rest.
  */
 export function readMergeWorkspace(db: Db): ClientMergeWorkspace {
   const clients = (
@@ -56,6 +57,12 @@ export function readMergeWorkspace(db: Db): ClientMergeWorkspace {
     projects: db
       .prepare('SELECT id, client_id clientId, name, status FROM projects')
       .all() as unknown as MergeWorkspaceProject[],
+    clientAliases: db
+      .prepare(
+        `SELECT source_namespace namespace, external_id externalId, client_id clientId
+         FROM client_import_aliases`,
+      )
+      .all() as unknown as MergeWorkspaceAlias[],
   };
 }
 
@@ -63,6 +70,7 @@ const toPreview = (plan: ClientMergePlan): ClientMergePreview => ({
   source: plan.source,
   destination: plan.destination,
   projects: plan.projects,
+  aliases: plan.aliases,
   planHash: clientMergePlanHash(plan),
 });
 
@@ -121,6 +129,19 @@ export function commitClientMerge(
       destinationId,
       sourceId,
     );
+    /**
+     * The source's import identities follow its work. One statement covers every one of them, and
+     * one hop is all it ever is: the identity now names the client that holds the projects, so a
+     * later playbook resolves it there directly rather than through the archived source.
+     *
+     * It cannot collide with an identity the destination already carries. The pair is unique across
+     * the table, so an identity exists against exactly one client and there is no second row here
+     * for this one to run into.
+     */
+    db.prepare('UPDATE client_import_aliases SET client_id=? WHERE client_id=?').run(
+      destinationId,
+      sourceId,
+    );
     db.prepare(
       'INSERT INTO client_merges(source_client_id,surviving_client_id,merged_at) VALUES(?,?,?)',
     ).run(sourceId, destinationId, stamp);
@@ -128,6 +149,7 @@ export function commitClientMerge(
       source: { ...plan.source, status: 'ARCHIVED' as const },
       destination: plan.destination,
       projects: plan.projects,
+      aliases: plan.aliases,
       movedProjectCount: plan.projects.length,
       mergedAt: stamp,
     };

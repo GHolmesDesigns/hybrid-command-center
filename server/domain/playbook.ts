@@ -13,12 +13,14 @@
 import { z } from 'zod';
 import { isValid, parseISO } from 'date-fns';
 import {
+  CLIENT_IDENTITY_COLUMNS,
   DUPLICATE_RULE,
   PLAYBOOK_DOC_SHEETS,
   PLAYBOOK_SCHEMA_VERSION,
   PLAYBOOK_SHEETS,
   SKIP_REASON,
   emptyCounts,
+  playbookSourceNamespace,
   type PlaybookCreation,
   type PlaybookIssue,
   type PlaybookPreview,
@@ -75,6 +77,24 @@ const HEADERS = {
   Dependencies: ['task_key', 'prerequisite_task_key'],
 } as const satisfies Record<PlaybookSheet, readonly string[]>;
 
+/**
+ * Columns a tab may carry and need not. Absent is not an error and neither is blank; present and
+ * filled in, they are validated exactly like a required column.
+ *
+ * They exist for one reason: every playbook written before a column was added is still a valid
+ * playbook, and a format that could only grow by invalidating the workbooks already in use would
+ * not grow. `client_import_source` and `client_import_id` are the client's identity at the source
+ * the workbook was written from — see the identity rules in
+ * `docs/campaign-playbook-import-format.md`.
+ */
+const OPTIONAL_HEADERS = {
+  Clients: CLIENT_IDENTITY_COLUMNS,
+  Projects: [],
+  Tasks: [],
+  ChecklistItems: [],
+  Dependencies: [],
+} as const satisfies Record<PlaybookSheet, readonly string[]>;
+
 /** Columns holding a calendar date, so an Excel date serial can be named as the mistake it is. */
 const DATE_COLUMNS = new Set(['start_date', 'target_deadline', 'due_date']);
 /** Columns holding a native boolean. */
@@ -123,6 +143,36 @@ const optionalDate = z
   .refine((value) => value === null || isValid(parseISO(value)), {
     message: 'That is not a real calendar date.',
   });
+/**
+ * The source a client identity belongs to, written as a UUID.
+ *
+ * A UUID rather than a label a person chose, because the identity exists precisely so that a
+ * rename cannot break it: "Dana's client sheet" would be renamed the same way the client is.
+ * Case is not part of it — a UUID typed in capitals is the same source.
+ */
+const optionalSourceId = z
+  .string()
+  .trim()
+  .optional()
+  .transform((value) => (value ? value.toLowerCase() : null))
+  .refine(
+    (value) =>
+      value === null ||
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value),
+    {
+      message: 'Expected the source as a UUID, for example 7f1c0a4e-2b8d-4f3a-9c15-6a0d8e2b41f7.',
+    },
+  );
+/**
+ * The id the client carries at that source. Opaque and exact: it is compared byte for byte,
+ * capitals included, because two ids that differ only in case are two ids wherever they came from.
+ */
+const optionalExternalId = z
+  .string()
+  .trim()
+  .max(200)
+  .optional()
+  .transform((value) => value || null);
 /**
  * A workbook-local key: the identifier that connects rows inside one workbook and nothing
  * else. Case-sensitive and trimmed, so `TSK-001` and `tsk-001` are two different keys and a
@@ -192,6 +242,10 @@ const ROW_SCHEMAS = {
     phone: optionalText,
     website: optionalUrl,
     notes: optionalText,
+    // Optional and supplied as a pair. The pairing rule is checked in `buildPlan`, where the row
+    // can be named alongside the client it describes rather than as a shapeless row problem.
+    client_import_source: optionalSourceId,
+    client_import_id: optionalExternalId,
   }),
   Projects: z.object({
     project_key: workbookKey,
@@ -249,6 +303,15 @@ export interface WorkspaceClient {
    */
   mergedIntoId?: string;
 }
+/**
+ * One source identity a client is already known by, as `client_import_aliases` stores it. The
+ * namespace is the source; the external id is what the client is called there.
+ */
+export interface WorkspaceClientAlias {
+  namespace: string;
+  externalId: string;
+  clientId: string;
+}
 export interface WorkspaceProject {
   id: string;
   clientId: string;
@@ -267,6 +330,8 @@ export interface WorkspaceTask {
  */
 export interface WorkspaceSnapshot {
   clients: WorkspaceClient[];
+  /** Every source identity already recorded, which a client row resolves against before its name. */
+  clientAliases: WorkspaceClientAlias[];
   projects: WorkspaceProject[];
   tasks: WorkspaceTask[];
   dependencies: { taskId: string; dependencyId: string }[];
@@ -278,6 +343,7 @@ export interface WorkspaceSnapshot {
 
 export const emptyWorkspace = (): WorkspaceSnapshot => ({
   clients: [],
+  clientAliases: [],
   projects: [],
   tasks: [],
   dependencies: [],
@@ -298,6 +364,19 @@ export interface PlannedClient {
   phone: string | null;
   website: string | null;
   notes: string | null;
+}
+/**
+ * A source identity the commit records against a client, inside the import's own transaction.
+ *
+ * The client is named by its workbook key rather than by id, because at planning time it may not
+ * have one yet: an identity is attached both to a client this import creates and to one the
+ * workspace already had under the matching name.
+ */
+export interface PlannedClientIdentity {
+  row: number;
+  clientKey: string;
+  namespace: string;
+  externalId: string;
 }
 export interface PlannedProject {
   row: number;
@@ -345,6 +424,8 @@ export type KeyResolution = { kind: 'create' } | { kind: 'existing'; id: string 
 export interface PlaybookPlan {
   schemaVersion: number;
   clients: PlannedClient[];
+  /** Identities to record. Never an identity the workspace already holds — see `buildPlan`. */
+  clientIdentities: PlannedClientIdentity[];
   projects: PlannedProject[];
   tasks: PlannedTask[];
   checklistItems: PlannedChecklistItem[];
@@ -400,6 +481,26 @@ function resolveClientName(
   return alias?.mergedIntoId ? { id: alias.mergedIntoId, viaMerge: true } : undefined;
 }
 
+/**
+ * The client a source identity is recorded against, or nothing when the identity is new here.
+ *
+ * A merge retargets every alias to the survivor, so this is normally a direct lookup. The merge
+ * hop is still followed for the same reason `resolveClientName` follows one: a merged-away client
+ * is never the answer, and no import may attach work beneath a client whose portfolio has moved.
+ */
+function resolveClientIdentity(
+  workspace: WorkspaceSnapshot,
+  identity: { namespace: string; externalId: string },
+): string | undefined {
+  const alias = workspace.clientAliases.find(
+    (candidate) =>
+      candidate.namespace === identity.namespace && candidate.externalId === identity.externalId,
+  );
+  if (!alias) return undefined;
+  const client = workspace.clients.find((candidate) => candidate.id === alias.clientId);
+  return client?.mergedIntoId ?? alias.clientId;
+}
+
 interface SheetRows<S extends PlaybookSheet> {
   rows: { row: number; value: z.output<(typeof ROW_SCHEMAS)[S]> }[];
   /**
@@ -422,6 +523,8 @@ function readSheetRows<S extends PlaybookSheet>(
 ): SheetRows<S> {
   const found = findSheet(workbook, sheet);
   const headers = HEADERS[sheet] as readonly string[];
+  /** Required and optional together: what this tab is allowed to carry, in a stable order. */
+  const allowed = [...headers, ...(OPTIONAL_HEADERS[sheet] as readonly string[])];
   const result: SheetRows<S> = { rows: [], rejected: new Set() };
   if (!found) {
     if ((REQUIRED_SHEETS as readonly string[]).includes(sheet))
@@ -466,7 +569,7 @@ function readSheetRows<S extends PlaybookSheet>(
   for (const name of headers)
     if (!columnAt.has(name)) headerIssue(`The ${name} column is missing.`);
   for (const [name, index] of columnAt)
-    if (!headers.includes(name))
+    if (!allowed.includes(name))
       headerIssue(`${name} is not a column of this tab. Remove it or correct its spelling.`, index);
   // Without trustworthy headers, every row error below would be addressed to the wrong column.
   if (headerFailed) return result;
@@ -484,8 +587,11 @@ function readSheetRows<S extends PlaybookSheet>(
         row: row.number,
         message: 'This row is hidden. Unhide it, or delete it if it is not meant to be imported.',
       });
-    for (const name of headers) {
-      const index = columnAt.get(name)!;
+    for (const name of allowed) {
+      // An optional column the workbook does not have contributes nothing, which is what the row
+      // schema reads as absent. A required one is always here: a missing one failed the header.
+      const index = columnAt.get(name);
+      if (index === undefined) continue;
       const value = readCell(sheet, row.number, name, index, row.cells[index], issues);
       if (value !== undefined) values[name] = value;
     }
@@ -696,6 +802,7 @@ export function buildPlan(workbook: Workbook, workspace: WorkspaceSnapshot): Pla
   const plan: PlaybookPlan = {
     schemaVersion,
     clients: [],
+    clientIdentities: [],
     projects: [],
     tasks: [],
     checklistItems: [],
@@ -708,6 +815,11 @@ export function buildPlan(workbook: Workbook, workspace: WorkspaceSnapshot): Pla
 
   // --- Clients -------------------------------------------------------------
   const clientKeys = new Map<string, ClientRow>();
+  /**
+   * Identities this workbook itself claims, so two rows claiming one identity are reported as the
+   * contradiction they are rather than settled by whichever row the insert reached first.
+   */
+  const claimedIdentities = new Map<string, number>();
   for (const { row, value } of clientRows.rows) {
     if (clientKeys.has(value.client_key)) {
       issues.push({
@@ -731,16 +843,102 @@ export function buildPlan(workbook: Workbook, workspace: WorkspaceSnapshot): Pla
       unresolved.clients.add(value.client_key);
       continue;
     }
-    const existing = resolveClientName(workspace, value.name);
-    if (existing) {
-      plan.resolutions.clients.set(value.client_key, { kind: 'existing', id: existing.id });
+    /**
+     * The row's source identity, if it declared one. The two columns are one fact and are supplied
+     * together: an id with no source names a client nowhere in particular, and a source with no id
+     * names nobody in it.
+     */
+    const [sourceColumn, idColumn] = CLIENT_IDENTITY_COLUMNS;
+    if (Boolean(value.client_import_source) !== Boolean(value.client_import_id)) {
+      issues.push({
+        sheet: 'Clients',
+        row,
+        message: value.client_import_source
+          ? `${idColumn} is required alongside ${sourceColumn}. Give this client the id it has at that source, or clear both columns.`
+          : `${sourceColumn} is required alongside ${idColumn}. Name the source this id belongs to, or clear both columns.`,
+      });
+      unresolved.clients.add(value.client_key);
+      continue;
+    }
+    const identity =
+      value.client_import_source && value.client_import_id
+        ? {
+            namespace: playbookSourceNamespace(value.client_import_source),
+            externalId: value.client_import_id,
+          }
+        : undefined;
+    if (identity) {
+      const claim = `${identity.namespace}\u0000${identity.externalId}`;
+      const claimedAt = claimedIdentities.get(claim);
+      if (claimedAt !== undefined) {
+        issues.push({
+          sheet: 'Clients',
+          row,
+          message: `Row ${claimedAt} already claims the identity ${identity.externalId} at this source. One identity names one client.`,
+        });
+        unresolved.clients.add(value.client_key);
+        continue;
+      }
+      claimedIdentities.set(claim, row);
+    }
+    /**
+     * Identity first, name second — and a disagreement between the two is refused rather than
+     * resolved. The identity says which client this is; the name only says what it is called, and a
+     * client renamed at its source is the case this column pair exists for. When the two point at
+     * different clients the workbook is describing a move nobody asked for, so the import stops
+     * with nothing written and both clients named.
+     */
+    const byIdentity = identity ? resolveClientIdentity(workspace, identity) : undefined;
+    const byName = resolveClientName(workspace, value.name);
+    if (byIdentity && byName && byIdentity !== byName.id) {
+      const nameOf = (id: string) =>
+        workspace.clients.find((client) => client.id === id)?.name ?? id;
+      issues.push({
+        sheet: 'Clients',
+        row,
+        message: `The source identity on this row belongs to “${nameOf(byIdentity)}” and the name on it matches “${nameOf(byName.id)}”. Nothing was imported. Correct the row, or merge the two clients first.`,
+      });
+      unresolved.clients.add(value.client_key);
+      continue;
+    }
+    if (byIdentity) {
+      // The identity is already recorded and an import never moves one, so this row has nothing to
+      // write: the client it names is whichever client that identity belongs to, called whatever it
+      // is called here.
+      plan.resolutions.clients.set(value.client_key, { kind: 'existing', id: byIdentity });
       skipped.push({
         sheet: 'Clients',
         row,
         key: value.client_key,
         label: value.name,
-        reason: existing.viaMerge ? SKIP_REASON.clientMergedAlias : SKIP_REASON.client,
-        existingId: existing.id,
+        reason: SKIP_REASON.clientIdentity,
+        existingId: byIdentity,
+      });
+      continue;
+    }
+    /** A new identity is recorded against whichever client this row resolves to, created or not. */
+    if (identity)
+      plan.clientIdentities.push({
+        row,
+        clientKey: value.client_key,
+        namespace: identity.namespace,
+        externalId: identity.externalId,
+      });
+    if (byName) {
+      plan.resolutions.clients.set(value.client_key, { kind: 'existing', id: byName.id });
+      skipped.push({
+        sheet: 'Clients',
+        row,
+        key: value.client_key,
+        label: value.name,
+        reason: identity
+          ? byName.viaMerge
+            ? SKIP_REASON.clientIdentityAttachMergedAlias
+            : SKIP_REASON.clientIdentityAttach
+          : byName.viaMerge
+            ? SKIP_REASON.clientMergedAlias
+            : SKIP_REASON.client,
+        existingId: byName.id,
       });
       continue;
     }
