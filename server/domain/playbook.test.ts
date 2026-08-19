@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { buildPlan, emptyWorkspace, planIsClean, toPreview } from './playbook.ts';
 import type { WorkspaceSnapshot } from './playbook.ts';
 import { readTabbedWorkbook, readXlsxWorkbook } from './workbook.ts';
+import { SKIP_REASON } from '../../shared/playbook.ts';
 import { buildXlsx } from './workbook-fixture.ts';
 
 const SAMPLE = path.join(
@@ -722,6 +723,234 @@ describe('campaign playbook plan', () => {
       expect(messages(result)).toContain(
         'Dependencies 2 TSK-2 depending on TSK-1 would create a circular relationship.',
       );
+    });
+  });
+
+  /**
+   * C70. A name says what a client is called; an identity says which client it is. Renaming the
+   * client at its source used to make the next import create a second one, so a `Clients` row may
+   * carry the `(source, id)` pair the client has where the playbook was written, and that pair is
+   * what it resolves by from then on.
+   *
+   * A row that fails takes its children with it, so a case about a refused row asserts the message
+   * it is about rather than the whole cascade behind it.
+   */
+  describe('a client identity at its source', () => {
+    const SOURCE = '9d3f1c62-5a47-4e8b-b0d2-7c6841ae5f30';
+    const NAMESPACE = `campaign-playbook:${SOURCE}`;
+    const CLIENT_HEADER = [
+      'client_key',
+      'name',
+      'contact_name',
+      'email',
+      'phone',
+      'website',
+      'notes',
+      'client_import_source',
+      'client_import_id',
+    ];
+    /** The one-client `Clients` tab, with the identity pair each case wants on it. */
+    const clientsTab = (name: string, source = SOURCE, externalId = 'ghd-studio') => [
+      CLIENT_HEADER,
+      ['CLI-A', name, '', '', '', '', '', source, externalId],
+    ];
+
+    /** A workspace holding clients, with the identities already recorded against them. */
+    const holding = (
+      clients: { id: string; name: string; mergedIntoId?: string }[],
+      clientAliases: { namespace: string; externalId: string; clientId: string }[] = [],
+    ): WorkspaceSnapshot => ({ ...emptyWorkspace(), clients, clientAliases });
+
+    it('resolves a client whose name changed at its source, by identity alone', () => {
+      const workspace = holding(
+        [{ id: 'client-1', name: 'Acme Studio' }],
+        [{ namespace: NAMESPACE, externalId: 'ghd-studio', clientId: 'client-1' }],
+      );
+
+      // The workbook now calls it something else entirely. The identity still names client-1.
+      const result = plan({ Clients: clientsTab('Acme Worldwide') }, workspace);
+
+      expect(messages(result)).toEqual([]);
+      expect(result.clients).toEqual([]);
+      expect(result.resolutions.clients.get('CLI-A')).toEqual({
+        kind: 'existing',
+        id: 'client-1',
+      });
+      expect(result.skipped[0]).toMatchObject({
+        sheet: 'Clients',
+        label: 'Acme Worldwide',
+        existingId: 'client-1',
+        reason: SKIP_REASON.clientIdentity,
+      });
+      // Nothing to record: the identity is already there, and the client keeps its own name.
+      expect(result.clientIdentities).toEqual([]);
+    });
+
+    it('refuses the whole import when the identity and the name are two different clients', () => {
+      const workspace = holding(
+        [
+          { id: 'client-1', name: 'Acme Studio' },
+          { id: 'client-2', name: 'Acme Worldwide' },
+        ],
+        [{ namespace: NAMESPACE, externalId: 'ghd-studio', clientId: 'client-1' }],
+      );
+
+      const result = plan({ Clients: clientsTab('Acme Worldwide') }, workspace);
+
+      expect(planIsClean(result)).toBe(false);
+      expect(messages(result)[0]).toBe(
+        'Clients 2 The source identity on this row belongs to “Acme Studio” and the name on it matches “Acme Worldwide”. Nothing was imported. Correct the row, or merge the two clients first.',
+      );
+      // Nothing is planned for this row, and nothing is recorded either.
+      expect(result.clients).toEqual([]);
+      expect(result.clientIdentities).toEqual([]);
+      expect(result.skipped).toEqual([]);
+    });
+
+    it('records a new identity against the client its name already matched', () => {
+      const workspace = holding([{ id: 'client-1', name: 'acme studio' }]);
+
+      const result = plan({ Clients: clientsTab('Acme Studio') }, workspace);
+
+      expect(messages(result)).toEqual([]);
+      expect(result.clients).toEqual([]);
+      expect(result.skipped[0]).toMatchObject({
+        existingId: 'client-1',
+        reason: SKIP_REASON.clientIdentityAttach,
+      });
+      expect(result.clientIdentities).toEqual([
+        { row: 2, clientKey: 'CLI-A', namespace: NAMESPACE, externalId: 'ghd-studio' },
+      ]);
+    });
+
+    it('records the identity against a client created by the same import', () => {
+      const result = plan({ Clients: clientsTab('Acme Studio') }, emptyWorkspace());
+
+      expect(messages(result)).toEqual([]);
+      expect(result.clients.map((client) => client.name)).toEqual(['Acme Studio']);
+      expect(result.clientIdentities).toEqual([
+        { row: 2, clientKey: 'CLI-A', namespace: NAMESPACE, externalId: 'ghd-studio' },
+      ]);
+    });
+
+    it('records it against the surviving client when the name matched through a merge', () => {
+      const workspace = holding([
+        { id: 'client-1', name: 'Acme Studio', mergedIntoId: 'client-2' },
+        { id: 'client-2', name: 'Acme Group' },
+      ]);
+
+      const result = plan({ Clients: clientsTab('Acme Studio') }, workspace);
+
+      expect(messages(result)).toEqual([]);
+      expect(result.skipped[0]).toMatchObject({
+        existingId: 'client-2',
+        reason: SKIP_REASON.clientIdentityAttachMergedAlias,
+      });
+      expect(result.clientIdentities[0]).toMatchObject({ clientKey: 'CLI-A' });
+    });
+
+    it('follows a merge from an identity, so no work lands under a client that was emptied', () => {
+      const workspace = holding(
+        [
+          { id: 'client-1', name: 'Acme Studio', mergedIntoId: 'client-2' },
+          { id: 'client-2', name: 'Acme Group' },
+        ],
+        [{ namespace: NAMESPACE, externalId: 'ghd-studio', clientId: 'client-1' }],
+      );
+
+      const result = plan({ Clients: clientsTab('Whatever It Is Called Now') }, workspace);
+
+      expect(messages(result)).toEqual([]);
+      expect(result.resolutions.clients.get('CLI-A')).toEqual({
+        kind: 'existing',
+        id: 'client-2',
+      });
+    });
+
+    it('lets one client carry an identity from a second source', () => {
+      const other = '11111111-2222-3333-4444-555555555555';
+      const workspace = holding(
+        [{ id: 'client-1', name: 'Acme Studio' }],
+        [{ namespace: NAMESPACE, externalId: 'ghd-studio', clientId: 'client-1' }],
+      );
+
+      const result = plan({ Clients: clientsTab('Acme Studio', other, 'acme-42') }, workspace);
+
+      expect(messages(result)).toEqual([]);
+      expect(result.clientIdentities).toEqual([
+        {
+          row: 2,
+          clientKey: 'CLI-A',
+          namespace: `campaign-playbook:${other}`,
+          externalId: 'acme-42',
+        },
+      ]);
+    });
+
+    it('reads the source case-insensitively and the id exactly', () => {
+      const workspace = holding(
+        [{ id: 'client-1', name: 'Renamed Here' }],
+        [{ namespace: NAMESPACE, externalId: 'ghd-studio', clientId: 'client-1' }],
+      );
+
+      // The same source in capitals is the same source.
+      expect(
+        plan({ Clients: clientsTab('Whatever', SOURCE.toUpperCase()) }, workspace).skipped[0],
+      ).toMatchObject({ existingId: 'client-1', reason: SKIP_REASON.clientIdentity });
+      // A different capitalisation of the id is a different id, so this one is new here.
+      const other = plan({ Clients: clientsTab('Whatever', SOURCE, 'GHD-Studio') }, workspace);
+      expect(other.clients.map((client) => client.name)).toEqual(['Whatever']);
+      expect(other.clientIdentities[0]).toMatchObject({ externalId: 'GHD-Studio' });
+    });
+
+    it('refuses one identity column without the other, naming the one that is missing', () => {
+      expect(
+        messages(plan({ Clients: clientsTab('Acme Studio', SOURCE, '') }, emptyWorkspace()))[0],
+      ).toBe(
+        'Clients 2 client_import_id is required alongside client_import_source. Give this client the id it has at that source, or clear both columns.',
+      );
+      expect(
+        messages(
+          plan({ Clients: clientsTab('Acme Studio', '', 'ghd-studio') }, emptyWorkspace()),
+        )[0],
+      ).toBe(
+        'Clients 2 client_import_source is required alongside client_import_id. Name the source this id belongs to, or clear both columns.',
+      );
+    });
+
+    it('refuses a source that is not a UUID, because a label would be renamed too', () => {
+      expect(
+        messages(plan({ Clients: clientsTab('Acme Studio', 'dana-sheet') }, emptyWorkspace()))[0],
+      ).toBe(
+        'Clients 2 client_import_source: expected the source as a UUID, for example 7f1c0a4e-2b8d-4f3a-9c15-6a0d8e2b41f7.',
+      );
+    });
+
+    it('refuses two rows of one workbook claiming the same identity', () => {
+      const result = plan(
+        {
+          Clients: [
+            ...clientsTab('Acme Studio'),
+            ['CLI-B', 'Beta Studio', '', '', '', '', '', SOURCE, 'ghd-studio'],
+          ],
+        },
+        emptyWorkspace(),
+      );
+
+      expect(messages(result)).toEqual([
+        'Clients 3 Row 2 already claims the identity ghd-studio at this source. One identity names one client.',
+      ]);
+      expect(result.clientIdentities).toHaveLength(1);
+    });
+
+    it('leaves a workbook with neither column matching by name, exactly as before', () => {
+      const workspace = holding([{ id: 'client-1', name: 'Acme Studio' }]);
+
+      const result = plan(undefined, workspace);
+
+      expect(messages(result)).toEqual([]);
+      expect(result.clientIdentities).toEqual([]);
+      expect(result.skipped[0]).toMatchObject({ reason: SKIP_REASON.client });
     });
   });
 });

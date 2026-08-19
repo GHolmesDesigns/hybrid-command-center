@@ -136,6 +136,23 @@ export type PlaybookInputKind = 'xlsx' | 'text';
 export const IMPORT_RECEIPT_LIMIT = 50;
 export const PLAYBOOK_SOURCE = 'campaign-playbook';
 
+/**
+ * The namespace a playbook's client identities are recorded under.
+ *
+ * A workbook declares the source it was written from as a UUID, and the identity a client carries
+ * is only unique *within* that source: two spreadsheets both numbering their first client `1` mean
+ * two different clients. Prefixing with the importer's own source name keeps a playbook identity
+ * from ever colliding with an identity some later integration records against the same client.
+ */
+export const playbookSourceNamespace = (sourceId: string) => `${PLAYBOOK_SOURCE}:${sourceId}`;
+
+/**
+ * The optional columns of the `Clients` tab, which carry the identity the client has at its
+ * source. Named here because the format document, the sample workbook, and the validator all have
+ * to agree on the spelling, and because both are supplied together or not at all.
+ */
+export const CLIENT_IDENTITY_COLUMNS = ['client_import_source', 'client_import_id'] as const;
+
 /** One line per rule, rendered in the preview and stored on the receipt's detail. */
 export const DUPLICATE_RULE: string[] = [
   'A client matches an existing client when the trimmed name is the same, ignoring case. The import attaches to that client instead of creating a second one.',
@@ -144,6 +161,10 @@ export const DUPLICATE_RULE: string[] = [
   'Checklist items and dependencies of a matched record are skipped with it: an existing record is never edited by an import.',
   'Archived clients and projects match too. An import never revives or rewrites them.',
   'A client that was merged into another one keeps its name as an alias: a playbook naming it attaches to the surviving client instead. A client of that name that was never merged still wins.',
+  'A client row that carries a source identity (client_import_source and client_import_id) matches on that identity first. The identity wins over the name, so a client renamed at its source still resolves to the client it has always been.',
+  'When an identity and a name resolve to two different clients, the whole import is refused rather than guessing which one was meant. Nothing is written.',
+  'A client row whose identity is new but whose name matches an existing client records the identity against that client as part of the import, so the next import resolves it by identity even if the name has changed by then.',
+  'An identity already recorded is never moved to another client by an import. One client may carry several identities, one per source it arrived from.',
 ];
 
 /** Human wording for a skip, used by the server and shown unchanged in the browser. */
@@ -155,4 +176,10 @@ export const SKIP_REASON = {
   task: 'This project already has a task with this title and due date.',
   checklistItem: 'Its task already exists, so its checklist is left as it is.',
   dependency: 'Both tasks already have this dependency.',
+  clientIdentity:
+    'This source identity is already recorded against a client; the import will use that client, whatever it is called now.',
+  clientIdentityAttach:
+    'A client with this name already exists; the import will use it and record this source identity against it.',
+  clientIdentityAttachMergedAlias:
+    'A client with this name was merged into another client; the import will use the surviving client and record this source identity against it.',
 } as const;

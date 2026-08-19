@@ -29,6 +29,22 @@ CREATE TABLE IF NOT EXISTS client_merges (
   merged_at TEXT NOT NULL,
   CHECK(source_client_id <> surviving_client_id)
 );
+-- One row per source identity a client is known by outside this workspace. A playbook may carry
+-- the id its client has at the source it was written from alongside the name, and that pair is
+-- recorded here, so renaming the client at the source no longer makes the next import look like a
+-- client this workspace has never seen. The namespace is campaign-playbook:<stable-source-uuid>,
+-- which keeps two sources that happen to number their clients the same way apart.
+--
+-- The uniqueness is on the pair alone, deliberately: one identity belongs to exactly one client, so
+-- no second client can claim it and retargeting one during a merge can never collide. The reverse is
+-- one to many -- a client may carry several identities, one per source it arrived from.
+CREATE TABLE IF NOT EXISTS client_import_aliases (
+  source_namespace TEXT NOT NULL,
+  external_id      TEXT NOT NULL,
+  client_id        TEXT NOT NULL REFERENCES clients(id),
+  created_at       TEXT NOT NULL,
+  UNIQUE (source_namespace, external_id)
+);
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY, client_id TEXT NOT NULL REFERENCES clients(id), name TEXT NOT NULL, description TEXT,
   status TEXT NOT NULL DEFAULT 'ACTIVE', start_date TEXT, target_deadline TEXT, priority TEXT NOT NULL DEFAULT 'MEDIUM',
@@ -258,6 +274,10 @@ CREATE INDEX IF NOT EXISTS idx_projects_client ON projects(client_id);
 -- Retargeting a merge reads every alias pointing at the client being merged away, and the
 -- client list joins the survivor of each one.
 CREATE INDEX IF NOT EXISTS idx_client_merges_surviving ON client_merges(surviving_client_id);
+-- A merge reads every import identity pointing at the client being merged away, for the same reason
+-- the index above exists: those identities have to follow the work to the survivor.
+CREATE INDEX IF NOT EXISTS idx_client_import_aliases_client
+  ON client_import_aliases(client_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_project_status ON tasks(project_id, status);
 CREATE INDEX IF NOT EXISTS idx_tasks_due_open ON tasks(due_date) WHERE status <> 'COMPLETE';
 CREATE INDEX IF NOT EXISTS idx_checklist_task ON checklist_items(task_id, position);

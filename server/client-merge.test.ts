@@ -46,6 +46,24 @@ const aliases = () =>
     )
     .all() as { source: string; surviving: string }[];
 
+/** The import identities on the table, so a merge can be asked what it did with them. */
+const importIdentities = () =>
+  db
+    .prepare(
+      `SELECT source_namespace ns, external_id ext, client_id id FROM client_import_aliases
+       ORDER BY source_namespace, external_id`,
+    )
+    .all() as { ns: string; ext: string; id: string }[];
+
+/** Records one against a client, the way a playbook import does. */
+const recordIdentity = (clientId: string, ext: string, source = 'source-a') =>
+  db
+    .prepare(
+      `INSERT INTO client_import_aliases(source_namespace,external_id,client_id,created_at)
+       VALUES(?,?,?,'2026-08-19T00:00:00.000Z')`,
+    )
+    .run(`campaign-playbook:${source}`, ext, clientId);
+
 describe('the client merge planner', () => {
   it('previews the whole portfolio, whatever each project’s status, and writes nothing', async () => {
     const source = await createClient('Duplicate Studio');
@@ -122,12 +140,22 @@ describe('the client merge planner', () => {
         { id: 'p1', clientId: 'a', name: 'First', status: 'ARCHIVED' },
         { id: 'p3', clientId: 'b', name: 'Theirs', status: 'ACTIVE' },
       ],
+      clientAliases: [
+        { namespace: 'campaign-playbook:s2', externalId: 'ext-2', clientId: 'a' },
+        { namespace: 'campaign-playbook:s1', externalId: 'ext-1', clientId: 'a' },
+        { namespace: 'campaign-playbook:s1', externalId: 'theirs', clientId: 'b' },
+      ],
     };
 
     const plan = buildClientMergePlan(workspace, 'a', 'b');
 
     // Sorted by id, so the hash does not depend on the order SQLite returned the rows in.
     expect(plan.projects.map((project) => project.id)).toEqual(['p1', 'p2']);
+    // The source's identities, sorted the same way, and never the destination's own.
+    expect(plan.aliases).toEqual([
+      { namespace: 'campaign-playbook:s1', externalId: 'ext-1' },
+      { namespace: 'campaign-playbook:s2', externalId: 'ext-2' },
+    ]);
     expect(plan.source.status).toBe('ARCHIVED');
     expect(() => buildClientMergePlan(workspace, 'a', 'a')).toThrow(ClientMergeError);
   });
@@ -279,6 +307,79 @@ describe('committing a client merge', () => {
       ].sort((x, y) => x.source.localeCompare(y.source)),
     );
     expect(db.prepare('SELECT client_id FROM projects').all()).toEqual([{ client_id: c.id }]);
+  });
+
+  /**
+   * C70. An import identity is the other thing that points at a client, and it has to follow the
+   * work for the same reason the name alias does: a playbook naming the source by the id it has at
+   * its own source must resolve to the client that now holds its projects.
+   */
+  it('moves every import identity the source carried to the destination, one hop', async () => {
+    const source = await createClient('Duplicate Studio');
+    const destination = await createClient('Studio');
+    const third = await createClient('Studio Group');
+    recordIdentity(source.id, 'dupe-1');
+    recordIdentity(source.id, 'dupe-2', 'source-b');
+    recordIdentity(destination.id, 'kept-1');
+
+    const result = await mergeClients(source.id, destination.id);
+
+    expect(result.aliases).toEqual([
+      { namespace: 'campaign-playbook:source-a', externalId: 'dupe-1' },
+      { namespace: 'campaign-playbook:source-b', externalId: 'dupe-2' },
+    ]);
+    expect(importIdentities()).toEqual([
+      { ns: 'campaign-playbook:source-a', ext: 'dupe-1', id: destination.id },
+      { ns: 'campaign-playbook:source-a', ext: 'kept-1', id: destination.id },
+      { ns: 'campaign-playbook:source-b', ext: 'dupe-2', id: destination.id },
+    ]);
+
+    // Merging the destination on leaves all three one hop from the client that holds the work.
+    await mergeClients(destination.id, third.id);
+    expect(importIdentities().map((identity) => identity.id)).toEqual([
+      third.id,
+      third.id,
+      third.id,
+    ]);
+  });
+
+  it('hashes the identities too, so one attached since the preview refuses the merge', async () => {
+    const source = await createClient('Identified Source');
+    const destination = await createClient('Identified Destination');
+    const stale = (await preview(source.id, destination.id)).body.planHash;
+
+    // A playbook import lands between the preview and the confirmation.
+    recordIdentity(source.id, 'arrived-late');
+
+    const refused = await merge(source.id, destination.id, stale);
+    expect(refused.status).toBe(409);
+    expect(importIdentities()).toEqual([
+      { ns: 'campaign-playbook:source-a', ext: 'arrived-late', id: source.id },
+    ]);
+    // The fresh preview names it, and confirming that one moves it.
+    const planned = await preview(source.id, destination.id);
+    expect(planned.body.aliases).toEqual([
+      { namespace: 'campaign-playbook:source-a', externalId: 'arrived-late' },
+    ]);
+    expect((await merge(source.id, destination.id, planned.body.planHash)).status).toBe(200);
+    expect(importIdentities()[0]!.id).toBe(destination.id);
+  });
+
+  it('leaves the identities where they were when the merge rolls back', async () => {
+    const source = await createClient('Rollback Identified');
+    const destination = await createClient('Rollback Keeper');
+    recordIdentity(source.id, 'stays-put');
+    const planHash = previewClientMerge(db, source.id, destination.id).planHash;
+    // The same trick as the rollback case above: the alias insert at the end cannot succeed.
+    db.prepare(
+      'INSERT INTO client_merges(source_client_id,surviving_client_id,merged_at) VALUES(?,?,?)',
+    ).run(source.id, destination.id, '2026-01-01T00:00:00.000Z');
+
+    expect(() => commitClientMerge(db, source.id, destination.id, planHash)).toThrow();
+
+    expect(importIdentities()).toEqual([
+      { ns: 'campaign-playbook:source-a', ext: 'stays-put', id: source.id },
+    ]);
   });
 
   /**

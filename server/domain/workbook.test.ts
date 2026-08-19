@@ -56,6 +56,9 @@ describe('workbook reader', () => {
       'phone',
       'website',
       'notes',
+      // The optional identity pair, which the sample fills in for both of its clients.
+      'client_import_source',
+      'client_import_id',
     ]);
     expect(cellAt(clients.rows, 2, 0)).toEqual({ kind: 'text', value: 'CLI-GHD' });
     const checklist = findSheet(workbook, 'ChecklistItems')!;

@@ -95,6 +95,52 @@ describe('Merging one client into another', () => {
     );
   });
 
+  /**
+   * C70. An import identity is the other thing that points at a client, and the merge moves it. The
+   * dialog lists each one rather than counting them: which id follows the work is the fact a later
+   * playbook turns on, and an identity nobody expected on this client is worth seeing beforehand.
+   */
+  it('lists the import identities that will move with the work', async () => {
+    testState.clientsPayload = [source, destination];
+    testState.projectsPayload = [sourceProject];
+    testState.clientImportAliases = [
+      { namespace: 'campaign-playbook:9d3f1c62', externalId: 'ghd-studio', clientId: source.id },
+      {
+        namespace: 'campaign-playbook:9d3f1c62',
+        externalId: 'kept-here',
+        clientId: destination.id,
+      },
+    ];
+
+    const dialog = await openMergeDialog();
+    fireEvent.change(within(dialog).getByLabelText('Merge into'), {
+      target: { value: destination.id },
+    });
+
+    const plan = await within(dialog).findByLabelText('Merge preview');
+    expect(within(plan).getByText(/One import identity moves/)).toBeVisible();
+    const moving = within(plan).getByLabelText('Import identities that move');
+    expect(within(moving).getByText('ghd-studio')).toBeVisible();
+    // The destination's own identity is not moving anywhere and is not listed.
+    expect(within(moving).queryByText('kept-here')).toBeNull();
+  });
+
+  it('says nothing about identities when the source carries none', async () => {
+    testState.clientsPayload = [source, destination];
+    testState.projectsPayload = [sourceProject];
+
+    const dialog = await openMergeDialog();
+    fireEvent.change(within(dialog).getByLabelText('Merge into'), {
+      target: { value: destination.id },
+    });
+
+    const plan = await within(dialog).findByLabelText('Merge preview');
+    expect(within(plan).queryByLabelText('Import identities that move')).toBeNull();
+    // The fixed notice about identities is still there — it says what a merge does, not what this
+    // one will do — so what is absent is the list and the sentence introducing it.
+    expect(within(plan).queryByText(/import identity moves|import identities move/)).toBeNull();
+  });
+
   it('confirms with the previewed plan, then lands on the surviving client', async () => {
     testState.clientsPayload = [source, destination];
     testState.projectsPayload = [sourceProject];

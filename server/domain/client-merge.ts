@@ -10,7 +10,7 @@
  * writing a merge nobody was shown.
  */
 import crypto from 'node:crypto';
-import type { ClientMergeProject } from '../../shared/client-merge.ts';
+import type { ClientMergeAlias, ClientMergeProject } from '../../shared/client-merge.ts';
 
 /** A client as the merge rules need to see it, merge alias included. */
 export interface MergeWorkspaceClient {
@@ -28,9 +28,17 @@ export interface MergeWorkspaceProject {
   status: string;
 }
 
+/** A source identity as `client_import_aliases` stores it, for the client it is recorded against. */
+export interface MergeWorkspaceAlias {
+  namespace: string;
+  externalId: string;
+  clientId: string;
+}
+
 export interface ClientMergeWorkspace {
   clients: MergeWorkspaceClient[];
   projects: MergeWorkspaceProject[];
+  clientAliases: MergeWorkspaceAlias[];
 }
 
 /** A validation refusal, carrying the status the HTTP boundary answers with. */
@@ -48,6 +56,12 @@ export interface ClientMergePlan {
   source: { id: string; name: string; status: 'ACTIVE' | 'ARCHIVED' };
   destination: { id: string; name: string; status: 'ACTIVE' | 'ARCHIVED' };
   projects: ClientMergeProject[];
+  /**
+   * The source identities the merge retargets. Part of the plan, so `clientMergePlanHash` covers
+   * them: an identity attached to either client between the preview and the confirmation changes
+   * what the merge would do, and a confirmation always applies to the merge that was shown.
+   */
+  aliases: ClientMergeAlias[];
 }
 
 const party = (client: MergeWorkspaceClient) => ({
@@ -100,6 +114,14 @@ export function buildClientMergePlan(
         status: project.status as ClientMergeProject['status'],
       }))
       .sort((a, b) => a.id.localeCompare(b.id)),
+    // Sorted for the same reason the projects are, over the pair that identifies one.
+    aliases: workspace.clientAliases
+      .filter((alias) => alias.clientId === sourceId)
+      .map((alias) => ({ namespace: alias.namespace, externalId: alias.externalId }))
+      .sort(
+        (a, b) =>
+          a.namespace.localeCompare(b.namespace) || a.externalId.localeCompare(b.externalId),
+      ),
   };
 }
 

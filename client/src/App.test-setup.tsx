@@ -226,6 +226,11 @@ export const testState = {
   clientMergePreviewError: null as { status: number; error: string } | null,
   clientMergeCommitError: null as { status: number; error: string } | null,
   /**
+   * Client import identities, the way `client_import_aliases` holds them. The merge stub reads the
+   * source's own and retargets them on commit, so a case can prove the dialog lists what moves.
+   */
+  clientImportAliases: [] as { namespace: string; externalId: string; clientId: string }[],
+  /**
    * The queue-health summary the planner loads beside the grid.
    *
    * Held as state rather than answered from a fixture, so acknowledging behaves the way the route
@@ -313,7 +318,19 @@ export const clientMergePlan = (sourceId: string, destinationId: string) => {
     .filter((p) => p.clientId === sourceId)
     .map((p) => ({ id: p.id, name: p.name, status: p.status }))
     .sort((a, b) => a.id.localeCompare(b.id));
-  return { source, destination, projects: merging, planHash: `hash-${sourceId}-${merging.length}` };
+  const aliases = testState.clientImportAliases
+    .filter((alias) => alias.clientId === sourceId)
+    .map((alias) => ({ namespace: alias.namespace, externalId: alias.externalId }))
+    .sort(
+      (a, b) => a.namespace.localeCompare(b.namespace) || a.externalId.localeCompare(b.externalId),
+    );
+  return {
+    source,
+    destination,
+    projects: merging,
+    aliases,
+    planHash: `hash-${sourceId}-${merging.length}`,
+  };
 };
 
 /**
@@ -826,10 +843,14 @@ const respondTo = (url: string, init?: RequestInit) => {
           }
         : candidate,
     );
+    testState.clientImportAliases = testState.clientImportAliases.map((alias) =>
+      alias.clientId === sourceId ? { ...alias, clientId: plan.destination.id } : alias,
+    );
     return {
       source: { ...plan.source, status: 'ARCHIVED' },
       destination: plan.destination,
       projects: plan.projects,
+      aliases: plan.aliases,
       movedProjectCount: plan.projects.length,
       mergedAt,
     };
@@ -1108,6 +1129,7 @@ beforeEach(() => {
   testState.signalVariantsError = null;
   testState.clientMergePreviewError = null;
   testState.clientMergeCommitError = null;
+  testState.clientImportAliases = [];
   testState.queueHealthSummary = clearQueueHealth();
   testState.queueHealthError = null;
   testState.signalCampaignsPayload = [];

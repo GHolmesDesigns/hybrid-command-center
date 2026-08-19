@@ -213,6 +213,7 @@ describe('additive schema migration', () => {
         'signal_campaigns',
         'signal_post_campaigns',
         'client_merges',
+        'client_import_aliases',
       ]),
     );
     // The integration activity log arrives empty: a migration invents no history.
@@ -223,6 +224,9 @@ describe('additive schema migration', () => {
     ]);
     // Merge aliases arrive empty too: an upgrade never claims a client was merged.
     expect(rows(db, 'SELECT COUNT(*) AS total FROM client_merges')).toEqual([{ total: 0 }]);
+    // And no client arrives with an import identity: which client a source calls what is something
+    // only a playbook carrying that pair can say, so a migration has nothing to fill this from.
+    expect(rows(db, 'SELECT COUNT(*) AS total FROM client_import_aliases')).toEqual([{ total: 0 }]);
     // And no alert is acknowledged on arrival: the summary is derived, so an upgrade cannot know
     // which of the lines it is about to show have already been seen.
     expect(rows(db, 'SELECT COUNT(*) AS total FROM signal_alert_acks')).toEqual([{ total: 0 }]);
@@ -329,6 +333,42 @@ describe('additive schema migration', () => {
     expect(() =>
       db.prepare('INSERT INTO categories (id, name) VALUES (?, ?)').run('k2', 'retainer'),
     ).toThrow(/UNIQUE/i);
+  });
+
+  /**
+   * C70. The uniqueness is on the source and the external id alone, which is what makes "an import
+   * never silently retargets an established identity" a property of the schema rather than a rule
+   * the importer has to remember: there is no second row for one identity to be moved into.
+   */
+  it('lets one client hold several import identities and one identity only one client', () => {
+    const db = track(createDb(scratch('identities.db')));
+    const client = (id: string, name: string) =>
+      db
+        .prepare(
+          `INSERT INTO clients (id, name, slug, created_at, updated_at)
+           VALUES (?, ?, ?, '2026-08-19T00:00:00.000Z', '2026-08-19T00:00:00.000Z')`,
+        )
+        .run(id, name, name.toLowerCase());
+    const identity = (namespace: string, externalId: string, clientId: string) =>
+      db
+        .prepare(
+          `INSERT INTO client_import_aliases (source_namespace, external_id, client_id, created_at)
+           VALUES (?, ?, ?, '2026-08-19T00:00:00.000Z')`,
+        )
+        .run(namespace, externalId, clientId);
+    client('c1', 'Kept');
+    client('c2', 'Other');
+
+    // Two sources, and two ids within one source: both are the same client arriving twice.
+    identity('campaign-playbook:s1', 'a', 'c1');
+    identity('campaign-playbook:s2', 'a', 'c1');
+    identity('campaign-playbook:s1', 'b', 'c1');
+
+    expect(rows(db, 'SELECT COUNT(*) AS total FROM client_import_aliases')).toEqual([{ total: 3 }]);
+    // The same pair against a second client is refused by the table itself.
+    expect(() => identity('campaign-playbook:s1', 'a', 'c2')).toThrow(/UNIQUE/i);
+    // And it names a real client.
+    expect(() => identity('campaign-playbook:s1', 'c', 'nobody')).toThrow(/FOREIGN KEY/i);
   });
 
   it('leaves the database consistent after migrating', () => {

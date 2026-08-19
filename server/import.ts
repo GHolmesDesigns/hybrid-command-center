@@ -32,6 +32,7 @@ import {
   type KeyResolution,
   type PlaybookPlan,
   type WorkspaceClient,
+  type WorkspaceClientAlias,
   type WorkspaceProject,
   type WorkspaceSnapshot,
   type WorkspaceTask,
@@ -173,7 +174,7 @@ function parseInput(input: PlaybookInput): ParsedInput {
 }
 
 /**
- * The workspace the duplicate rule compares against, read in five statements. Archived
+ * The workspace the duplicate rule compares against, read in six statements. Archived
  * clients and projects are included: an archived record still counts as existing, and an
  * import neither revives nor rewrites one.
  */
@@ -195,6 +196,13 @@ export function readWorkspace(db: Db): WorkspaceSnapshot {
       ...client,
       ...(mergedIntoId ? { mergedIntoId } : {}),
     })),
+    // Source identities come along for the same reason the merge alias does, one step further on:
+    // a client renamed at its source is a client this workspace already has, and the identity is
+    // the only thing left that still says so. See `resolveClientIdentity` in the same module.
+    clientAliases: rows<WorkspaceClientAlias>(
+      `SELECT source_namespace namespace, external_id externalId, client_id clientId
+       FROM client_import_aliases`,
+    ),
     projects: rows<WorkspaceProject>('SELECT id, client_id clientId, name FROM projects'),
     tasks: rows<WorkspaceTask>(
       'SELECT id, project_id projectId, title, due_date dueDate FROM tasks',
@@ -272,6 +280,11 @@ interface AppliedPlan {
  * Order follows the hierarchy, because a child needs its parent's id: clients, projects,
  * tasks, checklist items, dependencies. Keys the plan resolved to records that already exist
  * contribute no insert and are simply the id a child attaches to.
+ *
+ * Client source identities are written here too, in the same transaction as the clients they
+ * identify: an identity recorded against a client whose import then rolled back would claim a
+ * client that does not exist, and an import that created a client without recording the identity
+ * that named it would create a second one next time.
  */
 function applyPlan(db: Db, plan: PlaybookPlan): AppliedPlan {
   const stamp = now();
@@ -317,6 +330,23 @@ function applyPlan(db: Db, plan: PlaybookPlan): AppliedPlan {
     entities.push({ type: 'client', id: clientId, label: client.name });
     counts.Clients++;
   }
+
+  /**
+   * The identities the plan chose to record: never one the workspace already holds, because
+   * `buildPlan` resolves through those instead. A plain `INSERT` rather than an upsert or an
+   * `OR IGNORE` is the point — the unique pair means a routine import that somehow reached an
+   * established identity fails and rolls back, rather than quietly moving it to another client.
+   */
+  const insertIdentity = db.prepare(
+    'INSERT INTO client_import_aliases(source_namespace,external_id,client_id,created_at) VALUES(?,?,?,?)',
+  );
+  for (const identity of plan.clientIdentities)
+    insertIdentity.run(
+      identity.namespace,
+      identity.externalId,
+      resolve(plan.resolutions.clients, clientIds, identity.clientKey),
+      stamp,
+    );
 
   const insertProject = db.prepare(
     `INSERT INTO projects(id,client_id,name,description,status,start_date,target_deadline,priority,notes,position,drive_status,created_at,updated_at,last_activity_at)
