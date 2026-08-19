@@ -37,7 +37,7 @@ test('delivery is reported per target beside a planning status the provider neve
   await expect(delivery).toContainText('Unsupported');
   await expect(delivery).toContainText('No provider reaches Blog');
 
-  await editor.getByRole('button', { name: 'Preview publishing' }).click();
+  await editor.getByRole('button', { name: 'Show preview' }).click();
   const preview = editor.getByRole('region', { name: 'Publish confirmation' });
   await expect(preview).toContainText('X → @gholmes · Ready to send');
   await preview.getByRole('button', { name: 'Confirm and submit' }).click();

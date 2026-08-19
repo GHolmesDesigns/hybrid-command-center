@@ -138,7 +138,16 @@ export class PublishService {
       await this.signal.listPosts({ from: scheduled.date, to: scheduled.date })
     ).posts.find((candidate) => candidate.id === postId);
     if (!post) throw new PublishRequestError('Signal post not found.', 404);
-    return buildPublishPlan(post, await this.provider.listTargets(), this.timezone, this.clock());
+    // Two reads through the same read-only provider: the post, and the content overrides that
+    // tailor it. Neither can write, which is what keeps the publisher unable to change a schedule
+    // it is planning from.
+    return buildPublishPlan(
+      post,
+      await this.provider.listTargets(),
+      this.timezone,
+      this.clock(),
+      await this.signal.listVariants(postId),
+    );
   }
 
   async submit(postId: string, expectedHash: string): Promise<SignalPublication> {

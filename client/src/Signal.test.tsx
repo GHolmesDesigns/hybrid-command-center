@@ -283,6 +283,99 @@ describe('Signal planner', () => {
     expect(requests.filter((request) => request.method === 'PATCH')).toHaveLength(0);
   });
 
+  it('duplicates a scheduled post into the queue and leaves the original on its day', async () => {
+    testState.signalPostsPayload = [
+      signalPost('source', 'The September launch post', '2026-09-14', {
+        channels: ['li', 'ig'],
+        mediaUrls: ['https://cdn.example.com/launch.jpg'],
+        time: '13:00',
+        campaign: 'Wk4',
+        status: 'PUBLISHED',
+        cta: 'SOFT',
+        format: 'ARTICLE',
+      }),
+    ];
+    await openSignal();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit The September launch post' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate to unscheduled queue' }));
+
+    await waitFor(() =>
+      expect(within(screen.getByRole('dialog')).getByLabelText('Date')).toHaveValue(''),
+    );
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByLabelText('Date')).toHaveValue('');
+    expect(within(dialog).getByLabelText('Time')).toHaveValue('13:00');
+    expect(within(dialog).getByLabelText('Campaign')).toHaveValue('Wk4');
+    expect(within(dialog).getByLabelText('Content')).toHaveValue('The September launch post');
+    expect(
+      within(screen.getByRole('complementary', { name: 'Unscheduled queue' })).getByText(
+        'The September launch post',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '2026-09-14' })).toHaveTextContent(
+      'The September launch post',
+    );
+    expect(
+      requests.some((request) => request.url.endsWith('/api/signal/posts/source/duplicate')),
+    ).toBe(true);
+  });
+
+  it('shows a suggested slot without saving it, then writes on confirm', async () => {
+    testState.signalPostsPayload = [
+      signalPost('booked', 'Already on Monday', '2026-09-14', { time: '09:00' }),
+      signalPost('queued', 'Waiting for a day', null, { status: 'DRAFT', time: '09:00' }),
+    ];
+    await openSignal();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Waiting for a day' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Suggest next open slot' }));
+
+    const suggestion = await screen.findByRole('region', { name: 'Suggested slot' });
+    expect(suggestion).toHaveTextContent('09:00');
+    expect(requests.filter((request) => request.url.includes('/next-slot')).length).toBeGreaterThan(
+      0,
+    );
+    expect(testState.signalPostsPayload.find((post) => post.id === 'queued')?.date).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Use this slot' }));
+    await waitFor(() =>
+      expect(testState.signalPostsPayload.find((post) => post.id === 'queued')?.date).toBe(
+        '2026-09-15',
+      ),
+    );
+    expect(await screen.findByRole('region', { name: '2026-09-15' })).toHaveTextContent(
+      'Waiting for a day',
+    );
+  });
+
+  it('recalculates occupancy before saving a suggested slot that was taken', async () => {
+    const queued = signalPost('queued', 'Waiting for a day', null, {
+      status: 'DRAFT',
+      time: '09:00',
+    });
+    testState.signalPostsPayload = [queued];
+    await openSignal();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Waiting for a day' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Suggest next open slot' }));
+    expect(await screen.findByRole('region', { name: 'Suggested slot' })).toBeInTheDocument();
+
+    testState.signalPostsPayload = [
+      queued,
+      signalPost('taken', 'Takes Monday', '2026-09-14', { time: '09:00' }),
+    ];
+    fireEvent.click(screen.getByRole('button', { name: 'Use this slot' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('That slot is no longer open.');
+    expect(screen.getByRole('region', { name: 'Suggested slot' })).toHaveTextContent('09:00');
+    expect(testState.signalPostsPayload.find((post) => post.id === 'queued')?.date).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Use this slot' }));
+    await waitFor(() =>
+      expect(testState.signalPostsPayload.find((post) => post.id === 'queued')?.date).toBe(
+        '2026-09-15',
+      ),
+    );
+  });
+
   it('shows the exact publishing preview before sending and keeps status as a user write', async () => {
     const post = signalPost('publish', 'Preview this campaign post', '2026-09-14', {
       channels: ['x'],
@@ -307,6 +400,23 @@ describe('Signal planner', () => {
           status: 'READY',
           accountId: 4,
           handle: '@gholmes',
+          content: {
+            caption: post.text,
+            mediaUrls: [],
+            postKind: 'POST',
+            discloseSyntheticMedia: false,
+            deliveryMode: 'AUTOMATIC',
+            sources: {
+              caption: 'BASE',
+              mediaUrls: 'BASE',
+              postKind: 'BASE',
+              title: 'BASE',
+              firstComment: 'BASE',
+              discloseSyntheticMedia: 'BASE',
+              coverImageUrl: 'BASE',
+              thumbnailUrl: 'BASE',
+            },
+          },
           refusals: [],
           warnings: [],
         },
@@ -344,7 +454,7 @@ describe('Signal planner', () => {
     };
     await openSignal();
     fireEvent.click(screen.getByRole('button', { name: 'Edit Preview this campaign post' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Preview publishing' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Show preview' }));
     expect(await screen.findByRole('region', { name: 'Publish confirmation' })).toHaveTextContent(
       'America/New_York',
     );
@@ -353,7 +463,11 @@ describe('Signal planner', () => {
     const confirmation = await screen.findByRole('region', { name: 'Publish confirmation' });
     expect(confirmation).toHaveTextContent('X → @gholmes · Ready to send');
     expect(confirmation).toHaveTextContent('Blog · Not available from this provider');
-    expect(confirmation).toHaveTextContent('Blog is not available from this provider.');
+    // The reason a channel gives is in that channel's own tab, beside what it would have received.
+    fireEvent.click(within(confirmation).getByRole('tab', { name: 'Blog' }));
+    expect(within(confirmation).getByRole('tabpanel')).toHaveTextContent(
+      'Blog is not available from this provider.',
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Confirm and submit' }));
     await waitFor(() =>
       expect(
@@ -370,7 +484,7 @@ describe('Signal planner', () => {
     ];
     await openSignal();
     fireEvent.click(screen.getByRole('button', { name: 'Edit Blog stays manual' }));
-    expect(screen.queryByRole('button', { name: 'Preview publishing' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Show preview' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Close editor' }));
     fireEvent.click(screen.getByRole('button', { name: 'Edit Save me first' }));
     fireEvent.change(screen.getByLabelText('Content'), { target: { value: 'Unsaved revision' } });

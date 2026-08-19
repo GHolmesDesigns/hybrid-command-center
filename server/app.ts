@@ -39,13 +39,23 @@ import { signalProvider } from './signal/read.ts';
 import { readCalendarRange } from './calendar.ts';
 import {
   SignalPostNotFoundError,
+  SignalVariantError,
+  SignalSlotConflictError,
+  applyPostSlot,
   createPost,
   deletePost,
+  duplicatePost,
   getPost,
+  getPostVariants,
   listQueue,
+  replacePostVariants,
   signalPostInput,
   signalPostPatch,
   signalRangeQuery,
+  signalVariantsInput,
+  signalSlotFromQuery,
+  signalSlotInput,
+  suggestPostSlot,
   updatePost,
 } from './signal/service.ts';
 import type { DriveProvider } from './drive/provider.ts';
@@ -132,7 +142,12 @@ const productionContentSecurityPolicy = {
     // Only images widen: no other directive accepts a remote origin.
     imgSrc: ["'self'", 'data:', 'https:'],
     manifestSrc: ["'self'"],
-    mediaSrc: ["'self'"],
+    // Media widens for the same reason images do, and for one screen: the publishing preview
+    // renders the video a post already references, from the public URL the post carries, so the
+    // host is the user's and is not known in advance. The browser fetches it and the server never
+    // does -- this app uploads, downloads and proxies no media, the rule recorded on
+    // signal_post_media and in docs/publishing-integration.md section 3.3.
+    mediaSrc: ["'self'", 'https:'],
     objectSrc: ["'none'"],
     scriptSrc: ["'self'"],
     scriptSrcAttr: ["'none'"],
@@ -1376,6 +1391,64 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     if (!post) return res.status(404).json({ error: 'Signal post not found.' });
     res.json(post);
   });
+  /**
+   * Platform and account content overrides for one post.
+   *
+   * `PUT` replaces the whole set, the way branding does and for the same reason: the composer holds
+   * every layer while it is edited, and a patch would let a half-applied set leave a platform
+   * tailored by a request that was reported as having failed. What the provider will accept is
+   * checked here from `shared/publish-variants.ts` — the same function the composer renders its
+   * fields from — so a field the form hides is a field this route refuses rather than one a `curl`
+   * walks around.
+   */
+  app.get('/api/signal/posts/:id/variants', (req, res, next) => {
+    try {
+      res.json(getPostVariants(db, req.params.id));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.put('/api/signal/posts/:id/variants', (req, res, next) => {
+    try {
+      res.json(replacePostVariants(db, req.params.id, signalVariantsInput.parse(req.body)));
+    } catch (error) {
+      next(error);
+    }
+  });
+  /**
+   * Duplicate copies composition into the unscheduled queue and leaves publication rows on the
+   * original. The copy is a new plan: new id, no date, draft status.
+   */
+  app.post('/api/signal/posts/:id/duplicate', (req, res, next) => {
+    try {
+      res.status(201).json(duplicatePost(db, req.params.id));
+    } catch (error) {
+      next(error);
+    }
+  });
+  /**
+   * Next free cell at this post's time, from the Signal schedule. Nothing is written; the
+   * planner shows it until the user confirms.
+   */
+  app.get('/api/signal/posts/:id/next-slot', (req, res, next) => {
+    try {
+      const { from } = signalSlotFromQuery.parse(req.query);
+      res.json(suggestPostSlot(db, req.params.id, from));
+    } catch (error) {
+      next(error);
+    }
+  });
+  /**
+   * Confirm a suggested slot. Occupancy is recalculated here, immediately before the write, so
+   * a cell taken between suggestion and confirmation is refused rather than double-booked.
+   */
+  app.post('/api/signal/posts/:id/slot', (req, res, next) => {
+    try {
+      res.json(applyPostSlot(db, req.params.id, signalSlotInput.parse(req.body)));
+    } catch (error) {
+      next(error);
+    }
+  });
   app.post('/api/signal/posts/:id/publish/preview', async (req, res, next) => {
     try {
       res.json(await publisher.preview(req.params.id));
@@ -1554,15 +1627,21 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     const status =
       error instanceof z.ZodError ||
       error instanceof ImportInputError ||
-      error instanceof DriveScopeError
+      error instanceof DriveScopeError ||
+      // An override the capability contract will not carry is the caller naming something the
+      // provider cannot do, which is their problem to fix and not a failure of the write.
+      error instanceof SignalVariantError
         ? 400
         : // Editing or deleting a post that is not there is the caller addressing something
           // that does not exist, not a failure of the write.
           error instanceof SignalPostNotFoundError
           ? 404
           : // A refused merge is the caller's problem — the wrong pair, or a preview the
-            // workspace moved out from under — and each case carries its own status.
-            error instanceof PublishRequestError || error instanceof ClientMergeError
+            // workspace moved out from under — and each case carries its own status. A slot
+            // that is no longer free is the same kind of refusal.
+            error instanceof PublishRequestError ||
+              error instanceof ClientMergeError ||
+              error instanceof SignalSlotConflictError
             ? error.status
             : error?.code === 'SQLITE_CONSTRAINT_UNIQUE'
               ? 409
@@ -1585,6 +1664,12 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
           : error instanceof Error
             ? error.message
             : 'Unexpected error',
+      ...(error instanceof SignalSlotConflictError
+        ? {
+            code: error.suggestion ? 'SLOT_TAKEN' : 'NO_OPEN_SLOT',
+            suggestion: error.suggestion,
+          }
+        : {}),
     });
   });
   return app;

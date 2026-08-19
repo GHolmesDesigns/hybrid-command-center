@@ -25,12 +25,20 @@ import {
   PUBLICATION_STATES,
   RECONCILE_INTERVALS_MINUTES,
   RECONCILE_MAX_ATTEMPTS,
+  type DeliveryMode,
+  type PublishChannelContent,
   type PublishChannelReport,
   type PublishPreview,
   type SignalPublication,
   type SignalPublicationTarget,
 } from '../../shared/publish.ts';
-import { SIGNAL_CHANNELS, type SignalChannel } from '../../shared/signal.ts';
+import {
+  resolvePublishContent,
+  type PublishVariantBase,
+  type PublishVariantRecord,
+} from '../../shared/publish-variants.ts';
+import { replacePostVariants } from '../signal/service.ts';
+import { SIGNAL_CHANNELS, type SignalChannel, type SignalPost } from '../../shared/signal.ts';
 import {
   publishPlatformFor,
   PUBLISH_CAPABILITIES,
@@ -53,6 +61,25 @@ beforeEach(() => {
 const add = (overrides: Parameters<typeof seedSignalPost>[1] = {}) => seedSignalPost(db, overrides);
 const reportFor = (plan: PublishPreview, channel: SignalChannel): PublishChannelReport =>
   plan.channels.find((report) => report.channel === channel) as PublishChannelReport;
+/**
+ * Resolved content for a preflight exercised on its own, so a case states only the field it is
+ * about. Built through `resolvePublishContent` rather than by hand: a preflight test inventing its
+ * own `sources` map would stop describing anything the plan actually produces.
+ */
+const resolvedContent = (
+  overrides: Partial<PublishVariantBase> & { deliveryMode?: DeliveryMode } = {},
+): PublishChannelContent => {
+  const { deliveryMode = 'AUTOMATIC', ...base } = overrides;
+  return {
+    ...resolvePublishContent({
+      caption: 'A clear campaign post',
+      mediaUrls: [],
+      postKind: 'POST',
+      ...base,
+    }),
+    deliveryMode,
+  };
+};
 
 describe('publishing time conversion', () => {
   it('refuses a daylight-saving gap and chooses the first repeated instant', () => {
@@ -270,9 +297,7 @@ describe('preflight against the shared capability contract', () => {
     };
     const manual = preflightPlatform({
       capability,
-      kind: 'POST',
-      caption: 'A clear campaign post',
-      mediaKinds: ['image'],
+      content: resolvedContent({ mediaUrls: ['https://cdn.example.com/a.jpg'] }),
     });
     expect(manual.refusals).toEqual([]);
     expect(manual.warnings).toEqual([
@@ -287,9 +312,7 @@ describe('preflight against the shared capability contract', () => {
           POST: { ...capability.kinds.POST, automatic: false, manualFinish: false },
         },
       },
-      kind: 'POST',
-      caption: 'A clear campaign post',
-      mediaKinds: ['image'],
+      content: resolvedContent({ mediaUrls: ['https://cdn.example.com/a.jpg'] }),
     });
     expect(unreachable.refusals).toEqual([
       "TikTok does not accept a standard post from this provider. Change the post's format or remove TikTok.",
@@ -518,7 +541,6 @@ describe('publish planning and submission', () => {
       .expect(409);
   });
 });
-
 /**
  * Planning status and delivery are two facts, and these are the tests that hold them apart.
  *
@@ -870,5 +892,367 @@ describe('planning status and delivery stay apart end to end', () => {
     await request(app)
       .post(`/api/signal/publications/${submitted.body.id}/targets/404/finish`)
       .expect(404);
+  });
+});
+
+describe('platform and account content variants', () => {
+  const everyTarget = [
+    ...targets,
+    { id: 5, platform: 'linkedin', handle: '@gholmes', name: 'G.Holmes Designs' },
+    { id: 7, platform: 'youtube', handle: '@gholmes', name: 'G.Holmes Designs' },
+  ];
+  const plan = (post: SignalPost, variants: PublishVariantRecord[]) =>
+    buildPublishPlan(post, everyTarget, 'America/New_York', new Date('2026-01-01'), variants);
+
+  it('plans a post with no variants exactly as it did before variants existed', () => {
+    const post = add({ channels: ['x'] });
+    const without = buildPublishPlan(post, targets, 'America/New_York', new Date('2026-01-01'));
+    expect(plan(post, []).planHash).toBe(without.planHash);
+    expect(without.request?.platformConfigurations).toBeUndefined();
+    expect(reportFor(without, 'x').content).toMatchObject({
+      caption: post.text,
+      postKind: 'POST',
+      deliveryMode: 'AUTOMATIC',
+    });
+  });
+
+  it('resolves each channel from its own layers and reports where every value came from', () => {
+    const post = add({ text: 'The long form post', channels: ['x', 'li'] });
+    const resolved = plan(post, [
+      { platform: 'twitter', accountId: null, caption: 'The short version' },
+      { platform: 'twitter', accountId: 1, firstComment: 'gholmesdesigns.com' },
+    ]);
+    expect(reportFor(resolved, 'x').content).toMatchObject({
+      caption: 'The short version',
+      firstComment: 'gholmesdesigns.com',
+    });
+    expect(reportFor(resolved, 'x').content?.sources).toMatchObject({
+      caption: 'PLATFORM',
+      firstComment: 'ACCOUNT',
+      mediaUrls: 'BASE',
+    });
+    // LinkedIn was never mentioned, so it still receives the post.
+    expect(reportFor(resolved, 'li').content?.caption).toBe('The long form post');
+  });
+
+  it('sends one platform configuration per tailored platform and none for the rest', () => {
+    const post = add({
+      text: 'The long form post',
+      channels: ['x', 'li', 'yt'],
+      mediaUrls: ['https://cdn.example.com/clip.mp4'],
+      format: 'VIDEO',
+    });
+    const resolved = plan(post, [
+      { platform: 'twitter', accountId: null, caption: 'The short version' },
+      { platform: 'youtube', accountId: null, title: 'How clarity wins work' },
+    ]);
+    expect(publishPreviewRefusals(resolved)).toEqual([]);
+    expect(resolved.request?.caption).toBe('The long form post');
+    expect(resolved.request?.platformConfigurations).toEqual([
+      { platform: 'twitter', caption: 'The short version' },
+      { platform: 'youtube', title: 'How clarity wins work' },
+    ]);
+    // A YouTube title that is set is a title the caption no longer stands in for.
+    expect(reportFor(resolved, 'yt').warnings).not.toEqual(
+      expect.arrayContaining([expect.stringContaining('takes a title separate')]),
+    );
+  });
+
+  it('measures a caption limit against the caption the override produced', () => {
+    const post = add({ text: 'Short enough for X', channels: ['x'] });
+    const resolved = plan(post, [
+      { platform: 'twitter', accountId: null, caption: 'x'.repeat(281) },
+    ]);
+    expect(reportFor(resolved, 'x').refusals).toEqual([
+      'X limits captions to 280 characters and this one is 281. Remove 1.',
+    ]);
+  });
+
+  it('refuses a title the platform will not carry and one that is over its limit', () => {
+    const post = add({
+      channels: ['yt'],
+      mediaUrls: ['https://cdn.example.com/clip.mp4'],
+      format: 'VIDEO',
+    });
+    const overLong = plan(post, [{ platform: 'youtube', accountId: null, title: 'y'.repeat(101) }]);
+    expect(reportFor(overLong, 'yt').refusals).toEqual([
+      'YouTube limits the title to 100 characters and this one is 101. Remove 1.',
+    ]);
+    // A field the contract does not carry refuses rather than being dropped, because a title
+    // silently discarded is a video published under the wrong name.
+    expect(
+      preflightPlatform({
+        capability: PUBLISH_CAPABILITIES.bluesky,
+        content: { ...resolvedContent(), title: 'Nowhere to put this' },
+      }).refusals,
+    ).toEqual(['Bluesky takes no title from this provider, and one is set for it. Remove it.']);
+  });
+
+  it('takes a placement override as the shape, with its own media rules', () => {
+    const post = add({
+      channels: ['ig'],
+      mediaUrls: ['https://cdn.example.com/a.jpg', 'https://cdn.example.com/b.jpg'],
+      format: 'CAROUSEL',
+    });
+    const asStory = plan(post, [{ platform: 'instagram', accountId: null, postKind: 'STORY' }]);
+    expect(reportFor(asStory, 'ig').kind).toBe('STORY');
+    // A story is exactly one item, so a two-image carousel refuses as a story and says why.
+    expect(reportFor(asStory, 'ig').refusals).toEqual([
+      'Instagram accepts at most 1 media item on a story and this post has 2. Remove 1.',
+    ]);
+    const oneImage = plan(add({ channels: ['ig'], mediaUrls: ['https://cdn.example.com/a.jpg'] }), [
+      { platform: 'instagram', accountId: null, postKind: 'STORY' },
+    ]);
+    expect(publishPreviewRefusals(oneImage)).toEqual([]);
+    expect(reportFor(oneImage, 'ig').warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining('shows no caption on a story')]),
+    );
+    // A story is a real provider placement; a reel is not, and none is sent for one.
+    expect(oneImage.request?.platformConfigurations).toEqual([
+      { platform: 'instagram', story: true },
+    ]);
+  });
+
+  it('writes a disclosure into the caption and counts it against the limit', () => {
+    const post = add({ text: 'x'.repeat(240), channels: ['x'] });
+    const resolved = plan(post, [
+      { platform: 'twitter', accountId: null, discloseSyntheticMedia: true },
+    ]);
+    expect(reportFor(resolved, 'x').content?.caption).toContain(
+      'Contains AI-generated or synthetically altered content.',
+    );
+    expect(reportFor(resolved, 'x').warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining('written into the caption')]),
+    );
+    // 240 characters of post, a blank line, and a 54-character sentence is over 280, and X refuses.
+    expect(reportFor(resolved, 'x').refusals).toEqual([
+      expect.stringContaining('X limits captions to 280 characters'),
+    ]);
+  });
+
+  it('sends the selected media and refuses when two channels were given different sets', () => {
+    const media = ['https://cdn.example.com/a.jpg', 'https://cdn.example.com/b.jpg'];
+    const agreed = plan(add({ channels: ['x', 'li'], mediaUrls: media }), [
+      { platform: 'twitter', accountId: null, mediaUrls: [media[1] as string] },
+      { platform: 'linkedin', accountId: null, mediaUrls: [media[1] as string] },
+    ]);
+    expect(publishPreviewRefusals(agreed)).toEqual([]);
+    expect(agreed.request?.mediaUrls).toEqual([media[1]]);
+
+    const conflicting = plan(add({ channels: ['x', 'li'], mediaUrls: media }), [
+      { platform: 'twitter', accountId: null, mediaUrls: [media[1] as string] },
+    ]);
+    expect(conflicting.refusals).toEqual([
+      'This provider sends one set of media per submission and these channels were given different media: X (1 item); LinkedIn (2 items). Give them the same media, or publish them separately.',
+    ]);
+    expect(conflicting.request).toBeUndefined();
+  });
+
+  it('leaves out media the post no longer carries, and says it did', () => {
+    const post = add({ channels: ['li'], mediaUrls: ['https://cdn.example.com/a.jpg'] });
+    const resolved = plan(post, [
+      {
+        platform: 'linkedin',
+        accountId: null,
+        mediaUrls: ['https://cdn.example.com/a.jpg', 'https://cdn.example.com/gone.jpg'],
+      },
+    ]);
+    expect(reportFor(resolved, 'li').content?.mediaUrls).toEqual(['https://cdn.example.com/a.jpg']);
+    expect(reportFor(resolved, 'li').warnings).toEqual([
+      'LinkedIn was given 1 media item the post no longer carries, and it was left out. Choose its media again.',
+    ]);
+  });
+
+  it('states that an account caption is delivered as the platform configuration', () => {
+    const resolved = plan(add({ channels: ['x'] }), [
+      { platform: 'twitter', accountId: 1, caption: 'Just for this handle' },
+    ]);
+    expect(reportFor(resolved, 'x').content?.caption).toBe('Just for this handle');
+    expect(reportFor(resolved, 'x').warnings).toEqual([
+      expect.stringContaining('carries one set of content per platform'),
+    ]);
+    expect(resolved.request?.platformConfigurations).toEqual([
+      { platform: 'twitter', caption: 'Just for this handle' },
+    ]);
+  });
+
+  it('changes the plan hash when a variant changes, so a stale confirmation refuses', () => {
+    const post = add({ channels: ['x'] });
+    const before = plan(post, []);
+    const after = plan(post, [
+      { platform: 'twitter', accountId: null, caption: 'The short version' },
+    ]);
+    expect(after.planHash).not.toBe(before.planHash);
+  });
+
+  /**
+   * The claim the card makes about the server, tested as behaviour rather than as a promise.
+   *
+   * A preview resolves media, checks it against the contract, and reports it. None of that requires
+   * knowing anything about the file at the other end of the URL, and this proves nothing tried: the
+   * spy is the whole of `fetch`, so any attempt to reach a media host, a cover image, or the
+   * provider itself would be caught here.
+   */
+  it('fetches nothing at all while building a preview', async () => {
+    const post = add({
+      channels: ['x'],
+      mediaUrls: ['https://cdn.example.com/a.jpg', 'https://cdn.example.com/clip.mp4'],
+    });
+    replacePostVariants(db, post.id, {
+      variants: [
+        {
+          platform: 'twitter',
+          accountId: null,
+          caption: 'The short version',
+          mediaUrls: ['https://cdn.example.com/a.jpg'],
+        },
+      ],
+    });
+    const original = globalThis.fetch;
+    const attempts: string[] = [];
+    globalThis.fetch = (input: RequestInfo | URL) => {
+      attempts.push(String(input));
+      throw new Error('The server must not fetch a preview URL.');
+    };
+    try {
+      const service = new PublishService(
+        db,
+        new LocalSignalProvider(db),
+        new MockPublishProvider(targets),
+        'America/New_York',
+        () => new Date('2026-01-01'),
+      );
+      const preview = await service.preview(post.id);
+      expect(reportFor(preview, 'x').content?.mediaUrls).toEqual(['https://cdn.example.com/a.jpg']);
+      expect(attempts).toEqual([]);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+});
+
+describe('storing content variants', () => {
+  const media = ['https://cdn.example.com/a.jpg', 'https://cdn.example.com/b.jpg'];
+  const app = () => createApp(db, { publish: new MockPublishProvider(targets) });
+
+  it('replaces the whole set and drops a layer that overrides nothing', () => {
+    const post = add({ channels: ['x'], mediaUrls: media });
+    replacePostVariants(db, post.id, {
+      variants: [
+        { platform: 'twitter', accountId: null, caption: 'First' },
+        { platform: 'linkedin', accountId: null, caption: 'Second' },
+      ],
+    });
+    const replaced = replacePostVariants(db, post.id, {
+      variants: [
+        { platform: 'twitter', accountId: null, caption: '   ' },
+        { platform: 'linkedin', accountId: null, caption: 'Still here' },
+      ],
+    });
+    expect(replaced.map((variant) => variant.platform)).toEqual(['linkedin']);
+    expect(replaced[0]).toMatchObject({ caption: 'Still here', accountId: null });
+  });
+
+  it('keeps an empty media selection apart from no selection across the round trip', () => {
+    const post = add({ channels: ['x'], mediaUrls: media });
+    const stored = replacePostVariants(db, post.id, {
+      variants: [
+        { platform: 'twitter', accountId: null, mediaUrls: [] },
+        { platform: 'linkedin', accountId: null, caption: 'No selection here' },
+      ],
+    });
+    expect(stored.find((v) => v.platform === 'twitter')?.mediaUrls).toEqual([]);
+    expect(stored.find((v) => v.platform === 'linkedin')?.mediaUrls).toBeUndefined();
+  });
+
+  it('refuses a field the platform does not carry, and media the post does not have', () => {
+    const post = add({ channels: ['x'], mediaUrls: media });
+    expect(() =>
+      replacePostVariants(db, post.id, {
+        variants: [{ platform: 'bluesky', accountId: null, title: 'Nowhere' }],
+      }),
+    ).toThrow(/Bluesky takes no title/);
+    expect(() =>
+      replacePostVariants(db, post.id, {
+        variants: [{ platform: 'youtube', accountId: null, thumbnailUrl: 'https://x.test/t.jpg' }],
+      }),
+    ).toThrow(/YouTube takes no thumbnail/);
+    expect(() =>
+      replacePostVariants(db, post.id, {
+        variants: [{ platform: 'twitter', accountId: null, mediaUrls: ['https://x.test/new.jpg'] }],
+      }),
+    ).toThrow(/media the post already carries/);
+    expect(() =>
+      replacePostVariants(db, post.id, {
+        variants: [{ platform: 'twitter', accountId: null, postKind: 'STORY' }],
+      }),
+    ).toThrow(/X does not accept a story/);
+  });
+
+  it('answers the routes, refuses a bad layer with a 400, and goes with the post', async () => {
+    const post = add({ channels: ['x'], mediaUrls: media });
+    await request(app())
+      .put(`/api/signal/posts/${post.id}/variants`)
+      .send({ variants: [{ platform: 'twitter', accountId: null, caption: 'The short version' }] })
+      .expect(200)
+      .expect((response) => expect(response.body[0].caption).toBe('The short version'));
+    await request(app())
+      .get(`/api/signal/posts/${post.id}/variants`)
+      .expect(200)
+      .expect((response) => expect(response.body).toHaveLength(1));
+    await request(app())
+      .put(`/api/signal/posts/${post.id}/variants`)
+      .send({ variants: [{ platform: 'bluesky', accountId: null, title: 'Nowhere' }] })
+      .expect(400)
+      .expect((response) => expect(response.body.error).toMatch(/Bluesky takes no title/));
+    await request(app()).get('/api/signal/posts/missing/variants').expect(404);
+    // The layers belong to the post and go when it does.
+    db.prepare('DELETE FROM signal_posts WHERE id=?').run(post.id);
+    expect(
+      db.prepare('SELECT COUNT(*) AS n FROM signal_post_variants WHERE post_id=?').get(post.id),
+    ).toEqual({ n: 0 });
+  });
+
+  it('submits the tailored request the preview showed, without contacting a real provider', async () => {
+    const post = add({
+      channels: ['x'],
+      mediaUrls: media,
+      date: '2027-08-14',
+      status: 'SCHEDULED',
+    });
+    const provider = new MockPublishProvider(targets);
+    const service = new PublishService(
+      db,
+      new LocalSignalProvider(db),
+      provider,
+      'America/New_York',
+      () => new Date('2026-01-01'),
+    );
+    replacePostVariants(db, post.id, {
+      variants: [
+        {
+          platform: 'twitter',
+          accountId: null,
+          caption: 'The short version',
+          firstComment: 'gholmesdesigns.com',
+          mediaUrls: [media[0] as string],
+        },
+      ],
+    });
+    const preview = await service.preview(post.id);
+    expect(publishPreviewRefusals(preview)).toEqual([]);
+    await service.submit(post.id, preview.planHash);
+    expect(provider.submissions).toHaveLength(1);
+    expect(provider.submissions[0]).toMatchObject({
+      caption: post.text,
+      mediaUrls: [media[0]],
+      platformConfigurations: [
+        {
+          platform: 'twitter',
+          caption: 'The short version',
+          firstComment: 'gholmesdesigns.com',
+        },
+      ],
+    });
   });
 });

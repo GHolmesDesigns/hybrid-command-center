@@ -201,7 +201,14 @@ export interface PublishPlatformCapability {
   /**
    * The provider accepts a per-account override. False everywhere: tailoring is per platform, a
    * stated limitation of the working integration, so two accounts on one platform receive the same
-   * text. C62 (#189) builds the overrides themselves against this field.
+   * text.
+   *
+   * C62 (#189) builds the overrides themselves against this field and reads it exactly as written.
+   * An account override is stored and resolved locally either way; what this flag decides is
+   * whether it can be *delivered*. False means one set of content per platform, so an account
+   * override arrives only while that platform resolves to a single account, and two accounts on one
+   * platform whose resolved content differs is a refusal rather than a coin toss over whose text
+   * goes out.
    */
   accountContentOverride: boolean;
   firstComment: PublishTextField;

@@ -5,12 +5,44 @@ export interface PublishTarget {
   name: string;
 }
 
+/**
+ * One platform's tailored content, as the provider takes it.
+ *
+ * Per platform and not per account, which is the provider's own shape: `platform_configurations` is
+ * keyed by platform, so an account override arrives as its platform's configuration and the plan
+ * refuses rather than guessing when two accounts on one platform disagree
+ * (`shared/publish-capabilities.ts`, `accountContentOverride`).
+ *
+ * A configuration is emitted only where something differs from the submission's own caption, so a
+ * post with no overrides sends exactly the request it sent before this existed.
+ */
+export interface PublishPlatformConfiguration {
+  platform: string;
+  /** Present when this platform's effective caption differs from the request's caption. */
+  caption?: string;
+  title?: string;
+  firstComment?: string;
+  /**
+   * A provider placement, and only where the provider has one. A story is a real placement; a reel
+   * is one video in the platform's ordinary post, so it is not sent as a placement and nothing
+   * pretends otherwise.
+   */
+  story?: true;
+}
+
 export interface PublishRequest {
   caption: string;
+  /**
+   * One array for the whole submission — the provider's shape, not a choice made here. A
+   * per-platform media selection is delivered through this array, so every target has to agree on
+   * it and `plan.ts` refuses when they do not.
+   */
   mediaUrls: string[];
   scheduledInstant: string;
   timezone: string;
   targets: { accountId: number; platform: string }[];
+  /** Omitted entirely when no platform is tailored. */
+  platformConfigurations?: PublishPlatformConfiguration[];
 }
 
 export interface PublishSubmission {

@@ -1,13 +1,17 @@
 import type { SignalPost } from '../../shared/signal.ts';
+import type { PublishVariantRecord } from '../../shared/publish-variants.ts';
 
 /**
  * The one way anything outside Signal reads its schedule.
  *
- * Read-only by construction. There is exactly one method and it lists; there is deliberately no
- * counterpart that creates, moves, reschedules, or deletes a post, so a later mistake in the
- * calendar cannot reach a write through this interface. Signal's own writes live in
- * `service.ts`, which the calendar has no reason to import — the same split `browse.ts` and
- * `service.ts` keep for Drive (`AGENTS.md` §Structure).
+ * Read-only by construction. Every method lists; there is deliberately no counterpart that creates,
+ * moves, reschedules, or deletes anything, so a later mistake in the calendar cannot reach a write
+ * through this interface. Signal's own writes live in `service.ts`, which the calendar has no reason
+ * to import — the same split `browse.ts` and `service.ts` keep for Drive (`AGENTS.md` §Structure).
+ *
+ * A second *read* is a method here; a first write would not be. That is the line the Drive split
+ * draws too, and it is why the publisher can ask for a post's content overrides without Signal
+ * gaining a way to be written to from outside.
  *
  * This exists as an interface rather than a direct call for two reasons. Tests get a mock
  * without a database, and if Signal is ever extracted into its own process the calendar changes
@@ -26,6 +30,13 @@ export interface SignalProvider {
    * calendar cell. The planner is where they are seen.
    */
   listPosts(input: { from: string; to: string }): Promise<SignalPostRange>;
+  /**
+   * The platform and account content overrides recorded for one post, in no particular order.
+   *
+   * The publisher reads these to resolve what each target receives. An empty array is a post with
+   * no overrides at all, which is the ordinary case and resolves to the post's own content.
+   */
+  listVariants(postId: string): Promise<PublishVariantRecord[]>;
 }
 
 export interface SignalPostRange {
@@ -55,6 +66,9 @@ export class UnavailableSignalProvider implements SignalProvider {
     this.reason = reason;
   }
   async listPosts(): Promise<SignalPostRange> {
+    throw new Error(this.reason);
+  }
+  async listVariants(): Promise<PublishVariantRecord[]> {
     throw new Error(this.reason);
   }
 }

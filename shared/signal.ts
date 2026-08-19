@@ -432,3 +432,61 @@ export function signalMonthBounds(date: string): { from: string; to: string } {
   const stamp = (day: number) => `${String(year).padStart(4, '0')}-${pad(month)}-${pad(day)}`;
   return { from: stamp(1), to: stamp(signalDaysInMonth(year, month)) };
 }
+
+/**
+ * A calendar cell and a posting-time label. Not an instant, and not a second schedule: it is
+ * one existing `signal_posts` date/time pair, or a candidate for one.
+ */
+export interface SignalSlot {
+  date: string;
+  time: string;
+}
+
+/** How far "next open slot" will walk before giving up. Two years, leap day included. */
+export const SIGNAL_SLOT_SEARCH_DAYS = 731;
+
+const padDatePart = (value: number) => String(value).padStart(2, '0');
+
+const stampDate = (year: number, month: number, day: number): string =>
+  `${String(year).padStart(4, '0')}-${padDatePart(month)}-${padDatePart(day)}`;
+
+/**
+ * The next calendar day after a `YYYY-MM-DD` label.
+ *
+ * Arithmetic rather than `Date`: the same year-below-100 trap `signalDaysInMonth` already
+ * refuses, and the same discipline the cell rule keeps — a day is a number, not an instant.
+ */
+export function signalNextDate(date: string): string {
+  const [year, month, day] = date.split('-').map(Number) as [number, number, number];
+  if (day < signalDaysInMonth(year, month)) return stampDate(year, month, day + 1);
+  if (month === 12) return stampDate(year + 1, 1, 1);
+  return stampDate(year, month + 1, 1);
+}
+
+/** Whether two posts would share a planner cell and a time label. */
+export const signalSlotOccupied = (occupied: readonly SignalSlot[], slot: SignalSlot): boolean =>
+  occupied.some((item) => item.date === slot.date && item.time === slot.time);
+
+/**
+ * The next date, at `time`, that no dated Signal post already occupies.
+ *
+ * `skip` is the post asking for a suggestion, so a scheduled post is never offered its own
+ * current cell. Unscheduled posts occupy nothing and start from `fromDate`. Nothing here
+ * writes, and nothing here talks to a provider.
+ */
+export function suggestNextOpenSignalSlot(input: {
+  occupied: readonly SignalSlot[];
+  time: string;
+  fromDate: string;
+  skip?: SignalSlot | null;
+}): SignalSlot | null {
+  let date = input.fromDate;
+  for (let step = 0; step < SIGNAL_SLOT_SEARCH_DAYS; step += 1) {
+    const slot = { date, time: input.time };
+    const isCurrent =
+      input.skip != null && input.skip.date === slot.date && input.skip.time === slot.time;
+    if (!isCurrent && !signalSlotOccupied(input.occupied, slot)) return slot;
+    date = signalNextDate(date);
+  }
+  return null;
+}

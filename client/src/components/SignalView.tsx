@@ -10,6 +10,7 @@ import {
   ChevronRight,
   Circle,
   Clock3,
+  Copy,
   Plus,
   Paperclip,
   RefreshCw,
@@ -36,6 +37,7 @@ import {
   type SignalCta,
   type SignalFormat,
   type SignalPost,
+  type SignalSlot,
   type SignalStatus,
 } from '../../../shared/signal';
 import {
@@ -73,6 +75,9 @@ import {
   PUBLISH_PLATFORM_LABEL,
   type PublishPlatform,
 } from '../../../shared/publish-capabilities';
+import type { PublishVariantRecord } from '../../../shared/publish-variants';
+import { PlatformVariantsEditor, PublishPreviewTabs } from './SignalVariants';
+import { previewPlatforms, variantList, variantMap } from './signal-variants';
 
 type SignalRange = {
   from: string;
@@ -349,11 +354,13 @@ function Editor({
   post,
   close,
   saved,
+  opened,
   removed,
 }: {
   post: SignalPost;
   close: () => void;
   saved: (post: SignalPost) => Promise<void>;
+  opened: (post: SignalPost) => Promise<void>;
   removed: (id: string) => Promise<void>;
 }) {
   const [draft, setDraft] = useState(() => draftFor(post));
@@ -365,9 +372,22 @@ function Editor({
   const [deliveryTick, setDeliveryTick] = useState(0);
   const [presetNotice, setPresetNotice] = useState('');
   const checked = useRef(new Set<string>());
+  /**
+   * The content variants, twice: what the server holds and what the form is holding.
+   *
+   * Two copies rather than a dirty flag, because the preview is gated on them being identical and a
+   * boolean would have to be maintained by every edit path. Comparing the two says the same thing
+   * and cannot fall behind.
+   */
+  const [savedLayers, setSavedLayers] = useState(() => variantMap([]));
+  const [layers, setLayers] = useState(() => variantMap([]));
+  const [suggestedSlot, setSuggestedSlot] = useState<SignalSlot | null>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const hasUnsavedChanges = JSON.stringify(draft) !== JSON.stringify(draftFor(post));
+  const hasUnsavedVariants =
+    JSON.stringify(variantList(layers)) !== JSON.stringify(variantList(savedLayers));
   const hasPublishableChannel = post.channels.some((channel) => channel !== 'blog');
+  const hasTailorablePlatform = previewPlatforms(post).length > 0;
   const warnsAboutXLink = draft.channels.includes('x') && signalTextHasLink(draft.text);
   /**
    * Channels on this post that no submission reaches, answered from the same capability contract
@@ -401,6 +421,45 @@ function Editor({
       .catch(() => setPublications([]));
   }, [post.id]);
 
+  /**
+   * The stored overrides, read as text and nothing else.
+   *
+   * This is the one request the editor makes on open besides the delivery history, and it touches
+   * no remote host: the layers are local rows, and the media addresses in them stay addresses until
+   * the preview is asked for.
+   */
+  useEffect(() => {
+    api<PublishVariantRecord[]>(`/signal/posts/${post.id}/variants`)
+      .then((stored) => {
+        setSavedLayers(variantMap(stored));
+        setLayers(variantMap(stored));
+      })
+      .catch(() => {
+        setSavedLayers(variantMap([]));
+        setLayers(variantMap([]));
+      });
+  }, [post.id]);
+
+  const saveVariants = async (): Promise<boolean> => {
+    setBusy(true);
+    setError('');
+    try {
+      const stored = await send<PublishVariantRecord[]>(
+        `/signal/posts/${post.id}/variants`,
+        'PUT',
+        { variants: variantList(layers) },
+      );
+      setSavedLayers(variantMap(stored));
+      setLayers(variantMap(stored));
+      return true;
+    } catch (reason) {
+      setError((reason as Error).message);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const previewPublish = async () => {
     setBusy(true);
     setError('');
@@ -413,6 +472,17 @@ function Editor({
     } finally {
       setBusy(false);
     }
+  };
+
+  /**
+   * An account override saved from inside the preview, and the preview re-run against it.
+   *
+   * Both halves are this one press: a stored override the open preview does not reflect would be a
+   * plan the user confirmed after looking at a different one, and the plan hash would refuse it at
+   * commit anyway — later and less clearly.
+   */
+  const saveAccountVariant = async () => {
+    if (await saveVariants()) await previewPublish();
   };
 
   const confirmPublish = async () => {
@@ -570,6 +640,48 @@ function Editor({
       await removed(post.id);
     } catch (reason) {
       setError((reason as Error).message);
+      setBusy(false);
+    }
+  };
+
+  const duplicate = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      await opened(await send<SignalPost>(`/signal/posts/${post.id}/duplicate`, 'POST'));
+    } catch (reason) {
+      setError((reason as Error).message);
+      setBusy(false);
+    }
+  };
+
+  const suggestSlot = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      setSuggestedSlot(await api<SignalSlot>(`/signal/posts/${post.id}/next-slot?from=${today()}`));
+    } catch (reason) {
+      setError((reason as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmSlot = async () => {
+    if (!suggestedSlot) return;
+    setBusy(true);
+    setError('');
+    try {
+      const next = await send<SignalPost>(`/signal/posts/${post.id}/slot`, 'POST', {
+        ...suggestedSlot,
+        from: today(),
+      });
+      setSuggestedSlot(null);
+      await opened(next);
+    } catch (reason) {
+      const failure = reason as Error & { data?: { suggestion?: SignalSlot | null } };
+      setError(failure.message);
+      if (failure.data?.suggestion) setSuggestedSlot(failure.data.suggestion);
       setBusy(false);
     }
   };
@@ -789,14 +901,65 @@ function Editor({
               />
             </label>
           </div>
-          {draft.date && (
+          <div className="signal-slot-actions">
             <button
               type="button"
-              className="secondary signal-unschedule"
-              onClick={() => setDraft({ ...draft, date: '' })}
+              className="secondary"
+              disabled={busy || hasUnsavedChanges}
+              onClick={() => void duplicate()}
             >
-              Move to unscheduled queue
+              <Copy aria-hidden="true" /> Duplicate to unscheduled queue
             </button>
+            <button
+              type="button"
+              className="secondary"
+              disabled={busy || hasUnsavedChanges}
+              onClick={() => void suggestSlot()}
+            >
+              Suggest next open slot
+            </button>
+            {draft.date && (
+              <button
+                type="button"
+                className="secondary signal-unschedule"
+                onClick={() => setDraft({ ...draft, date: '' })}
+              >
+                Move to unscheduled queue
+              </button>
+            )}
+          </div>
+          {hasUnsavedChanges && (
+            <p className="signal-preset-notice">
+              Save changes before duplicating or suggesting a slot.
+            </p>
+          )}
+          {suggestedSlot && (
+            <section className="signal-slot-suggestion" aria-label="Suggested slot">
+              <h3>Suggested slot</h3>
+              <p>
+                {dayHeading(suggestedSlot.date, {
+                  weekday: 'long',
+                  month: 'long',
+                  day: 'numeric',
+                  year: 'numeric',
+                })}{' '}
+                at {suggestedSlot.time}
+              </p>
+              <p>Nothing is saved until you confirm. Occupancy is checked again at that moment.</p>
+              <div className="signal-editor-actions">
+                <button type="button" className="secondary" onClick={() => setSuggestedSlot(null)}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="submit"
+                  onClick={() => void confirmSlot()}
+                  disabled={busy}
+                >
+                  Use this slot
+                </button>
+              </div>
+            </section>
           )}
           <div className="form-row triple">
             <Select
@@ -836,6 +999,18 @@ function Editor({
               onChange={(event) => setDraft({ ...draft, campaign: event.target.value })}
             />
           </label>
+          {/* Tailored from the post as it is saved, not as it is being typed: a platform override
+              of a caption that has not been written yet would be an override of nothing. */}
+          {hasTailorablePlatform && (
+            <PlatformVariantsEditor
+              post={post}
+              layers={layers}
+              onChange={setLayers}
+              onSave={() => void saveVariants()}
+              dirty={hasUnsavedVariants}
+              busy={busy}
+            />
+          )}
           {/* Delivery sits beside the planning status above, never inside it. The status select is
               the user's own claim about the post; everything here is what a provider did with one
               submission, per account, and neither one is allowed to write the other. */}
@@ -927,10 +1102,11 @@ function Editor({
                   UTC: {publishPreview.scheduledInstant}
                 </p>
               )}
+              {/* The post's own caption. What each target actually receives is in its own tab,
+                  because after an override there is no single answer to show here. */}
               <p>{publishPreview.caption}</p>
-              {/* One block per channel: what it resolved to, and what that account refuses or
-                  warns about. Kept per channel rather than one merged list so a limit is read
-                  beside the account it belongs to. */}
+              {/* Every channel's verdict at a glance, so the shape of the plan is readable without
+                  opening seven tabs; each channel's detail, media and reasons are in its tab. */}
               <ul className="signal-publish-channels">
                 {publishPreview.channels.map((report) => (
                   <li key={report.channel} className={`channel-${report.status.toLowerCase()}`}>
@@ -939,19 +1115,18 @@ function Editor({
                       {report.handle ? ` → ${report.handle}` : ''} ·{' '}
                       {PUBLISH_CHANNEL_STATUS_LABEL[report.status]}
                     </p>
-                    {report.refusals.map((refusal) => (
-                      <p className="form-error" key={refusal}>
-                        {refusal}
-                      </p>
-                    ))}
-                    {report.warnings.map((warning) => (
-                      <p className="form-warning" key={warning}>
-                        {warning}
-                      </p>
-                    ))}
                   </li>
                 ))}
               </ul>
+              <PublishPreviewTabs
+                preview={publishPreview}
+                post={post}
+                layers={layers}
+                savedLayers={savedLayers}
+                onChange={setLayers}
+                onSaveAccount={() => void saveAccountVariant()}
+                busy={busy}
+              />
               {publishPreview.warnings.map((warning) => (
                 <p className="form-warning" key={warning}>
                   {warning}
@@ -1002,10 +1177,12 @@ function Editor({
               <button
                 type="button"
                 className="secondary"
-                disabled={busy || hasUnsavedChanges}
+                disabled={busy || hasUnsavedChanges || hasUnsavedVariants}
                 onClick={previewPublish}
               >
-                {hasUnsavedChanges ? 'Save changes before preview' : 'Preview publishing'}
+                {hasUnsavedChanges || hasUnsavedVariants
+                  ? 'Save changes before preview'
+                  : 'Show preview'}
               </button>
             )}
           </div>
@@ -1265,9 +1442,14 @@ export function SignalView() {
       </div>
       {editing && (
         <Editor
+          key={editing.id}
           post={editing}
           close={() => setEditing(null)}
           saved={refreshed}
+          opened={async (post) => {
+            await load();
+            setEditing(post);
+          }}
           removed={refreshed}
         />
       )}

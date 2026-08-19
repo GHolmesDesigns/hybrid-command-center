@@ -6,11 +6,15 @@ import { LocalSignalProvider, listPostsInRange } from './read.ts';
 import { UnavailableSignalProvider } from './provider.ts';
 import {
   SignalPostNotFoundError,
+  SignalSlotConflictError,
+  applyPostSlot,
   createPost,
   deletePost,
+  duplicatePost,
   getPost,
   listQueue,
   signalPostInput,
+  suggestPostSlot,
   updatePost,
 } from './service.ts';
 import {
@@ -165,6 +169,102 @@ describe('writing posts', () => {
   it('refuses to edit or delete a post that does not exist', () => {
     expect(() => updatePost(db, 'nope', { text: 'x' })).toThrow(SignalPostNotFoundError);
     expect(() => deletePost(db, 'nope')).toThrow(SignalPostNotFoundError);
+  });
+
+  it('duplicates content, media, campaign, and channels into the queue without publications', () => {
+    const source = add({
+      text: 'Teach first. Sell second.',
+      channels: ['li', 'ig'],
+      mediaUrls: ['https://cdn.example.com/launch.jpg'],
+      date: '2026-09-14',
+      time: '13:00',
+      format: 'ARTICLE',
+      status: 'PUBLISHED',
+      campaign: 'Wk4',
+      cta: 'SOFT',
+    });
+    db.prepare(
+      `INSERT INTO signal_publications(
+        id,post_id,state,provider,provider_post_id,idempotency_key,scheduled_instant,timezone,
+        sent_caption,sent_channels,error,created_at,updated_at
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      'pub-1',
+      source.id,
+      'CONFIRMED',
+      'post-bridge',
+      'ext-1',
+      'key-1',
+      '2026-09-14T17:00:00.000Z',
+      'America/New_York',
+      source.text,
+      '["li","ig"]',
+      null,
+      '2026-09-14T12:00:00.000Z',
+      '2026-09-14T12:00:00.000Z',
+    );
+
+    const copy = duplicatePost(db, source.id);
+    expect(copy.id).not.toBe(source.id);
+    expect(copy).toMatchObject({
+      text: source.text,
+      channels: ['ig', 'li'],
+      mediaUrls: ['https://cdn.example.com/launch.jpg'],
+      date: null,
+      time: '13:00',
+      format: 'ARTICLE',
+      status: 'DRAFT',
+      campaign: 'Wk4',
+      cta: 'SOFT',
+    });
+    expect(listQueue(db).map((item) => item.id)).toEqual([copy.id]);
+    expect(getPost(db, source.id)).toMatchObject({
+      date: '2026-09-14',
+      status: 'PUBLISHED',
+      text: source.text,
+    });
+    expect(
+      db.prepare('SELECT COUNT(*) n FROM signal_publications WHERE post_id=?').get(source.id),
+    ).toEqual({ n: 1 });
+    expect(
+      db.prepare('SELECT COUNT(*) n FROM signal_publications WHERE post_id=?').get(copy.id),
+    ).toEqual({ n: 0 });
+  });
+
+  it('suggests the next free Signal cell and writes it only on confirm', () => {
+    const original = add({ text: 'Already booked', date: '2026-09-14', time: '09:00' });
+    const queued = duplicatePost(db, original.id);
+    expect(suggestPostSlot(db, queued.id, '2026-09-14')).toEqual({
+      date: '2026-09-15',
+      time: '09:00',
+    });
+    expect(getPost(db, queued.id)?.date).toBeNull();
+
+    const placed = applyPostSlot(db, queued.id, {
+      date: '2026-09-15',
+      time: '09:00',
+      from: '2026-09-14',
+    });
+    expect(placed).toMatchObject({ date: '2026-09-15', time: '09:00', id: queued.id });
+    expect(getPost(db, original.id)?.date).toBe('2026-09-14');
+  });
+
+  it('recalculates occupancy immediately before saving a confirmed slot', () => {
+    const queued = add({ text: 'Waiting for a day', time: '09:00' });
+    add({ text: 'Takes the suggested cell', date: '2026-09-14', time: '09:00' });
+    expect(() =>
+      applyPostSlot(db, queued.id, { date: '2026-09-14', time: '09:00', from: '2026-09-14' }),
+    ).toThrow(SignalSlotConflictError);
+    try {
+      applyPostSlot(db, queued.id, { date: '2026-09-14', time: '09:00', from: '2026-09-14' });
+    } catch (error) {
+      expect(error).toMatchObject({
+        status: 409,
+        message: 'That slot is no longer open.',
+        suggestion: { date: '2026-09-15', time: '09:00' },
+      });
+    }
+    expect(getPost(db, queued.id)?.date).toBeNull();
   });
 
   it('leaves nothing behind when the channel writes fail part-way', () => {
@@ -352,5 +452,66 @@ describe('the HTTP boundary', () => {
       .get('/api/signal/posts?from=0001-01-01&to=9999-12-31')
       .expect(200);
     expect(range.body.posts.map((p: { text: string }) => p.text)).toEqual(['Scheduled']);
+  });
+
+  it('duplicates a post over HTTP and confirms a suggested slot after a conflict', async () => {
+    const created = await request(app())
+      .post('/api/signal/posts')
+      .send({
+        text: 'The September launch post',
+        channels: ['li'],
+        mediaUrls: ['https://cdn.example.com/launch.jpg'],
+        date: '2026-09-14',
+        time: '09:00',
+        campaign: 'Wk4',
+        status: 'SCHEDULED',
+      })
+      .expect(201);
+
+    const copy = await request(app())
+      .post(`/api/signal/posts/${created.body.id}/duplicate`)
+      .expect(201);
+    expect(copy.body).toMatchObject({
+      text: 'The September launch post',
+      channels: ['li'],
+      mediaUrls: ['https://cdn.example.com/launch.jpg'],
+      date: null,
+      time: '09:00',
+      campaign: 'Wk4',
+      status: 'DRAFT',
+    });
+    expect(copy.body.id).not.toBe(created.body.id);
+
+    const suggestion = await request(app())
+      .get(`/api/signal/posts/${copy.body.id}/next-slot?from=2026-09-14`)
+      .expect(200);
+    expect(suggestion.body).toEqual({ date: '2026-09-15', time: '09:00' });
+    expect(
+      (await request(app()).get(`/api/signal/posts/${copy.body.id}`).expect(200)).body.date,
+    ).toBeNull();
+
+    await request(app())
+      .post('/api/signal/posts')
+      .send({ text: 'Takes Tuesday', date: '2026-09-15', time: '09:00' })
+      .expect(201);
+
+    const refused = await request(app())
+      .post(`/api/signal/posts/${copy.body.id}/slot`)
+      .send({ date: '2026-09-15', time: '09:00', from: '2026-09-14' })
+      .expect(409);
+    expect(refused.body).toMatchObject({
+      error: 'That slot is no longer open.',
+      code: 'SLOT_TAKEN',
+      suggestion: { date: '2026-09-16', time: '09:00' },
+    });
+
+    const placed = await request(app())
+      .post(`/api/signal/posts/${copy.body.id}/slot`)
+      .send({ ...refused.body.suggestion, from: '2026-09-14' })
+      .expect(200);
+    expect(placed.body).toMatchObject({ date: '2026-09-16', time: '09:00', id: copy.body.id });
+    expect(
+      (await request(app()).get(`/api/signal/posts/${created.body.id}`).expect(200)).body.date,
+    ).toBe('2026-09-14');
   });
 });

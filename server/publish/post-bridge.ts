@@ -48,7 +48,30 @@ export class PostBridgeProvider implements PublishProvider {
       name: row.username ?? '',
     }));
   }
+  /**
+   * The per-platform overrides, in the vendor's own vocabulary and nowhere else.
+   *
+   * `document_title` on LinkedIn and `title` everywhere else are the same field to this app and two
+   * field names to Post Bridge, which is exactly the kind of difference that belongs in this module
+   * and no other. A placement is sent only for a story, because that is the only placement the
+   * source records; a reel reaches the platform as its single video.
+   */
+  private static platformConfigurations(request: PublishRequest) {
+    const entries = (request.platformConfigurations ?? []).map((configuration) => {
+      const fields: Record<string, unknown> = {};
+      if (configuration.caption !== undefined) fields.caption = configuration.caption;
+      if (configuration.firstComment !== undefined)
+        fields.first_comment = configuration.firstComment;
+      if (configuration.title !== undefined)
+        fields[configuration.platform === 'linkedin' ? 'document_title' : 'title'] =
+          configuration.title;
+      if (configuration.story) fields.placement = 'story';
+      return [configuration.platform, fields] as const;
+    });
+    return entries.length ? Object.fromEntries(entries) : undefined;
+  }
   async submit(request: PublishRequest): Promise<PublishSubmission> {
+    const platformConfigurations = PostBridgeProvider.platformConfigurations(request);
     const body = (await this.request('/posts', {
       method: 'POST',
       body: JSON.stringify({
@@ -56,6 +79,8 @@ export class PostBridgeProvider implements PublishProvider {
         media_urls: request.mediaUrls,
         scheduled_at: request.scheduledInstant,
         social_accounts: request.targets.map((target) => target.accountId),
+        // Only where non-empty, which is the artifact's own rule for this key.
+        ...(platformConfigurations ? { platform_configurations: platformConfigurations } : {}),
       }),
     })) as { id: string; status?: string };
     if (!body.id)
