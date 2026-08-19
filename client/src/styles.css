@@ -3249,6 +3249,185 @@ button.tag-chip.toggle.active {
   }
 }
 
+/* Queue health: what the workspace's own rows say is wrong with it, above the grid that cannot
+   show it. Every severity states its words and carries its own icon shape before it takes a
+   colour, so the two levels stay apart in greyscale and read aloud. */
+.signal-health {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 18px;
+  margin-bottom: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.signal-health-headline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-weight: 700;
+}
+.signal-health-headline svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+.signal-health-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  max-width: 78ch;
+}
+.signal-health-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.signal-health-alert {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+.signal-health-alert.severity-action {
+  border-left-color: var(--amber);
+  background: #fff9f0;
+}
+.signal-health-alert.severity-watch {
+  border-left-color: #b9c6dd;
+  background: #f7f9fd;
+}
+.signal-health-alert.is-acknowledged {
+  background: var(--paper);
+  border-left-color: var(--line);
+}
+.signal-health-alert > p {
+  margin: 0;
+}
+.signal-health-alert-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.signal-health-alert-detail,
+.signal-health-alert-acknowledged {
+  color: var(--muted);
+  line-height: 1.5;
+}
+.signal-health-alert-acknowledged {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.signal-health-alert-acknowledged svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+}
+.signal-health-alert button {
+  align-self: flex-start;
+}
+.signal-health-severity {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.signal-health-severity svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+}
+.signal-health-severity.severity-action {
+  border-color: #efd6ae;
+  background: #fff3df;
+  color: #8d601c;
+}
+.signal-health-severity.severity-watch {
+  border-color: #b9c6dd;
+  background: #eaf0fa;
+  color: #2f4b93;
+}
+.signal-health-kind {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.signal-health-acknowledged > summary,
+.signal-health-windows > summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.signal-health-acknowledged > summary svg,
+.signal-health-windows > summary svg {
+  width: 14px;
+  height: 14px;
+}
+.signal-health-acknowledged[open] > summary,
+.signal-health-windows[open] > summary {
+  margin-bottom: 10px;
+}
+.signal-health-windows form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 460px;
+  font-size: 12px;
+}
+.signal-health-windows label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-weight: 600;
+}
+.signal-health-channels {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+.signal-health-channels legend {
+  font-weight: 700;
+}
+.signal-health-channels p {
+  flex: 1 0 100%;
+  margin: 0;
+  color: var(--muted);
+}
+.signal-health-channels label {
+  flex-direction: row;
+  align-items: center;
+  font-weight: 500;
+}
+.signal-health-windows button {
+  align-self: flex-start;
+}
+
 /* Signal planner: the queue and month are two views of the same API state. */
 .signal-layout {
   display: grid;

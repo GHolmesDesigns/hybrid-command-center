@@ -207,6 +207,7 @@ describe('additive schema migration', () => {
         'integration_events',
         'signal_publications',
         'signal_publication_targets',
+        'signal_alert_acks',
         'client_merges',
       ]),
     );
@@ -218,6 +219,9 @@ describe('additive schema migration', () => {
     ]);
     // Merge aliases arrive empty too: an upgrade never claims a client was merged.
     expect(rows(db, 'SELECT COUNT(*) AS total FROM client_merges')).toEqual([{ total: 0 }]);
+    // And no alert is acknowledged on arrival: the summary is derived, so an upgrade cannot know
+    // which of the lines it is about to show have already been seen.
+    expect(rows(db, 'SELECT COUNT(*) AS total FROM signal_alert_acks')).toEqual([{ total: 0 }]);
   });
 
   it('adds the media join to a populated Signal database without changing existing posts', () => {

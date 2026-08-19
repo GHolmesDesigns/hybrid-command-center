@@ -150,6 +150,11 @@ CREATE TABLE IF NOT EXISTS signal_publications (
   -- now on carries a value.
   sent_media TEXT, sent_configurations TEXT,
   checked_at TEXT, check_attempts INTEGER NOT NULL DEFAULT 0,
+  -- What the last provider check concluded, and what the row held before it. Written by a check
+  -- and by nothing else: every other state write leaves them alone, which is deliberate, because
+  -- checked_state still matching state is how a reader knows the change has not already been
+  -- answered by a cancel or a resubmit. Both NULL until the provider has been asked once.
+  checked_state TEXT, prior_state TEXT,
   created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
 -- mode is the delivery route decided at submit time from the capability contract, kept beside
@@ -161,6 +166,20 @@ CREATE TABLE IF NOT EXISTS signal_publication_targets (
   channel TEXT NOT NULL, provider_account_id INTEGER NOT NULL, outcome TEXT, permalink TEXT, error TEXT,
   handle TEXT NOT NULL DEFAULT '', mode TEXT NOT NULL DEFAULT 'AUTOMATIC', manual_completed_at TEXT,
   PRIMARY KEY(publication_id, provider_account_id)
+);
+-- Queue-health acknowledgements: one row per alert a person has said they have seen.
+--
+-- This is the only table the health summary writes, and it holds nothing about the plan or the
+-- delivery -- which is the acceptance criterion of the card that added it. The alerts themselves are
+-- derived on every read from the rows above (shared/queue-health.ts) and are never stored, so this
+-- table cannot disagree with them; the worst it can hold is a row for an alert that no longer
+-- exists, which reads as nothing at all.
+--
+-- fingerprint is the shape of the facts that were acknowledged. The derivation compares it, so a
+-- situation that moves on stops matching and the alert returns live rather than staying dismissed
+-- for a problem that has become a different problem.
+CREATE TABLE IF NOT EXISTS signal_alert_acks (
+  alert_id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, acknowledged_at TEXT NOT NULL
 );
 `;
 
@@ -193,6 +212,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_signal_post_variants_layer
 CREATE UNIQUE INDEX IF NOT EXISTS idx_signal_publications_live ON signal_publications(post_id)
   WHERE state IN ('SUBMITTING','SUBMITTED','UNCONFIRMED');
 CREATE INDEX IF NOT EXISTS idx_signal_publications_post ON signal_publications(post_id);
+-- Retention over acknowledgements keeps the newest rows and prunes the rest, so the oldest are
+-- what it has to find.
+CREATE INDEX IF NOT EXISTS idx_signal_alert_acks_time ON signal_alert_acks(acknowledged_at);
 `;
 
 const schema = `${tableSchema}${indexSchema}`;

@@ -699,6 +699,38 @@ Four things are refused, and the panel says which apply:
 If the post or the provider changes while the comparison is open, confirming is refused and the
 comparison is taken again, so you are never acting on a difference that has already moved.
 
+#### Queue health
+
+**What needs attention** sits above the planner and is the one place a problem surfaces without
+your going to look for it. It reports six things, each one read from your own posts and deliveries
+rather than from anything a provider was asked:
+
+- **Delivery** — a post that was not delivered, was only partly delivered, or whose result the
+  provider never confirmed. Failed accounts are named.
+- **Waiting on you** — a delivery the provider accepted and cannot finish. Instagram and TikTok
+  finish in their own apps, and a provider draft has to be submitted in Post Bridge.
+- **Scheduled slot** — a post marked **Scheduled** whose time is close, or has passed, with no
+  submission at the provider. Either publish it or set its status to match what you actually intend.
+- **Provider answer** — a delivery the last provider check moved, named as the move it made, so a
+  result that arrived while you were elsewhere is not something you have to go hunting for.
+- **Channel coverage** — a channel with nothing planned inside the window. By default this asks
+  about every channel you have ever posted to.
+- **Provider synchronisation** — the provider rate-limiting this app, or delivery answers older
+  than the window while a submission is still waiting on one.
+
+Each line names the post it is about, and the name is a link that opens that post — including a post
+in another month. **Alert windows** changes the three windows the rules measure against, and lets you
+name the channels coverage is expected on instead of all the ones you have used.
+
+**Acknowledge** records that you have seen a line and moves it out of the counts. It changes nothing
+else: not the post, not its schedule, not its planning status, and nothing at the provider. If the
+situation then changes — another account fails, the window is widened — the line comes back, because
+it is no longer the same situation you acknowledged. **Put back on the list** undoes an
+acknowledgement.
+
+Nothing here is emailed, texted, or pushed to a phone. The summary exists in the app and is read when
+you open the planner.
+
 ### Import
 
 **Import** creates a whole campaign at once from a *campaign playbook*: a client, its projects,

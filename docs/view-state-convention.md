@@ -39,9 +39,14 @@ contain an unknown or retired value.
 | Projects | Collection | Live projects by recent activity | `visibility`, `client`, `sort`, and `categories` |
 | Status | Workflow board | Canonical task-status order | Project, client, priority, type, focus, and tag filters |
 | Calendar | Time view | Current week | View and selected date/month when away from the default |
-| Signal | Time view | Current week | View and selected date/month when away from the default |
+| Signal | Time view | Current week | View and selected date/month when away from the default, and `post` for an open post |
 | Files | Context browser | Explicit project, remembered project, then first live project | Project and folder selections |
 
 Projects uses `live`, `archived`, and `all`; Clients uses its domain term `active` in place of
 `live`. The default live/active value is omitted from the address; choosing Archived or All is
 explicit.
+
+Signal's `post` is a selection rather than a period: it names the post whose editor is open, so a
+queue-health alert can link straight to the post it is about. It is read defensively like every other
+parameter — a post the workspace no longer has reports itself and leaves the planner usable — and it
+is dropped from the address when the editor closes, so the ordinary planner keeps a short one.

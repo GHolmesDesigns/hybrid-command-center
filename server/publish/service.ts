@@ -4,14 +4,12 @@ import { transaction } from '../db.ts';
 import { recordIntegrationEvent, redactSecrets } from '../integration-log.ts';
 import type { SignalProvider } from '../signal/provider.ts';
 import type {
-  DeliveryMode,
   ProviderAction,
   ProviderDiffField,
   ProviderPostRecord,
   ProviderReconcilePreview,
   PublishPreview,
   SignalPublication,
-  SignalPublicationTarget,
 } from '../../shared/publish.ts';
 import {
   deliveryModeNeedsPerson,
@@ -23,42 +21,17 @@ import {
   reconcileSchedule,
   RECONCILE_MAX_ATTEMPTS,
 } from '../../shared/publish.ts';
-import { publishPlatformFor } from '../../shared/publish-capabilities.ts';
-import type { SignalChannel } from '../../shared/signal.ts';
 import { buildPublishPlan, publishInstantFor } from './plan.ts';
 import { buildProviderReconcile, providerRecordNeedsWithdrawal } from './reconcile.ts';
-import { PublishProviderError, type PublishProvider, type PublishRequest } from './provider.ts';
-
-interface PublicationRow {
-  id: string;
-  post_id: string;
-  state: SignalPublication['state'];
-  provider: string;
-  provider_post_id: string | null;
-  scheduled_instant: string;
-  timezone: string;
-  sent_caption: string;
-  sent_channels: string;
-  /** NULL only on a row written before these columns existed. See `server/db.ts`. */
-  sent_media: string | null;
-  sent_configurations: string | null;
-  error: string | null;
-  checked_at: string | null;
-  check_attempts: number;
-  created_at: string;
-  updated_at: string;
-}
-
-interface TargetRow {
-  channel: string;
-  provider_account_id: number;
-  outcome: 'SUCCESS' | 'FAILURE' | null;
-  permalink: string | null;
-  error: string | null;
-  handle: string;
-  mode: string;
-  manual_completed_at: string | null;
-}
+import {
+  PublishProviderError,
+  PUBLISH_RATE_LIMIT_FALLBACK_SECONDS,
+  type PublishProvider,
+  type PublishRequest,
+} from './provider.ts';
+import { recordSyncHealth } from './sync-health.ts';
+import { toPublication, toTarget, type PublicationRow, type TargetRow } from './rows.ts';
+import { targetRowsFor } from './read.ts';
 
 export class PublishRequestError extends Error {
   readonly status: 400 | 404 | 409;
@@ -68,37 +41,6 @@ export class PublishRequestError extends Error {
     this.status = status;
   }
 }
-
-const toTarget = (row: TargetRow): SignalPublicationTarget => ({
-  channel: row.channel as SignalChannel,
-  platform: publishPlatformFor(row.channel) ?? null,
-  accountId: row.provider_account_id,
-  handle: row.handle,
-  mode: row.mode as DeliveryMode,
-  ...(row.outcome ? { outcome: row.outcome } : {}),
-  ...(row.permalink ? { permalink: row.permalink } : {}),
-  ...(row.error ? { error: row.error } : {}),
-  ...(row.manual_completed_at ? { manualCompletedAt: row.manual_completed_at } : {}),
-});
-
-const toPublication = (row: PublicationRow, targets: TargetRow[]): SignalPublication => ({
-  id: row.id,
-  postId: row.post_id,
-  state: row.state,
-  provider: row.provider,
-  ...(row.provider_post_id ? { providerPostId: row.provider_post_id } : {}),
-  scheduledInstant: row.scheduled_instant,
-  timezone: row.timezone,
-  sentCaption: row.sent_caption,
-  sentChannels: JSON.parse(row.sent_channels) as SignalChannel[],
-  ...(row.sent_media ? { sentMedia: JSON.parse(row.sent_media) as string[] } : {}),
-  ...(row.error ? { error: row.error } : {}),
-  targets: targets.map(toTarget),
-  ...(row.checked_at ? { checkedAt: row.checked_at } : {}),
-  checkAttempts: row.check_attempts,
-  createdAt: row.created_at,
-  updatedAt: row.updated_at,
-});
 
 export class PublishService {
   private readonly db: Db;
@@ -314,9 +256,7 @@ export class PublishService {
    * plan's own order, so the delivery rows read down the page the way the preview did.
    */
   private targetRows(publicationId: string): TargetRow[] {
-    return this.db
-      .prepare('SELECT * FROM signal_publication_targets WHERE publication_id=? ORDER BY rowid')
-      .all(publicationId) as unknown as TargetRow[];
+    return targetRowsFor(this.db, publicationId);
   }
 
   /**
@@ -342,6 +282,33 @@ export class PublishService {
     const row = this.db.prepare('SELECT * FROM signal_publications WHERE id=?').get(id) as
       PublicationRow | undefined;
     return row ? this.toPublicationWithDrift(row, this.targetRows(row.id)) : undefined;
+  }
+
+  /**
+   * Runs one provider check and records what it says about the connection.
+   *
+   * Wrapped here rather than at each call site because the two things worth recording are the same
+   * whatever was being asked: a call that got through means the app's copy of the provider's answers
+   * is current as of now, and a refusal that names a rate limit means every answer it is showing is
+   * as old as that limit. Both go to `sync-health.ts`, which the queue-health summary reads; neither
+   * changes the publication, and the error is rethrown untouched so every caller above still sees
+   * exactly the failure it saw before.
+   */
+  private async checked<T>(call: () => Promise<T>): Promise<T> {
+    try {
+      const result = await call();
+      recordSyncHealth(this.db, { lastSyncedAt: this.clock().toISOString() });
+      return result;
+    } catch (error) {
+      if (error instanceof PublishProviderError && error.rateLimited)
+        recordSyncHealth(this.db, {
+          rateLimitedUntil: new Date(
+            this.clock().getTime() +
+              (error.retryAfterSeconds ?? PUBLISH_RATE_LIMIT_FALLBACK_SECONDS) * 1000,
+          ).toISOString(),
+        });
+      throw error;
+    }
   }
 
   /**
@@ -372,7 +339,8 @@ export class PublishService {
     // Not due, or out of budget: answered from what is already stored, with no provider call.
     if (automatic && !reconcileSchedule(current, this.clock()).due) return current;
 
-    const result = await this.provider.check(current.providerPostId);
+    const providerPostId = current.providerPostId;
+    const result = await this.checked(() => this.provider.check(providerPostId));
     const attempts = current.checkAttempts + (automatic ? 1 : 0);
     // The bound, expressed where it happens: an automatic schedule that runs out while the
     // provider still has no answer stops asking and hands the question to a person. Manual
@@ -385,12 +353,19 @@ export class PublishService {
     transaction(this.db, () => {
       this.db
         .prepare(
-          'UPDATE signal_publications SET state=?,error=?,checked_at=?,check_attempts=?,updated_at=? WHERE id=?',
+          `UPDATE signal_publications
+             SET state=?,error=?,checked_at=?,checked_state=?,prior_state=?,check_attempts=?,updated_at=?
+             WHERE id=?`,
         )
         .run(
           state,
           givingUp ? giveUpReason : result.error ? redactSecrets(result.error) : null,
           timestamp,
+          state,
+          // What it held before this check, and only when the check moved it. A check that found
+          // nothing new clears the marker rather than leaving yesterday's move to be reported
+          // again as though the provider had just said it.
+          state === current.state ? null : current.state,
           attempts,
           timestamp,
           publicationId,

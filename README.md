@@ -33,6 +33,7 @@ Nothing in this app is reachable off loopback by design, and the server enforces
 - **Files** — read-only browsing of a project's Drive folder and its provisioned subfolders: paginated listing, type/size/modified for every item, and "Open in Drive" on every row. It uploads, downloads, moves, renames, and deletes nothing, and every Drive failure mode has its own state and next step
 - **Integration activity** — an append-only record of what each integration changed, when, and how it ended, naming the affected clients, projects, and tasks by id, bounded to the most recent 200 rows, credential-scrubbed, and shown on the Import page beside the receipt it belongs to
 - **Signal Campaign** — the authoritative store and operable planner for content: month grid, unscheduled queue, quick idea capture, and a full editor for content, channels, ordered public media references, date, time, format, status, campaign, and CTA, with duplicate-to-queue, next-open-slot suggestion, and confirmed deletion
+- **Queue health** — an in-app summary above the planner deriving six alerts from your own posts and deliveries: a failed or partly delivered post, a manual finish waiting on you, a scheduled slot approaching with nothing submitted, a provider answer that moved at the last check, a channel with nothing planned inside a configurable window, and a provider synchronisation that is rate-limited or behind. Each line links to the post it is about, and acknowledging one changes no planning or delivery state. In-app only — no email, SMS, or push service
 - **Calendar** — a read-only month agenda putting Signal's scheduled content beside task due dates, kept as two headed groups rather than one merged list of "events", with empty days dropped. It writes nothing, and a schedule it cannot read degrades the page to task due dates alone with the reason shown
 - Server-only Google OAuth 2.0, encrypted token storage, configurable Drive root, and resumable/idempotent folder creation
 - Responsive desktop/tablet/mobile interface with empty, error, loading, disconnected, and confirmation states
@@ -49,7 +50,8 @@ server/                    Express local API
   drive/                   provider interface, Google implementation, provisioning + sync,
                            and read-only project folder browsing (browse.ts)
   signal/                  Signal Campaign's schedule: SignalProvider (provider.ts), the
-                           read-only implementation (read.ts), writes (service.ts)
+                           read-only implementation (read.ts), writes (service.ts), and the
+                           queue-health summary's gathering half (queue-health.ts)
   scripts/                 migration, demo seed, backup, restore, and rehearsal
   backup.ts                SQLite online backup / restore helpers
   calendar.ts              the read-only calendar: schedule and due dates over one range
@@ -463,6 +465,14 @@ it and never writes.
   a calendar that dropped them would make a busy week look empty in hindsight.
 - **Signal's own writes record no `integration_events`.** Editing a post is local data, like
   editing a task. The log is for what an *integration* did.
+- **Queue health is derived, never stored.** A failed delivery, a slot about to pass unfilled, a
+  manual finish waiting on somebody, a provider answer that moved, a channel with nothing planned,
+  and a synchronisation that is behind are all conclusions about rows that already exist —
+  `shared/queue-health.ts` reaches them from posts, publications, and one record of the last
+  provider synchronisation, and the summary is recomputed on every read so it cannot go stale.
+  Acknowledging one writes a single row to `signal_alert_acks` and touches nothing it reports; the
+  row carries the fingerprint of the facts that were seen, so a situation that changes comes back as
+  a live alert. No email, SMS, or push service is involved — the summary lives in the app.
 - **Media stays a reference.** A post may carry an ordered list of public `https:` URLs. SQLite
   stores those strings in `signal_post_media`; the app never fetches, downloads, proxies, or
   uploads the referenced files. Kind is inferred from the URL extension and remains `unknown`
