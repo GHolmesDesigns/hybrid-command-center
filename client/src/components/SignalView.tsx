@@ -49,11 +49,30 @@ import { Empty } from './Primitives';
 import { Select } from './FormControls';
 import { PageHead } from './Shell';
 import {
+  deliveryModeFor,
+  deliveryModeInstruction,
+  deliveryTargetAwaitsPerson,
+  deliveryTargetSummary,
+  isReconcilableState,
   publishPreviewRefusals,
+  reconcileSchedule,
+  DELIVERY_GROUP_LABEL,
+  DELIVERY_MODE_LABEL,
+  PUBLICATION_STATE_DESCRIPTION,
+  PUBLICATION_STATE_GROUP,
+  PUBLICATION_STATE_LABEL,
   PUBLISH_CHANNEL_STATUS_LABEL,
+  type DeliveryGroup,
   type PublishPreview,
   type SignalPublication,
+  type SignalPublicationTarget,
 } from '../../../shared/publish';
+import {
+  publishPlatformFor,
+  publishPostKindFor,
+  PUBLISH_PLATFORM_LABEL,
+  type PublishPlatform,
+} from '../../../shared/publish-capabilities';
 
 type SignalRange = {
   from: string;
@@ -189,6 +208,83 @@ const X_LINK_WARNING =
   'X removes links from the post body. Move this link to a reply before publishing.';
 
 /**
+ * A delivery group, painted and said.
+ *
+ * The colour is never the only cue: the group carries its own icon shape and the state's own
+ * words sit beside it, so "needs attention" survives greyscale, colour-blindness, and a screen
+ * reader reading the row aloud.
+ */
+function DeliveryChip({ group, children }: { group: DeliveryGroup; children: string }) {
+  const Icon =
+    group === 'DELIVERED'
+      ? CheckCircle2
+      : group === 'ATTENTION'
+        ? AlertTriangle
+        : group === 'STOPPED'
+          ? X
+          : Clock3;
+  return (
+    <span className={`signal-delivery-chip delivery-${group.toLowerCase()}`}>
+      <Icon aria-hidden="true" />
+      <span className="sr-only">{DELIVERY_GROUP_LABEL[group]}: </span>
+      {children}
+    </span>
+  );
+}
+
+/** What a delivery's platform is called in a sentence, falling back to the channel's own name. */
+const platformLabelFor = (platform: PublishPlatform | null, channel: SignalChannel) =>
+  platform ? PUBLISH_PLATFORM_LABEL[platform] : SIGNAL_CHANNEL_LABEL[channel];
+
+/** One provider account's delivery: what it took, how far it got, and what is left for a person. */
+function DeliveryTarget({
+  publication,
+  target,
+  busy,
+  finish,
+}: {
+  publication: SignalPublication;
+  target: SignalPublicationTarget;
+  busy: boolean;
+  finish: () => void;
+}) {
+  const summary = deliveryTargetSummary(publication, target);
+  const platformLabel = platformLabelFor(target.platform, target.channel);
+  return (
+    <li className={`signal-delivery-target delivery-${summary.group.toLowerCase()}`}>
+      <p className="signal-delivery-target-head">
+        <ChannelChip channel={target.channel} />
+        <strong>{SIGNAL_CHANNEL_LABEL[target.channel]}</strong>
+        {target.handle ? ` → ${target.handle}` : ''}{' '}
+        <DeliveryChip group={summary.group}>{summary.label}</DeliveryChip>
+      </p>
+      <p className="signal-delivery-mode">
+        <strong>{DELIVERY_MODE_LABEL[target.mode]}.</strong>{' '}
+        {deliveryModeInstruction(target.mode, platformLabel)}
+      </p>
+      {target.permalink && (
+        <p>
+          <a href={target.permalink} target="_blank" rel="noreferrer noopener">
+            Open the {platformLabel} post
+          </a>
+        </p>
+      )}
+      {target.error && <p className="form-error">{target.error}</p>}
+      {target.manualCompletedAt && (
+        <p className="signal-delivery-checked">
+          You marked this finished on {new Date(target.manualCompletedAt).toLocaleString()}.
+        </p>
+      )}
+      {deliveryTargetAwaitsPerson(target) && (
+        <button type="button" className="secondary" disabled={busy} onClick={finish}>
+          Mark {platformLabel} finished
+        </button>
+      )}
+    </li>
+  );
+}
+
+/**
  * Editing and expanding are siblings, never nested: a control inside the edit button would be
  * invalid markup and would never receive its own click.
  */
@@ -266,11 +362,29 @@ function Editor({
   const [mediaInput, setMediaInput] = useState('');
   const [publishPreview, setPublishPreview] = useState<PublishPreview | null>(null);
   const [publications, setPublications] = useState<SignalPublication[]>([]);
+  const [deliveryTick, setDeliveryTick] = useState(0);
   const [presetNotice, setPresetNotice] = useState('');
+  const checked = useRef(new Set<string>());
   const textRef = useRef<HTMLTextAreaElement>(null);
   const hasUnsavedChanges = JSON.stringify(draft) !== JSON.stringify(draftFor(post));
   const hasPublishableChannel = post.channels.some((channel) => channel !== 'blog');
   const warnsAboutXLink = draft.channels.includes('x') && signalTextHasLink(draft.text);
+  /**
+   * Channels on this post that no submission reaches, answered from the same capability contract
+   * preflight uses rather than by testing for `blog` by name — a format that leaves a channel with
+   * no route is the same fact arriving a different way.
+   */
+  const undeliverable = useMemo(() => {
+    const delivered = new Set(
+      publications.flatMap((publication) => publication.targets.map((target) => target.channel)),
+    );
+    return post.channels.filter(
+      (channel) =>
+        !delivered.has(channel) &&
+        deliveryModeFor(publishPlatformFor(channel), publishPostKindFor(post.format)) ===
+          'UNSUPPORTED',
+    );
+  }, [post.channels, post.format, publications]);
 
   useEffect(() => {
     textRef.current?.focus();
@@ -340,6 +454,7 @@ function Editor({
       const refreshed = await send<SignalPublication>(
         `/signal/publications/${publicationId}/reconcile`,
         'POST',
+        { automatic: false },
       );
       setPublications((current) =>
         current.map((publication) => (publication.id === refreshed.id ? refreshed : publication)),
@@ -350,6 +465,79 @@ function Editor({
       setBusy(false);
     }
   };
+
+  const finishDelivery = async (publicationId: string, accountId: number) => {
+    setBusy(true);
+    setError('');
+    try {
+      const updated = await send<SignalPublication>(
+        `/signal/publications/${publicationId}/targets/${accountId}/finish`,
+        'POST',
+      );
+      setPublications((current) =>
+        current.map((publication) => (publication.id === updated.id ? updated : publication)),
+      );
+    } catch (reason) {
+      setError((reason as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * The reconciliation timer.
+   *
+   * This app has no background job, so the open planner is the only thing that can ask a provider
+   * what happened. It holds one timer for the soonest publication that is due, and the schedule it
+   * reads is the shared one — the same rule the server enforces, so an early tick costs a refused
+   * check rather than a provider call.
+   *
+   * `checked` remembers which attempt of which publication has already been asked, so a check the
+   * server answers from storage cannot become a loop: the key only changes once an attempt is
+   * actually spent.
+   */
+  useEffect(() => {
+    const now = new Date();
+    const schedules = publications.map(
+      (publication) => [publication, reconcileSchedule(publication, now)] as const,
+    );
+    const due = schedules.filter(
+      ([publication, schedule]) =>
+        schedule.due && !checked.current.has(`${publication.id}:${publication.checkAttempts}`),
+    );
+    if (due.length) {
+      for (const [publication] of due)
+        checked.current.add(`${publication.id}:${publication.checkAttempts}`);
+      let cancelled = false;
+      void Promise.all(
+        due.map(([publication]) =>
+          send<SignalPublication>(`/signal/publications/${publication.id}/reconcile`, 'POST', {
+            automatic: true,
+          }).catch(() => null),
+        ),
+      ).then((results) => {
+        if (cancelled) return;
+        setPublications((current) =>
+          current.map(
+            (publication) => results.find((result) => result?.id === publication.id) ?? publication,
+          ),
+        );
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+    const upcoming = schedules
+      .map(([, schedule]) => schedule.dueAt)
+      .filter((dueAt): dueAt is string => Boolean(dueAt))
+      .map((dueAt) => Date.parse(dueAt) - now.getTime());
+    if (!upcoming.length) return;
+    // Re-evaluate at the soonest due moment, and at least once a minute so a long wait still
+    // refreshes the "next check" line the reader is looking at.
+    const wait = Math.min(Math.max(Math.min(...upcoming), 1_000), 60_000);
+    const timer = setTimeout(() => setDeliveryTick((tick) => tick + 1), wait);
+    return () => clearTimeout(timer);
+  }, [publications, deliveryTick]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -622,7 +810,7 @@ function Editor({
               }
             />
             <Select
-              label="Status"
+              label="Planning status"
               name="status"
               value={draft.status}
               options={SIGNAL_STATUSES}
@@ -648,28 +836,83 @@ function Editor({
               onChange={(event) => setDraft({ ...draft, campaign: event.target.value })}
             />
           </label>
-          {publications.length > 0 && (
-            <section className="signal-publications" aria-label="Publishing history">
+          {/* Delivery sits beside the planning status above, never inside it. The status select is
+              the user's own claim about the post; everything here is what a provider did with one
+              submission, per account, and neither one is allowed to write the other. */}
+          {(publications.length > 0 || undeliverable.length > 0) && (
+            <section className="signal-delivery" aria-label="Delivery">
               <h3>Delivery</h3>
-              {publications.map((publication) => (
-                <p key={publication.id}>
-                  <strong>{publication.state}</strong> · {publication.sentChannels.join(', ')} ·{' '}
-                  {new Date(publication.scheduledInstant).toLocaleString()}
+              <p className="signal-delivery-note">
+                Planning status above is your own claim about this post. Delivery below is what the
+                provider did with it, one row per account.
+              </p>
+              {publications.map((publication) => {
+                const schedule = reconcileSchedule(publication, new Date());
+                return (
+                  <article className="signal-delivery-record" key={publication.id}>
+                    <p className="signal-delivery-head">
+                      <DeliveryChip group={PUBLICATION_STATE_GROUP[publication.state]}>
+                        {PUBLICATION_STATE_LABEL[publication.state]}
+                      </DeliveryChip>{' '}
+                      <span className="signal-delivery-instant">
+                        {new Date(publication.scheduledInstant).toLocaleString()}
+                      </span>
+                    </p>
+                    <p>{PUBLICATION_STATE_DESCRIPTION[publication.state]}</p>
+                    {publication.error && <p className="form-error">{publication.error}</p>}
+                    <ul className="signal-delivery-targets">
+                      {publication.targets.map((target) => (
+                        <DeliveryTarget
+                          key={target.accountId}
+                          publication={publication}
+                          target={target}
+                          busy={busy}
+                          finish={() => finishDelivery(publication.id, target.accountId)}
+                        />
+                      ))}
+                    </ul>
+                    <p className="signal-delivery-checked" role="status">
+                      {publication.checkedAt
+                        ? `Last checked ${new Date(publication.checkedAt).toLocaleString()}.`
+                        : 'Not checked with the provider yet.'}{' '}
+                      {schedule.exhausted
+                        ? 'Automatic checks have stopped after their bounded number of tries; refresh to ask again.'
+                        : schedule.dueAt
+                          ? `Next automatic check ${new Date(schedule.dueAt).toLocaleString()}.`
+                          : 'No further checks are due.'}
+                    </p>
+                    {/* Manual refresh outlives the automatic schedule on purpose: `UNCONFIRMED`
+                        is the state a person resolves, and it is exactly the state the timer has
+                        stopped asking about. */}
+                    {publication.providerPostId &&
+                      (isReconcilableState(publication.state) ||
+                        publication.state === 'UNCONFIRMED') && (
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => refreshDelivery(publication.id)}
+                          disabled={busy}
+                        >
+                          <RefreshCw /> Refresh delivery
+                        </button>
+                      )}
+                  </article>
+                );
+              })}
+              {/* A channel with no provider is a delivery answer too, and a missing row would read
+                  as "nothing to say" rather than "nothing can be sent". Its completion is the
+                  planning status, which is why it points there instead of carrying its own
+                  control — one fact, one writer. */}
+              {undeliverable.map((channel) => (
+                <p className="signal-delivery-unsupported" key={channel}>
+                  <ChannelChip channel={channel} /> <strong>{SIGNAL_CHANNEL_LABEL[channel]}</strong>{' '}
+                  <DeliveryChip group="STOPPED">{DELIVERY_MODE_LABEL.UNSUPPORTED}</DeliveryChip>{' '}
+                  {deliveryModeInstruction('UNSUPPORTED', SIGNAL_CHANNEL_LABEL[channel])}
                 </p>
               ))}
-              {publications[0]?.state === 'CONFIRMED' && post.status !== 'PUBLISHED' && (
+              {post.status !== 'PUBLISHED' && (
                 <button type="button" className="secondary" onClick={markPublished} disabled={busy}>
                   Mark published
-                </button>
-              )}
-              {publications[0]?.providerPostId && publications[0].state === 'SUBMITTED' && (
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => refreshDelivery(publications[0]!.id)}
-                  disabled={busy}
-                >
-                  Refresh delivery
                 </button>
               )}
             </section>

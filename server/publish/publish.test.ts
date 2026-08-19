@@ -8,14 +8,34 @@ import { PublishProviderError } from './provider.ts';
 import { UnavailablePublishProvider } from './provider.ts';
 import { PublishService } from './service.ts';
 import {
+  deliveryModeFor,
+  deliveryModeForCapability,
+  deliveryModeInstruction,
+  deliveryModeNeedsPerson,
+  deliveryTargetAwaitsPerson,
+  deliveryTargetSummary,
+  isReconcilableState,
   publishPreviewRefusals,
   publishPreviewWarnings,
+  reconcileSchedule,
+  DELIVERY_GROUP_LABEL,
+  PUBLICATION_STATE_DESCRIPTION,
+  PUBLICATION_STATE_GROUP,
+  PUBLICATION_STATE_LABEL,
   PUBLICATION_STATES,
+  RECONCILE_INTERVALS_MINUTES,
+  RECONCILE_MAX_ATTEMPTS,
   type PublishChannelReport,
   type PublishPreview,
+  type SignalPublication,
+  type SignalPublicationTarget,
 } from '../../shared/publish.ts';
 import { SIGNAL_CHANNELS, type SignalChannel } from '../../shared/signal.ts';
-import { PUBLISH_CAPABILITIES } from '../../shared/publish-capabilities.ts';
+import {
+  publishPlatformFor,
+  PUBLISH_CAPABILITIES,
+  type PublishPlatformCapability,
+} from '../../shared/publish-capabilities.ts';
 import request from 'supertest';
 import { createApp } from '../app.ts';
 import { seedSignalPost } from '../signal/test-fixture.ts';
@@ -496,5 +516,359 @@ describe('publish planning and submission', () => {
       .post(`/api/signal/posts/${post.id}/publish`)
       .send({ planHash: 'b'.repeat(64) })
       .expect(409);
+  });
+});
+
+/**
+ * Planning status and delivery are two facts, and these are the tests that hold them apart.
+ *
+ * The interesting cases are the ones where a single word would have been wrong: a provider result
+ * that would like to move the post's status and must not, a submission where one account succeeded
+ * and another did not, and a delivery the provider accepted that is still not out because a person
+ * has not finished it.
+ */
+describe('delivery mode, decided from the capability contract', () => {
+  const manualOnly = (base: PublishPlatformCapability, providerDraft = false) => ({
+    ...base,
+    providerDraft,
+    kinds: {
+      ...base.kinds,
+      POST: { ...base.kinds.POST, automatic: false, manualFinish: true },
+    },
+  });
+
+  it('answers every channel, and never guesses at one the contract does not cover', () => {
+    // Every channel Signal plans for, at its ordinary shape. `blog` is the permanent unsupported
+    // one; an unrecognised channel is unsupported too rather than assumed automatic.
+    expect(
+      SIGNAL_CHANNELS.map((channel) => deliveryModeFor(publishPlatformFor(channel), 'POST')),
+    ).toEqual([
+      'UNSUPPORTED',
+      'AUTOMATIC',
+      'AUTOMATIC',
+      'AUTOMATIC',
+      'AUTOMATIC',
+      'AUTOMATIC',
+      'AUTOMATIC',
+      'AUTOMATIC',
+    ]);
+    expect(deliveryModeFor(publishPlatformFor('not-a-channel'), 'POST')).toBe('UNSUPPORTED');
+    expect(deliveryModeFor(undefined, 'POST')).toBe('UNSUPPORTED');
+    // A shape the platform does not take is unsupported for that post even though the platform
+    // itself is reachable — YouTube takes no carousel.
+    expect(deliveryModeFor('youtube', 'CAROUSEL')).toBe('UNSUPPORTED');
+    expect(deliveryModeFor('youtube', 'REEL')).toBe('AUTOMATIC');
+  });
+
+  it('prefers automatic, then a provider draft, then a person', () => {
+    // Constructed capabilities, for the same reason preflight's manual-finish test uses one:
+    // every connected platform publishes automatically today, and the other three routes still
+    // have to be decided rather than left to whichever one happens to ship first.
+    const tiktok = PUBLISH_CAPABILITIES.tiktok;
+    expect(deliveryModeForCapability(tiktok, 'POST')).toBe('AUTOMATIC');
+    expect(deliveryModeForCapability(manualOnly(tiktok), 'POST')).toBe('MANUAL_FINISH');
+    expect(deliveryModeForCapability(manualOnly(tiktok, true), 'POST')).toBe('PROVIDER_DRAFT');
+    expect(deliveryModeForCapability(undefined, 'POST')).toBe('UNSUPPORTED');
+    // Both routes available is not a tie: automatic wins, and the draft flag does not change it.
+    expect(deliveryModeForCapability({ ...tiktok, providerDraft: true }, 'POST')).toBe('AUTOMATIC');
+  });
+
+  it('names what a person has to do, and where', () => {
+    expect(deliveryModeInstruction('MANUAL_FINISH', 'TikTok')).toContain('Open TikTok');
+    expect(deliveryModeInstruction('PROVIDER_DRAFT', 'TikTok')).toContain('Post Bridge');
+    expect(deliveryModeInstruction('UNSUPPORTED', 'Blog')).toContain('Publish it yourself');
+    expect(deliveryModeInstruction('AUTOMATIC', 'X')).toContain('Nothing is left for you to do');
+    expect(deliveryModeNeedsPerson('AUTOMATIC')).toBe(false);
+    expect(deliveryModeNeedsPerson('UNSUPPORTED')).toBe(false);
+  });
+
+  it('groups the seven states without adding to them, and keeps every state readable', () => {
+    expect(PUBLICATION_STATES.map((state) => PUBLICATION_STATE_GROUP[state])).toEqual([
+      'IN_FLIGHT',
+      'IN_FLIGHT',
+      'DELIVERED',
+      'ATTENTION',
+      'ATTENTION',
+      'ATTENTION',
+      'STOPPED',
+    ]);
+    for (const state of PUBLICATION_STATES) {
+      expect(PUBLICATION_STATE_LABEL[state]).toBeTruthy();
+      expect(PUBLICATION_STATE_DESCRIPTION[state]).toBeTruthy();
+      expect(DELIVERY_GROUP_LABEL[PUBLICATION_STATE_GROUP[state]]).toBeTruthy();
+    }
+  });
+
+  it('reports a target apart from its publication where the two disagree', () => {
+    const target = (over: Partial<SignalPublicationTarget> = {}): SignalPublicationTarget => ({
+      channel: 'x',
+      platform: 'twitter',
+      accountId: 1,
+      handle: '@gholmes',
+      mode: 'AUTOMATIC',
+      ...over,
+    });
+    // Half of a PARTIAL submission is delivered and half is not, and each row says which.
+    expect(deliveryTargetSummary({ state: 'PARTIAL' }, target({ outcome: 'SUCCESS' }))).toEqual({
+      label: 'Delivered',
+      group: 'DELIVERED',
+    });
+    expect(deliveryTargetSummary({ state: 'PARTIAL' }, target({ outcome: 'FAILURE' }))).toEqual({
+      label: 'Not delivered',
+      group: 'ATTENTION',
+    });
+    // The provider accepting a manual-finish delivery is not the same as it being out.
+    const waiting = target({ mode: 'MANUAL_FINISH', outcome: 'SUCCESS' });
+    expect(deliveryTargetSummary({ state: 'SUBMITTED' }, waiting)).toEqual({
+      label: 'Waiting for you to finish',
+      group: 'ATTENTION',
+    });
+    expect(deliveryTargetAwaitsPerson(waiting)).toBe(true);
+    const finished = { ...waiting, manualCompletedAt: '2026-01-02T00:00:00.000Z' };
+    expect(deliveryTargetSummary({ state: 'SUBMITTED' }, finished)).toEqual({
+      label: 'Finished by hand',
+      group: 'DELIVERED',
+    });
+    expect(deliveryTargetAwaitsPerson(finished)).toBe(false);
+    // With no outcome of its own a target falls back to what the publication says.
+    expect(deliveryTargetSummary({ state: 'SUBMITTING' }, target())).toEqual({
+      label: PUBLICATION_STATE_LABEL.SUBMITTING,
+      group: 'IN_FLIGHT',
+    });
+  });
+});
+
+describe('bounded reconciliation', () => {
+  const publication = (over: Partial<SignalPublication> = {}) => ({
+    state: 'SUBMITTED' as const,
+    providerPostId: 'provider-1',
+    scheduledInstant: '2026-09-14T13:00:00.000Z',
+    checkAttempts: 0,
+    ...over,
+  });
+
+  it('waits for the instant, then widens, then gives up', () => {
+    const before = reconcileSchedule(publication(), new Date('2026-09-14T12:00:00.000Z'));
+    expect(before).toMatchObject({ dueAt: '2026-09-14T13:00:00.000Z', due: false });
+    expect(reconcileSchedule(publication(), new Date('2026-09-14T13:00:01.000Z')).due).toBe(true);
+
+    // Each attempt buys a longer wait than the last, measured from the check that was made.
+    const gaps = RECONCILE_INTERVALS_MINUTES.map((_, index) => {
+      const schedule = reconcileSchedule(
+        publication({ checkAttempts: index + 1, checkedAt: '2026-09-14T13:00:00.000Z' }),
+        new Date('2026-09-14T13:00:00.000Z'),
+      );
+      return (
+        (Date.parse(schedule.dueAt as string) - Date.parse('2026-09-14T13:00:00.000Z')) / 60000
+      );
+    });
+    expect(gaps).toEqual([...RECONCILE_INTERVALS_MINUTES]);
+    expect(gaps.every((gap, index) => index === 0 || gap > (gaps[index - 1] as number))).toBe(true);
+
+    const spent = reconcileSchedule(
+      publication({ checkAttempts: RECONCILE_MAX_ATTEMPTS, checkedAt: '2026-09-14T13:00:00.000Z' }),
+      new Date('2030-01-01T00:00:00.000Z'),
+    );
+    expect(spent).toEqual({ due: false, exhausted: true });
+  });
+
+  it('never schedules a check there is no answer left to ask for', () => {
+    for (const state of PUBLICATION_STATES)
+      expect(reconcileSchedule(publication({ state }), new Date('2030-01-01')).due).toBe(
+        isReconcilableState(state),
+      );
+    // Nothing to ask about without a provider id, and nothing pretends otherwise.
+    expect(
+      reconcileSchedule({ ...publication(), providerPostId: undefined }, new Date('2030-01-01')),
+    ).toEqual({ due: false, exhausted: false });
+  });
+});
+
+describe('planning status and delivery stay apart end to end', () => {
+  const serviceAt = (provider: MockPublishProvider, instant: string) =>
+    new PublishService(
+      db,
+      new LocalSignalProvider(db),
+      provider,
+      'America/New_York',
+      () => new Date(instant),
+    );
+
+  it('records mode and handle per target and never writes PUBLISHED from a provider result', async () => {
+    const post = add({ channels: ['x', 'blog'] });
+    const provider = new MockPublishProvider(targets);
+    const service = serviceAt(provider, '2026-01-01T00:00:00.000Z');
+
+    const preview = await service.preview(post.id);
+    // The preview knows the route before anything is sent, per channel and per target.
+    expect(preview.targets).toEqual([
+      { channel: 'x', platform: 'twitter', accountId: 1, handle: '@gholmes', mode: 'AUTOMATIC' },
+    ]);
+    expect(reportFor(preview, 'blog').mode).toBe('UNSUPPORTED');
+
+    const publication = await service.submit(post.id, preview.planHash);
+    expect(publication.targets).toEqual([
+      {
+        channel: 'x',
+        platform: 'twitter',
+        accountId: 1,
+        handle: '@gholmes',
+        mode: 'AUTOMATIC',
+      },
+    ]);
+    expect(publication.checkAttempts).toBe(0);
+    expect(publication.checkedAt).toBeUndefined();
+
+    // The provider confirming is the strongest result there is, and it still does not touch the
+    // planning status: that column has one writer, and it is the person.
+    provider.result = {
+      providerPostId: 'mock-publication',
+      state: 'CONFIRMED',
+      targets: [{ accountId: 1, outcome: 'SUCCESS', permalink: 'https://x.example/1' }],
+    };
+    const confirmed = await service.reconcile(publication.id);
+    expect(confirmed.state).toBe('CONFIRMED');
+    expect(confirmed.targets[0]).toMatchObject({
+      outcome: 'SUCCESS',
+      permalink: 'https://x.example/1',
+    });
+    expect(db.prepare('SELECT status FROM signal_posts WHERE id=?').get(post.id)).toEqual({
+      status: 'DRAFT',
+    });
+  });
+
+  it('keeps a partial multi-account result visible per target', async () => {
+    const post = add({ channels: ['x', 'fb'] });
+    const provider = new MockPublishProvider(targets);
+    const service = serviceAt(provider, '2026-01-01T00:00:00.000Z');
+    provider.result = {
+      providerPostId: 'mock-publication',
+      state: 'PARTIAL',
+      targets: [
+        { accountId: 1, outcome: 'SUCCESS', permalink: 'https://x.example/1' },
+        { accountId: 2, outcome: 'FAILURE', error: 'Page token rejected api_key=do-not-store' },
+      ],
+    };
+    const publication = await service.submit(post.id, (await service.preview(post.id)).planHash);
+    expect(publication.state).toBe('PARTIAL');
+    // Two rows, two different answers — the whole reason a publication cannot be one word.
+    expect(publication.targets.map((target) => [target.channel, target.outcome])).toEqual([
+      ['fb', 'FAILURE'],
+      ['x', 'SUCCESS'],
+    ]);
+    expect(deliveryTargetSummary(publication, publication.targets[0]!).group).toBe('ATTENTION');
+    expect(deliveryTargetSummary(publication, publication.targets[1]!).group).toBe('DELIVERED');
+    expect(publication.targets[0]?.error).not.toContain('do-not-store');
+  });
+
+  it('holds an automatic check to its schedule and gives up into UNCONFIRMED', async () => {
+    const post = add();
+    const provider = new MockPublishProvider(targets);
+    let now = new Date('2026-01-01T00:00:00.000Z');
+    const service = new PublishService(
+      db,
+      new LocalSignalProvider(db),
+      provider,
+      'America/New_York',
+      () => now,
+    );
+    const publication = await service.submit(post.id, (await service.preview(post.id)).planHash);
+
+    // Before the publishing instant an automatic check is answered from storage, with no call.
+    const early = await service.reconcile(publication.id, { automatic: true });
+    expect(provider.checks).toHaveLength(0);
+    expect(early.checkAttempts).toBe(0);
+
+    // A person asking is never held to that schedule, and never spends an attempt either.
+    const manual = await service.reconcile(publication.id);
+    expect(provider.checks).toHaveLength(1);
+    expect(manual.checkAttempts).toBe(0);
+    expect(manual.checkedAt).toBe('2026-01-01T00:00:00.000Z');
+
+    // Past the instant the budget is spent one attempt at a time, and the last one gives up
+    // rather than polling for ever.
+    now = new Date('2027-08-15T00:00:00.000Z');
+    for (let attempt = 1; attempt <= RECONCILE_MAX_ATTEMPTS; attempt += 1) {
+      now = new Date(Date.parse('2027-08-15T00:00:00.000Z') + attempt * 24 * 3600_000);
+      const checked = await service.reconcile(publication.id, { automatic: true });
+      expect(checked.checkAttempts).toBe(attempt);
+      expect(checked.state).toBe(attempt === RECONCILE_MAX_ATTEMPTS ? 'UNCONFIRMED' : 'SUBMITTED');
+    }
+    const givenUp = service.get(publication.id) as SignalPublication;
+    expect(givenUp.error).toContain(`${RECONCILE_MAX_ATTEMPTS} checks`);
+    // And the schedule stops asking, while a person still can.
+    expect(reconcileSchedule(givenUp, now).due).toBe(false);
+    expect(listIntegrationEvents(db, { correlationId: publication.id }).length).toBeGreaterThan(1);
+  });
+
+  it('lets a person finish a manual delivery, once, and only where there is something to finish', async () => {
+    const post = add();
+    const provider = new MockPublishProvider(targets);
+    const service = serviceAt(provider, '2026-01-01T00:00:00.000Z');
+    const publication = await service.submit(post.id, (await service.preview(post.id)).planHash);
+
+    // An automatic delivery has nothing for anyone to finish, and saying so is a refusal rather
+    // than a no-op: marking it would be a person overwriting the provider's own answer.
+    expect(() => service.markTargetFinished(publication.id, 1)).toThrow(
+      /nothing for you to finish/,
+    );
+    expect(() => service.markTargetFinished(publication.id, 99)).toThrow(/not on this publication/);
+
+    // A manual-finish target is the case the control exists for. No connected platform produces
+    // one today, so the row is set to the mode the contract would give it.
+    db.prepare(
+      "UPDATE signal_publication_targets SET mode='MANUAL_FINISH',outcome='SUCCESS' WHERE publication_id=?",
+    ).run(publication.id);
+    const waiting = service.get(publication.id) as SignalPublication;
+    expect(deliveryTargetSummary(waiting, waiting.targets[0]!).label).toBe(
+      'Waiting for you to finish',
+    );
+
+    const finished = service.markTargetFinished(publication.id, 1);
+    expect(finished.targets[0]?.manualCompletedAt).toBe('2026-01-01T00:00:00.000Z');
+    expect(deliveryTargetSummary(finished, finished.targets[0]!).group).toBe('DELIVERED');
+    // Finishing is about the delivery and nothing else: the post's own status is untouched.
+    expect(db.prepare('SELECT status FROM signal_posts WHERE id=?').get(post.id)).toEqual({
+      status: 'DRAFT',
+    });
+    expect(() => service.markTargetFinished(publication.id, 1)).toThrow(/already marked/);
+  });
+
+  it('exposes the automatic gate and the manual finish over HTTP, through the mock alone', async () => {
+    const post = add();
+    const provider = new MockPublishProvider(targets);
+    const app = createApp(db, {
+      publish: provider,
+      publishTimezone: 'America/New_York',
+      now: () => new Date('2026-01-01'),
+    });
+    const preview = await request(app)
+      .post(`/api/signal/posts/${post.id}/publish/preview`)
+      .expect(200);
+    const submitted = await request(app)
+      .post(`/api/signal/posts/${post.id}/publish`)
+      .send({ planHash: preview.body.planHash })
+      .expect(201);
+
+    // An automatic check that is not due costs the provider nothing.
+    await request(app)
+      .post(`/api/signal/publications/${submitted.body.id}/reconcile`)
+      .send({ automatic: true })
+      .expect(200);
+    expect(provider.checks).toHaveLength(0);
+
+    await request(app)
+      .post(`/api/signal/publications/${submitted.body.id}/targets/1/finish`)
+      .expect(409);
+    db.prepare(
+      "UPDATE signal_publication_targets SET mode='MANUAL_FINISH' WHERE publication_id=?",
+    ).run(submitted.body.id);
+    await request(app)
+      .post(`/api/signal/publications/${submitted.body.id}/targets/1/finish`)
+      .expect(200)
+      .expect((response) => expect(response.body.targets[0].manualCompletedAt).toBeTruthy());
+    await request(app)
+      .post(`/api/signal/publications/${submitted.body.id}/targets/404/finish`)
+      .expect(404);
   });
 });

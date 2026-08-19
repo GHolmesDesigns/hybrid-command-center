@@ -17,7 +17,7 @@ import {
   type PublishPostKind,
 } from '../../shared/publish-capabilities.ts';
 import type { PublishChannelReport, PublishPreview } from '../../shared/publish.ts';
-import { publishPreviewRefusals } from '../../shared/publish.ts';
+import { deliveryModeFor, publishPreviewRefusals } from '../../shared/publish.ts';
 import type { PublishRequest, PublishTarget } from './provider.ts';
 
 const partsInZone = (instant: Date, zone: string) => {
@@ -198,11 +198,13 @@ function reportForChannel(
 ): PublishChannelReport {
   const channelLabel = SIGNAL_CHANNEL_LABEL[channel] ?? channel;
   const platform = publishPlatformFor(channel);
+  const mode = deliveryModeFor(platform, kind);
   if (platform === null)
     return {
       channel,
       platform: null,
       kind,
+      mode,
       status: 'NOT_AVAILABLE',
       refusals: [],
       warnings: [
@@ -215,6 +217,7 @@ function reportForChannel(
       channel,
       platform: platform ?? null,
       kind,
+      mode,
       status: 'BLOCKED',
       refusals: [
         `${channelLabel} is not answered by the provider capability contract, so nothing can be sent to it. Record it in shared/publish-capabilities.ts before publishing to it.`,
@@ -228,6 +231,7 @@ function reportForChannel(
     channel,
     platform: capability.platform,
     kind,
+    mode,
     status: refusals.length ? 'BLOCKED' : 'READY',
     ...(target ? { accountId: target.id, handle: target.handle || target.name } : {}),
     refusals,
@@ -273,6 +277,7 @@ export function buildPublishPlan(
       platform: report.platform as string,
       accountId: report.accountId as number,
       handle: report.handle as string,
+      mode: report.mode,
     }));
   // Plan-level only when nothing resolved at all. A channel that resolved and is blocked has
   // already said why, and repeating it here as "nothing resolved" would contradict its own report.

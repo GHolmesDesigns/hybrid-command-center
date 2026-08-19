@@ -1398,9 +1398,24 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       next(error);
     }
   });
+  /**
+   * A provider check. `automatic` marks the planner's own timer, which is held to the widening
+   * schedule and answered from storage when it is not due; the default is a person pressing
+   * refresh, which always runs.
+   */
   app.post('/api/signal/publications/:id/reconcile', async (req, res, next) => {
     try {
-      res.json(await publisher.reconcile(req.params.id));
+      const input = z.object({ automatic: z.boolean().default(false) }).parse(req.body ?? {});
+      res.json(await publisher.reconcile(req.params.id, { automatic: input.automatic }));
+    } catch (error) {
+      next(error);
+    }
+  });
+  /** A person recording that they finished one delivery in the application that owns it. */
+  app.post('/api/signal/publications/:id/targets/:accountId/finish', (req, res, next) => {
+    try {
+      const accountId = z.coerce.number().int().parse(req.params.accountId);
+      res.json(publisher.markTargetFinished(req.params.id, accountId));
     } catch (error) {
       next(error);
     }

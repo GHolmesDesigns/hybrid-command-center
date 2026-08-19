@@ -388,6 +388,54 @@ Three reasons the one field could not hold both:
   opinion and give the column a second writer — the thing §6 just avoided. The one-click control
   costs a click and keeps the invariant.
 
+### 6.2 Delivery is two axes, and neither one is the planning status
+
+Delivery could not be one word either, so it is two fields kept apart in the schema
+(C65, #192). The planner labels `signal_posts.status` **Planning status** and shows everything
+below it under **Delivery**, one row per publication target.
+
+**Mode** — the route a delivery takes — is new, and it is decided before anything is sent, from the
+capability contract in `shared/publish-capabilities.ts`. It is stored on
+`signal_publication_targets.mode` at submit time rather than derived on read: the contract can
+change, and what a delivery needed from a person when it went out is a fact about that submission.
+
+| Mode | Meaning | What is left for a person |
+| --- | --- | --- |
+| `AUTOMATIC` | the provider publishes it without anyone | nothing |
+| `PROVIDER_DRAFT` | the provider holds it as a draft | submit it in Post Bridge |
+| `MANUAL_FINISH` | the provider hands it to the platform's own application | finish it there |
+| `UNSUPPORTED` | no route exists for this channel at this shape | publish it yourself |
+
+The order above is also the precedence `deliveryModeFor` applies: automatic where a platform can
+publish on its own, then a provider draft, then a person, and `UNSUPPORTED` for anything the
+contract has no answer for — the same fail-closed rule preflight uses. Nothing in the app *chooses*
+between two available routes today, which is why TikTok, reachable both ways, records `AUTOMATIC`;
+per-target provider options are C62 (#189) and this card deliberately does not read them.
+
+**State** stays `PUBLICATION_STATES` exactly as §6 defines it. No value is added. What this card
+adds is the grouping the planner reads them by, and the words each one is shown in — the stored
+word is never displayed:
+
+| Group | States | Why they are together |
+| --- | --- | --- |
+| `IN_FLIGHT` | `SUBMITTING`, `SUBMITTED` | nothing is required but time |
+| `DELIVERED` | `CONFIRMED` | every target reported success |
+| `ATTENTION` | `PARTIAL`, `FAILED`, `UNCONFIRMED` | three different facts, one response: someone looks |
+| `STOPPED` | `CANCELLED` | withdrawn before it went out |
+
+A **target** reports its own answer where it differs from its publication's, which is the case
+`PARTIAL` exists for: one account delivered and another not, each with its own permalink and its
+own error. A manual-finish target the provider accepted is `SUBMITTED` and still not out, so it
+reads *waiting for you to finish* until a person records that they finished it — a write to
+`signal_publication_targets.manual_completed_at` and to nothing else. That control refuses an
+automatic target: there is nothing there for a person to finish, and allowing it would let a
+person overwrite the provider's own answer by hand.
+
+`blog` keeps the arrangement §10 already describes. It is shown as an `UNSUPPORTED` delivery rather
+than left out — a missing row reads as *nothing to say* rather than *nothing can be sent* — and it
+carries no completion control of its own, because its completion is `SignalStatus.PUBLISHED`. One
+fact, one writer.
+
 ---
 
 ## 7. Signal's authority when a publish fails
@@ -517,7 +565,18 @@ syncs") and nothing else. Absence of a documented limit is not absence of a limi
 - **Reconciliation polls on a schedule, not a spin.** A `SUBMITTED` publication is checked when its
   instant has passed, then at widening intervals, and gives up into `UNCONFIRMED` after a bounded
   number of attempts. There are no webhooks from either provider, so polling is the only mechanism
-  available and it should be as quiet as that allows.
+  available and it should be as quiet as that allows. The schedule is
+  `RECONCILE_INTERVALS_MINUTES` in `shared/publish.ts` — 2, 5, 15, 45, then 120 minutes after the
+  check at the publishing instant, so six attempts in all — and it is shared rather than duplicated:
+  the open planner is the only thing that can drive a check, since this app runs no background job,
+  and `reconcileSchedule` is the rule its timer reads *and* the rule the server enforces on arrival.
+  An automatic check that is not due is answered from storage with no provider call, which is what
+  keeps a loose timer from turning widening intervals back into a spin.
+- **Manual refresh sits outside that budget.** A person asking always runs and never spends an
+  attempt, so it cannot exhaust the automatic schedule and cannot force a publication into
+  `UNCONFIRMED` by being clicked. Both kinds of check record `checked_at`, because *when was this
+  last checked* is one question however it was asked, and the planner shows that time beside the
+  delivery along with when the next automatic check is due.
 
 ---
 

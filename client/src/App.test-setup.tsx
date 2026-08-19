@@ -176,6 +176,7 @@ export const testState = {
   publicationsPayload: [] as SignalPublication[],
   publishSubmitPayload: null as SignalPublication | null,
   publishReconcilePayload: null as SignalPublication | null,
+  publishFinishPayload: null as SignalPublication | null,
   /**
    * Client merge. Both routes are answered from the client and project state by default — the
    * stub plans the merge the way the server would, and a commit moves the projects, archives the
@@ -328,6 +329,9 @@ const respondTo = (url: string, init?: RequestInit) => {
     return (
       testState.publishReconcilePayload ?? reply(400, { error: 'No reconciliation was set up.' })
     );
+  const finishPath = url.match(/\/api\/signal\/publications\/([^/?]+)\/targets\/(\d+)\/finish$/);
+  if (finishPath && method === 'POST')
+    return testState.publishFinishPayload ?? reply(409, { error: 'Nothing to finish here.' });
   const signalPostPath = url.match(/\/api\/signal\/posts\/([^/?]+)$/);
   if (signalPostPath && method === 'PATCH') {
     if (testState.signalMutationError) return reply(400, { error: testState.signalMutationError });
@@ -712,6 +716,7 @@ beforeEach(() => {
   testState.publicationsPayload = [];
   testState.publishSubmitPayload = null;
   testState.publishReconcilePayload = null;
+  testState.publishFinishPayload = null;
   testState.clientMergePreviewError = null;
   testState.clientMergeCommitError = null;
   requests.length = 0;
