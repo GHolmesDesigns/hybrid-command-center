@@ -264,22 +264,24 @@ function requestLogger(stream?: DestinationStream) {
 }
 
 /**
+ * The three shapes an optional client field is written in, before either of the two ways of
+ * sending one is layered on. `nullable*` below is the PATCH form, where an omitted key keeps the
+ * stored value; `mergeFieldChoice` below that is the merge form, where the key is always sent and only
+ * a blank one clears the field. Both read from these, so a value a client form would refuse is
+ * refused just the same when a merge is the thing choosing it.
+ */
+const text = z.string().trim();
+const emailText = z.union([z.literal(''), z.string().email()]);
+const urlText = z.union([z.literal(''), z.string().url()]);
+/**
  * Optional text field. An omitted key stays `undefined` so a PATCH keeps the stored
  * value; an empty string becomes `null` so the caller can deliberately clear it.
  */
-const nullable = z
-  .string()
-  .trim()
+const nullable = text.optional().transform((v) => (v === undefined ? undefined : v || null));
+const nullableEmail = emailText
   .optional()
   .transform((v) => (v === undefined ? undefined : v || null));
-const nullableEmail = z
-  .union([z.literal(''), z.string().email()])
-  .optional()
-  .transform((v) => (v === undefined ? undefined : v || null));
-const nullableUrl = z
-  .union([z.literal(''), z.string().url()])
-  .optional()
-  .transform((v) => (v === undefined ? undefined : v || null));
+const nullableUrl = urlText.optional().transform((v) => (v === undefined ? undefined : v || null));
 /**
  * Optional calendar date. User-supplied dates are `YYYY-MM-DD` values interpreted in local
  * time, so the pattern is checked first and `isValid` then rejects real-looking impossibilities
@@ -417,8 +419,36 @@ const normalizedCategoryName = z
   .string()
   .transform(normalizeCategoryName)
   .pipe(z.string().min(1).max(60));
-/** The destination half of a merge; the source is the route's own `:id`. */
-const clientMergeInput = z.object({ destinationId: z.string().uuid() });
+/**
+ * One field's choice in a merge. `DESTINATION` and `SOURCE` name a record and carry nothing;
+ * `CUSTOM` carries the value, validated by the same schema the client form validates that field
+ * with, so a merge cannot write an address or an email a client edit would have refused. A blank
+ * custom value clears the field, which is what a blank one means everywhere else.
+ */
+const mergeFieldChoice = <T extends z.ZodType<string>>(value: T) =>
+  z.union([
+    z.object({ choice: z.enum(['DESTINATION', 'SOURCE']) }),
+    z.object({ choice: z.literal('CUSTOM'), value: value.transform((v) => v || null) }),
+  ]);
+/** The destination half of a merge, and its choices; the source is the route's own `:id`. */
+const clientMergeInput = z.object({
+  destinationId: z.string().uuid(),
+  /**
+   * The six choosable fields. Every one is optional and defaults to `DESTINATION` in the planner
+   * rather than here, so an older client that sends no choices at all merges exactly as it did.
+   */
+  fields: z
+    .object({
+      name: mergeFieldChoice(clientFields.name),
+      contactName: mergeFieldChoice(text),
+      email: mergeFieldChoice(emailText),
+      phone: mergeFieldChoice(text),
+      website: mergeFieldChoice(urlText),
+      notes: mergeFieldChoice(text),
+    })
+    .partial()
+    .default({}),
+});
 
 const categoryInput = z.object({ name: normalizedCategoryName, color: chipColor });
 const categoryPatch = categoryInput.partial().refine((value) => Object.keys(value).length > 0, {
@@ -591,15 +621,19 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     res.json({ ok: true });
   });
   /**
-   * Merging one client into another (C49). The preview writes nothing; the commit re-plans
+   * Merging one client into another (C49, C71). The preview writes nothing; the commit re-plans
    * inside its own transaction and refuses a plan that no longer matches the one confirmed.
    * Both live in `server/client-merge.ts`, which calls no Drive method and writes no
    * `integration_events` row — a merge is local workspace surgery, not an integration.
+   *
+   * The field choices go to both routes. The preview settles what each field would become and
+   * hashes it; the commit settles it again from the same choices, so a confirmation taken
+   * against one set of values cannot write another.
    */
   app.post('/api/clients/:id/merge/preview', (req, res, next) => {
     try {
       const data = clientMergeInput.parse(req.body);
-      res.json(previewClientMerge(db, req.params.id, data.destinationId));
+      res.json(previewClientMerge(db, req.params.id, data.destinationId, data.fields));
     } catch (error) {
       next(error);
     }
@@ -607,7 +641,9 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   app.post('/api/clients/:id/merge', (req, res, next) => {
     try {
       const data = clientMergeInput.extend({ planHash: z.string().length(64) }).parse(req.body);
-      res.json(commitClientMerge(db, req.params.id, data.destinationId, data.planHash));
+      res.json(
+        commitClientMerge(db, req.params.id, data.destinationId, data.fields, data.planHash),
+      );
     } catch (error) {
       next(error);
     }

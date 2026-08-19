@@ -20,24 +20,57 @@ beforeEach(() => {
 });
 
 const app = () => createApp(db);
-const createClient = async (name: string) =>
-  (await request(app()).post('/api/clients').send({ name })).body;
+const createClient = async (name: string, details: Record<string, string> = {}) =>
+  (
+    await request(app())
+      .post('/api/clients')
+      .send({ name, ...details })
+  ).body;
 const createProject = async (clientId: string, name: string, status = 'ACTIVE') =>
   (await request(app()).post('/api/projects').send({ clientId, name, status })).body;
 const archiveClient = (id: string) => request(app()).post(`/api/clients/${id}/archive`).send();
-const preview = (sourceId: string, destinationId: string) =>
-  request(app()).post(`/api/clients/${sourceId}/merge/preview`).send({ destinationId });
-const merge = (sourceId: string, destinationId: string, planHash: string) =>
-  request(app()).post(`/api/clients/${sourceId}/merge`).send({ destinationId, planHash });
+/** The field choices as the dialog sends them; omitted entirely, every field keeps the destination. */
+type Selections = Record<string, { choice: string; value?: string }>;
+const preview = (sourceId: string, destinationId: string, fields?: Selections) =>
+  request(app())
+    .post(`/api/clients/${sourceId}/merge/preview`)
+    .send({ destinationId, ...(fields ? { fields } : {}) });
+const merge = (sourceId: string, destinationId: string, planHash: string, fields?: Selections) =>
+  request(app())
+    .post(`/api/clients/${sourceId}/merge`)
+    .send({ destinationId, planHash, ...(fields ? { fields } : {}) });
 
 /** A merge through the API, previewed then confirmed, which is the only way the UI does it. */
-async function mergeClients(sourceId: string, destinationId: string) {
-  const planned = await preview(sourceId, destinationId);
+async function mergeClients(sourceId: string, destinationId: string, fields?: Selections) {
+  const planned = await preview(sourceId, destinationId, fields);
   expect(planned.status).toBe(200);
-  const done = await merge(sourceId, destinationId, planned.body.planHash);
+  const done = await merge(sourceId, destinationId, planned.body.planHash, fields);
   expect(done.status).toBe(200);
   return done.body;
 }
+
+/** A workspace client with nothing filled in, for the planner cases that build one by hand. */
+const blankClient = {
+  id: '',
+  name: '',
+  slug: '',
+  status: 'ACTIVE',
+  contactName: null,
+  email: null,
+  phone: null,
+  website: null,
+  notes: null,
+};
+
+/** The survivor's own columns, which is what a field choice is finally about. */
+const clientRow = (id: string) =>
+  db
+    .prepare(
+      `SELECT name, slug, contact_name contactName, email, phone, website, notes, status,
+              drive_folder_id driveFolderId, drive_status driveStatus
+       FROM clients WHERE id=?`,
+    )
+    .get(id) as Record<string, string | null>;
 
 const aliases = () =>
   db
@@ -132,8 +165,8 @@ describe('the client merge planner', () => {
   it('plans against the workspace it is given rather than against a database', () => {
     const workspace = {
       clients: [
-        { id: 'a', name: 'A', status: 'ARCHIVED' },
-        { id: 'b', name: 'B', status: 'ACTIVE' },
+        { ...blankClient, id: 'a', name: 'A', slug: 'a-a', status: 'ARCHIVED', phone: '111' },
+        { ...blankClient, id: 'b', name: 'B', slug: 'b-b', status: 'ACTIVE' },
       ],
       projects: [
         { id: 'p2', clientId: 'a', name: 'Second', status: 'ACTIVE' },
@@ -157,7 +190,65 @@ describe('the client merge planner', () => {
       { namespace: 'campaign-playbook:s2', externalId: 'ext-2' },
     ]);
     expect(plan.source.status).toBe('ARCHIVED');
+    // Every choosable field is planned, in the dialog's order, defaulting to the destination.
+    expect(plan.fields.map((field) => field.field)).toEqual([
+      'name',
+      'contactName',
+      'email',
+      'phone',
+      'website',
+      'notes',
+    ]);
+    expect(plan.fields.find((field) => field.field === 'phone')).toEqual({
+      field: 'phone',
+      destination: null,
+      source: '111',
+      choice: 'DESTINATION',
+      value: null,
+    });
+    expect(plan.slug).toEqual({ current: 'b-b', next: 'b-b' });
     expect(() => buildClientMergePlan(workspace, 'a', 'a')).toThrow(ClientMergeError);
+  });
+
+  it('settles each field from the choice it was given, and derives the slug from the name', () => {
+    const workspace = {
+      clients: [
+        { ...blankClient, id: 'a', name: 'Old Name', slug: 'old-name-a', email: 'old@test' },
+        {
+          ...blankClient,
+          id: 'b',
+          name: 'Kept',
+          slug: 'kept-b',
+          status: 'ACTIVE',
+          email: 'kept@test',
+          notes: 'Theirs',
+        },
+      ],
+      projects: [],
+      clientAliases: [],
+    };
+
+    const plan = buildClientMergePlan(workspace, 'a', 'b', {
+      name: { choice: 'SOURCE' },
+      email: { choice: 'CUSTOM', value: 'typed@test' },
+      notes: { choice: 'CUSTOM', value: null },
+    });
+
+    expect(Object.fromEntries(plan.fields.map((field) => [field.field, field.value]))).toEqual({
+      name: 'Old Name',
+      contactName: null,
+      email: 'typed@test',
+      phone: null,
+      website: null,
+      notes: null,
+    });
+    // The name came from the source, so the slug is rebuilt from it and the destination's own id.
+    expect(plan.slug).toEqual({ current: 'kept-b', next: 'old-name-b' });
+    // A name is the one field that cannot be cleared: the column is NOT NULL and a client
+    // without a name is unreachable in every list that names one.
+    expect(() =>
+      buildClientMergePlan(workspace, 'a', 'b', { name: { choice: 'CUSTOM', value: null } }),
+    ).toThrow(ClientMergeError);
   });
 });
 
@@ -210,7 +301,7 @@ describe('committing a client merge', () => {
     expect(aliases()).toEqual([{ source: source.id, surviving: destination.id }]);
   });
 
-  it('keeps the source’s own details readable and lets the destination’s metadata win', async () => {
+  it('keeps the source’s own details readable and defaults every field to the destination', async () => {
     const source = (
       await request(app())
         .post('/api/clients')
@@ -229,7 +320,9 @@ describe('committing a client merge', () => {
       contactName: 'Old Contact',
       notes: 'Historic notes',
     });
-    // Nothing was copied across; the destination reads exactly as it did.
+    // Nothing was copied across; the destination reads exactly as it did. Its notes were blank
+    // and the source's were not, and that on its own moves nothing: the default is the record
+    // being kept, whether or not it has anything in the field.
     expect(clients.find((c) => c.id === destination.id)).toMatchObject({
       contactName: 'Current Contact',
     });
@@ -277,7 +370,7 @@ describe('committing a client merge', () => {
       'INSERT INTO client_merges(source_client_id,surviving_client_id,merged_at) VALUES(?,?,?)',
     ).run(source.id, destination.id, '2026-01-01T00:00:00.000Z');
 
-    expect(() => commitClientMerge(db, source.id, destination.id, planHash)).toThrow();
+    expect(() => commitClientMerge(db, source.id, destination.id, {}, planHash)).toThrow();
 
     expect(db.prepare('SELECT client_id FROM projects WHERE id=?').get(project.id)).toEqual({
       client_id: source.id,
@@ -375,7 +468,7 @@ describe('committing a client merge', () => {
       'INSERT INTO client_merges(source_client_id,surviving_client_id,merged_at) VALUES(?,?,?)',
     ).run(source.id, destination.id, '2026-01-01T00:00:00.000Z');
 
-    expect(() => commitClientMerge(db, source.id, destination.id, planHash)).toThrow();
+    expect(() => commitClientMerge(db, source.id, destination.id, {}, planHash)).toThrow();
 
     expect(importIdentities()).toEqual([
       { ns: 'campaign-playbook:source-a', ext: 'stays-put', id: source.id },
@@ -468,8 +561,8 @@ describe('committing a client merge', () => {
     );
   });
 
-  it('reads the merge workspace with archived records and aliases included', async () => {
-    const source = await createClient('Workspace Source');
+  it('reads the merge workspace with archived records, aliases, and choosable fields included', async () => {
+    const source = await createClient('Workspace Source', { email: 'workspace@example.com' });
     const destination = await createClient('Workspace Destination');
     await archiveClient(source.id);
     await createProject(destination.id, 'Theirs');
@@ -477,17 +570,270 @@ describe('committing a client merge', () => {
 
     const workspace = readMergeWorkspace(db);
 
+    // Exactly what the rules compare: the pair, the merge alias, and the six choosable fields.
+    // No `drive_*` column is read here, so nothing on this path can plan against one.
     expect(workspace.clients.find((client) => client.id === source.id)).toEqual({
       id: source.id,
       name: 'Workspace Source',
+      slug: `workspace-source-${source.id.slice(0, 6)}`,
       status: 'ARCHIVED',
+      contactName: null,
+      email: 'workspace@example.com',
+      phone: null,
+      website: null,
+      notes: null,
       mergedIntoId: destination.id,
     });
     expect(workspace.clients.find((client) => client.id === destination.id)).toEqual({
       id: destination.id,
       name: 'Workspace Destination',
+      slug: `workspace-destination-${destination.id.slice(0, 6)}`,
       status: 'ACTIVE',
+      contactName: null,
+      email: null,
+      phone: null,
+      website: null,
+      notes: null,
     });
+  });
+});
+
+/**
+ * C71. Which record wins, field by field. The properties this block holds: the six choosable
+ * fields are exactly the six, the default is the destination whatever either value looks like,
+ * the surviving slug follows the surviving name, the hash covers the chosen values, and a value
+ * a client edit would refuse is refused here too.
+ */
+describe('choosing which field wins', () => {
+  const both = async () => {
+    const source = await createClient('Duplicate Co', {
+      contactName: 'Old Contact',
+      email: 'old@example.com',
+      phone: '020 7946 0000',
+      website: 'https://old.example.com',
+      notes: 'Historic notes',
+    });
+    const destination = await createClient('Real Co', { contactName: 'Current Contact' });
+    return { source, destination };
+  };
+
+  it('previews exactly the six choosable fields with both records’ values', async () => {
+    const { source, destination } = await both();
+
+    const planned = await preview(source.id, destination.id);
+
+    expect(planned.body.fields).toEqual([
+      {
+        field: 'name',
+        destination: 'Real Co',
+        source: 'Duplicate Co',
+        choice: 'DESTINATION',
+        value: 'Real Co',
+      },
+      {
+        field: 'contactName',
+        destination: 'Current Contact',
+        source: 'Old Contact',
+        choice: 'DESTINATION',
+        value: 'Current Contact',
+      },
+      {
+        field: 'email',
+        destination: null,
+        source: 'old@example.com',
+        choice: 'DESTINATION',
+        value: null,
+      },
+      {
+        field: 'phone',
+        destination: null,
+        source: '020 7946 0000',
+        choice: 'DESTINATION',
+        value: null,
+      },
+      {
+        field: 'website',
+        destination: null,
+        source: 'https://old.example.com',
+        choice: 'DESTINATION',
+        value: null,
+      },
+      {
+        field: 'notes',
+        destination: null,
+        source: 'Historic notes',
+        choice: 'DESTINATION',
+        value: null,
+      },
+    ]);
+    // Status, the slug, and every Drive column are outside the choice. The slug is reported
+    // because the name can change it, and it is reported as unchanged.
+    expect(planned.body.fields.map((field: { field: string }) => field.field)).not.toContain(
+      'status',
+    );
+    expect(planned.body.slug.next).toBe(planned.body.slug.current);
+  });
+
+  it('applies a chosen value from either record or from the dialog, and clears one on request', async () => {
+    const { source, destination } = await both();
+    const before = clientRow(destination.id);
+
+    const result = await mergeClients(source.id, destination.id, {
+      email: { choice: 'SOURCE' },
+      phone: { choice: 'CUSTOM', value: '020 7946 1111' },
+      contactName: { choice: 'CUSTOM', value: '' },
+      notes: { choice: 'SOURCE' },
+    });
+
+    expect(clientRow(destination.id)).toEqual({
+      ...before,
+      email: 'old@example.com',
+      phone: '020 7946 1111',
+      contactName: null,
+      notes: 'Historic notes',
+    });
+    // The source keeps everything it had: a merge chooses what the survivor holds, and copies
+    // rather than moves.
+    expect(clientRow(source.id)).toMatchObject({
+      contactName: 'Old Contact',
+      email: 'old@example.com',
+      notes: 'Historic notes',
+      status: 'ARCHIVED',
+    });
+    expect(result.fields.find((field: { field: string }) => field.field === 'email')).toEqual({
+      field: 'email',
+      destination: null,
+      source: 'old@example.com',
+      choice: 'SOURCE',
+      value: 'old@example.com',
+    });
+  });
+
+  it('rebuilds the survivor’s slug from the name it keeps and leaves it alone otherwise', async () => {
+    const { source, destination } = await both();
+    const kept = await createClient('Untouched Co');
+    const keptSlug = clientRow(kept.id).slug;
+
+    await mergeClients(source.id, destination.id, { name: { choice: 'SOURCE' } });
+
+    // The same rule renaming a client through PATCH follows: name-derived, id-suffixed, unique.
+    expect(clientRow(destination.id)).toMatchObject({
+      name: 'Duplicate Co',
+      slug: `duplicate-co-${destination.id.slice(0, 6)}`,
+    });
+    // The archived source keeps its own name and slug: only the survivor was renamed.
+    expect(clientRow(source.id)).toMatchObject({ name: 'Duplicate Co' });
+    expect(clientRow(source.id).slug).not.toBe(clientRow(destination.id).slug);
+    expect(clientRow(kept.id).slug).toBe(keptSlug);
+  });
+
+  it('hashes the chosen values, so confirming other choices is refused', async () => {
+    const { source, destination } = await both();
+    const planned = await preview(source.id, destination.id, { email: { choice: 'SOURCE' } });
+
+    // The same hash, sent back with a different set of choices.
+    const refused = await merge(source.id, destination.id, planned.body.planHash, {
+      email: { choice: 'CUSTOM', value: 'somewhere@else.com' },
+    });
+
+    expect(refused.status).toBe(409);
+    expect(refused.body.error).toContain('changed since this merge was previewed');
+    expect(clientRow(destination.id)).toMatchObject({ email: null, status: 'ACTIVE' });
+    expect(aliases()).toEqual([]);
+    // The choices it was previewed with go through.
+    expect(
+      (
+        await merge(source.id, destination.id, planned.body.planHash, {
+          email: { choice: 'SOURCE' },
+        })
+      ).status,
+    ).toBe(200);
+    expect(clientRow(destination.id)).toMatchObject({ email: 'old@example.com' });
+  });
+
+  it('refuses a confirmation whose fields moved on either client since the preview', async () => {
+    const { source, destination } = await both();
+    const planned = await preview(source.id, destination.id, { phone: { choice: 'SOURCE' } });
+    // Someone edits the source's phone number in another tab: the value on offer is not the
+    // value that was shown, and a confirmation applies to what was shown.
+    await request(app()).patch(`/api/clients/${source.id}`).send({ phone: '020 7946 9999' });
+
+    const refused = await merge(source.id, destination.id, planned.body.planHash, {
+      phone: { choice: 'SOURCE' },
+    });
+
+    expect(refused.status).toBe(409);
+    expect(clientRow(destination.id)).toMatchObject({ phone: null, status: 'ACTIVE' });
+  });
+
+  it('validates a custom value the way the client form does', async () => {
+    const { source, destination } = await both();
+    const planned = await preview(source.id, destination.id);
+
+    for (const fields of [
+      { email: { choice: 'CUSTOM', value: 'not-an-email' } },
+      { website: { choice: 'CUSTOM', value: 'not a url' } },
+      { name: { choice: 'CUSTOM', value: 'A' } },
+      { name: { choice: 'CUSTOM' } },
+      { phone: { choice: 'ELSEWHERE' } },
+    ] as Selections[])
+      expect((await preview(source.id, destination.id, fields)).status).toBe(400);
+    expect(
+      (
+        await merge(source.id, destination.id, planned.body.planHash, {
+          email: { choice: 'CUSTOM', value: 'not-an-email' },
+        })
+      ).status,
+    ).toBe(400);
+    // A field outside the six is not a 400 and not a write: it is not part of the request at
+    // all, so `slug`, `status`, and every `drive_*` column are unreachable from here by shape.
+    for (const outside of [
+      { slug: { choice: 'SOURCE' } },
+      { status: { choice: 'SOURCE' } },
+      { driveStatus: { choice: 'SOURCE' } },
+    ] as Selections[])
+      expect((await preview(source.id, destination.id, outside)).body.fields).toEqual(
+        planned.body.fields,
+      );
+    expect(clientRow(destination.id)).toMatchObject({ email: null, status: 'ACTIVE' });
+  });
+
+  it('leaves status, Drive, and the activity log out of it', async () => {
+    const { source, destination } = await both();
+    db.prepare(
+      "UPDATE clients SET drive_folder_id=?, drive_folder_url=?, drive_status='CONNECTED' WHERE id=?",
+    ).run('survivor-folder', 'https://drive.test/survivor', destination.id);
+
+    await mergeClients(source.id, destination.id, {
+      name: { choice: 'SOURCE' },
+      website: { choice: 'CUSTOM', value: 'https://new.example.com' },
+    });
+
+    expect(clientRow(destination.id)).toMatchObject({
+      status: 'ACTIVE',
+      driveFolderId: 'survivor-folder',
+      driveStatus: 'CONNECTED',
+      website: 'https://new.example.com',
+    });
+    expect(db.prepare('SELECT COUNT(*) total FROM integration_events').get()).toEqual({ total: 0 });
+  });
+
+  it('rolls the chosen values back with everything else when the merge fails', async () => {
+    const { source, destination } = await both();
+    const before = clientRow(destination.id);
+    const planHash = previewClientMerge(db, source.id, destination.id, {
+      email: { choice: 'SOURCE' },
+    }).planHash;
+    // The same trick the other rollback cases use: the alias insert at the end cannot succeed.
+    db.prepare(
+      'INSERT INTO client_merges(source_client_id,surviving_client_id,merged_at) VALUES(?,?,?)',
+    ).run(source.id, destination.id, '2026-01-01T00:00:00.000Z');
+
+    expect(() =>
+      commitClientMerge(db, source.id, destination.id, { email: { choice: 'SOURCE' } }, planHash),
+    ).toThrow();
+
+    expect(clientRow(destination.id)).toEqual(before);
   });
 });
 

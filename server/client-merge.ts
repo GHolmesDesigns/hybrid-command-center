@@ -8,13 +8,17 @@
  * - **The plan is never trusted from the browser.** A commit re-reads the workspace inside its
  *   own transaction and re-plans, so the write is decided by the same code that produced the
  *   preview, against the workspace as it stands at the moment of the write. A plan that no
- *   longer matches the confirmed one is refused with a 409 rather than written.
- * - **One transaction.** The projects, the archived source, the destination's stamp, the
+ *   longer matches the confirmed one is refused with a 409 rather than written. That covers the
+ *   field choices too: they are planned, not applied, and the value the survivor keeps is the
+ *   one the planner settled inside the transaction.
+ * - **One transaction.** The projects, the archived source, the destination's chosen fields, the
  *   retargeted aliases, and the new alias row land together or not at all.
  *
  * No `DriveProvider` method is called from here. `drive_folder_id`, `drive_folder_url`, and the
  * `drive_steps` rows stay on the projects that carry them, so Files still opens the same folders
- * after a merge and the source client's own folder is left where it is.
+ * after a merge and the source client's own folder is left where it is. The destination's own
+ * `drive_*` columns and its `status` are not in the update either: a merge chooses contact
+ * details, never a connection or a lifecycle.
  *
  * No `integration_events` row is written either: this is a local workspace operation, like
  * archiving a project, and the activity log is for what an *integration* did.
@@ -31,7 +35,12 @@ import {
   type MergeWorkspaceClient,
   type MergeWorkspaceProject,
 } from './domain/client-merge.ts';
-import type { ClientMergePreview, ClientMergeResult } from '../shared/client-merge.ts';
+import type {
+  ClientMergePreview,
+  ClientMergeResult,
+  ClientMergeSelections,
+} from '../shared/client-merge.ts';
+import { clientMergeFieldValues } from '../shared/client-merge.ts';
 
 const now = () => new Date().toISOString();
 
@@ -44,7 +53,8 @@ export function readMergeWorkspace(db: Db): ClientMergeWorkspace {
   const clients = (
     db
       .prepare(
-        `SELECT c.id, c.name, c.status, m.surviving_client_id mergedIntoId
+        `SELECT c.id, c.name, c.slug, c.status, c.contact_name contactName, c.email, c.phone,
+                c.website, c.notes, m.surviving_client_id mergedIntoId
          FROM clients c LEFT JOIN client_merges m ON m.source_client_id = c.id`,
       )
       .all() as unknown as (MergeWorkspaceClient & { mergedIntoId: string | null })[]
@@ -71,16 +81,24 @@ const toPreview = (plan: ClientMergePlan): ClientMergePreview => ({
   destination: plan.destination,
   projects: plan.projects,
   aliases: plan.aliases,
+  fields: plan.fields,
+  slug: plan.slug,
   planHash: clientMergePlanHash(plan),
 });
 
-/** The dry run. Reads the workspace, validates the pair, and writes nothing at all. */
+/**
+ * The dry run. Reads the workspace, validates the pair, settles what each field would end up as,
+ * and writes nothing at all.
+ */
 export function previewClientMerge(
   db: Db,
   sourceId: string,
   destinationId: string,
+  selections: ClientMergeSelections = {},
 ): ClientMergePreview {
-  return toPreview(buildClientMergePlan(readMergeWorkspace(db), sourceId, destinationId));
+  return toPreview(
+    buildClientMergePlan(readMergeWorkspace(db), sourceId, destinationId, selections),
+  );
 }
 
 /**
@@ -97,10 +115,11 @@ export function commitClientMerge(
   db: Db,
   sourceId: string,
   destinationId: string,
+  selections: ClientMergeSelections,
   expectedHash: string,
 ): ClientMergeResult {
   return transaction(db, () => {
-    const plan = buildClientMergePlan(readMergeWorkspace(db), sourceId, destinationId);
+    const plan = buildClientMergePlan(readMergeWorkspace(db), sourceId, destinationId, selections);
     if (clientMergePlanHash(plan) !== expectedHash)
       throw new ClientMergeError(
         'These clients changed since this merge was previewed. Review the new preview before merging.',
@@ -119,8 +138,31 @@ export function commitClientMerge(
       stamp,
       sourceId,
     );
-    // The destination's portfolio changed, so its record did. Its own fields still win.
-    db.prepare('UPDATE clients SET updated_at=? WHERE id=?').run(stamp, destinationId);
+    /**
+     * The destination takes the values the plan settled — its own wherever nothing was chosen,
+     * which is the default for every field. The columns named here are exactly the six a person
+     * edits plus the slug derived from the surviving name, so this is the same write a rename
+     * makes; `status` and every `drive_*` column are absent by construction rather than by
+     * remembering to leave them out.
+     */
+    const values = clientMergeFieldValues(plan.fields);
+    // Never the fallback in practice — the planner refuses a blank surviving name — but the
+    // column is `NOT NULL` and this says so without an assertion.
+    const survivingName = values.name ?? plan.destination.name;
+    db.prepare(
+      `UPDATE clients SET name=?,slug=?,contact_name=?,email=?,phone=?,website=?,notes=?,updated_at=?
+       WHERE id=?`,
+    ).run(
+      survivingName,
+      plan.slug.next,
+      values.contactName,
+      values.email,
+      values.phone,
+      values.website,
+      values.notes,
+      stamp,
+      destinationId,
+    );
     /**
      * Aliases that pointed at the source now point past it. Merging A into B and then B into C
      * leaves A pointing at C, so resolving a merged name is always one hop and never a chain.
@@ -147,9 +189,11 @@ export function commitClientMerge(
     ).run(sourceId, destinationId, stamp);
     return {
       source: { ...plan.source, status: 'ARCHIVED' as const },
-      destination: plan.destination,
+      // Under the name it now holds, which is what the dialog reads back to the person merging.
+      destination: { ...plan.destination, name: survivingName },
       projects: plan.projects,
       aliases: plan.aliases,
+      fields: plan.fields,
       movedProjectCount: plan.projects.length,
       mergedAt: stamp,
     };

@@ -17,10 +17,14 @@ test('a client merges into another, and the archived source points at it', async
     taskTitle = `E2E Merged Task ${run}`;
 
   const source = await (
-    await page.request.post('/api/clients', { data: { name: sourceName } })
+    await page.request.post('/api/clients', {
+      data: { name: sourceName, contactName: 'E2E Old Contact', phone: '020 7946 0000' },
+    })
   ).json();
   const destination = await (
-    await page.request.post('/api/clients', { data: { name: destinationName } })
+    await page.request.post('/api/clients', {
+      data: { name: destinationName, contactName: 'E2E Current Contact' },
+    })
   ).json();
   const project = await (
     await page.request.post('/api/projects', {
@@ -45,13 +49,43 @@ test('a client merges into another, and the archived source points at it', async
   ).toBeVisible();
   await expect(plan.getByText(projectName)).toBeVisible();
   await expect(plan.getByText('There is no undo.', { exact: false })).toBeVisible();
-  await dialog.getByRole('button', { name: 'Merge clients' }).click();
+
+  /**
+   * C71. Every field starts on the client being kept, blank or not, and only what is chosen
+   * moves. The phone number is taken from the duplicate; the contact name is left alone, and the
+   * duplicate's own is what a merge would have had to guess at.
+   */
+  const phone = plan.getByRole('group', { name: 'Phone' });
+  await expect(phone.getByRole('radio', { name: /Keep destination/ })).toBeChecked();
+  await expect(phone.getByText('(none)')).toBeVisible();
+  await phone.getByRole('radio', { name: /Use source/ }).click();
+  const contact = plan.getByRole('group', { name: 'Contact name' });
+  await expect(contact.getByRole('radio', { name: /Keep destination/ })).toBeChecked();
+  // The choice re-plans, so the confirmation is only offered again once the server has it.
+  const confirm = dialog.getByRole('button', { name: 'Merge clients' });
+  await expect(confirm).toBeEnabled();
+  await confirm.click();
 
   // The successful flow lands on the survivor, which now owns the project.
   await expect(page).toHaveURL(new RegExp(`/clients/${destination.id}$`));
   await expect(page.getByRole('heading', { name: destinationName })).toBeVisible();
   await expect(page.getByRole('link', { name: new RegExp(projectName) })).toBeVisible();
   await expect(page.getByText('merged into', { exact: false })).toBeVisible();
+
+  // The survivor took the one value that was chosen and kept everything else of its own.
+  const survivor = (
+    (await (await page.request.get('/api/clients')).json()) as {
+      id: string;
+      name: string;
+      contactName?: string;
+      phone?: string;
+    }[]
+  ).find((row) => row.id === destination.id);
+  expect(survivor).toMatchObject({
+    name: destinationName,
+    contactName: 'E2E Current Contact',
+    phone: '020 7946 0000',
+  });
 
   // The task came with its project, and the API agrees about who owns both.
   const moved = await (await page.request.get(`/api/tasks?projectId=${project.id}`)).json();

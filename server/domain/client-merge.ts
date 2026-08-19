@@ -5,18 +5,38 @@
  * import planner takes its snapshot in.
  *
  * The plan hashes to a value the browser sends back on confirmation. If a project was added,
- * removed, renamed, or reassigned between the preview and the confirmation, or if either client
- * was renamed or archived, the hash no longer matches and the commit is refused rather than
- * writing a merge nobody was shown.
+ * removed, renamed, or reassigned between the preview and the confirmation, if either client was
+ * renamed or archived, or if a field either record holds changed underneath a choice made about
+ * it, the hash no longer matches and the commit is refused rather than writing a merge nobody
+ * was shown.
  */
 import crypto from 'node:crypto';
-import type { ClientMergeAlias, ClientMergeProject } from '../../shared/client-merge.ts';
+import type {
+  ClientMergeAlias,
+  ClientMergeField,
+  ClientMergeFieldPlan,
+  ClientMergeProject,
+  ClientMergeSelections,
+} from '../../shared/client-merge.ts';
+import { CLIENT_MERGE_FIELDS, clientMergeFieldValues } from '../../shared/client-merge.ts';
+import { buildClientSlug } from './client-slugs.ts';
 
-/** A client as the merge rules need to see it, merge alias included. */
+/**
+ * A client as the merge rules need to see it: the pair's identity, the merge alias, and the six
+ * fields a merge chooses between, which are exactly the properties named in `CLIENT_MERGE_FIELDS`.
+ * `slug` is here to be derived from the surviving name, never to be chosen; no `drive_*` column
+ * is here at all, because nothing on this path may read or write one.
+ */
 export interface MergeWorkspaceClient {
   id: string;
   name: string;
+  slug: string;
   status: string;
+  contactName: string | null;
+  email: string | null;
+  phone: string | null;
+  website: string | null;
+  notes: string | null;
   /** The client this one was merged into, when it is already a merge source. */
   mergedIntoId?: string;
 }
@@ -62,6 +82,15 @@ export interface ClientMergePlan {
    * what the merge would do, and a confirmation always applies to the merge that was shown.
    */
   aliases: ClientMergeAlias[];
+  /**
+   * Each choosable field with both records' current values and the value the survivor keeps.
+   * In the plan for the same reason the aliases are: the hash then covers every selected value
+   * *and* the two values it was selected between, so a contact detail edited on either client
+   * after the preview refuses the confirmation instead of being silently planned around.
+   */
+  fields: ClientMergeFieldPlan[];
+  /** The survivor's slug, derived from the name it keeps rather than chosen. */
+  slug: { current: string; next: string };
 }
 
 const party = (client: MergeWorkspaceClient) => ({
@@ -69,6 +98,32 @@ const party = (client: MergeWorkspaceClient) => ({
   name: client.name,
   status: client.status === 'ARCHIVED' ? ('ARCHIVED' as const) : ('ACTIVE' as const),
 });
+
+/**
+ * One field's outcome. A blank value on either side is a value like any other: it is offered,
+ * and it wins only when it is chosen. Nothing here looks at whether a value is filled in, which
+ * is what keeps `DESTINATION` the default for a blank destination beside a filled-in source.
+ */
+function resolveField(
+  field: ClientMergeField,
+  source: MergeWorkspaceClient,
+  destination: MergeWorkspaceClient,
+  selections: ClientMergeSelections,
+): ClientMergeFieldPlan {
+  const destinationValue = destination[field] ?? null;
+  const sourceValue = source[field] ?? null;
+  const selection = selections[field];
+  const choice = selection?.choice ?? 'DESTINATION';
+  const value =
+    choice === 'SOURCE'
+      ? sourceValue
+      : choice === 'CUSTOM'
+        ? (selection?.value ?? null)
+        : destinationValue;
+  if (field === 'name' && !value)
+    throw new ClientMergeError('The client you keep needs a name.', 400);
+  return { field, destination: destinationValue, source: sourceValue, choice, value };
+}
 
 /**
  * Validates the pair and describes the merge they would produce.
@@ -82,6 +137,7 @@ export function buildClientMergePlan(
   workspace: ClientMergeWorkspace,
   sourceId: string,
   destinationId: string,
+  selections: ClientMergeSelections = {},
 ): ClientMergePlan {
   if (sourceId === destinationId)
     throw new ClientMergeError('A client cannot be merged into itself.', 400);
@@ -101,6 +157,19 @@ export function buildClientMergePlan(
     );
   if (destination.status !== 'ACTIVE')
     throw new ClientMergeError('Choose an active destination client.', 409);
+  const fields = CLIENT_MERGE_FIELDS.map(({ key }) =>
+    resolveField(key, source, destination, selections),
+  );
+  /**
+   * The slug decision this card had to make, made here and nowhere else: the survivor's slug
+   * follows the name it ends up with. Keeping the destination's name keeps its slug untouched;
+   * any other surviving name rebuilds it from that name and the destination's own id, which is
+   * exactly what `PATCH /api/clients/:id` does when a client is renamed. A slug that contradicts
+   * the name it is derived from would be a state nothing else in the workspace can produce, and
+   * the slug addresses nothing — every route, link, and lookup goes by id — so rebuilding it
+   * changes no address anybody holds.
+   */
+  const survivingName = clientMergeFieldValues(fields).name ?? destination.name;
   return {
     source: party(source),
     destination: party(destination),
@@ -122,6 +191,14 @@ export function buildClientMergePlan(
         (a, b) =>
           a.namespace.localeCompare(b.namespace) || a.externalId.localeCompare(b.externalId),
       ),
+    fields,
+    slug: {
+      current: destination.slug,
+      next:
+        survivingName === destination.name
+          ? destination.slug
+          : buildClientSlug(survivingName, destination.id),
+    },
   };
 }
 
