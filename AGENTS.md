@@ -71,12 +71,12 @@
 - The Files module reads and nothing else. It browses a project only at its own Drive folder and the subfolders `drive_steps` recorded for it, matched by ID; any other folder ID is refused rather than fetched. Adding upload, download, move, rename, or delete means a new module beside `browse.ts` with its own confirmation flow, not a method on the browsing path — and it changes what `/files` promises, so the README and the user manual change in the same branch.
 - **Signal publishing media is a separate boundary from Files, and narrower than the media comments
   used to state.** This app stores no media files, serves no media bytes, and holds no media bytes at
-  rest. `server/drive/media.ts` is that boundary, and it is now half built: it **resolves** one
+  rest. `server/drive/media.ts` is that boundary: it **resolves** one
   user-supplied Drive link — parsed as a URL and host-checked before anything is looked up — to
-  canonical metadata and a version fingerprint, and reads no bytes at all. The byte path it will
-  gain is still the only one decided: streaming that same file straight to the provider's upload URL
+  canonical metadata and a version fingerprint without reading bytes. Its separate confirmed byte
+  path streams that same file straight to the provider's upload URL
   during a confirmed submit, update, or restore-and-resubmit, persisting nothing and never writing to
-  Drive. **That half is not built** — `docs/post-bridge-integrations-plan.md` C75 owns it. Neither
+  Drive. Neither
   half is available to Files, which keeps the rule above exactly as written: project-scoped browsing
   with no upload, download, move, rename, or delete, and no byte method on `browse.ts` or
   `shared/drive.ts`. The two capabilities are two interfaces on purpose — `DriveProvider` is the

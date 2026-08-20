@@ -60,6 +60,12 @@ describe('claimDisposition', () => {
     expect(said).toContain(claim.whenVerified);
     expect(said).toContain('preflight refusal, not a warning');
   });
+
+  it('permits only a reviewed fail-closed unverified disposition to override blocking text', () => {
+    const expiry = initialClaims().find((candidate) => candidate.id === 'media-expiry-lifecycle');
+    expect(claimDisposition(expiry!)).toBe(expiry?.whenUnverified);
+    expect(claimDisposition(expiry!)).toContain('documented but unverified');
+  });
 });
 
 describe('ClaimLedger', () => {

@@ -148,6 +148,13 @@ export interface SignalPublication {
    * refuses to turn that into a difference or into an agreement.
    */
   sentMedia?: string[];
+  /** Versioned source descriptors for publications written after Drive uploads landed. */
+  sentMediaSources?: {
+    version: 1;
+    items: import('./signal-media.ts').SignalPostMedia[];
+  };
+  /** Exact ephemeral provider ids used for this attempt, absent on URL-only and legacy rows. */
+  sentProviderMediaIds?: string[];
   error?: string;
   /** One row per provider account, in the order the plan resolved them. */
   targets: SignalPublicationTarget[];
@@ -490,6 +497,8 @@ export interface ProviderPostRecord {
   /** Null is the provider's "post instantly", which this app never sends. */
   scheduledInstant: string | null;
   mediaUrls: string[];
+  /** Uploaded-media identities where the provider still exposes them. */
+  mediaIds?: string[];
   accountIds: number[];
   /** The provider's own last-modified stamp, where it gives one. Part of the staleness token. */
   updatedAt?: string;
@@ -563,6 +572,8 @@ export const PROVIDER_DIFF_FIELD_ACTION: Record<ProviderDiffField, ProviderActio
 export interface ProviderFieldDiff {
   field: ProviderDiffField;
   changed: boolean;
+  /** False when the provider no longer exposes evidence that can be compared. */
+  comparisonAvailable?: false;
   /** Signal's value, rendered for a reader. */
   local: string;
   /** The provider's value, rendered the same way so the two lines compare. */

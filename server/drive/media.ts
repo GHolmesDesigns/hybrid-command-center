@@ -2,8 +2,12 @@ import type { Db } from '../db.ts';
 import { driveClients } from './service.ts';
 import {
   SIGNAL_DRIVE_MAX_BYTES,
+  SIGNAL_DRIVE_IMAGE_MAX_BYTES,
   SIGNAL_DRIVE_MIME_TYPES,
+  SIGNAL_DRIVE_VIDEO_MAX_DURATION_MS,
+  SIGNAL_DRIVE_VIDEO_MIN_DURATION_MS,
   isSignalDriveMimeType,
+  signalMediaFingerprint,
   signalPostMediaIssue,
   type SignalPostMedia,
 } from '../../shared/signal-media.ts';
@@ -60,6 +64,14 @@ export interface DriveMediaFile {
   trashed: boolean;
   /** Set only on `application/vnd.google-apps.shortcut`. */
   shortcutTargetId: string | null;
+  /** Reliable Drive video metadata, absent for non-video files or where Drive cannot inspect it. */
+  videoDurationMillis: string | null;
+  videoWidth: number | null;
+  videoHeight: number | null;
+}
+
+export interface DriveMediaStream {
+  body: AsyncIterable<Uint8Array>;
 }
 
 /**
@@ -72,11 +84,16 @@ export interface DriveMediaProvider {
   readonly connected: boolean;
   /** Canonical metadata for one file id, or a thrown error carrying Drive's own words. */
   getFile(fileId: string): Promise<DriveMediaFile>;
+  /** Opens bytes for the already revalidated id. This method is never exposed through Files. */
+  openFile(fileId: string, signal?: AbortSignal): Promise<DriveMediaStream>;
 }
 
 export class DisconnectedDriveMediaProvider implements DriveMediaProvider {
   readonly connected = false;
   async getFile(): Promise<DriveMediaFile> {
+    throw new Error('Google Drive is not connected.');
+  }
+  async openFile(): Promise<DriveMediaStream> {
     throw new Error('Google Drive is not connected.');
   }
 }
@@ -208,6 +225,11 @@ export async function resolveDriveMedia(input: {
     file = target;
   }
 
+  return descriptorFromFile(file, now());
+}
+
+/** Canonical descriptor from Drive's current metadata. Shared by paste and submit revalidation. */
+function descriptorFromFile(file: DriveMediaFile, verifiedAt: string): SignalPostMedia {
   const name = file.name?.trim() || 'that file';
   if (file.trashed)
     throw new DriveMediaError(`${name} is in the Drive trash. Restore it or link another file.`);
@@ -235,7 +257,7 @@ export async function resolveDriveMedia(input: {
     driveVersion: file.version?.trim() || null,
     driveModifiedAt: file.modifiedTime?.trim() || null,
     driveChecksum: file.sha256Checksum?.trim() || file.md5Checksum?.trim() || null,
-    driveVerifiedAt: now(),
+    driveVerifiedAt: verifiedAt,
   };
   if (!media.driveVersion && !media.driveModifiedAt && !media.driveChecksum)
     throw new DriveMediaError(
@@ -246,6 +268,110 @@ export async function resolveDriveMedia(input: {
   const issue = signalPostMediaIssue(media);
   if (issue) throw new DriveMediaError(issue);
   return media;
+}
+
+const SUPPORTED_VIDEO_RATIOS = [9 / 16, 16 / 9, 1, 4 / 3] as const;
+
+/** Limits Drive itself exposes as reliable metadata; no byte sniffing or buffering is used. */
+function validateCurrentLimits(file: DriveMediaFile, media: SignalPostMedia): void {
+  const name = media.driveName ?? 'Drive file';
+  const size = media.sizeBytes as number;
+  if (media.mimeType?.startsWith('image/') && size > SIGNAL_DRIVE_IMAGE_MAX_BYTES)
+    throw new DriveMediaError(
+      `${name} is ${formatFileSize(size)}; Post Bridge accepts images up to ${formatFileSize(SIGNAL_DRIVE_IMAGE_MAX_BYTES)}.`,
+    );
+  if (!media.mimeType?.startsWith('video/')) return;
+  const duration = Number(file.videoDurationMillis);
+  if (!Number.isFinite(duration) || duration <= 0)
+    throw new DriveMediaError(
+      `Drive reports no reliable video duration for ${name}, so the 3–300 second provider limit cannot be checked. Export the video again or use a public URL.`,
+    );
+  if (
+    duration < SIGNAL_DRIVE_VIDEO_MIN_DURATION_MS ||
+    duration > SIGNAL_DRIVE_VIDEO_MAX_DURATION_MS
+  )
+    throw new DriveMediaError(`${name} must be between 3 seconds and 5 minutes long.`);
+  if (!file.videoWidth || !file.videoHeight)
+    throw new DriveMediaError(
+      `Drive reports no reliable dimensions for ${name}, so the provider aspect-ratio limit cannot be checked.`,
+    );
+  const ratio = file.videoWidth / file.videoHeight;
+  if (!SUPPORTED_VIDEO_RATIOS.some((supported) => Math.abs(ratio - supported) < 0.01))
+    throw new DriveMediaError(
+      `${name} has an unsupported ${file.videoWidth}:${file.videoHeight} aspect ratio. Use 9:16, 16:9, 1:1, or 4:3.`,
+    );
+}
+
+/**
+ * Revalidates the complete C74 fingerprint before opening bytes, then exposes a counted stream.
+ * A short body and a body that exceeds Drive's declaration are both failures; the latter aborts
+ * the upstream request immediately.
+ */
+export async function openDriveMedia(input: {
+  stored: SignalPostMedia;
+  provider: DriveMediaProvider;
+  signal?: AbortSignal;
+}): Promise<{
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+  body: AsyncIterable<Uint8Array>;
+}> {
+  if (input.stored.source !== 'DRIVE' || !input.stored.driveFileId)
+    throw new DriveMediaError('Only a version-bound Drive reference can be opened.');
+  if (!input.provider.connected)
+    throw new DriveMediaError('Google Drive is not connected. Connect it and recheck this file.');
+  const currentFile = await read(input.provider, input.stored.driveFileId);
+  const current = descriptorFromFile(
+    currentFile,
+    input.stored.driveVerifiedAt ?? new Date().toISOString(),
+  );
+  if (
+    JSON.stringify(signalMediaFingerprint(current)) !==
+    JSON.stringify(signalMediaFingerprint(input.stored))
+  )
+    throw new DriveMediaError(
+      `${input.stored.driveName ?? 'The Drive file'} changed after the publishing preview. Recheck the Drive file and preview again.`,
+    );
+  validateCurrentLimits(currentFile, current);
+
+  const controller = new AbortController();
+  const signal = input.signal
+    ? AbortSignal.any([input.signal, controller.signal])
+    : controller.signal;
+  const opened = await input.provider.openFile(input.stored.driveFileId, signal);
+  const expected = current.sizeBytes as number;
+  const counted = async function* (): AsyncGenerator<Uint8Array> {
+    let readBytes = 0;
+    const iterator = opened.body[Symbol.asyncIterator]();
+    try {
+      while (true) {
+        const next = await iterator.next();
+        if (next.done) break;
+        const chunk = next.value;
+        readBytes += chunk.byteLength;
+        if (readBytes > expected) {
+          controller.abort();
+          throw new DriveMediaError(
+            `Drive sent more bytes for ${current.driveName ?? 'the file'} than the ${expected} bytes it declared.`,
+          );
+        }
+        yield chunk;
+      }
+      if (readBytes !== expected)
+        throw new DriveMediaError(
+          `Drive ended ${current.driveName ?? 'the file'} after ${readBytes} of ${expected} bytes.`,
+        );
+    } finally {
+      await iterator.return?.();
+    }
+  };
+  return {
+    name: current.driveName as string,
+    mimeType: current.mimeType as string,
+    sizeBytes: expected,
+    body: counted(),
+  };
 }
 
 /** Drive's own failure, kept as Drive's words and bounded so it cannot flood a response. */

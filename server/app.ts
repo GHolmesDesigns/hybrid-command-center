@@ -493,6 +493,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     publishProvider,
     options.publishTimezone ?? config.publish.timezone,
     clock,
+    driveMedia(),
   );
   // Beside the publisher and not inside it. It holds its own provider, which has no way to submit,
   // update, or cancel anything, and it never touches `SignalProvider` at all.

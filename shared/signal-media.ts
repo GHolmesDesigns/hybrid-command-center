@@ -18,8 +18,8 @@ import type { SignalMediaKind } from './signal.ts';
  * `url` is non-null for both kinds, which is what keeps every existing display and selection path
  * working: a URL row stores the public URL, and a Drive row stores Drive's canonical
  * `webViewLink`. **A Drive row's `url` is a page for a person to open, never provider-fetchable
- * media.** C75 is the only card that will ever read a Drive row's bytes, and it will do so from
- * `driveFileId` after revalidating the fingerprint below.
+ * media.** The confirmed publishing path is the only path that reads a Drive row's bytes, and it
+ * does so from `driveFileId` only after revalidating the fingerprint below.
  */
 
 export const SIGNAL_MEDIA_SOURCES = ['URL', 'DRIVE'] as const;
@@ -58,9 +58,8 @@ export interface SignalPostMedia {
  * The MIME types a Drive reference may carry.
  *
  * Post Bridge's `create-upload-url` declares a closed enum of five
- * (`docs/post-bridge-api-surface.md` §5), and C73 has **not** verified that the five are the whole
- * accepted set. Until it does, this is the fail-closed value: a file outside the five is refused
- * here rather than accepted now and refused by the provider at submit, when the post is due.
+ * (`docs/post-bridge-api-surface.md` §5), and the live C73 probe verified that an outside value is
+ * refused. A file outside the five is therefore rejected before Drive content can be opened.
  */
 export const SIGNAL_DRIVE_MIME_TYPES = [
   'image/png',
@@ -77,12 +76,17 @@ export const isSignalDriveMimeType = (value: string): value is SignalDriveMimeTy
 /**
  * The largest Drive file this app will bind a reference to.
  *
- * **Fail-closed, pending C73.** The provider documents no per-file limit anywhere and the live
- * probe has not measured one (`docs/post-bridge-api-surface.md` §14, question 2), so this is a
- * bound this app chose rather than one the provider stated. Raise it when C73 records a measured
- * figure; do not raise it to make one particular file work.
+ * The live C73 probe measured a 500 MB upload-reservation ceiling. The narrower image ceiling,
+ * total ceiling, item count, and video metadata bounds below come from current provider support
+ * material and remain independently enforced before Drive content can be opened.
  */
-export const SIGNAL_DRIVE_MAX_BYTES = 100 * 1024 * 1024;
+export const SIGNAL_DRIVE_MAX_BYTES = 500 * 1024 * 1024;
+/** Provider-wide bounds recorded by C73 from the live API and current support material. */
+export const SIGNAL_DRIVE_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
+export const SIGNAL_DRIVE_TOTAL_MAX_BYTES = 500 * 1024 * 1024;
+export const SIGNAL_DRIVE_IMAGE_MAX_ITEMS = 35;
+export const SIGNAL_DRIVE_VIDEO_MIN_DURATION_MS = 3_000;
+export const SIGNAL_DRIVE_VIDEO_MAX_DURATION_MS = 300_000;
 
 /**
  * The kind of a Drive reference, from the MIME type Drive reported and this app stored.

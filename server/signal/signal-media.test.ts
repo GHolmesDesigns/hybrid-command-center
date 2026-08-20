@@ -342,17 +342,15 @@ describe('what a preview reads, and what it does not', () => {
     expect(drive.calls).toHaveLength(before);
   });
 
-  /**
-   * The channel is happy and the plan still is not, which is the honest pair of answers: the media
-   * fits TikTok, and this app cannot hand the provider a Drive viewer page. Uploading the bytes is
-   * C75, so until then the plan refuses rather than sending an address nobody can fetch.
-   */
-  it('refuses to send a Drive reference, and builds no request while it carries one', async () => {
+  it('plans provider ids for Drive media without handing over the viewer page', async () => {
     const created = await withDrive(FILE_ID, { channels: ['tt'], date: '2027-08-14' });
+    const before = drive.calls.length;
     const plan = buildPublishPlan(created, connected, 'America/New_York', new Date('2027-01-01'));
 
-    expect(plan.refusals).toContainEqual(expect.stringContaining('cannot send'));
-    expect(plan.request).toBeUndefined();
+    expect(plan.refusals).toEqual([]);
+    expect(plan.request).toMatchObject({ mediaIds: [] });
+    expect(plan.request).not.toHaveProperty('mediaUrls');
+    expect(drive.calls).toHaveLength(before);
   });
 
   it('changes the plan hash when any version-fingerprint field changes', async () => {

@@ -6,6 +6,7 @@ import { resetE2eDatabase } from './database.ts';
 import { handleE2eStopRequest } from './endpoints.ts';
 import { stopWhenTheRunEnds } from './shutdown.ts';
 import { MockAnalyticsProvider, MockPublishProvider } from '../server/publish/mock-provider.ts';
+import { MockDriveMediaProvider } from '../server/drive/mock-provider.ts';
 
 const databasePath = resetE2eDatabase();
 console.log(`Reset E2E database at ${databasePath}`);
@@ -15,6 +16,12 @@ console.log(`Reset E2E database at ${databasePath}`);
 // to close; the production static-file branch in that module is not wanted anyway, since Vite
 // serves the client during E2E.
 const db = getDb();
+const driveMedia = new MockDriveMediaProvider();
+driveMedia.seed('1AbCdEfGhIjKlMnOpQrStUvWxYz012345', {
+  name: 'e2e-drive-image.png',
+  size: '4',
+});
+driveMedia.seedBody('1AbCdEfGhIjKlMnOpQrStUvWxYz012345', new Uint8Array([137, 80, 78, 71]));
 
 // One account per platform, which is what target resolution requires and what makes a
 // per-account override deliverable as its platform's configuration.
@@ -65,6 +72,7 @@ const app = createApp(db, {
   publishTimezone: 'America/New_York',
   publish,
   analytics,
+  driveMedia: () => driveMedia,
 });
 const server: Server = app.listen(config.port, config.host, () =>
   console.log(`Command Center E2E API ready at http://${config.host}:${config.port}`),

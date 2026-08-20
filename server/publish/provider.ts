@@ -34,19 +34,35 @@ export interface PublishPlatformConfiguration {
   story?: true;
 }
 
-export interface PublishRequest {
+interface PublishRequestBase {
   caption: string;
-  /**
-   * One array for the whole submission — the provider's shape, not a choice made here. A
-   * per-platform media selection is delivered through this array, so every target has to agree on
-   * it and `plan.ts` refuses when they do not.
-   */
-  mediaUrls: string[];
   scheduledInstant: string;
   timezone: string;
   targets: { accountId: number; platform: string }[];
   /** Omitted entirely when no platform is tailored. */
   platformConfigurations?: PublishPlatformConfiguration[];
+}
+
+/**
+ * One provider submission carries public URLs or freshly uploaded provider ids, never both.
+ *
+ * Keeping the alternatives in the type prevents the adapter from accidentally serialising both
+ * keys and relying on the provider's current "media wins" behaviour. Drive ids are ephemeral and
+ * are produced immediately before the request; they are not Signal media references.
+ */
+export type PublishRequest = PublishRequestBase &
+  ({ mediaUrls: string[]; mediaIds?: never } | { mediaIds: string[]; mediaUrls?: never });
+
+/** A byte source with no Drive vocabulary in it. */
+export interface PublishMediaSource {
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+  body: AsyncIterable<Uint8Array>;
+}
+
+export interface PublishMediaUpload {
+  mediaId: string;
 }
 
 export interface PublishSubmission {
@@ -98,6 +114,17 @@ export class PublishProviderError extends Error {
   }
 }
 
+/** Upload failed after the provider had already reserved an ephemeral asset id. */
+export class PublishMediaUploadError extends PublishProviderError {
+  readonly providerMediaId: string;
+  constructor(message: string, providerMediaId: string, ambiguous = false, options?: ErrorOptions) {
+    super(message, ambiguous);
+    this.name = 'PublishMediaUploadError';
+    this.providerMediaId = providerMediaId;
+    if (options?.cause !== undefined) this.cause = options.cause;
+  }
+}
+
 /**
  * How long to treat the connection as rate-limited when the provider named no delay.
  *
@@ -110,6 +137,8 @@ export const PUBLISH_RATE_LIMIT_FALLBACK_SECONDS = 60;
 export interface PublishProvider {
   readonly available: boolean;
   listTargets(): Promise<PublishTarget[]>;
+  /** Creates one ephemeral provider asset. It never retries an ambiguous body transfer. */
+  uploadMedia(source: PublishMediaSource, signal?: AbortSignal): Promise<PublishMediaUpload>;
   submit(request: PublishRequest): Promise<PublishSubmission>;
   check(providerPostId: string): Promise<PublishSubmission>;
   /**
@@ -143,6 +172,14 @@ export class UnavailablePublishProvider implements PublishProvider {
     throw new Error(this.reason);
   }
   async listTargets(): Promise<PublishTarget[]> {
+    return this.fail();
+  }
+  async uploadMedia(
+    _source: PublishMediaSource,
+    _signal?: AbortSignal,
+  ): Promise<PublishMediaUpload> {
+    void _source;
+    void _signal;
     return this.fail();
   }
   async submit(_request: PublishRequest): Promise<PublishSubmission> {

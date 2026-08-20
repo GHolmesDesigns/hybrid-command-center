@@ -27,6 +27,8 @@ export interface ProbeClaimDefinition {
   dependents: readonly string[];
   whenVerified: string;
   whenNegative: string;
+  /** Reviewed fail-closed disposition where a card can proceed without treating the claim as fact. */
+  whenUnverified?: string;
 }
 
 export interface ProbeClaimResult extends ProbeClaimDefinition {
@@ -146,6 +148,8 @@ export const PROBE_CLAIMS: readonly ProbeClaimDefinition[] = [
     whenVerified: 'C75 may state the expiry as fact rather than as vendor prose.',
     whenNegative:
       'The documented expiry did not happen; C75 states the observed behaviour and treats a leftover asset as durable until something deletes it.',
+    whenUnverified:
+      'C75 may build without depending on this timing only by labelling it documented but unverified and recording every landed asset; the timing itself remains unavailable as a correctness guarantee.',
   },
   {
     id: 'media-limits',
@@ -329,6 +333,8 @@ export const PROBE_CLAIMS: readonly ProbeClaimDefinition[] = [
       '`PUBLISH_RATE_LIMIT_FALLBACK_SECONDS` and the §9 rule are checked against the observed headers.',
     whenNegative:
       'A `429` arrived carrying nothing usable, so the fallback stays the authority and §9 is unchanged.',
+    whenUnverified:
+      'C75 keeps the existing conservative fallback and never retries an ambiguous signed transfer; C80 stays blocked on its own rate-limit contract.',
   },
 ];
 
@@ -357,6 +363,7 @@ export function claimDisposition(claim: ProbeClaimResult): string {
     case 'negative':
       return claim.whenNegative;
     case 'still-unverified':
+      if (claim.whenUnverified) return claim.whenUnverified;
       return `${dependents} ${claim.dependents.length > 1 ? 'stay' : 'stays'} blocked. Today's fail-closed value is unchanged.`;
   }
 }

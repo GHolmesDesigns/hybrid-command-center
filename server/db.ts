@@ -208,6 +208,9 @@ CREATE TABLE IF NOT EXISTS signal_publications (
   -- evidence for, so the unknown stays unknown and the comparison says so. Every row written from
   -- now on carries a value.
   sent_media TEXT, sent_configurations TEXT,
+  -- Versioned source evidence and the ephemeral provider ids used for this exact attempt. NULL on
+  -- legacy and URL-only rows; neither column stores bytes or a reusable provider reference.
+  sent_media_sources TEXT, sent_provider_media_ids TEXT,
   checked_at TEXT, check_attempts INTEGER NOT NULL DEFAULT 0,
   -- What the last provider check concluded, and what the row held before it. Written by a check
   -- and by nothing else: every other state write leaves them alone, which is deliberate, because

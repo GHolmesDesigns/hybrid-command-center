@@ -92,6 +92,10 @@ export class MockDriveMediaProvider implements DriveMediaProvider {
   calls: string[] = [];
   /** Thrown by `getFile` when set, standing in for a Drive call that failed. */
   error?: string;
+  openError?: string;
+  /** Byte chunks by file id and every byte-open call, separate from metadata reads. */
+  bodies = new Map<string, Uint8Array[]>();
+  openCalls: { fileId: string; signal?: AbortSignal }[] = [];
 
   async getFile(fileId: string): Promise<DriveMediaFile> {
     this.calls.push(fileId);
@@ -99,6 +103,21 @@ export class MockDriveMediaProvider implements DriveMediaProvider {
     const file = this.files.get(fileId);
     if (!file) throw new Error(`File not found: ${fileId}`);
     return file;
+  }
+
+  async openFile(fileId: string, signal?: AbortSignal) {
+    this.openCalls.push({ fileId, ...(signal ? { signal } : {}) });
+    if (this.openError) throw new Error(this.openError);
+    const chunks = this.bodies.get(fileId);
+    if (!chunks) throw new Error(`No byte stream seeded for: ${fileId}`);
+    return {
+      body: (async function* () {
+        for (const chunk of chunks) {
+          if (signal?.aborted) throw signal.reason;
+          yield chunk;
+        }
+      })(),
+    };
   }
 
   /** Seeds one file, defaulting to a small PNG that every rule accepts. */
@@ -115,10 +134,20 @@ export class MockDriveMediaProvider implements DriveMediaProvider {
       sha256Checksum: null,
       trashed: false,
       shortcutTargetId: null,
+      videoDurationMillis: null,
+      videoWidth: null,
+      videoHeight: null,
       ...overrides,
     };
     this.files.set(id, file);
+    const declared = Number(file.size);
+    if (!this.bodies.has(id) && Number.isSafeInteger(declared) && declared <= 1024 * 1024)
+      this.bodies.set(id, [new Uint8Array(declared)]);
     return file;
+  }
+
+  seedBody(id: string, ...chunks: Uint8Array[]) {
+    this.bodies.set(id, chunks);
   }
 }
 

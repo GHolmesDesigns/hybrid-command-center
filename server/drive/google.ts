@@ -132,7 +132,7 @@ export class GoogleDriveMediaProvider implements DriveMediaProvider {
     const result = await this.drive.files.get({
       fileId,
       fields:
-        'id,name,mimeType,size,webViewLink,modifiedTime,version,md5Checksum,sha256Checksum,trashed,shortcutDetails(targetId,targetMimeType)',
+        'id,name,mimeType,size,webViewLink,modifiedTime,version,md5Checksum,sha256Checksum,trashed,shortcutDetails(targetId,targetMimeType),videoMediaMetadata(durationMillis,width,height)',
       // A file on a shared drive is still a file the connected account may have selected.
       supportsAllDrives: true,
     });
@@ -150,7 +150,21 @@ export class GoogleDriveMediaProvider implements DriveMediaProvider {
       sha256Checksum: file.sha256Checksum ?? null,
       trashed: file.trashed === true,
       shortcutTargetId: file.shortcutDetails?.targetId ?? null,
+      videoDurationMillis: file.videoMediaMetadata?.durationMillis ?? null,
+      videoWidth: file.videoMediaMetadata?.width ?? null,
+      videoHeight: file.videoMediaMetadata?.height ?? null,
     };
+  }
+
+  async openFile(fileId: string, signal?: AbortSignal) {
+    const result = await this.drive.files.get(
+      { fileId, alt: 'media', supportsAllDrives: true },
+      { responseType: 'stream', signal },
+    );
+    const body = result.data as unknown as AsyncIterable<Uint8Array>;
+    if (!body || typeof body[Symbol.asyncIterator] !== 'function')
+      throw new Error('Drive did not return a readable byte stream.');
+    return { body };
   }
 }
 

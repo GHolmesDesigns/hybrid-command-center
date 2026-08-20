@@ -30,6 +30,7 @@ import {
 } from '../../shared/publish.ts';
 import { planHash } from './plan.ts';
 import type { PublishRequest } from './provider.ts';
+import type { SignalPostMedia } from '../../shared/signal-media.ts';
 
 /**
  * Whether a fresh submission may replace what the provider is holding.
@@ -53,8 +54,10 @@ const renderInstant = (instant: string | null | undefined) => instant ?? 'Not sc
 /** One field rendered from both sides, and whether the two sides differ. */
 function diffFor(
   field: ProviderDiffField,
-  request: Pick<PublishRequest, 'caption' | 'mediaUrls' | 'scheduledInstant' | 'targets'>,
+  request: PublishRequest,
   record: ProviderPostRecord,
+  publication: SignalPublication,
+  plannedSources: readonly SignalPostMedia[] = [],
 ): ProviderFieldDiff {
   switch (field) {
     case 'caption':
@@ -72,10 +75,38 @@ function diffFor(
         remote: renderInstant(record.scheduledInstant),
       };
     case 'media':
+      if (request.mediaIds !== undefined) {
+        const sourceChanged =
+          publication.sentMediaSources !== undefined &&
+          JSON.stringify(plannedSources) !== JSON.stringify(publication.sentMediaSources.items);
+        if (sourceChanged)
+          return {
+            field,
+            changed: true,
+            local: 'Signal’s current Drive files',
+            remote: 'The Drive files used for this provider post',
+          };
+        if (record.mediaIds === undefined)
+          return {
+            field,
+            changed: false,
+            comparisonAvailable: false,
+            local: 'Uploaded provider media',
+            remote: 'Media comparison unavailable',
+          };
+        return {
+          field,
+          changed:
+            JSON.stringify(publication.sentProviderMediaIds ?? []) !==
+            JSON.stringify(record.mediaIds),
+          local: renderList(publication.sentProviderMediaIds ?? []),
+          remote: renderList(record.mediaIds),
+        };
+      }
       return {
         field,
-        changed: JSON.stringify(request.mediaUrls) !== JSON.stringify(record.mediaUrls),
-        local: renderList(request.mediaUrls),
+        changed: JSON.stringify(request.mediaUrls ?? []) !== JSON.stringify(record.mediaUrls),
+        local: renderList(request.mediaUrls ?? []),
         remote: renderList(record.mediaUrls),
       };
     case 'accounts': {
@@ -96,7 +127,7 @@ function diffFor(
 export interface ProviderReconcileInput {
   publication: SignalPublication;
   /** The plan the post produces now. `request` is absent whenever the plan refuses anything. */
-  plan: PublishPreview & { request?: PublishRequest };
+  plan: PublishPreview & { request?: PublishRequest; mediaSources?: SignalPostMedia[] };
   /** What the provider says it holds. Absent when the read failed. */
   record?: ProviderPostRecord;
   /** Why the record could not be read, already redacted. Present only when `record` is absent. */
@@ -145,7 +176,11 @@ export function buildProviderReconcile(input: ProviderReconcileInput): ProviderR
     ? []
     : [...plan.refusals, ...plan.channels.flatMap((report) => report.refusals)];
   const request = plan.request;
-  const diffs = request ? PROVIDER_DIFF_FIELDS.map((field) => diffFor(field, request, record)) : [];
+  const diffs = request
+    ? PROVIDER_DIFF_FIELDS.map((field) =>
+        diffFor(field, request, record, publication, plan.mediaSources),
+      )
+    : [];
   const changed = diffs.filter((diff) => diff.changed).map((diff) => diff.field);
   const contentChanged = changed.some((field) => field !== 'schedule');
   const scheduleChanged = changed.includes('schedule');
@@ -159,15 +194,25 @@ export function buildProviderReconcile(input: ProviderReconcileInput): ProviderR
    * which would silently overwrite their edit. So the disagreement is reported, and rescheduling
    * fails closed until the user chooses which side wins.
    */
+  const mediaComparisonUnavailable =
+    publication.sentProviderMediaIds !== undefined && record.mediaIds === undefined;
+  const remoteMediaEdited = publication.sentProviderMediaIds
+    ? record.mediaIds !== undefined &&
+      JSON.stringify(record.mediaIds) !== JSON.stringify(publication.sentProviderMediaIds)
+    : publication.sentMedia !== undefined &&
+      JSON.stringify(record.mediaUrls) !== JSON.stringify(publication.sentMedia);
   const remoteEdited =
     record.caption !== publication.sentCaption ||
-    (publication.sentMedia !== undefined &&
-      JSON.stringify(record.mediaUrls) !== JSON.stringify(publication.sentMedia)) ||
+    remoteMediaEdited ||
     JSON.stringify([...record.accountIds].sort((a, b) => a - b)) !==
       JSON.stringify(publication.targets.map((target) => target.accountId).sort((a, b) => a - b));
   if (remoteEdited)
     warnings.push(
       'The provider is holding content this app did not send, so it was changed in Post Bridge directly. Updating the content replaces theirs with Signal.',
+    );
+  if (mediaComparisonUnavailable)
+    warnings.push(
+      'Media comparison unavailable: the provider no longer exposes ids for the uploaded assets this app sent.',
     );
   /**
    * A publication from before the media snapshot existed.
@@ -228,6 +273,10 @@ export function buildProviderReconcile(input: ProviderReconcileInput): ProviderR
         if (action === 'UPDATE_SCHEDULE' && snapshotIncomplete)
           reasons.push(
             'This submission predates the media snapshot, so this app cannot tell whether the provider still holds what it sent. Update the content from Signal, or cancel and resubmit, instead of moving the instant alone.',
+          );
+        if (action === 'UPDATE_SCHEDULE' && mediaComparisonUnavailable)
+          reasons.push(
+            'Media comparison unavailable, so this app cannot prove a schedule-only update would preserve the provider content. Update the content from Signal, or cancel and resubmit instead.',
           );
         break;
       }

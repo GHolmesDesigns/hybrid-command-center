@@ -1,10 +1,12 @@
 import type {
   ProviderPostRecord,
   PublishProvider,
+  PublishMediaSource,
   PublishRequest,
   PublishSubmission,
   PublishTarget,
 } from './provider.ts';
+import { PublishMediaUploadError } from './provider.ts';
 import type {
   AnalyticsProvider,
   ProviderAnalyticsDay,
@@ -32,6 +34,10 @@ export class MockPublishProvider implements PublishProvider {
   readonly updates: { providerPostId: string; request: PublishRequest }[] = [];
   /** Each `cancel`, so a test can prove a refused action reached no provider. */
   readonly cancels: string[] = [];
+  readonly uploads: { name: string; mimeType: string; sizeBytes: number; bytesRead: number }[] = [];
+  /** Fail this one-based upload call, optionally after consuming the source body. */
+  uploadFailureAt?: number;
+  uploadFailure?: Error;
   targets: PublishTarget[];
   result: PublishSubmission = { providerPostId: 'mock-publication', state: 'SUBMITTED' };
   /**
@@ -70,6 +76,23 @@ export class MockPublishProvider implements PublishProvider {
   async listTargets() {
     return this.targets;
   }
+  async uploadMedia(source: PublishMediaSource) {
+    const call = this.uploads.length + 1;
+    let bytesRead = 0;
+    for await (const chunk of source.body) bytesRead += chunk.byteLength;
+    this.uploads.push({
+      name: source.name,
+      mimeType: source.mimeType,
+      sizeBytes: source.sizeBytes,
+      bytesRead,
+    });
+    if (this.uploadFailureAt === call)
+      throw (
+        this.uploadFailure ??
+        new PublishMediaUploadError(`Mock upload ${call} failed.`, `mock-media-${call}`)
+      );
+    return { mediaId: `mock-media-${call}` };
+  }
   async submit(request: PublishRequest) {
     this.submissions.push(request);
     if (this.failure) throw this.failure;
@@ -80,7 +103,8 @@ export class MockPublishProvider implements PublishProvider {
       state: 'SCHEDULED',
       caption: request.caption,
       scheduledInstant: request.scheduledInstant,
-      mediaUrls: [...request.mediaUrls],
+      mediaUrls: request.mediaUrls !== undefined ? [...request.mediaUrls] : [],
+      ...(request.mediaIds !== undefined ? { mediaIds: [...request.mediaIds] } : {}),
       accountIds: request.targets.map((target) => target.accountId),
     };
     return this.result;
@@ -102,7 +126,10 @@ export class MockPublishProvider implements PublishProvider {
       providerPostId,
       caption: request.caption,
       scheduledInstant: request.scheduledInstant,
-      mediaUrls: [...request.mediaUrls],
+      mediaUrls: request.mediaUrls !== undefined ? [...request.mediaUrls] : [],
+      ...(request.mediaIds !== undefined
+        ? { mediaIds: [...request.mediaIds] }
+        : { mediaIds: undefined }),
       accountIds: request.targets.map((target) => target.accountId),
     };
     return { providerPostId, state: 'SUBMITTED' as const };

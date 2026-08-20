@@ -5,6 +5,7 @@ import {
   DisconnectedDriveMediaProvider,
   DriveMediaError,
   driveMediaProvider,
+  openDriveMedia,
   parseDriveMediaLink,
   resolveDriveMedia,
   type DriveMediaProvider,
@@ -263,5 +264,120 @@ describe('the capability boundary', () => {
       'getFolder',
       'listFiles',
     ]);
+  });
+});
+
+describe('the C75 byte boundary', () => {
+  const consume = async (body: AsyncIterable<Uint8Array>) => {
+    let bytes = 0;
+    for await (const chunk of body) bytes += chunk.byteLength;
+    return bytes;
+  };
+
+  it('revalidates before opening and streams exactly the declared number of bytes', async () => {
+    const provider = new MockDriveMediaProvider();
+    provider.seed(FILE_ID, { size: '4' });
+    provider.seedBody(FILE_ID, new Uint8Array([1, 2]), new Uint8Array([3, 4]));
+    const stored = await resolve(`https://drive.google.com/file/d/${FILE_ID}/view`, provider);
+    provider.calls.length = 0;
+
+    const source = await openDriveMedia({ stored, provider });
+    expect(provider.calls).toEqual([FILE_ID]);
+    expect(provider.openCalls).toHaveLength(1);
+    await expect(consume(source.body)).resolves.toBe(4);
+  });
+
+  it('refuses a changed fingerprint before opening any bytes', async () => {
+    const provider = new MockDriveMediaProvider();
+    provider.seed(FILE_ID, { size: '4' });
+    const stored = await resolve(`https://drive.google.com/file/d/${FILE_ID}/view`, provider);
+    provider.seed(FILE_ID, { size: '4', version: '8' });
+
+    await expect(openDriveMedia({ stored, provider })).rejects.toThrow(/changed after/);
+    expect(provider.openCalls).toEqual([]);
+  });
+
+  it('fails closed on both short and excess Drive bodies', async () => {
+    const provider = new MockDriveMediaProvider();
+    provider.seed(FILE_ID, { size: '4' });
+    const stored = await resolve(`https://drive.google.com/file/d/${FILE_ID}/view`, provider);
+
+    provider.seedBody(FILE_ID, new Uint8Array(3));
+    await expect(consume((await openDriveMedia({ stored, provider })).body)).rejects.toThrow(
+      /after 3 of 4 bytes/,
+    );
+    provider.seedBody(FILE_ID, new Uint8Array(5));
+    await expect(consume((await openDriveMedia({ stored, provider })).body)).rejects.toThrow(
+      /more bytes/,
+    );
+    expect(provider.openCalls.at(-1)?.signal?.aborted).toBe(true);
+  });
+
+  it('uses Drive video metadata to enforce duration and aspect before download', async () => {
+    const provider = new MockDriveMediaProvider();
+    provider.seed(FILE_ID, {
+      name: 'clip.mp4',
+      mimeType: 'video/mp4',
+      size: '4',
+      videoDurationMillis: '120000',
+      videoWidth: 1920,
+      videoHeight: 1080,
+    });
+    provider.seedBody(FILE_ID, new Uint8Array(4));
+    const stored = await resolve(`https://drive.google.com/file/d/${FILE_ID}/view`, provider);
+    await expect(openDriveMedia({ stored, provider })).resolves.toMatchObject({
+      name: 'clip.mp4',
+      mimeType: 'video/mp4',
+    });
+
+    provider.seed(FILE_ID, {
+      name: 'clip.mp4',
+      mimeType: 'video/mp4',
+      size: '4',
+      videoDurationMillis: null,
+      videoWidth: 1920,
+      videoHeight: 1080,
+    });
+    const missing = await resolve(`https://drive.google.com/file/d/${FILE_ID}/view`, provider);
+    await expect(openDriveMedia({ stored: missing, provider })).rejects.toThrow(
+      /no reliable video duration/,
+    );
+
+    provider.seed(FILE_ID, {
+      name: 'clip.mp4',
+      mimeType: 'video/mp4',
+      size: '4',
+      videoDurationMillis: '301000',
+      videoWidth: 1920,
+      videoHeight: 1080,
+    });
+    const tooLong = await resolve(`https://drive.google.com/file/d/${FILE_ID}/view`, provider);
+    await expect(openDriveMedia({ stored: tooLong, provider })).rejects.toThrow(
+      /between 3 seconds/,
+    );
+
+    provider.seed(FILE_ID, {
+      name: 'clip.mp4',
+      mimeType: 'video/mp4',
+      size: '4',
+      videoDurationMillis: '120000',
+      videoWidth: 1000,
+      videoHeight: 700,
+    });
+    const badRatio = await resolve(`https://drive.google.com/file/d/${FILE_ID}/view`, provider);
+    await expect(openDriveMedia({ stored: badRatio, provider })).rejects.toThrow(
+      /unsupported 1000:700 aspect ratio/,
+    );
+  });
+
+  it('refuses an image above the provider image limit before opening Drive bytes', async () => {
+    const provider = new MockDriveMediaProvider();
+    provider.seed(FILE_ID, { name: 'large.png', size: String(9 * 1024 * 1024) });
+    const stored = await resolve(`https://drive.google.com/file/d/${FILE_ID}/view`, provider);
+
+    await expect(openDriveMedia({ stored, provider })).rejects.toThrow(
+      /accepts images up to 8\.0 MB/,
+    );
+    expect(provider.openCalls).toEqual([]);
   });
 });
