@@ -8,6 +8,41 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [4.5.1] - 2026-08-20
+
+### Added
+
+- A Signal post's media can now be a **file in your connected Drive**, not only a public address.
+  Open a post, paste a Drive share link under **Add a Drive file by link**, and the file is checked
+  straight away: the composer shows its name, type, size, and when it was last checked, and links
+  out to Drive for anything else. Nothing is uploaded, downloaded, or copied — the app records what
+  the file is, not the file.
+- **Recheck Drive file** confirms a reference against Drive again whenever you want to know it is
+  still what you planned. It records what came back and moves the post, so a publish preview taken
+  before the change stops matching and has to be looked at again. A recheck that fails leaves the
+  reference and its last known details exactly where they are and says why underneath them — it
+  never removes or silently rewrites your media.
+
+### Changed
+
+- A Drive video, image, or PDF is now recognised for what it is when a post is previewed, because
+  the type comes from what Drive reported rather than from a share link that carries no file
+  extension. Preview still contacts nothing: no Drive call, no provider call, no bytes.
+- A Drive link that cannot be used says exactly why rather than failing vaguely — a folder, a
+  shortcut that does not lead to one file, a Google Doc or Sheet with nothing to publish, a type the
+  publisher will not take, a file with no size, or one over the size this app will bind to. A link
+  from anywhere other than Drive is refused before anything is looked up.
+- Editing a post no longer risks disturbing its Drive references: an ordinary save keeps each one
+  exactly as it was last checked, and only a recheck replaces it.
+- Fixed alongside: a partial edit sent to the API — one naming only the text, say — no longer
+  cleared the fields it did not mention. Channels, media, campaigns, and the scheduled date now stay
+  as they were, which is what a partial edit always claimed to do.
+
+### Breaking changes
+
+None. Every existing media reference is a public address and stays one, with nothing to change and
+nothing to re-enter.
+
 ## [4.5.0] - 2026-08-20
 
 ### Changed

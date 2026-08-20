@@ -287,9 +287,7 @@ describe('a fingerprint changes only when somebody asks', () => {
     // inequality fail for a reason that has nothing to do with the write.
     expect(rechecked.updatedAt >= created.updatedAt).toBe(true);
     const at = new Date('2027-01-01');
-    const targets = [
-      { id: 904, platform: 'tiktok', name: 'G.Holmes Designs', handle: '@gholmes' },
-    ];
+    const targets = [{ id: 904, platform: 'tiktok', name: 'G.Holmes Designs', handle: '@gholmes' }];
     // And the consequence that matters: an open preview stops matching, because the hash is over
     // the fingerprint and the fingerprint moved.
     expect(buildPublishPlan(rechecked, targets, 'America/New_York', at).planHash).not.toBe(

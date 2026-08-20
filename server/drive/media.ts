@@ -146,8 +146,7 @@ export function parseDriveMediaLink(link: string): string {
       'That is a Google Docs, Sheets, or Slides document, which has no downloadable bytes to publish. Export it to PDF, put the export in Drive, and paste that link.',
     );
   if (segments[0] === 'file' && segments[1] === 'd') return idOrThrow(segments[2]);
-  if (segments[0] === 'open' || segments[0] === 'uc')
-    return idOrThrow(url.searchParams.get('id'));
+  if (segments[0] === 'open' || segments[0] === 'uc') return idOrThrow(url.searchParams.get('id'));
   // `?id=` on any other Drive path is still an unambiguous file address, and refusing it would
   // refuse links Drive itself hands out. Anything with no id at all is not a file link.
   const query = url.searchParams.get('id');
