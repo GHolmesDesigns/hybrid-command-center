@@ -13,7 +13,13 @@ export default defineConfig({
       // test happened to load, so deleting the last test for a module removes the module from
       // the report instead of dropping the number — coverage can rise as the suite shrinks.
       // With an explicit list an untested file counts as a zero, which is the honest reading.
-      include: ['client/src/**/*.{ts,tsx}', 'server/**/*.ts', 'shared/**/*.ts', 'e2e/**/*.ts'],
+      include: [
+        'client/src/**/*.{ts,tsx}',
+        'scripts/**/*.ts',
+        'server/**/*.ts',
+        'shared/**/*.ts',
+        'e2e/**/*.ts',
+      ],
       exclude: [
         // The tests and their scaffolding. Measuring a test measures nothing.
         '**/*.test.ts',
@@ -40,6 +46,13 @@ export default defineConfig({
         // and `server/scripts/check-version-bump.test.ts` are the gates on these two.
         'e2e/shutdown.ts',
         'server/scripts/check-version-bump.ts',
+        // The Post Bridge probe's two live halves. `probe-post-bridge.ts` is argv, stdin, the
+        // filesystem, and an exit code; `transport.ts` is `fetch` and a timeout. Everything they
+        // compose — the guards, the request shapes, the parsing, the budget, the redaction, the
+        // teardown — is measured where it lives, which is the whole reason the transport is an
+        // injected seam. No automated test may load either file: one of them talks to Post Bridge.
+        'scripts/probe-post-bridge.ts',
+        'scripts/probe-post-bridge/transport.ts',
         // Operator commands — migrate, seed, backup, restore, rehearse, the Signal import.
         // Run by hand or by their own CI step, never by this suite; a threshold over them
         // would be a permanent zero that says nothing about whether they work.
@@ -56,6 +69,11 @@ export default defineConfig({
       // this branch, floored to a whole percent; a round number would be a target rather than
       // a baseline, and this way a drop reads as a drop.
       thresholds: {
+        // 97.06 statements / 89.10 branches / 99.21 functions / 98.24 lines. The Post Bridge probe,
+        // measured over everything except its two live halves, which are excluded above. High
+        // because the point of the injected transport is that the risky logic is reachable from a
+        // test; a drop here means a wire shape or a guard has stopped being covered.
+        'scripts/**': { statements: 97, branches: 89, functions: 99, lines: 98 },
         // 99.20 statements / 96.21 branches / 100 functions / 100 lines
         'shared/**': { statements: 99, branches: 96, functions: 100, lines: 100 },
         // 92.42 statements / 85.68 branches / 95.51 functions / 93.70 lines
@@ -75,6 +93,16 @@ export default defineConfig({
           environment: 'node',
           include: ['shared/**/*.test.ts'],
           setupFiles: ['./shared/test-setup.ts'],
+        },
+      },
+      {
+        test: {
+          // The Post Bridge probe. Its own project rather than a glob added to `server`, because
+          // nothing under `scripts/` is application code and a probe test failing should read as a
+          // probe failure.
+          name: 'scripts',
+          environment: 'node',
+          include: ['scripts/**/*.test.ts'],
         },
       },
       {

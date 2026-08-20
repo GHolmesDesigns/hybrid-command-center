@@ -21,12 +21,14 @@ export default tseslint.config(
   },
   { rules: { '@typescript-eslint/no-explicit-any': 'off' } },
   {
-    // The server runs under `node --experimental-strip-types`, which erases type annotations
-    // without rewriting code. A constructor parameter property (`constructor(private db: Db)`)
-    // is the one TypeScript form that needs a rewrite to mean anything, so Node refuses to load
-    // the file at all. Vite transpiles it, so unit tests and the build both pass and only the
-    // real server falls over — this rule moves that failure back to `npm run lint`.
-    files: ['server/**/*.ts', 'shared/**/*.ts'],
+    // The server and the operator scripts run under `node --experimental-strip-types`, which
+    // erases type annotations without rewriting code. A constructor parameter property
+    // (`constructor(private db: Db)`) is the one TypeScript form that needs a rewrite to mean
+    // anything, so Node refuses to load the file at all. Vite transpiles it, so unit tests and the
+    // build both pass and only the real process falls over — this rule moves that failure back to
+    // `npm run lint`. `scripts/` is in the list because the Post Bridge probe is loaded the same
+    // way, and its classes would fail at exactly the moment it is pointed at a live account.
+    files: ['scripts/**/*.ts', 'server/**/*.ts', 'shared/**/*.ts'],
     rules: { '@typescript-eslint/parameter-properties': ['error', { prefer: 'class-property' }] },
   },
 );
