@@ -1042,7 +1042,7 @@ function Editor({
           </fieldset>
           <fieldset className="signal-media-fieldset">
             <legend>Media</legend>
-            <p>Public https URLs only. Signal stores the references and never fetches the files.</p>
+            <p>Public https URLs only. Signal stores the references, not the files.</p>
             {draft.mediaUrls.length > 0 && (
               <ol>
                 {draft.mediaUrls.map((url, index) => (

@@ -612,9 +612,9 @@ refuses the write and offers the next free cell instead.
 
 Media is added as a public `https:` URL, not uploaded. Use the arrow controls beside a media row to
 change its order, or the trash control to detach it from the post. The planner shows the media
-count on the post. Command Center stores only those URL references: it never downloads, proxies,
-or inspects the file, so an extensionless link remains an unknown media kind until publishing
-preflight asks you to correct it.
+count on the post. Command Center stores only those URL references — the file itself is never
+copied here and nothing reads inside it — so an extensionless link remains an unknown media kind
+until publishing preflight asks you to correct it.
 
 #### Per-platform content
 

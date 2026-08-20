@@ -522,9 +522,13 @@ it and never writes.
   stored. Its date range asks *which posts*, not *which days* — a post scheduled inside it brings its
   whole measured history, and an undated post is in no range.
 - **Media stays a reference.** A post may carry an ordered list of public `https:` URLs. SQLite
-  stores those strings in `signal_post_media`; the app never fetches, downloads, proxies, or
-  uploads the referenced files. Kind is inferred from the URL extension and remains `unknown`
-  when an extension does not say.
+  stores those strings in `signal_post_media`; nothing fetches, downloads, proxies, or uploads the
+  referenced files, and this app stores no media files and holds no media bytes at rest. Kind is
+  inferred from the URL extension and remains `unknown` when an extension does not say. One
+  exception to the byte rule has been decided and is **not built**: C74 and C75 in
+  `docs/post-bridge-integrations-plan.md` give a confirmed submit a single stream from a selected
+  Drive file to the provider, storing nothing. Files, the read-only Drive browser below, is
+  unaffected by it.
 - **One post can read differently per channel.** A post's content is the base; a platform override
   sits over it and an account override over that, resolved in that order by
   `shared/publish-variants.ts`. A layer says only what it changes, and clearing a field restores the

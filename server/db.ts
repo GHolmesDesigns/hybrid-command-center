@@ -140,7 +140,13 @@ CREATE TABLE IF NOT EXISTS signal_post_channels (
   post_id TEXT NOT NULL REFERENCES signal_posts(id) ON DELETE CASCADE,
   channel TEXT NOT NULL, PRIMARY KEY(post_id, channel)
 );
--- Media is an ordered list of public references. The app never uploads, downloads, or proxies it.
+-- Media is an ordered list of public references. This app stores no media files, serves no media
+-- bytes, and holds no media bytes at rest, and nothing on this path fetches, uploads, or proxies
+-- one. The single exception the repository has decided is not built: C74 and C75 in
+-- docs/post-bridge-integrations-plan.md give the confirmed publishing path one stream from a
+-- user-selected Drive file to the provider, through server/drive/media.ts, storing nothing. Until
+-- those cards land there is no byte path at all, and a provider media id is ephemeral either way --
+-- never a durable reference here, and recreated on every submit, update, and restore-and-resubmit.
 CREATE TABLE IF NOT EXISTS signal_post_media (
   post_id TEXT NOT NULL REFERENCES signal_posts(id) ON DELETE CASCADE,
   position INTEGER NOT NULL CHECK(position >= 0), url TEXT NOT NULL,
@@ -157,7 +163,9 @@ CREATE TABLE IF NOT EXISTS signal_post_media (
 -- a new reference. NULL means the platform inherits the post's media and '[]' means it deliberately
 -- receives none, which are different answers. Nothing here is fetched, uploaded, or proxied by the
 -- server -- the rule signal_post_media above states, restated because cover_image_url and
--- thumbnail_url are the two columns most likely to tempt someone into breaking it.
+-- thumbnail_url are the two columns most likely to tempt someone into breaking it. Those two reach
+-- no provider field today and C76 is where they would; a byte path arriving for the publishing
+-- stream does not make one for this table.
 CREATE TABLE IF NOT EXISTS signal_post_variants (
   post_id TEXT NOT NULL REFERENCES signal_posts(id) ON DELETE CASCADE,
   platform TEXT NOT NULL, account_id INTEGER,

@@ -8,6 +8,44 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [4.5.0] - 2026-08-20
+
+### Changed
+
+- **The rule about media has been narrowed, and nothing in the app behaves differently yet.** The
+  older claim — Command Center never uploads, downloads, or proxies media — has been replaced
+  everywhere it appeared with the claim that is actually being kept: **this app stores no media
+  files, serves no media bytes, and holds no media bytes at rest.** Referencing, storing, and
+  serving are still refused.
+- One narrow exception has been decided and is **not built**: when you confirm a submit, the server
+  may stream a single media file you selected from Drive straight to the publisher, keeping no copy
+  and writing nothing back to Drive. Until that work lands there is no path in this app that moves
+  a media file at all.
+- **Files has not changed and is not part of that exception.** Drive browsing stays read-only and
+  scoped to a project's own folders, with no upload, download, move, rename, or delete — exactly as
+  before.
+- The Signal composer's media hint now reads "Signal stores the references, not the files", and the
+  user manual says the file is never copied here rather than promising it will never be read.
+  Previewing a post still contacts nothing: the preview has never fetched a media file on the
+  server and that does not change.
+
+### Added
+
+- Two documents behind the publishing work now live in the repository:
+  `docs/post-bridge-api-surface.md`, a dated research note recording what the provider's API
+  actually offers, and `docs/post-bridge-integrations-plan.md`, the reviewed sequencing for what to
+  do about it. `docs/publishing-integration.md` links both and remains the record that decides how
+  publishing behaves.
+- The decision record now states plainly that a publisher-side media id is temporary — recreated
+  every time a post is submitted, updated, or resubmitted, never a lasting reference — and that the
+  vendor's expiry timing is documented but has not been verified against the live service.
+- Every other capability the research note found is recorded as unverified, so the publishing
+  capability table keeps refusing what it refuses today until each one is checked in turn.
+
+### Breaking changes
+
+None. No feature, screen, endpoint, stored value, or publishing capability changed in this release.
+
 ## [4.4.0] - 2026-08-18
 
 ### Added

@@ -403,7 +403,12 @@ export interface SignalPost {
   /** What is being posted. The copy itself, not a title. */
   text: string;
   channels: SignalChannel[];
-  /** Ordered public `https:` references. Signal stores no media files and fetches none. */
+  /**
+   * Ordered public `https:` references. Signal stores no media files, serves no media bytes, and
+   * holds none at rest, and nothing on this path fetches one. The single decided exception is not
+   * built: C74 and C75 in `docs/post-bridge-integrations-plan.md` let a confirmed submit stream one
+   * user-selected Drive file to the provider through `server/drive/media.ts`, persisting nothing.
+   */
   mediaUrls: string[];
   /** `YYYY-MM-DD` in local time, or null when the post is in the unscheduled queue. */
   date: string | null;
