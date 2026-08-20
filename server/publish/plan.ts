@@ -1,12 +1,14 @@
 import crypto from 'node:crypto';
 import {
   signalMediaKind,
+  signalMediaKindFor,
   signalTextHasLink,
   SIGNAL_CHANNEL_LABEL,
   type SignalChannel,
   type SignalMediaKind,
   type SignalPost,
 } from '../../shared/signal.ts';
+import { signalMediaFingerprint, type SignalPostMedia } from '../../shared/signal-media.ts';
 import {
   publishCapabilityFor,
   publishKindSupported,
@@ -80,6 +82,45 @@ export function publishInstantFor(date: string, time: string, zone: string): str
 export interface PlatformPreflight {
   capability: PublishPlatformCapability;
   content: PublishChannelContent;
+  /**
+   * The post's media descriptors, so a reference can be classified by what it *is*.
+   *
+   * `content.mediaUrls` is a selection stated in URLs, which is the vocabulary the per-platform
+   * override speaks; a Drive reference's URL is a viewer page and says nothing about the file. The
+   * descriptors are matched to it by URL, and a Drive row is classified from the MIME type Drive
+   * reported when the reference was resolved — **no Drive call happens here or anywhere else in a
+   * preview.** Omitted, every reference is classified from its pathname, which is what a caller
+   * holding nothing but URLs correctly gets.
+   */
+  media?: readonly SignalPostMedia[];
+}
+
+/**
+ * The post's own content, before any platform or account layer.
+ *
+ * `mediaUrls` and `media` are the same references twice: the URLs are what a per-platform
+ * selection is stated in and what the provider request carries, and the descriptors are what says
+ * whether each one is a public URL or a version-bound Drive file. The selection resolves in URLs
+ * and is classified through the descriptors.
+ */
+interface PublishPlanBase {
+  caption: string;
+  mediaUrls: string[];
+  media: readonly SignalPostMedia[];
+  postKind: PublishPostKind;
+}
+
+/** Classifies the selected URLs, using a descriptor wherever one is known for the URL. */
+function mediaKindsFor(
+  mediaUrls: readonly string[],
+  media: readonly SignalPostMedia[] | undefined,
+): SignalMediaKind[] {
+  if (!media?.length) return mediaUrls.map(signalMediaKind);
+  const byUrl = new Map(media.map((item) => [item.url, item]));
+  return mediaUrls.map((url) => {
+    const descriptor = byUrl.get(url);
+    return descriptor ? signalMediaKindFor(descriptor) : signalMediaKind(url);
+  });
 }
 
 /** The override fields a platform can refuse outright, and nothing to do with their values. */
@@ -106,7 +147,7 @@ export function preflightPlatform(input: PlatformPreflight): {
   const { capability, content } = input;
   const kind = content.postKind;
   const caption = content.caption;
-  const mediaKinds: SignalMediaKind[] = content.mediaUrls.map(signalMediaKind);
+  const mediaKinds = mediaKindsFor(content.mediaUrls, input.media);
   const refusals: string[] = [];
   const warnings: string[] = [];
   const label = capability.label;
@@ -205,7 +246,7 @@ export function preflightPlatform(input: PlatformPreflight): {
   }
   if (mediaKinds.includes('unknown'))
     warnings.push(
-      `${label} media could not be classified from its URL, so these limits were checked without knowing whether it is an image or a video.`,
+      `${label} media could not be classified from what is recorded about it, so these limits were checked without knowing whether it is an image or a video.`,
     );
 
   if (capability.stripsLinks && signalTextHasLink(caption))
@@ -272,7 +313,7 @@ function resolveTarget(
  * not among them.
  */
 function resolveForTarget(
-  base: { caption: string; mediaUrls: string[]; postKind: PublishPostKind },
+  base: PublishPlanBase,
   capability: PublishPlatformCapability,
   variants: readonly PublishVariantRecord[],
   accountId: number | undefined,
@@ -317,7 +358,7 @@ function resolveForTarget(
  */
 function reportForChannel(
   channel: SignalChannel,
-  base: { caption: string; mediaUrls: string[]; postKind: PublishPostKind },
+  base: PublishPlanBase,
   connected: PublishTarget[],
   variants: readonly PublishVariantRecord[],
 ): PublishChannelReport {
@@ -350,7 +391,7 @@ function reportForChannel(
     };
   const { target, refusal } = resolveTarget(capability.platform, capability.label, connected);
   const { content, warnings } = resolveForTarget(base, capability, variants, target?.id);
-  const preflight = preflightPlatform({ capability, content });
+  const preflight = preflightPlatform({ capability, content, media: base.media });
   const refusals = [...preflight.refusals];
   if (refusal) refusals.push(refusal);
   return {
@@ -472,9 +513,10 @@ export function buildPublishPlan(
   if (post.status === 'PUBLISHED')
     warnings.push('You marked this published yourself; sending it will post it again.');
 
-  const base = {
+  const base: PublishPlanBase = {
     caption,
     mediaUrls: post.mediaUrls,
+    media: post.media,
     postKind: publishPostKindFor(post.format),
   };
   const channels = post.channels.map((channel) =>
@@ -498,6 +540,22 @@ export function buildPublishPlan(
   // media array, whatever each platform would have preferred.
   const media = agreedMedia(channels, post.mediaUrls);
   refusals.push(...media.refusals);
+  /**
+   * A Drive reference cannot be sent yet, and saying so is the whole of this app's obligation here.
+   *
+   * The provider takes media as public addresses, and a Drive row's `url` is Drive's viewer page —
+   * a private HTML document, not the file. Letting it through would hand the provider an address it
+   * cannot fetch and produce a delivery that fails for a reason nobody could read. Uploading the
+   * bytes instead is C75; until that lands this refuses, which is the same fail-closed direction
+   * every unverified capability takes.
+   */
+  const driveCount = media.mediaUrls.filter((url) =>
+    post.media.some((item) => item.url === url && item.source === 'DRIVE'),
+  ).length;
+  if (driveCount > 0)
+    refusals.push(
+      `This post carries ${driveCount} Drive file${driveCount === 1 ? '' : 's'}, and this app cannot send ${driveCount === 1 ? 'one' : 'them'} to the provider yet — a Drive link addresses a viewer page rather than the file. Use a public https address, or remove the Drive media before publishing.`,
+    );
   const platformConfigurations = platformConfigurationsFor(channels, caption);
 
   const stable = {
@@ -507,6 +565,19 @@ export function buildPublishPlan(
     // The media that would be sent rather than the post's own, so a selection changed between
     // preview and confirm invalidates the hash exactly as an edited caption does.
     mediaUrls: media.mediaUrls,
+    /**
+     * And the same references as whole descriptors, so the token covers what each one *is* and
+     * not only where it points.
+     *
+     * A Drive file's viewer link does not change when its content does — Drive may replace the
+     * bytes under the same id — so a hash over URLs alone would call a plan current after the
+     * thing it planned to send had been swapped. The version fingerprint is what closes that, and
+     * it is why an explicit recheck that finds a new version invalidates an open preview.
+     */
+    media: media.mediaUrls.map((url) => {
+      const descriptor = post.media.find((item) => item.url === url);
+      return descriptor ? signalMediaFingerprint(descriptor) : { source: 'URL', url };
+    }),
     scheduledInstant,
     timezone: zone,
     targets,

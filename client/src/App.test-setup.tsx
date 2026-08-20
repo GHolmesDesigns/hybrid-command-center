@@ -30,6 +30,7 @@ import {
   type SignalCampaignSummary,
   type SignalPost,
 } from '../../shared/signal';
+import { urlPostMedia, type SignalPostMedia } from '../../shared/signal-media';
 import type { SignalCampaignAnalytics } from '../../shared/signal-campaign-analytics';
 import type {
   ProviderReconcilePreview,
@@ -224,6 +225,19 @@ export const testState = {
   signalVariantsPayload: [] as PublishVariantRecord[],
   signalVariantsError: null as string | null,
   /**
+   * What resolving a Drive link answers with, and what a recheck answers with afterwards.
+   *
+   * Two values rather than one, because the whole point of a recheck is that the file may have
+   * moved: a case sets the first to say what a paste finds and the second to say what checking it
+   * again finds. Either error stands in for a refusal the server made — a folder link, a type the
+   * publisher will not take, a file Drive no longer returns — and the composer has to keep the
+   * reference visible when the second one fires.
+   */
+  driveMediaPayload: null as SignalPostMedia | null,
+  driveMediaError: null as string | null,
+  driveRecheckPayload: null as SignalPostMedia | null,
+  driveRecheckError: null as string | null,
+  /**
    * Client merge. Both routes are answered from the client and project state by default — the
    * stub plans the merge the way the server would, and a commit moves the projects, archives the
    * source, and records the alias — so a case only sets one of these to rehearse a refusal.
@@ -411,6 +425,31 @@ export function resolveMockCampaigns(names: unknown): SignalCampaign[] {
   return resolved;
 }
 
+/**
+ * Media as the write routes resolve it: a source and an address in, descriptors out.
+ *
+ * A Drive item the post already carries comes back exactly as it stands — the server does not
+ * re-resolve one on an ordinary save, and neither does this — and a new one takes whatever the
+ * case staged as `driveMediaPayload`. Both arrays come back, because the API answers with both.
+ */
+export function resolveMockMedia(
+  post: SignalPost,
+  items: unknown,
+): Pick<SignalPost, 'media' | 'mediaUrls'> {
+  const list = Array.isArray(items) ? items : [];
+  const media = list.map((raw) => {
+    const item = raw as { source?: string; url?: string };
+    const url = String(item.url ?? '');
+    if (item.source !== 'DRIVE') return urlPostMedia(url);
+    return (
+      post.media.find((stored) => stored.source === 'DRIVE' && stored.url === url) ??
+      testState.driveMediaPayload ??
+      urlPostMedia(url)
+    );
+  });
+  return { media, mediaUrls: media.map((item) => item.url) };
+}
+
 /** A workspace with no campaigns and nothing measured: what the panel answers by default. */
 export const emptyCampaignAnalytics = (
   overrides: Partial<SignalCampaignAnalytics> = {},
@@ -425,28 +464,39 @@ export const emptyCampaignAnalytics = (
   ...overrides,
 });
 
-/** One scheduled post, with only the fields a case cares about spelled out. */
+/**
+ * One scheduled post, with only the fields a case cares about spelled out.
+ *
+ * `media` and `mediaUrls` are the same references twice, exactly as the API answers with them, so a
+ * case may state either one: giving `mediaUrls` is the shorthand for a list of public references,
+ * and giving `media` is how a case states a Drive reference. Deriving the second from the first
+ * here is what stops a fixture describing a post the server could never return.
+ */
 export const signalPost = (
   id: string,
   text: string,
   date: string | null,
   overrides: Partial<SignalPost> = {},
-): SignalPost => ({
-  id,
-  text,
-  channels: [],
-  mediaUrls: [],
-  date,
-  time: SIGNAL_DEFAULT_TIME,
-  format: 'TEXT',
-  status: 'SCHEDULED',
-  campaigns: [],
-  cta: 'NONE',
-  position: 0,
-  createdAt: '2026-08-01T09:00:00.000Z',
-  updatedAt: '2026-08-01T09:00:00.000Z',
-  ...overrides,
-});
+): SignalPost => {
+  const media = overrides.media ?? (overrides.mediaUrls ?? []).map((url) => urlPostMedia(url));
+  return {
+    id,
+    text,
+    channels: [],
+    date,
+    time: SIGNAL_DEFAULT_TIME,
+    format: 'TEXT',
+    status: 'SCHEDULED',
+    campaigns: [],
+    cta: 'NONE',
+    position: 0,
+    createdAt: '2026-08-01T09:00:00.000Z',
+    updatedAt: '2026-08-01T09:00:00.000Z',
+    ...overrides,
+    media,
+    mediaUrls: media.map((item) => item.url),
+  };
+};
 
 /** A calendar range with both halves healthy unless a case says otherwise. */
 export const calendarRange = (overrides: Partial<CalendarRange> = {}): CalendarRange => ({
@@ -623,6 +673,32 @@ const respondTo = (url: string, init?: RequestInit) => {
       truncated: testState.signalPostsTruncated,
     };
   }
+  if (url.endsWith('/api/signal/drive-media/resolve') && method === 'POST') {
+    if (testState.driveMediaError) return reply(400, { error: testState.driveMediaError });
+    if (!testState.driveMediaPayload) return reply(400, { error: 'No Drive file was staged.' });
+    return testState.driveMediaPayload;
+  }
+  const recheckPath = url.match(/\/api\/signal\/posts\/([^/?]+)\/media\/recheck$/);
+  if (recheckPath && method === 'POST') {
+    if (testState.driveRecheckError) return reply(400, { error: testState.driveRecheckError });
+    const next = testState.driveRecheckPayload ?? testState.driveMediaPayload;
+    if (!next) return reply(400, { error: 'No Drive file was staged.' });
+    testState.signalPostsPayload = testState.signalPostsPayload.map((post) => {
+      if (post.id !== recheckPath[1]) return post;
+      const media = post.media.map((item) =>
+        item.source === 'DRIVE' && item.driveFileId === body.driveFileId ? next : item,
+      );
+      // The recheck writes through the ordinary edit, so the post moves — which is what makes an
+      // open preview stale, and what the composer has to reload the draft from.
+      return {
+        ...post,
+        media,
+        mediaUrls: media.map((item) => item.url),
+        updatedAt: '2026-08-20T10:00:00.000Z',
+      };
+    });
+    return testState.signalPostsPayload.find((post) => post.id === recheckPath[1]) ?? {};
+  }
   if (url.endsWith('/api/signal/queue') && method === 'GET')
     return testState.signalPostsPayload.filter((post) => post.date === null);
   if (url.endsWith('/api/signal/posts') && method === 'POST') {
@@ -781,6 +857,10 @@ const respondTo = (url: string, init?: RequestInit) => {
             ...(body.campaigns === undefined
               ? {}
               : { campaigns: resolveMockCampaigns(body.campaigns) }),
+            // The route takes a source and an address and answers with descriptors: a Drive item
+            // the post already carries comes back untouched, and only a new one is resolved. The
+            // stub does the same, so a case can prove an unrelated edit left a fingerprint alone.
+            ...(body.media === undefined ? {} : resolveMockMedia(post, body.media)),
           }
         : post,
     );
@@ -1188,6 +1268,10 @@ beforeEach(() => {
   testState.postMetricsRefreshError = null;
   testState.signalVariantsPayload = [];
   testState.signalVariantsError = null;
+  testState.driveMediaPayload = null;
+  testState.driveMediaError = null;
+  testState.driveRecheckPayload = null;
+  testState.driveRecheckError = null;
   testState.clientMergePreviewError = null;
   testState.clientMergeCommitError = null;
   testState.clientImportAliases = [];

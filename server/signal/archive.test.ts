@@ -90,8 +90,8 @@ describe('importing the archive', () => {
     });
   });
 
-  it('leaves posts written here untouched, and does not count them as its own', () => {
-    const mine = createPost(db, signalPostInput.parse({ text: 'My own idea' }));
+  it('leaves posts written here untouched, and does not count them as its own', async () => {
+    const mine = await createPost(db, signalPostInput.parse({ text: 'My own idea' }));
     const result = importCampaignArchive(db);
 
     expect(result.skipped).toBe(0);

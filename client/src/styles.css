@@ -4226,6 +4226,46 @@ button.tag-chip.toggle.active {
   font-size: 10px;
   text-transform: uppercase;
 }
+/* A Drive reference is read, not edited: the name, the type, the size, and when it was last
+   checked, plus the one action that checks it again. It takes the column a URL input takes so a
+   mixed list still reads as one ordered list. */
+.signal-media-drive {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.signal-media-source {
+  color: #58605c;
+  font-size: 11px;
+  font-weight: 600;
+}
+.signal-media-drive a {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.signal-media-detail {
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.signal-media-drive button {
+  justify-self: start;
+}
+/* A reference that could not be confirmed. Paired with an icon and its own words rather than
+   carried by colour, and it never replaces the metadata above it. */
+.signal-media-unresolved {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  color: var(--red);
+  font-size: 11px;
+}
+.signal-media-unresolved svg {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+}
 .signal-media-add {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

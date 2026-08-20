@@ -32,7 +32,7 @@ Nothing in this app is reachable off loopback by design, and the server enforces
 - **Campaign playbook import** — an .xlsx workbook or pasted tabs creating a client, its projects, their tasks, checklists, and dependencies in one confirmed transaction, previewed first, duplicates skipped and reported, with a persisted receipt and no Drive side effect
 - **Files** — read-only browsing of a project's Drive folder and its provisioned subfolders: paginated listing, type/size/modified for every item, and "Open in Drive" on every row. It uploads, downloads, moves, renames, and deletes nothing, and every Drive failure mode has its own state and next step
 - **Integration activity** — an append-only record of what each integration changed, when, and how it ended, naming the affected clients, projects, and tasks by id, bounded to the most recent 200 rows, credential-scrubbed, and shown on the Import page beside the receipt it belongs to
-- **Signal Campaign** — the authoritative store and operable planner for content: month grid, unscheduled queue, quick idea capture, and a full editor for content, channels, ordered public media references, date, time, format, status, campaigns, and CTA, with duplicate-to-queue, next-open-slot suggestion, and confirmed deletion
+- **Signal Campaign** — the authoritative store and operable planner for content: month grid, unscheduled queue, quick idea capture, and a full editor for content, channels, ordered media references — public URLs and version-bound Drive files — date, time, format, status, campaigns, and CTA, with duplicate-to-queue, next-open-slot suggestion, and confirmed deletion
 - **Queue health** — an in-app summary above the planner deriving six alerts from your own posts and deliveries: a failed or partly delivered post, a manual finish waiting on you, a scheduled slot approaching with nothing submitted, a provider answer that moved at the last check, a channel with nothing planned inside a configurable window, and a provider synchronisation that is rate-limited or behind. Each line links to the post it is about, and acknowledging one changes no planning or delivery state. In-app only — no email, SMS, or push service
 - **Figures** — the platforms’ own counts for a post that went out: provider-reported views, likes, comments, and shares per delivery, with the daily snapshots behind them shown as per-day gains, the time of the last synchronisation, and a refresh that runs only when you press it. A channel this provider does not measure says **Not available from this provider** rather than showing a zero, a rate-limited provider is waited out rather than hammered, and a refresh that fails leaves the last known good figures on screen
 - **Signal campaigns** — a shared vocabulary labelling Signal posts the way categories label projects: a post carries as many as it needs, two spellings of one name are one campaign, renaming one reaches every post in a single write, and deleting one detaches it without deleting a post. Managed in Settings or typed straight into a post
@@ -72,7 +72,7 @@ The browser never receives Google tokens. UI code calls only the local API. Driv
 
 ### Data ownership
 
-- **SQLite:** clients, projects, tasks, board-card and project-tile positions, checklists, dependencies, due dates, notes, task tags, project categories, client merge aliases, Signal Campaign's planned posts, channels, campaigns, ordered media URL references, and per-platform and per-account content overrides, settings, branding (including the sidebar palette and the logo's address, never the image itself), Drive IDs/URLs, provisioning steps, import receipts, integration activity records, and timestamps.
+- **SQLite:** clients, projects, tasks, board-card and project-tile positions, checklists, dependencies, due dates, notes, task tags, project categories, client merge aliases, Signal Campaign's planned posts, channels, campaigns, ordered media references (public URLs, and Drive file ids with their version fingerprints), and per-platform and per-account content overrides, settings, branding (including the sidebar palette and the logo's address, never the image itself), Drive IDs/URLs, provisioning steps, import receipts, integration activity records, and timestamps.
 - **Google Drive:** every project file. The database stores references, never duplicate file contents. Deleting a project or task in the app does **not** delete Drive folders or files.
 
 Timestamps are stored as UTC ISO strings. Date-only deadlines are interpreted in the browser/server machine's local timezone and become overdue after their local calendar day has passed.
@@ -521,14 +521,24 @@ it and never writes.
   filter cannot spend a synchronisation; the numbers are the ones a post's own **Refresh figures**
   stored. Its date range asks *which posts*, not *which days* — a post scheduled inside it brings its
   whole measured history, and an undated post is in no range.
-- **Media stays a reference.** A post may carry an ordered list of public `https:` URLs. SQLite
-  stores those strings in `signal_post_media`; nothing fetches, downloads, proxies, or uploads the
-  referenced files, and this app stores no media files and holds no media bytes at rest. Kind is
-  inferred from the URL extension and remains `unknown` when an extension does not say. One
-  exception to the byte rule has been decided and is **not built**: C74 and C75 in
-  `docs/post-bridge-integrations-plan.md` give a confirmed submit a single stream from a selected
-  Drive file to the provider, storing nothing. Files, the read-only Drive browser below, is
-  unaffected by it.
+- **Media stays a reference, and a reference is one of two things.** A post carries an ordered list
+  in `signal_post_media`, and each entry is either a public `https:` URL or a **Drive file**.
+  Nothing fetches, downloads, proxies, or uploads the referenced files, and this app stores no media
+  files and holds no media bytes at rest. A URL's kind is inferred from its extension and remains
+  `unknown` when an extension does not say.
+- **A Drive reference is bound to a version, not just to a file.** You add one by pasting a Drive
+  share link; the server parses it, checks the host, and asks Drive what the file is, storing the
+  name, MIME type, size, and Drive's own version evidence — its `version`, `modifiedTime`, and
+  checksum. That is because a file id is not evidence of the bytes you previewed: Drive may replace
+  a file's content under the same id. The kind of a Drive reference comes from the stored MIME type
+  rather than from a share link that has no extension, and the publish plan hash covers the whole
+  descriptor, so a file that moves invalidates a preview taken before it did. **Recheck Drive file**
+  in the composer is the only thing that replaces a stored fingerprint; a recheck that fails leaves
+  the reference and its last known details exactly where they are and says why. The one exception to
+  the byte rule remains decided and **not built**: C75 in `docs/post-bridge-integrations-plan.md` is
+  the confirmed submit's single stream from the selected Drive file to the provider, storing
+  nothing. Files, the read-only Drive browser below, is unaffected — it is a separate capability
+  with a separate interface, and it still browses a project's own folders and nothing else.
 - **One post can read differently per channel.** A post's content is the base; a platform override
   sits over it and an account override over that, resolved in that order by
   `shared/publish-variants.ts`. A layer says only what it changes, and clearing a field restores the

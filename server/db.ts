@@ -140,16 +140,30 @@ CREATE TABLE IF NOT EXISTS signal_post_channels (
   post_id TEXT NOT NULL REFERENCES signal_posts(id) ON DELETE CASCADE,
   channel TEXT NOT NULL, PRIMARY KEY(post_id, channel)
 );
--- Media is an ordered list of public references. This app stores no media files, serves no media
--- bytes, and holds no media bytes at rest, and nothing on this path fetches, uploads, or proxies
--- one. The single exception the repository has decided is not built: C74 and C75 in
--- docs/post-bridge-integrations-plan.md give the confirmed publishing path one stream from a
--- user-selected Drive file to the provider, through server/drive/media.ts, storing nothing. Until
--- those cards land there is no byte path at all, and a provider media id is ephemeral either way --
--- never a durable reference here, and recreated on every submit, update, and restore-and-resubmit.
+-- Media is an ordered list of references, and a reference is one of two things (C74). This app
+-- still stores no media files, serves no media bytes, and holds no media bytes at rest, and
+-- nothing on this path fetches, uploads, or proxies one. The single exception the repository has
+-- decided is half built: server/drive/media.ts resolves one user-selected Drive file to the
+-- metadata and version evidence below and reads nothing; C75 is the card that streams its bytes
+-- straight to the provider during a confirmed submit, storing nothing. A provider media id is
+-- ephemeral either way -- never a durable reference here, and recreated on every submit, update,
+-- and restore-and-resubmit.
+--
+-- source discriminates the two. url stays NOT NULL for both and is what every display and
+-- selection path reads: a URL row stores the public URL and a DRIVE row stores Drive's canonical
+-- webViewLink, which is a viewer page for a person to open and never provider-fetchable media.
+--
+-- The Drive columns are the identity and the version fingerprint together, because a file id is
+-- not evidence of the bytes anyone previewed: Drive may replace a file's content under the same
+-- id. drive_verified_at is when this app last resolved the rest, which is a fact about the
+-- resolution rather than about the file -- it is what the composer shows and deliberately not part
+-- of the fingerprint the plan hash covers.
 CREATE TABLE IF NOT EXISTS signal_post_media (
   post_id TEXT NOT NULL REFERENCES signal_posts(id) ON DELETE CASCADE,
   position INTEGER NOT NULL CHECK(position >= 0), url TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'URL' CHECK(source IN ('URL','DRIVE')),
+  drive_file_id TEXT, drive_name TEXT, mime_type TEXT, size_bytes INTEGER,
+  drive_version TEXT, drive_modified_at TEXT, drive_checksum TEXT, drive_verified_at TEXT,
   PRIMARY KEY(post_id, position)
 );
 -- Platform and account content overrides for one post. The layers resolve base -> platform ->
@@ -320,6 +334,65 @@ CREATE INDEX IF NOT EXISTS idx_signal_alert_acks_time ON signal_alert_acks(ackno
 -- arrives with a result id and nothing else is matched back to the delivery it belongs to.
 CREATE INDEX IF NOT EXISTS idx_signal_publication_targets_result
   ON signal_publication_targets(post_result_id);
+`;
+
+/**
+ * The cross-field rule on `signal_post_media`, in the strongest form SQLite can be given
+ * *additively*.
+ *
+ * A CHECK constraint would be the natural home, and the fresh-install schema above carries the one
+ * CHECK a single column can hold. It cannot be the whole answer: a cross-column CHECK has to be a
+ * table constraint, SQLite adds table constraints only by rebuilding the table, and
+ * `applyAdditiveMigrations` is additive by design. Worse, `PRAGMA table_info` does not report CHECK
+ * constraints at all, so even the column-level one above is dropped on the `ALTER TABLE` path — a
+ * database migrated into these columns would have no constraint whatsoever.
+ *
+ * A trigger has neither problem. `CREATE TRIGGER IF NOT EXISTS` is additive, it reaches a migrated
+ * database and a fresh one identically, and it can see every column at once. These two say exactly
+ * what `signalPostMediaIssue` in `shared/signal-media.ts` says, restated here rather than imported
+ * because this module is the schema and imports nothing from `shared/` -- and stated at all
+ * because a rule enforced only at the Zod boundary is a rule the next writer of an INSERT walks
+ * around.
+ *
+ * They run after the migration, for the same reason the indexes do: the columns have to exist.
+ * Existing rows are untouched -- a migrated URL row has `source='URL'` from the column default and
+ * NULL in every Drive column, which is precisely the first branch.
+ */
+export const triggerSchema = `
+CREATE TRIGGER IF NOT EXISTS signal_post_media_source_insert
+BEFORE INSERT ON signal_post_media FOR EACH ROW WHEN NOT (
+  (NEW.source = 'URL'
+    AND NEW.drive_file_id IS NULL AND NEW.drive_name IS NULL AND NEW.mime_type IS NULL
+    AND NEW.size_bytes IS NULL AND NEW.drive_version IS NULL AND NEW.drive_modified_at IS NULL
+    AND NEW.drive_checksum IS NULL AND NEW.drive_verified_at IS NULL)
+  OR (NEW.source = 'DRIVE'
+    AND TRIM(COALESCE(NEW.drive_file_id, '')) <> ''
+    AND TRIM(COALESCE(NEW.drive_name, '')) <> ''
+    AND TRIM(COALESCE(NEW.mime_type, '')) <> ''
+    AND NEW.size_bytes IS NOT NULL AND NEW.size_bytes > 0
+    AND (NEW.drive_version IS NOT NULL OR NEW.drive_modified_at IS NOT NULL
+         OR NEW.drive_checksum IS NOT NULL))
+)
+BEGIN
+  SELECT RAISE(ABORT, 'signal_post_media: a URL reference carries no Drive fields, and a DRIVE reference needs an id, a name, a MIME type, a positive size, and at least one version signal.');
+END;
+CREATE TRIGGER IF NOT EXISTS signal_post_media_source_update
+BEFORE UPDATE ON signal_post_media FOR EACH ROW WHEN NOT (
+  (NEW.source = 'URL'
+    AND NEW.drive_file_id IS NULL AND NEW.drive_name IS NULL AND NEW.mime_type IS NULL
+    AND NEW.size_bytes IS NULL AND NEW.drive_version IS NULL AND NEW.drive_modified_at IS NULL
+    AND NEW.drive_checksum IS NULL AND NEW.drive_verified_at IS NULL)
+  OR (NEW.source = 'DRIVE'
+    AND TRIM(COALESCE(NEW.drive_file_id, '')) <> ''
+    AND TRIM(COALESCE(NEW.drive_name, '')) <> ''
+    AND TRIM(COALESCE(NEW.mime_type, '')) <> ''
+    AND NEW.size_bytes IS NOT NULL AND NEW.size_bytes > 0
+    AND (NEW.drive_version IS NOT NULL OR NEW.drive_modified_at IS NOT NULL
+         OR NEW.drive_checksum IS NOT NULL))
+)
+BEGIN
+  SELECT RAISE(ABORT, 'signal_post_media: a URL reference carries no Drive fields, and a DRIVE reference needs an id, a name, a MIME type, a positive size, and at least one version signal.');
+END;
 `;
 
 const schema = `${tableSchema}${indexSchema}`;
@@ -586,6 +659,7 @@ export function createDb(
   backfillProjectActivity(db);
   backfillSignalCampaigns(db);
   db.exec(indexSchema);
+  db.exec(triggerSchema);
   db.exec('PRAGMA optimize');
   onMigration?.(applied);
   return db;

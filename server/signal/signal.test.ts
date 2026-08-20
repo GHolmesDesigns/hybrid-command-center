@@ -14,6 +14,7 @@ import {
   getPost,
   listQueue,
   signalPostInput,
+  signalPostPatch,
   suggestPostSlot,
   updatePost,
 } from './service.ts';
@@ -64,11 +65,11 @@ describe('the date/time vocabulary', () => {
     ['a zone that is hours behind UTC', 'America/Los_Angeles'],
     ['a zone that is hours ahead', 'Asia/Tokyo'],
     ['UTC itself', 'UTC'],
-  ])('keeps a post on its own day in %s', (_label, timeZone) => {
+  ])('keeps a post on its own day in %s', async (_label, timeZone) => {
     // The cell rule compares stored strings and derives no instant, so the server's zone cannot
     // move a post across a day boundary. Asserting it here is what keeps that true.
     process.env.TZ = timeZone;
-    const created = add({ date: '2026-09-14', time: '23:30' });
+    const created = await add({ date: '2026-09-14', time: '23:30' });
     const { posts } = listPostsInRange(db, '2026-09-14', '2026-09-14');
     expect(posts.map((p) => p.id)).toEqual([created.id]);
     expect(listPostsInRange(db, '2026-09-15', '2026-09-15').posts).toEqual([]);
@@ -76,8 +77,8 @@ describe('the date/time vocabulary', () => {
 });
 
 describe('writing posts', () => {
-  it('creates an unscheduled post by default and puts it in the queue', () => {
-    const created = add();
+  it('creates an unscheduled post by default and puts it in the queue', async () => {
+    const created = await add();
     expect(created.date).toBeNull();
     expect(created.status).toBe('DRAFT');
     expect(created.cta).toBe('NONE');
@@ -85,19 +86,19 @@ describe('writing posts', () => {
     expect(listPostsInRange(db, '0001-01-01', '9999-12-31').posts).toEqual([]);
   });
 
-  it('queues new posts behind the ones already there, and appends a post sent back', () => {
-    const first = add({ text: 'First idea' });
-    const second = add({ text: 'Second idea' });
-    const dated = add({ text: 'Third idea', date: '2026-09-14' });
+  it('queues new posts behind the ones already there, and appends a post sent back', async () => {
+    const first = await add({ text: 'First idea' });
+    const second = await add({ text: 'Second idea' });
+    const dated = await add({ text: 'Third idea', date: '2026-09-14' });
     expect(listQueue(db).map((p) => p.id)).toEqual([first.id, second.id]);
 
-    const returned = updatePost(db, dated.id, { date: null });
+    const returned = await updatePost(db, dated.id, { date: null });
     expect(returned.date).toBeNull();
     expect(listQueue(db).map((p) => p.id)).toEqual([first.id, second.id, dated.id]);
   });
 
-  it('stores channels as rows and hands them back deduplicated and ordered', () => {
-    const created = add({ channels: ['li', 'ig', 'li', 'blog'] });
+  it('stores channels as rows and hands them back deduplicated and ordered', async () => {
+    const created = await add({ channels: ['li', 'ig', 'li', 'blog'] });
     expect(created.channels).toEqual(['blog', 'ig', 'li']);
     const rows = db
       .prepare('SELECT COUNT(*) n FROM signal_post_channels WHERE post_id=?')
@@ -105,16 +106,16 @@ describe('writing posts', () => {
     expect(rows.n).toBe(3);
   });
 
-  it('replaces channels on patch and leaves them alone when the patch omits them', () => {
-    const created = add({ channels: ['li', 'ig'] });
-    expect(updatePost(db, created.id, { channels: ['x'] }).channels).toEqual(['x']);
-    expect(updatePost(db, created.id, { text: 'Reworded' }).channels).toEqual(['x']);
+  it('replaces channels on patch and leaves them alone when the patch omits them', async () => {
+    const created = await add({ channels: ['li', 'ig'] });
+    expect((await updatePost(db, created.id, { channels: ['x'] })).channels).toEqual(['x']);
+    expect((await updatePost(db, created.id, { text: 'Reworded' })).channels).toEqual(['x']);
   });
 
-  it('stores ordered media rows, replaces them on patch, and leaves them alone when omitted', () => {
+  it('stores ordered media rows, replaces them on patch, and leaves them alone when omitted', async () => {
     const first = 'https://cdn.example.com/first.jpg';
     const second = 'https://cdn.example.com/second.mp4?download=1';
-    const created = add({ mediaUrls: [second, first] });
+    const created = await add({ mediaUrls: [second, first] });
     expect(created.mediaUrls).toEqual([second, first]);
     expect(
       db
@@ -125,21 +126,24 @@ describe('writing posts', () => {
       { position: 1, url: first },
     ]);
 
-    expect(updatePost(db, created.id, { mediaUrls: [first, second] }).mediaUrls).toEqual([
+    expect((await updatePost(db, created.id, { mediaUrls: [first, second] })).mediaUrls).toEqual([
       first,
       second,
     ]);
-    expect(updatePost(db, created.id, { text: 'Reworded' }).mediaUrls).toEqual([first, second]);
+    expect((await updatePost(db, created.id, { text: 'Reworded' })).mediaUrls).toEqual([
+      first,
+      second,
+    ]);
   });
 
-  it('changes only what a patch names', () => {
-    const created = add({
+  it('changes only what a patch names', async () => {
+    const created = await add({
       date: '2026-09-14',
       time: '13:00',
       campaigns: ['Wk4'],
       status: 'SCHEDULED',
     });
-    const patched = updatePost(db, created.id, { status: 'PUBLISHED' });
+    const patched = await updatePost(db, created.id, { status: 'PUBLISHED' });
     expect(patched).toMatchObject({
       date: '2026-09-14',
       time: '13:00',
@@ -149,10 +153,10 @@ describe('writing posts', () => {
     expect(patched.campaigns.map((campaign) => campaign.name)).toEqual(['Wk4']);
   });
 
-  it('distinguishes clearing a nullable field from leaving it alone', () => {
-    const created = add({ date: '2026-09-14', time: '13:00' });
-    expect(updatePost(db, created.id, { text: 'Reworded' }).date).toBe('2026-09-14');
-    expect(updatePost(db, created.id, { date: null }).date).toBeNull();
+  it('distinguishes clearing a nullable field from leaving it alone', async () => {
+    const created = await add({ date: '2026-09-14', time: '13:00' });
+    expect((await updatePost(db, created.id, { text: 'Reworded' })).date).toBe('2026-09-14');
+    expect((await updatePost(db, created.id, { date: null })).date).toBeNull();
   });
 
   /**
@@ -160,28 +164,28 @@ describe('writing posts', () => {
    * replaces the set, a patch that omits them leaves it alone, and an empty array is the deliberate
    * answer *this post belongs to none* rather than a request to leave it as it was.
    */
-  it('replaces campaigns on patch, leaves them alone when omitted, and takes an empty set', () => {
-    const created = add({ campaigns: ['Clarity Campaign'] });
+  it('replaces campaigns on patch, leaves them alone when omitted, and takes an empty set', async () => {
+    const created = await add({ campaigns: ['Clarity Campaign'] });
     expect(created.campaigns.map((campaign) => campaign.name)).toEqual(['Clarity Campaign']);
 
-    const both = updatePost(db, created.id, { campaigns: ['Clarity Campaign', 'Wk1'] });
+    const both = await updatePost(db, created.id, { campaigns: ['Clarity Campaign', 'Wk1'] });
     expect(both.campaigns.map((campaign) => campaign.name)).toEqual(['Clarity Campaign', 'Wk1']);
-    expect(updatePost(db, created.id, { text: 'Reworded' }).campaigns).toHaveLength(2);
-    expect(updatePost(db, created.id, { campaigns: [] }).campaigns).toEqual([]);
+    expect((await updatePost(db, created.id, { text: 'Reworded' })).campaigns).toHaveLength(2);
+    expect((await updatePost(db, created.id, { campaigns: [] })).campaigns).toEqual([]);
     // Detaching a post never removes the campaign from the workspace's own list.
     expect(listCampaigns(db).map((campaign) => campaign.name)).toEqual(['Clarity Campaign', 'Wk1']);
   });
 
-  it('resolves two spellings of one campaign to a single row, keeping the first', () => {
-    const first = add({ campaigns: ['Clarity Campaign'] });
-    const second = add({ campaigns: ['CLARITY campaign'] });
+  it('resolves two spellings of one campaign to a single row, keeping the first', async () => {
+    const first = await add({ campaigns: ['Clarity Campaign'] });
+    const second = await add({ campaigns: ['CLARITY campaign'] });
     expect(second.campaigns.map((campaign) => campaign.name)).toEqual(['Clarity Campaign']);
     expect(second.campaigns[0]!.id).toBe(first.campaigns[0]!.id);
     expect(listCampaigns(db)).toHaveLength(1);
   });
 
-  it('refuses more campaigns than a post may carry, and deduplicates what it takes', () => {
-    const created = add({ campaigns: ['Wk1', 'wk1  ', ' Wk1'] });
+  it('refuses more campaigns than a post may carry, and deduplicates what it takes', async () => {
+    const created = await add({ campaigns: ['Wk1', 'wk1  ', ' Wk1'] });
     expect(created.campaigns.map((campaign) => campaign.name)).toEqual(['Wk1']);
     expect(() =>
       signalPostInput.parse({
@@ -191,8 +195,8 @@ describe('writing posts', () => {
     ).toThrow();
   });
 
-  it('takes the channel and media rows with the post when it is deleted', () => {
-    const created = add({
+  it('takes the channel and media rows with the post when it is deleted', async () => {
+    const created = await add({
       channels: ['li', 'ig'],
       mediaUrls: ['https://cdn.example.com/post.jpg'],
     });
@@ -203,13 +207,42 @@ describe('writing posts', () => {
     expect(db.prepare('SELECT COUNT(*) n FROM signal_post_media').get()).toEqual({ n: 0 });
   });
 
-  it('refuses to edit or delete a post that does not exist', () => {
-    expect(() => updatePost(db, 'nope', { text: 'x' })).toThrow(SignalPostNotFoundError);
+  /**
+   * The route parses the body before it patches, so what the schema does with an absent field is
+   * what the API does with it. A field declared with a default keeps that default inside
+   * `.partial()`'s optional wrapper, which turned a patch that named only the text into one that
+   * cleared the channels, the media, the campaigns, and the date — `signalPostPatch` strips the
+   * defaults for exactly this reason, and this is the test that says so.
+   */
+  it('leaves every unnamed field alone when a patch is parsed rather than written by hand', async () => {
+    const created = await add({
+      channels: ['li'],
+      mediaUrls: ['https://cdn.example.com/one.jpg'],
+      campaigns: ['Wk4'],
+      date: '2026-09-14',
+      time: '13:00',
+    });
+    const parsed = signalPostPatch.parse({ text: 'Reworded' });
+    expect(parsed).toEqual({ text: 'Reworded' });
+
+    const patched = await updatePost(db, created.id, parsed);
+    expect(patched).toMatchObject({
+      text: 'Reworded',
+      channels: ['li'],
+      mediaUrls: ['https://cdn.example.com/one.jpg'],
+      date: '2026-09-14',
+      time: '13:00',
+    });
+    expect(patched.campaigns.map((campaign) => campaign.name)).toEqual(['Wk4']);
+  });
+
+  it('refuses to edit or delete a post that does not exist', async () => {
+    await expect(updatePost(db, 'nope', { text: 'x' })).rejects.toThrow(SignalPostNotFoundError);
     expect(() => deletePost(db, 'nope')).toThrow(SignalPostNotFoundError);
   });
 
-  it('duplicates content, media, campaign, and channels into the queue without publications', () => {
-    const source = add({
+  it('duplicates content, media, campaign, and channels into the queue without publications', async () => {
+    const source = await add({
       text: 'Teach first. Sell second.',
       channels: ['li', 'ig'],
       mediaUrls: ['https://cdn.example.com/launch.jpg'],
@@ -270,8 +303,8 @@ describe('writing posts', () => {
     ).toEqual({ n: 0 });
   });
 
-  it('suggests the next free Signal cell and writes it only on confirm', () => {
-    const original = add({ text: 'Already booked', date: '2026-09-14', time: '09:00' });
+  it('suggests the next free Signal cell and writes it only on confirm', async () => {
+    const original = await add({ text: 'Already booked', date: '2026-09-14', time: '09:00' });
     const queued = duplicatePost(db, original.id);
     expect(suggestPostSlot(db, queued.id, '2026-09-14')).toEqual({
       date: '2026-09-15',
@@ -288,9 +321,9 @@ describe('writing posts', () => {
     expect(getPost(db, original.id)?.date).toBe('2026-09-14');
   });
 
-  it('recalculates occupancy immediately before saving a confirmed slot', () => {
-    const queued = add({ text: 'Waiting for a day', time: '09:00' });
-    add({ text: 'Takes the suggested cell', date: '2026-09-14', time: '09:00' });
+  it('recalculates occupancy immediately before saving a confirmed slot', async () => {
+    const queued = await add({ text: 'Waiting for a day', time: '09:00' });
+    await add({ text: 'Takes the suggested cell', date: '2026-09-14', time: '09:00' });
     expect(() =>
       applyPostSlot(db, queued.id, { date: '2026-09-14', time: '09:00', from: '2026-09-14' }),
     ).toThrow(SignalSlotConflictError);
@@ -306,20 +339,20 @@ describe('writing posts', () => {
     expect(getPost(db, queued.id)?.date).toBeNull();
   });
 
-  it('leaves nothing behind when the channel writes fail part-way', () => {
+  it('leaves nothing behind when the channel writes fail part-way', async () => {
     // Duplicate channels only reach the join if validation is bypassed, and the join's primary
     // key then rejects the second one. The transaction is what keeps the post row from
     // surviving on its own: a create either lands whole or does not land.
-    expect(() => createPost(db, { ...post(), channels: ['li', 'li'] as never })).toThrow();
+    await expect(createPost(db, { ...post(), channels: ['li', 'li'] as never })).rejects.toThrow();
     expect(db.prepare('SELECT COUNT(*) n FROM signal_posts').get()).toEqual({ n: 0 });
     expect(db.prepare('SELECT COUNT(*) n FROM signal_post_channels').get()).toEqual({ n: 0 });
   });
 
-  it('leaves the post as it was when a patch fails part-way', () => {
-    const created = add({ text: 'Original', channels: ['li'] });
-    expect(() =>
+  it('leaves the post as it was when a patch fails part-way', async () => {
+    const created = await add({ text: 'Original', channels: ['li'] });
+    await expect(
       updatePost(db, created.id, { text: 'Changed', channels: ['x', 'x'] as never }),
-    ).toThrow();
+    ).rejects.toThrow();
     expect(getPost(db, created.id)).toMatchObject({ text: 'Original', channels: ['li'] });
   });
 });
@@ -364,9 +397,9 @@ describe('validation', () => {
 
 describe('the read provider', () => {
   it('orders a range by date, then time', async () => {
-    add({ text: 'Later that day', date: '2026-09-14', time: '15:00' });
-    add({ text: 'Earlier that day', date: '2026-09-14', time: '09:00' });
-    add({ text: 'The day before', date: '2026-09-13', time: '23:00' });
+    await add({ text: 'Later that day', date: '2026-09-14', time: '15:00' });
+    await add({ text: 'Earlier that day', date: '2026-09-14', time: '09:00' });
+    await add({ text: 'The day before', date: '2026-09-13', time: '23:00' });
 
     const { posts } = await new LocalSignalProvider(db).listPosts({
       from: '2026-09-01',
@@ -400,7 +433,8 @@ describe('the read provider', () => {
     const within = await provider.listPosts({ from: '2026-09-01', to: '2026-09-30' });
     expect(within.truncated).toBe(false);
 
-    for (let n = 0; n <= SIGNAL_RANGE_LIMIT; n += 1) add({ text: `Post ${n}`, date: '2026-09-14' });
+    for (let n = 0; n <= SIGNAL_RANGE_LIMIT; n += 1)
+      await add({ text: `Post ${n}`, date: '2026-09-14' });
     const over = await provider.listPosts({ from: '2026-09-01', to: '2026-09-30' });
     expect(over.posts).toHaveLength(SIGNAL_RANGE_LIMIT);
     expect(over.truncated).toBe(true);
@@ -467,8 +501,8 @@ describe('the HTTP boundary', () => {
   });
 
   it('reads a range and refuses one that ends before it starts', async () => {
-    add({ text: 'In range', date: '2026-09-14' });
-    add({ text: 'Out of range', date: '2026-10-14' });
+    await add({ text: 'In range', date: '2026-09-14' });
+    await add({ text: 'Out of range', date: '2026-10-14' });
 
     const response = await request(app())
       .get('/api/signal/posts?from=2026-09-01&to=2026-09-30')
@@ -481,8 +515,8 @@ describe('the HTTP boundary', () => {
   });
 
   it('serves the queue separately, and never inside a range', async () => {
-    const queued = add({ text: 'Unscheduled idea' });
-    add({ text: 'Scheduled', date: '2026-09-14' });
+    const queued = await add({ text: 'Unscheduled idea' });
+    await add({ text: 'Scheduled', date: '2026-09-14' });
 
     const queue = await request(app()).get('/api/signal/queue').expect(200);
     expect(queue.body.map((p: { id: string }) => p.id)).toEqual([queued.id]);

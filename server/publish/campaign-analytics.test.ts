@@ -105,8 +105,11 @@ const read = (query: Record<string, string> = {}) =>
   readSignalCampaignAnalytics(db, signalCampaignAnalyticsQuery.parse(query));
 
 describe('gathering campaign figures from the rows', () => {
-  it('groups a delivered, measured post under its campaigns and names the accounts it reached', () => {
-    const post = add('The launch post', { date: '2026-09-14', campaigns: ['Clarity', 'Wk1'] });
+  it('groups a delivered, measured post under its campaigns and names the accounts it reached', async () => {
+    const post = await add('The launch post', {
+      date: '2026-09-14',
+      campaigns: ['Clarity', 'Wk1'],
+    });
     const publicationId = deliver(post, {
       channel: 'tt',
       accountId: 904,
@@ -126,8 +129,11 @@ describe('gathering campaign figures from the rows', () => {
     expect(summary.accounts).toEqual([{ accountId: 904, channel: 'tt', handle: '@gholmes' }]);
   });
 
-  it('gives an unmeasured delivery no totals field, so nothing downstream can read it as zero', () => {
-    const post = add('Waiting on the provider', { date: '2026-09-14', campaigns: ['Clarity'] });
+  it('gives an unmeasured delivery no totals field, so nothing downstream can read it as zero', async () => {
+    const post = await add('Waiting on the provider', {
+      date: '2026-09-14',
+      campaigns: ['Clarity'],
+    });
     deliver(post, { channel: 'tt', accountId: 904, handle: '@gholmes' });
 
     const summary = read();
@@ -136,8 +142,11 @@ describe('gathering campaign figures from the rows', () => {
     expect(summary).not.toHaveProperty('totals');
   });
 
-  it('treats a stored reading of zero as a reading, because zero is what the platform counted', () => {
-    const post = add('Counted, and nobody watched', { date: '2026-09-14', campaigns: ['Clarity'] });
+  it('treats a stored reading of zero as a reading, because zero is what the platform counted', async () => {
+    const post = await add('Counted, and nobody watched', {
+      date: '2026-09-14',
+      campaigns: ['Clarity'],
+    });
     const publicationId = deliver(post, {
       channel: 'tt',
       accountId: 904,
@@ -151,8 +160,8 @@ describe('gathering campaign figures from the rows', () => {
     expect(summary.totals).toEqual({ views: 0, likes: 0, comments: 0, shares: 0 });
   });
 
-  it('carries the daily snapshots to the delivery they belong to, as per-day gains', () => {
-    const post = add('With a history', { date: '2026-09-14', campaigns: ['Clarity'] });
+  it('carries the daily snapshots to the delivery they belong to, as per-day gains', async () => {
+    const post = await add('With a history', { date: '2026-09-14', campaigns: ['Clarity'] });
     const publicationId = deliver(post, {
       channel: 'tt',
       accountId: 904,
@@ -169,8 +178,8 @@ describe('gathering campaign figures from the rows', () => {
     expect(read().groups[0]?.trend).toHaveLength(1);
   });
 
-  it('keeps a post with no deliveries visible as a post in its campaign', () => {
-    add('Planned and not sent', { date: '2026-09-14', campaigns: ['Clarity'] });
+  it('keeps a post with no deliveries visible as a post in its campaign', async () => {
+    await add('Planned and not sent', { date: '2026-09-14', campaigns: ['Clarity'] });
     const summary = read();
     expect(summary.groups[0]).toMatchObject({
       name: 'Clarity',
@@ -180,9 +189,9 @@ describe('gathering campaign figures from the rows', () => {
     });
   });
 
-  it('puts an unclassified post under No campaign, including one still in the queue', () => {
-    add('Never classified', { date: '2026-09-14' });
-    add('An idea with no date');
+  it('puts an unclassified post under No campaign, including one still in the queue', async () => {
+    await add('Never classified', { date: '2026-09-14' });
+    await add('An idea with no date');
     const summary = read();
     expect(summary.groups.map((group) => [group.campaignId, group.posts])).toEqual([[null, 2]]);
     // A range is a question about days, and an undated post is in none of them.
@@ -202,9 +211,9 @@ describe('gathering campaign figures from the rows', () => {
 });
 
 describe('the filters, as the address spells them', () => {
-  const workspace = () => {
-    const first = add('Clarity, measured', { date: '2026-09-01', campaigns: ['Clarity'] });
-    const second = add('Explain, measured', { date: '2026-09-20', campaigns: ['Explain'] });
+  const workspace = async () => {
+    const first = await add('Clarity, measured', { date: '2026-09-01', campaigns: ['Clarity'] });
+    const second = await add('Explain, measured', { date: '2026-09-20', campaigns: ['Explain'] });
     const tiktok = deliver(first, {
       channel: 'tt',
       accountId: 904,
@@ -248,23 +257,23 @@ describe('the filters, as the address spells them', () => {
     ).toThrow();
   });
 
-  it('narrows by channel and by account against the stored rows', () => {
-    workspace();
+  it('narrows by channel and by account against the stored rows', async () => {
+    await workspace();
     expect(read({ channels: 'tt' }).totals?.views).toBe(1000);
     expect(read({ accounts: '905' }).totals?.views).toBe(200);
     expect(read({ channels: 'tt', accounts: '905' })).not.toHaveProperty('totals');
   });
 
-  it('narrows by campaign, with several read as or', () => {
-    const { first, second } = workspace();
+  it('narrows by campaign, with several read as or', async () => {
+    const { first, second } = await workspace();
     const clarityId = first.campaigns[0]!.id;
     const explainId = second.campaigns[0]!.id;
     expect(read({ campaigns: clarityId }).totals?.views).toBe(1000);
     expect(read({ campaigns: `${clarityId},${explainId}` }).totals?.views).toBe(1200);
   });
 
-  it('narrows by the post’s own date', () => {
-    workspace();
+  it('narrows by the post’s own date', async () => {
+    await workspace();
     expect(read({ from: '2026-09-10' }).totals?.views).toBe(200);
     expect(read({ to: '2026-09-10' }).totals?.views).toBe(1000);
     expect(read({ from: '2026-09-01', to: '2026-09-30' }).totals?.views).toBe(1200);
@@ -273,7 +282,7 @@ describe('the filters, as the address spells them', () => {
 
 describe('the campaign figures route', () => {
   it('answers the summary, and contacts no provider on any path through it', async () => {
-    const post = add('The launch post', { date: '2026-09-14', campaigns: ['Clarity'] });
+    const post = await add('The launch post', { date: '2026-09-14', campaigns: ['Clarity'] });
     const publicationId = deliver(post, {
       channel: 'tt',
       accountId: 904,
@@ -293,7 +302,7 @@ describe('the campaign figures route', () => {
   });
 
   it('takes the filters from the query string and echoes them back', async () => {
-    const post = add('The launch post', { date: '2026-09-14', campaigns: ['Clarity'] });
+    const post = await add('The launch post', { date: '2026-09-14', campaigns: ['Clarity'] });
     const campaignId = post.campaigns[0]!.id;
     const response = await request(app())
       .get(
@@ -318,7 +327,7 @@ describe('the campaign figures route', () => {
   });
 
   it('writes nothing: reading figures by campaign cannot change a post or a delivery', async () => {
-    const post = add('The launch post', { date: '2026-09-14', campaigns: ['Clarity'] });
+    const post = await add('The launch post', { date: '2026-09-14', campaigns: ['Clarity'] });
     const publicationId = deliver(post, {
       channel: 'tt',
       accountId: 904,

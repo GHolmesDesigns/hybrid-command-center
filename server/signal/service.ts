@@ -24,6 +24,17 @@ import {
 } from './rows.ts';
 import { campaignsByPost, signalPostCampaignNames, writePostCampaigns } from './campaigns.ts';
 import {
+  signalPostMediaIssue,
+  urlPostMedia,
+  type SignalPostMedia,
+} from '../../shared/signal-media.ts';
+import {
+  driveMediaProvider,
+  parseDriveMediaLink,
+  resolveDriveMedia,
+  type DriveMediaProvider,
+} from '../drive/media.ts';
+import {
   PUBLISH_PLATFORMS,
   PUBLISH_POST_KINDS,
   PUBLISH_POST_KIND_LABEL,
@@ -59,6 +70,20 @@ const now = () => new Date().toISOString();
 export class SignalPostNotFoundError extends Error {}
 
 /**
+ * A media list this app will not store: a descriptor that breaks the cross-field rule, the same
+ * Drive file twice, or a recheck of a file the post does not carry. Answered as a 400.
+ *
+ * A Drive link that will not resolve is a `DriveMediaError` instead, thrown from the capability
+ * that tried, so the message names what Drive said rather than what this service concluded.
+ */
+export class SignalMediaError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SignalMediaError';
+  }
+}
+
+/**
  * A suggested slot was refused: either the confirmed cell is now taken, or the search window
  * found no free cell. Carries a replacement suggestion when one exists, so the editor can show
  * it without a second round-trip.
@@ -82,6 +107,32 @@ const mediaUrl = z
   .max(2048, 'A media URL is too long.')
   .url('Use a valid media URL.')
   .refine((value) => new URL(value).protocol === 'https:', 'Media URLs must use https.');
+
+/**
+ * One media reference as a request states it.
+ *
+ * A `DRIVE` item carries a **link**, never a file id. That is the boundary rule from C74: a link
+ * is parsed as a URL, checked against the Drive hosts, and matched against the documented forms
+ * before anything is looked up, and there is no path by which a bare id from a browser becomes a
+ * stored reference. The link is bounded here and understood in `server/drive/media.ts`, which owns
+ * the one parsing rule that a paste, a save, and an explicit recheck all go through.
+ *
+ * Nothing about a Drive file's metadata is accepted from a request. The name, MIME type, size, and
+ * version fingerprint are whatever Drive said when this app resolved the link, so a caller cannot
+ * describe a file into existence — the worst a forged link achieves is a refusal.
+ */
+const mediaItemInput = z.discriminatedUnion('source', [
+  z.object({ source: z.literal('URL'), url: mediaUrl }),
+  z.object({
+    source: z.literal('DRIVE'),
+    url: z
+      .string()
+      .trim()
+      .min(1, 'Paste a Google Drive file link.')
+      .max(2048, 'That Drive link is too long.'),
+  }),
+]);
+export type SignalMediaItemInput = z.output<typeof mediaItemInput>;
 const date = z
   .string()
   .regex(SIGNAL_DATE_PATTERN, 'Use a YYYY-MM-DD date.')
@@ -97,8 +148,24 @@ const postFields = {
     .max(SIGNAL_CHANNELS.length)
     .transform((values) => [...new Set(values)])
     .default([]),
-  /** Ordered and bounded; per-platform media limits belong to the publisher preflight. */
+  /**
+   * Ordered and bounded; per-platform media limits belong to the publisher preflight.
+   *
+   * The public-URL half of the media list, and the shape every caller wrote before a reference
+   * could be a Drive file. It is still exactly that: a request that sends only this gets a post
+   * whose media are all `URL` rows, unchanged in every respect. `media` below is the whole list
+   * and wins when both are sent.
+   */
   mediaUrls: z.array(mediaUrl).max(20, 'A post can reference at most 20 media items.').default([]),
+  /**
+   * The whole ordered media list, discriminated by source.
+   *
+   * When present this is authoritative and `mediaUrls` is ignored — they are alternatives rather
+   * than a merge, the same way the provider treats its own `media` and `media_urls`
+   * (`docs/post-bridge-api-surface.md` §5). Absent from a patch means the post's media are left
+   * exactly as they are, which is what lets an edit to the caption leave a Drive fingerprint alone.
+   */
+  media: z.array(mediaItemInput).max(20, 'A post can reference at most 20 media items.').optional(),
   /** Null is the unscheduled queue, and is the default: an idea starts without a day. */
   date: date.nullable().default(null),
   time: z
@@ -120,11 +187,32 @@ const postFields = {
 };
 
 export const signalPostInput = z.object(postFields);
+
 /**
- * A patch changes only what it names. `.partial()` over the same fields is what keeps the two
- * from drifting: a field added above is patchable without a second edit here.
+ * A patch changes only what it names — and the defaults have to come off for that to be true.
+ *
+ * `.partial()` alone is not enough. It wraps each field in `ZodOptional`, but a field declared with
+ * `.default(...)` keeps its default *inside* that wrapper, so parsing `{ text: 'Reworded' }`
+ * against it yields `channels: []`, `mediaUrls: []`, `campaigns: []`, and `date: null` — a patch
+ * that says nothing about those fields arriving at the write as a patch that clears them. Every
+ * caller inside this module passes an object literal and so never met it; the `PATCH` route parses
+ * the body and does.
+ *
+ * Stripping the default first is what makes an omitted field arrive as `undefined`, which is what
+ * every `!== undefined` test below is written against. It is still derived from `postFields` rather
+ * than typed out a second time, so a field added above is still patchable without a second edit.
  */
-export const signalPostPatch = z.object(postFields).partial();
+type WithoutDefault<T> = T extends z.ZodDefault<infer Inner> ? Inner : T;
+type SignalPostPatchShape = {
+  [K in keyof typeof postFields]: z.ZodOptional<WithoutDefault<(typeof postFields)[K]>>;
+};
+const patchShape = Object.fromEntries(
+  Object.entries(postFields).map(([field, schema]) => [
+    field,
+    (schema instanceof z.ZodDefault ? schema.unwrap() : schema).optional(),
+  ]),
+) as SignalPostPatchShape;
+export const signalPostPatch = z.object(patchShape);
 
 export type SignalPostInput = z.output<typeof signalPostInput>;
 export type SignalPostPatch = z.output<typeof signalPostPatch>;
@@ -162,10 +250,105 @@ function writeChannels(db: Db, postId: string, channels: string[]): void {
   for (const value of channels) insert.run(postId, value);
 }
 
-function writeMedia(db: Db, postId: string, mediaUrls: string[]): void {
+function writeMedia(db: Db, postId: string, media: SignalPostMedia[]): void {
   db.prepare('DELETE FROM signal_post_media WHERE post_id=?').run(postId);
-  const insert = db.prepare('INSERT INTO signal_post_media(post_id, position, url) VALUES(?,?,?)');
-  mediaUrls.forEach((url, position) => insert.run(postId, position, url));
+  const insert = db.prepare(
+    `INSERT INTO signal_post_media(
+       post_id, position, url, source, drive_file_id, drive_name, mime_type, size_bytes,
+       drive_version, drive_modified_at, drive_checksum, drive_verified_at
+     ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+  );
+  media.forEach((item, position) => {
+    // The same rule the Zod boundary applied and the SQLite triggers will apply again. Stated
+    // here as well because this is the only function that writes the table, and a descriptor
+    // assembled in code rather than parsed from a request reaches it without passing the schema.
+    const issue = signalPostMediaIssue(item);
+    if (issue) throw new SignalMediaError(issue);
+    insert.run(
+      postId,
+      position,
+      item.url,
+      item.source,
+      item.driveFileId,
+      item.driveName,
+      item.mimeType,
+      item.sizeBytes,
+      item.driveVersion,
+      item.driveModifiedAt,
+      item.driveChecksum,
+      item.driveVerifiedAt,
+    );
+  });
+}
+
+/** The media a post carries now, by Drive file id. Empty for a post that has none. */
+function storedDriveMedia(db: Db, postId: string | null): Map<string, SignalPostMedia> {
+  if (!postId) return new Map();
+  const stored = mediaByPost(db, [postId]).get(postId) ?? [];
+  return new Map(
+    stored.flatMap((item) =>
+      item.source === 'DRIVE' && item.driveFileId ? [[item.driveFileId, item] as const] : [],
+    ),
+  );
+}
+
+/**
+ * Turns what a request asked for into the descriptors that will be stored.
+ *
+ * The rule for a Drive item is the point of this function, and it is short: **a reference the post
+ * already carries is carried forward exactly as it stands, and only a new one is resolved.** That
+ * is what makes a fingerprint change an explicit act. Saving an edit to the caption re-sends the
+ * whole media list, and if that re-resolved every Drive item then a file replaced under the same
+ * id would be silently adopted by an edit that was about the text — the opposite of the version
+ * binding this card exists to give. `recheck` names the one file the user asked about, and it is
+ * the only way an existing fingerprint is replaced.
+ *
+ * Resolution happens **before** the transaction that writes it. A Drive call inside `BEGIN
+ * IMMEDIATE` would hold the write lock for the length of a network round trip.
+ */
+async function resolveMediaItems(
+  db: Db,
+  postId: string | null,
+  items: SignalMediaItemInput[],
+  provider: DriveMediaProvider,
+  recheck: ReadonlySet<string> = new Set(),
+): Promise<SignalPostMedia[]> {
+  const carried = storedDriveMedia(db, postId);
+  const seen = new Set<string>();
+  const resolved: SignalPostMedia[] = [];
+  for (const item of items) {
+    if (item.source === 'URL') {
+      resolved.push(urlPostMedia(item.url));
+      continue;
+    }
+    const fileId = parseDriveMediaLink(item.url);
+    if (seen.has(fileId))
+      throw new SignalMediaError('A post cannot carry the same Drive file twice.');
+    seen.add(fileId);
+    const existing = carried.get(fileId);
+    if (existing && !recheck.has(fileId)) {
+      resolved.push(existing);
+      continue;
+    }
+    resolved.push(await resolveDriveMedia({ link: item.url, provider }));
+  }
+  return resolved;
+}
+
+/**
+ * What a create or a patch says the media list is, or `undefined` when it says nothing about it.
+ *
+ * `media` wins over `mediaUrls`; see the field notes on both. A patch naming neither leaves the
+ * post's references untouched, fingerprints included.
+ */
+function mediaItemsOf(input: {
+  media?: SignalMediaItemInput[];
+  mediaUrls?: string[];
+}): SignalMediaItemInput[] | undefined {
+  if (input.media !== undefined) return input.media;
+  if (input.mediaUrls !== undefined)
+    return input.mediaUrls.map((url) => ({ source: 'URL' as const, url }));
+  return undefined;
 }
 
 function readRow(db: Db, postId: string): SignalPostRow | undefined {
@@ -196,7 +379,13 @@ export function listQueue(db: Db): SignalPost[] {
   return toSignalPosts(db, rows);
 }
 
-export function createPost(db: Db, input: SignalPostInput): SignalPost {
+/**
+ * The write itself, over media that is already resolved.
+ *
+ * Split from `createPost` so that a duplicate — which copies descriptors it already holds — needs
+ * no Drive call and stays synchronous, and so that the transaction below contains no `await`.
+ */
+function insertPost(db: Db, input: SignalPostInput, media: SignalPostMedia[]): SignalPost {
   const postId = id();
   const timestamp = now();
   // The post, channels, media, and campaigns land together: a post missing part of the requested
@@ -222,7 +411,7 @@ export function createPost(db: Db, input: SignalPostInput): SignalPost {
       timestamp,
     );
     writeChannels(db, postId, input.channels);
-    writeMedia(db, postId, input.mediaUrls);
+    writeMedia(db, postId, media);
     writePostCampaigns(db, postId, input.campaigns);
     db.exec('COMMIT');
   } catch (error) {
@@ -232,7 +421,36 @@ export function createPost(db: Db, input: SignalPostInput): SignalPost {
   return getPost(db, postId) as SignalPost;
 }
 
-export function updatePost(db: Db, postId: string, patch: SignalPostPatch): SignalPost {
+/**
+ * A new post, with any Drive references resolved first.
+ *
+ * Asynchronous because a Drive link the request has never seen resolved has to be looked up before
+ * it can be stored, and only then: a post whose media are all public URLs contacts nothing and the
+ * provider is never touched.
+ */
+export async function createPost(
+  db: Db,
+  input: SignalPostInput,
+  provider: DriveMediaProvider = driveMediaProvider(db),
+): Promise<SignalPost> {
+  const items = mediaItemsOf(input) ?? [];
+  return insertPost(db, input, await resolveMediaItems(db, null, items, provider));
+}
+
+/**
+ * The stored fields of one post, and optionally its media, in one transaction.
+ *
+ * Media is passed already resolved for the same reason it is in `insertPost`: this is the ordinary
+ * Signal edit transaction, and an explicit recheck writes a new fingerprint through it rather than
+ * through a path of its own. Bumping `updated_at` is what invalidates an open publish preview,
+ * because the plan hash covers it.
+ */
+function writePost(
+  db: Db,
+  postId: string,
+  patch: SignalPostPatch,
+  media: SignalPostMedia[] | undefined,
+): SignalPost {
   const existing = readRow(db, postId);
   if (!existing) throw new SignalPostNotFoundError(`No Signal post ${postId}.`);
 
@@ -266,7 +484,7 @@ export function updatePost(db: Db, postId: string, patch: SignalPostPatch): Sign
       postId,
     );
     if (patch.channels !== undefined) writeChannels(db, postId, patch.channels);
-    if (patch.mediaUrls !== undefined) writeMedia(db, postId, patch.mediaUrls);
+    if (media !== undefined) writeMedia(db, postId, media);
     // A patch changes only what it names, campaigns included: an edit to the time leaves the
     // campaigns alone, and `[]` is the deliberate answer *this post belongs to none*.
     if (patch.campaigns !== undefined) writePostCampaigns(db, postId, patch.campaigns);
@@ -276,6 +494,57 @@ export function updatePost(db: Db, postId: string, patch: SignalPostPatch): Sign
     throw error;
   }
   return getPost(db, postId) as SignalPost;
+}
+
+/**
+ * A patch, with any *new* Drive reference resolved first and every existing one left exactly as it
+ * stands. See `resolveMediaItems` for why that asymmetry is the whole point.
+ */
+export async function updatePost(
+  db: Db,
+  postId: string,
+  patch: SignalPostPatch,
+  provider: DriveMediaProvider = driveMediaProvider(db),
+): Promise<SignalPost> {
+  if (!readRow(db, postId)) throw new SignalPostNotFoundError(`No Signal post ${postId}.`);
+  const items = mediaItemsOf(patch);
+  const media =
+    items === undefined ? undefined : await resolveMediaItems(db, postId, items, provider);
+  return writePost(db, postId, patch, media);
+}
+
+/**
+ * Checks one Drive reference against Drive again, on purpose, and records what it found.
+ *
+ * The only way a stored fingerprint is replaced. It resolves through the same rule a paste uses —
+ * from the reference's own stored link, which is Drive's canonical `webViewLink` and parses back
+ * to the same id — and writes the result through the ordinary edit transaction, so the post's
+ * `updated_at` moves and any open publish preview stops matching.
+ *
+ * A failure throws and **writes nothing**: the row keeps the metadata it had, the composer keeps
+ * showing it beside the reason, and nothing about the reference is silently removed or rewritten.
+ * C75 owns the mandatory revalidation at submit; this is the one a person asks for.
+ */
+export async function recheckPostMedia(
+  db: Db,
+  postId: string,
+  driveFileId: string,
+  provider: DriveMediaProvider = driveMediaProvider(db),
+): Promise<SignalPost> {
+  const post = getPost(db, postId);
+  if (!post) throw new SignalPostNotFoundError(`No Signal post ${postId}.`);
+  const target = post.media.find(
+    (item) => item.source === 'DRIVE' && item.driveFileId === driveFileId,
+  );
+  if (!target)
+    throw new SignalMediaError('That Drive file is not one of this post’s media references.');
+  const items: SignalMediaItemInput[] = post.media.map((item) =>
+    item.source === 'DRIVE'
+      ? { source: 'DRIVE' as const, url: item.url }
+      : { source: 'URL' as const, url: item.url },
+  );
+  const media = await resolveMediaItems(db, postId, items, provider, new Set([driveFileId]));
+  return writePost(db, postId, {}, media);
 }
 
 /**
@@ -456,19 +725,27 @@ export function getPostVariants(db: Db, postId: string): PublishVariantRecord[] 
 export function duplicatePost(db: Db, postId: string): SignalPost {
   const source = getPost(db, postId);
   if (!source) throw new SignalPostNotFoundError(`No Signal post ${postId}.`);
-  return createPost(db, {
-    text: source.text,
-    channels: source.channels,
-    mediaUrls: source.mediaUrls,
-    date: null,
-    time: source.time,
-    format: source.format,
-    status: 'DRAFT',
-    // The names, not the ids: `createPost` resolves them, and they already exist, so the duplicate
-    // joins the same campaigns rather than creating second rows with the same names.
-    campaigns: source.campaigns.map((campaign) => campaign.name),
-    cta: source.cta,
-  });
+  // The descriptors verbatim, Drive rows included: a duplicate is a copy of a plan, and the copy
+  // means the same file at the same version the original was bound to. Copying them rather than
+  // re-resolving is also why this needs no Drive call and stays synchronous — and it is honest,
+  // because the fingerprint being copied is the last one this app actually verified.
+  return insertPost(
+    db,
+    {
+      text: source.text,
+      channels: source.channels,
+      mediaUrls: [],
+      date: null,
+      time: source.time,
+      format: source.format,
+      status: 'DRAFT',
+      // The names, not the ids: they already exist, so the duplicate joins the same campaigns
+      // rather than creating second rows with the same names.
+      campaigns: source.campaigns.map((campaign) => campaign.name),
+      cta: source.cta,
+    },
+    source.media,
+  );
 }
 
 function occupiedSlots(db: Db, exceptPostId: string): SignalSlot[] {
@@ -515,5 +792,7 @@ export function applyPostSlot(db: Db, postId: string, input: SignalSlotInput): S
       suggestionFor(post, occupied, input.from),
     );
   }
-  return updatePost(db, postId, { date: input.date, time: input.time });
+  // The write core rather than `updatePost`: a slot names no media, so there is nothing to resolve
+  // and no reason for this to become a call that could contact Drive.
+  return writePost(db, postId, { date: input.date, time: input.time }, undefined);
 }

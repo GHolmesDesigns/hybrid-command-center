@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { AlertTriangle, ExternalLink, FileText, Play, RefreshCw } from 'lucide-react';
-import { SIGNAL_CHANNEL_LABEL, signalMediaKind, type SignalPost } from '../../../shared/signal';
+import { SIGNAL_CHANNEL_LABEL, signalMediaKindFor, type SignalPost } from '../../../shared/signal';
+import { urlPostMedia, type SignalPostMedia } from '../../../shared/signal-media';
+import { formatFileSize } from '../../../shared/drive';
 import {
   publishCapabilityFor,
   PUBLISH_POST_KIND_LABEL,
@@ -59,8 +61,14 @@ function VariantFields({
 }: {
   capability: PublishPlatformCapability;
   value: PublishContentVariant;
-  /** The post's own media, in its order. A selection can only ever be a subset of this. */
-  postMedia: string[];
+  /**
+   * The post's own media, in its order. A selection can only ever be a subset of this.
+   *
+   * Descriptors rather than URLs: the selection is still stated in URLs, because that is what the
+   * stored layer and the provider request carry, but what each one *is* comes from the descriptor
+   * — a Drive reference is classified from its stored MIME type, never from its viewer link.
+   */
+  postMedia: readonly SignalPostMedia[];
   onChange: (next: PublishContentVariant) => void;
   disabled?: boolean;
 }) {
@@ -205,31 +213,37 @@ function VariantFields({
               name={`${id}-media-mode`}
               checked={selection !== undefined}
               disabled={disabled}
-              onChange={() => set({ mediaUrls: [...postMedia] })}
+              onChange={() => set({ mediaUrls: postMedia.map((item) => item.url) })}
             />
             Choose media for {capability.label}
           </label>
           {selection !== undefined && (
             <ol>
-              {postMedia.map((url, index) => (
-                <li key={`${index}-${url}`}>
+              {postMedia.map((item, index) => (
+                <li key={`${index}-${item.url}`}>
                   <label className="signal-variant-check">
                     <input
                       type="checkbox"
-                      checked={selection.includes(url)}
+                      checked={selection.includes(item.url)}
                       disabled={disabled}
                       onChange={(event) =>
                         set({
                           mediaUrls: event.target.checked
-                            ? postMedia.filter(
-                                (candidate) => candidate === url || selection.includes(candidate),
-                              )
-                            : selection.filter((candidate) => candidate !== url),
+                            ? postMedia
+                                .filter(
+                                  (candidate) =>
+                                    candidate.url === item.url || selection.includes(candidate.url),
+                                )
+                                .map((candidate) => candidate.url)
+                            : selection.filter((candidate) => candidate !== item.url),
                         })
                       }
                     />
-                    Media {index + 1} · {signalMediaKind(url)}
-                    <span className="signal-variant-url">{url}</span>
+                    Media {index + 1} · {signalMediaKindFor(item)}
+                    {item.source === 'DRIVE' && ' · Drive'}
+                    <span className="signal-variant-url">
+                      {item.source === 'DRIVE' ? item.driveName : item.url}
+                    </span>
                   </label>
                 </li>
               ))}
@@ -311,7 +325,7 @@ export function PlatformVariantsEditor({
               <VariantFields
                 capability={capability}
                 value={stored ?? {}}
-                postMedia={post.mediaUrls}
+                postMedia={post.media}
                 disabled={busy}
                 onChange={(next) => update(platform, next)}
               />
@@ -350,12 +364,19 @@ export function PlatformVariantsEditor({
  * `referrerPolicy="no-referrer"` is on the elements the attribute is defined for, and the app's
  * `Referrer-Policy: no-referrer` response header covers the rest, so nothing this renders tells a
  * media host which page asked for it.
+ *
+ * **A Drive reference is never embedded.** Its URL is Drive's viewer page rather than the file, so
+ * an `<img>` or a `<video>` pointed at it would fetch an HTML document and show a broken frame;
+ * what it gets instead is what Drive said about the file and a link to open it. That is also the
+ * honest picture of what this app holds: metadata and a version fingerprint, and no bytes.
  */
-function PreviewMedia({ url, index }: { url: string; index: number }) {
-  const kind = signalMediaKind(url);
+function PreviewMedia({ media, index }: { media: SignalPostMedia; index: number }) {
+  const url = media.url;
+  const kind = signalMediaKindFor(media);
   const [broken, setBroken] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const label = `Media ${index + 1} · ${kind}`;
+  const isDrive = media.source === 'DRIVE';
 
   const fallback = (
     <p className="signal-preview-media-fallback">
@@ -373,7 +394,17 @@ function PreviewMedia({ url, index }: { url: string; index: number }) {
         </a>
       </p>
       <span className="signal-preview-media-url">{url}</span>
-      {kind === 'image' &&
+      {isDrive && (
+        <p className="signal-preview-media-note">
+          <FileText aria-hidden="true" /> Drive file · {media.driveName} · {media.mimeType} ·{' '}
+          {formatFileSize(media.sizeBytes)}
+          {media.driveVerifiedAt
+            ? ` · checked ${new Date(media.driveVerifiedAt).toLocaleString()}`
+            : ''}
+        </p>
+      )}
+      {!isDrive &&
+        kind === 'image' &&
         (broken ? (
           fallback
         ) : (
@@ -386,7 +417,8 @@ function PreviewMedia({ url, index }: { url: string; index: number }) {
             onError={() => setBroken(true)}
           />
         ))}
-      {kind === 'video' &&
+      {!isDrive &&
+        kind === 'video' &&
         (broken ? (
           fallback
         ) : loaded ? (
@@ -407,7 +439,7 @@ function PreviewMedia({ url, index }: { url: string; index: number }) {
             <Play aria-hidden="true" /> Load this video
           </button>
         ))}
-      {(kind === 'pdf' || kind === 'unknown') && (
+      {!isDrive && (kind === 'pdf' || kind === 'unknown') && (
         <p className="signal-preview-media-note">
           <FileText aria-hidden="true" />{' '}
           {kind === 'pdf'
@@ -509,8 +541,15 @@ function PreviewPanel({
             <p className="signal-preview-field">No media on this target.</p>
           ) : (
             <ol className="signal-preview-media-list">
+              {/* The selection is URLs; what each one is comes from the post's own descriptors.
+                  A URL the post no longer carries falls back to a public reference, which is what
+                  it would have been read as before descriptors existed. */}
               {content.mediaUrls.map((url, index) => (
-                <PreviewMedia key={`${index}-${url}`} url={url} index={index} />
+                <PreviewMedia
+                  key={`${index}-${url}`}
+                  media={post.media.find((item) => item.url === url) ?? urlPostMedia(url)}
+                  index={index}
+                />
               ))}
             </ol>
           )}
@@ -540,7 +579,7 @@ function PreviewPanel({
           <VariantFields
             capability={capability}
             value={accountLayer ?? {}}
-            postMedia={post.mediaUrls}
+            postMedia={post.media}
             disabled={busy}
             onChange={onAccountChange}
           />

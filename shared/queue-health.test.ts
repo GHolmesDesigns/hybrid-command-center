@@ -48,6 +48,7 @@ const post = (overrides: Partial<SignalPost> = {}): SignalPost => ({
   id: 'post-1',
   text: 'Clarity as competitive advantage',
   channels: ['x'],
+  media: [],
   mediaUrls: [],
   date: '2026-08-19',
   time: '18:00',

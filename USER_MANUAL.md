@@ -610,11 +610,30 @@ then proposes the next date at that time that the Signal schedule does not alrea
 is written until you confirm **Use this slot**. If another post takes that cell first, Signal
 refuses the write and offers the next free cell instead.
 
-Media is added as a public `https:` URL, not uploaded. Use the arrow controls beside a media row to
-change its order, or the trash control to detach it from the post. The planner shows the media
-count on the post. Command Center stores only those URL references — the file itself is never
-copied here and nothing reads inside it — so an extensionless link remains an unknown media kind
-until publishing preflight asks you to correct it.
+Media is a reference, never an upload, and it comes in two kinds. **Add media URL** takes a public
+`https:` address. **Add a Drive file by link** takes a share link to a file in your connected
+Drive — paste the link Drive itself gives you under Share, and Command Center asks Drive what the
+file is. Use the arrow controls beside a media row to change its order, or the trash control to
+detach it from the post. The planner shows the media count on the post. The file itself is never
+copied here and nothing reads inside it, so a public link with no file extension remains an unknown
+media kind until publishing preflight asks you to correct it.
+
+A Drive file shows its name, type, size, and when it was last checked, and its name links out to
+Drive. Because Drive told Command Center the type, a Drive video is known to be a video even though
+a share link has no extension — which is what lets the publishing preview check the platform's rules
+without asking Drive again.
+
+**Recheck Drive file** asks Drive about that file once more, on purpose. It is the only thing that
+replaces what Command Center recorded, and it counts as an edit to the post: an open publishing
+preview stops matching afterwards, because a file whose content changed must not go out under a plan
+you approved before it did. Save the post first — the button waits until there is nothing unsaved.
+If the recheck fails, the reference stays exactly where it is with the last details Drive gave, and
+the reason appears underneath it. Nothing is removed and nothing is rewritten behind your back.
+
+Some links are refused, each with its own reason: a folder rather than a file, a shortcut that does
+not lead to one file, a Google Doc, Sheet, or Slides file with no downloadable content, a file type
+the publisher does not accept, a file Drive reports no size for, or one larger than Command Center
+will bind to. A link from anywhere other than Drive is refused before anything is looked up.
 
 #### Per-platform content
 
@@ -1214,7 +1233,9 @@ Media in a panel is shown small, because a preview is for checking the order and
 loads with the preview. **A video never starts on its own**: press **Load this video** and it appears
 with ordinary controls. Media that cannot be shown says so and still gives you its address to open,
 which is the honest answer — Command Center never fetches these files on the server, so a preview
-cannot tell you more about one than your own browser can.
+cannot tell you more about one than your own browser can. A Drive file is listed with its name,
+type, size, and last check rather than shown: a Drive link addresses a page for you to open, not the
+file, so there is nothing there to display.
 
 You can also tailor content for one account from inside its tab, under **Override for … only**. Saving
 it re-checks the plan, because what you confirm has to be what you last looked at.

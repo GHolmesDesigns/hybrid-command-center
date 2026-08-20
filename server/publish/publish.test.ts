@@ -252,7 +252,7 @@ describe('preflight against the shared capability contract', () => {
       new Date('2026-01-01'),
     );
     expect(reportFor(unclassified, 'x').warnings).toEqual([
-      expect.stringContaining('could not be classified from its URL'),
+      expect.stringContaining('could not be classified from what is recorded about it'),
     ]);
   });
 

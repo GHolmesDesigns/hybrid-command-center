@@ -1,5 +1,6 @@
 import { mixHex } from './contrast.ts';
 import { normalizeTagName, sameTagName } from './types.ts';
+import { signalMediaKindForMime, type SignalPostMedia } from './signal-media.ts';
 
 /**
  * Signal Campaign: the scheduled-content vocabulary the API, the planner, and the calendar
@@ -123,6 +124,11 @@ export const signalTextHasLink = (text: string): boolean => SIGNAL_LINK_PATTERN.
  * Classifies a media reference from its pathname alone, matching the proven publisher artifact.
  * An extensionless URL is deliberately `unknown`: guessing from a hostname or query string would
  * claim a video exists when the publisher's own preflight cannot know that.
+ *
+ * This is the rule for a **public URL reference**. A Drive reference is classified from the MIME
+ * type Drive reported and this app stored — `signalMediaKindFor` picks between the two, and it is
+ * what every caller holding a whole descriptor should use. Passing a Drive row's `url` here would
+ * answer `unknown` for every Drive file, because a share link addresses a viewer page.
  */
 export function signalMediaKind(url: string): SignalMediaKind {
   let pathname: string;
@@ -135,6 +141,22 @@ export function signalMediaKind(url: string): SignalMediaKind {
   if (SIGNAL_PDF_EXTENSION.test(pathname)) return 'pdf';
   if (SIGNAL_IMAGE_EXTENSION.test(pathname)) return 'image';
   return 'unknown';
+}
+
+/**
+ * The kind of one media reference, from whichever evidence its source actually has.
+ *
+ * A Drive row is classified from the MIME type Drive reported when the reference was resolved,
+ * which is why preflight can tell a video from an image **without a Drive call**: the answer was
+ * recorded at paste time and is stored on the row. A URL row is classified from its pathname, the
+ * rule above and the only one a public URL supports.
+ */
+export function signalMediaKindFor(
+  media: Pick<SignalPostMedia, 'source' | 'url' | 'mimeType'>,
+): SignalMediaKind {
+  return media.source === 'DRIVE'
+    ? signalMediaKindForMime(media.mimeType)
+    : signalMediaKind(media.url);
 }
 
 export const SIGNAL_CHANNEL_LABEL: Record<SignalChannel, string> = {
@@ -404,10 +426,20 @@ export interface SignalPost {
   text: string;
   channels: SignalChannel[];
   /**
-   * Ordered public `https:` references. Signal stores no media files, serves no media bytes, and
-   * holds none at rest, and nothing on this path fetches one. The single decided exception is not
-   * built: C74 and C75 in `docs/post-bridge-integrations-plan.md` let a confirmed submit stream one
-   * user-selected Drive file to the provider through `server/drive/media.ts`, persisting nothing.
+   * The ordered media references, each one either a public `https:` URL or a version-bound Drive
+   * file (`shared/signal-media.ts`). Signal stores no media files, serves no media bytes, and holds
+   * none at rest; a Drive reference is metadata and a version fingerprint, and C75 is the card that
+   * streams its bytes straight to the provider during a confirmed submit, persisting nothing.
+   */
+  media: SignalPostMedia[];
+  /**
+   * The same references as display addresses, in the same order — **derived from `media`**, never
+   * stored beside it.
+   *
+   * It is still here because it is the vocabulary the per-platform media selection speaks
+   * (`signal_post_variants.media_urls` names the post's media by URL) and what every list and
+   * preview renders. Read `media` when the answer depends on what a reference *is*: a Drive row's
+   * URL is Drive's viewer page, so classifying or fetching from this array would be wrong.
    */
   mediaUrls: string[];
   /** `YYYY-MM-DD` in local time, or null when the post is in the unscheduled queue. */

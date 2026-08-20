@@ -3,6 +3,7 @@ import { PROJECT_SUBFOLDERS, config } from '../config.ts';
 import { createGoogleProvider } from './google.ts';
 import { decryptJson, encryptJson } from './tokens.ts';
 import { DisconnectedDriveProvider, type DriveProvider } from './provider.ts';
+import type { DriveMediaProvider } from './media.ts';
 
 const now = () => new Date().toISOString();
 export function getSetting(db: Db, key: string) {
@@ -24,7 +25,18 @@ export function deleteSetting(db: Db, key: string) {
   db.prepare('DELETE FROM settings WHERE key=?').run(key);
 }
 
-export function driveProvider(db: Db): DriveProvider {
+/**
+ * The two Drive capabilities this workspace has, built from one authorized client, or null when
+ * there is no connection to build them from.
+ *
+ * They are returned together because they share the credentials and the token refresh, and they
+ * are two values rather than one because they are two capabilities: `provider` is the browsing
+ * vocabulary Files receives, and `media` is the file-by-id metadata read that only
+ * `server/drive/media.ts` hands out. Nothing here merges them into one interface.
+ */
+export function driveClients(
+  db: Db,
+): { provider: DriveProvider; media: DriveMediaProvider } | null {
   const encrypted = getSetting(db, 'google_tokens');
   if (
     !encrypted ||
@@ -32,9 +44,9 @@ export function driveProvider(db: Db): DriveProvider {
     !config.google.clientSecret ||
     !config.google.encryptionKey
   )
-    return new DisconnectedDriveProvider();
+    return null;
   const tokens = decryptJson(encrypted, config.google.encryptionKey);
-  const { provider, auth } = createGoogleProvider(tokens, config.google);
+  const { provider, media, auth } = createGoogleProvider(tokens, config.google);
   auth.on('tokens', (fresh) =>
     setSetting(
       db,
@@ -42,7 +54,11 @@ export function driveProvider(db: Db): DriveProvider {
       encryptJson({ ...tokens, ...fresh }, config.google.encryptionKey),
     ),
   );
-  return provider;
+  return { provider, media };
+}
+
+export function driveProvider(db: Db): DriveProvider {
+  return driveClients(db)?.provider ?? new DisconnectedDriveProvider();
 }
 
 export async function provisionClient(db: Db, clientId: string, provider = driveProvider(db)) {
