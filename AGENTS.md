@@ -29,6 +29,15 @@
 - `npm run signal:import`: loads the campaign content Signal already held into `signal_posts`.
   Real content rather than demo data, which is why it is not part of `db:seed`. Idempotent by
   post id, and it never overwrites a post that is already there, so running it twice is safe.
+- `npm run probe:post-bridge`: the Post Bridge contract probe, `scripts/probe-post-bridge.ts`. It
+  plans by default and contacts nothing; `--live` writes scheduled posts to the provider accounts
+  named on the command line and deletes them again in a `finally`, and it refuses to start without
+  `POST_BRIDGE_API_KEY` in the environment, `--yes`, `--accounts-approved`, an instant at least 48
+  hours out, an unused `--probe-label`, an explicit `--account <platform>:<id>` for every account,
+  and the label typed back at the prompt. There is no default account and no first-matching
+  behaviour. **Owner-run only, and never in CI**: it is a write against real social accounts. Its
+  request budget is a hard 50 including cleanup. What it establishes goes in §14 of
+  `docs/post-bridge-api-surface.md` as a dated result matrix — the transcript is never committed.
 - `npm test`: unit/integration tests with mock Drive
 - `npm run test:coverage`: the same suite with coverage and its thresholds. CI runs this rather
   than `npm test`, so a drop below any project's threshold fails the build. The thresholds are
