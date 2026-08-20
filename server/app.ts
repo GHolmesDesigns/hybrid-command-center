@@ -174,8 +174,12 @@ const productionContentSecurityPolicy = {
     // Media widens for the same reason images do, and for one screen: the publishing preview
     // renders the video a post already references, from the public URL the post carries, so the
     // host is the user's and is not known in advance. The browser fetches it and the server never
-    // does -- this app uploads, downloads and proxies no media, the rule recorded on
-    // signal_post_media and in docs/publishing-integration.md section 3.3.
+    // does. The rule recorded on signal_post_media and in docs/publishing-integration.md section
+    // 3.3 is narrower than it once read: this app stores no media files, serves no media bytes,
+    // and holds none at rest. The one decided exception is not built and would not widen this
+    // policy if it were -- C74 and C75 in docs/post-bridge-integrations-plan.md put a single
+    // server-side stream from a selected Drive file to the provider behind a confirmed submit,
+    // and no browser request is involved, so no directive here changes for it.
     mediaSrc: ["'self'", 'https:'],
     objectSrc: ["'none'"],
     scriptSrc: ["'self'"],

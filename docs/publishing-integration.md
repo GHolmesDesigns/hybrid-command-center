@@ -19,6 +19,15 @@ re-checked on 2026-08-13 against the working integration extracted in
 [`social-media-publisher-artifact.md`](social-media-publisher-artifact.md). Where the artifact and
 the vendor-documentation record disagreed, this record now states which answer governs this app.
 
+Two later documents sit beside this one and neither replaces it. The provider surface was
+re-established from the OpenAPI document on 2026-08-19 and recorded as a dated research note in
+[`post-bridge-api-surface.md`](post-bridge-api-surface.md); the sequencing that spends it, together
+with the media-boundary decision in its §0, is
+[`post-bridge-integrations-plan.md`](post-bridge-integrations-plan.md). The note decides nothing and
+the plan is sequencing rather than a second runtime contract — **this record remains the runtime
+contract**, and where the note contradicts a decision here, the plan names the card that would
+change it. Nothing in either document is built.
+
 ---
 
 ## 1. The decision
@@ -304,9 +313,33 @@ Media rendering, and the rules it keeps:
 
 **The server still fetches nothing.** It does not fetch a media URL, a cover, a thumbnail, or
 anything else a preview names, and `server/publish/publish.test.ts` proves it by replacing `fetch`
-with a spy for the duration of a preview and asserting it was never called. The rule recorded on
-`signal_post_media` — this app never uploads, downloads, or proxies media — is not relaxed by this
-card, and a preview is the last place it should be.
+with a spy for the duration of a preview and asserting it was never called. **A preview never
+becomes a byte path**, and that holds whatever else changes: the rule below is narrowed, this
+sentence is not.
+
+**The media rule, as it now stands.** The claim recorded on `signal_post_media` used to read *this
+app never uploads, downloads, or proxies media*. What survives is narrower and is the version every
+comment in the repository now states: **this app stores no media files, serves no media bytes, and
+holds no media bytes at rest.** Referencing, storing, and serving are still refused. The one
+exception the repository has decided is a single server-side stream from a user-selected Drive file
+to the provider's upload URL, immediately behind a confirmed submit, update, or
+restore-and-resubmit — through `server/drive/media.ts`, persisting nothing and writing nothing back
+to Drive. **It is not built.** C74 and C75 in
+[`post-bridge-integrations-plan.md`](post-bridge-integrations-plan.md) own it, the Files boundary is
+untouched by it (`AGENTS.md`, `shared/drive.ts`, `server/drive/browse.ts` keep their rule exactly),
+and until those cards land there is no byte path in this app at all.
+
+**A provider media id is ephemeral.** It is never a durable Signal reference: it is recreated on
+every submit, update, and restore-and-resubmit, and a stored one may not resolve. The vendor's
+24-hour and on-publish deletion behavior is **documented but unverified** — read off the OpenAPI
+document, not exercised — so nothing may depend on its timing until C73 records live evidence.
+
+**Everything else the surface note found stays pending C73.** `account_configurations`, the
+media-role fields (YouTube `thumbnail`, Instagram `cover_image`), the analytics filters and
+`match_confidence`, and the platform disclosure fields are vocabulary in an OpenAPI document rather
+than verified behavior. **The fail-closed values in `shared/publish-capabilities.ts` remain
+authoritative** — `accountContentOverride` included — until the card that verifies each one lands.
+A field appearing in a spec is not permission to flip a capability.
 
 ### 3.1 The Facebook account rule
 
@@ -937,10 +970,16 @@ written in the same transaction as the publication-state change it describes.
 
 ## 14. What this does not decide
 
-Named so an implementation card does not assume otherwise: media uploading or storage; the planner
+Named so an implementation card does not assume otherwise: media **storage**; the planner
 UI beyond the confirmed submit flow and publication state; multi-workspace or per-client API keys;
 publishing anything that is not a Signal post; Buffer Bridge transport or credentials; and any
 second provider inside this app.
+
+**Media upload has moved off that list, in one direction only.** §3.3 now records the boundary: the
+confirmed publishing path may stream one user-selected Drive file to the provider through
+`server/drive/media.ts`, and nothing is stored. The behavior that would implement it is C74 and C75
+in [`post-bridge-integrations-plan.md`](post-bridge-integrations-plan.md) and is **not built**. What
+stays undecided is everything C73 has to verify first, listed at the end of §3.3.
 
 **Analytics is no longer on that list.** It said "`/v1/analytics` exists and this app has no use for
 it yet"; C68 (#195) gave it one, and §16 is the record. What stays undecided there is named in §16
