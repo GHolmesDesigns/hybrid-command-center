@@ -29,6 +29,8 @@ export interface PublicationRow {
   /** NULL only on a row written before these columns existed. See `server/db.ts`. */
   sent_media: string | null;
   sent_configurations: string | null;
+  sent_media_sources: string | null;
+  sent_provider_media_ids: string | null;
   error: string | null;
   checked_at: string | null;
   /** Written by a check and by nothing else. NULL until the provider has been asked once. */
@@ -76,6 +78,16 @@ export const toPublication = (row: PublicationRow, targets: TargetRow[]): Signal
   sentCaption: row.sent_caption,
   sentChannels: JSON.parse(row.sent_channels) as SignalChannel[],
   ...(row.sent_media ? { sentMedia: JSON.parse(row.sent_media) as string[] } : {}),
+  ...(row.sent_media_sources
+    ? {
+        sentMediaSources: JSON.parse(row.sent_media_sources) as NonNullable<
+          SignalPublication['sentMediaSources']
+        >,
+      }
+    : {}),
+  ...(row.sent_provider_media_ids
+    ? { sentProviderMediaIds: JSON.parse(row.sent_provider_media_ids) as string[] }
+    : {}),
   ...(row.error ? { error: row.error } : {}),
   targets: targets.map(toTarget),
   ...(row.checked_at ? { checkedAt: row.checked_at } : {}),

@@ -148,10 +148,8 @@ export function renderResultMatrix(result: ProbeRunResult, options: { date: stri
   lines.push(
     'Four states, and no fifth: **verified**, **verified with policy constraint**, **negative**, and',
   );
-  lines.push(
-    '**still unverified**. A still-unverified claim leaves its dependent cards blocked and every',
-  );
-  lines.push('fail-closed capability value exactly where it is.');
+  lines.push('**still unverified**. Its reviewed registry disposition remains authoritative: it');
+  lines.push('blocks dependent work unless that work has an explicit path that cannot rely on it.');
   lines.push('');
 
   lines.push('### Fixtures');

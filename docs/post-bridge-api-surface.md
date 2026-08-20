@@ -248,8 +248,8 @@ source of truth where the README puts it, and gives an agent the same refusals a
 Session ran with 29 of 50 allowed requests (12 of them reserved for teardown).
 
 Four states, and no fifth: **verified**, **verified with policy constraint**, **negative**, and
-**still unverified**. A still-unverified claim leaves its dependent cards blocked and every
-fail-closed capability value exactly where it is.
+**still unverified**. Its reviewed registry disposition remains authoritative: it
+blocks dependent work unless that work has an explicit path that cannot rely on it.
 
 ### Fixtures
 
@@ -279,13 +279,13 @@ fail-closed capability value exactly where it is.
 
 | Claim | State | Evidence | Effect on the dependent cards |
 | --- | --- | --- | --- |
-| The `create-upload-url` request and response field names, and the signed `PUT`’s required headers and content-length behaviour. | **verified** | `POST /v1/media/create-upload-url` with `{ name, mime_type, size_bytes }` answered `{ media_id: string, name: string, upload_url: string }`. The signed `PUT` carried `Content-Type: image/png`, `Content-Length: 136`, and no `Authorization` header; it answered HTTP 200. Fixture sha256 `808300be67e20c6559af29ba909bd89b4017e0501a08da7cc3f4140c4a8f2e8c`. | C75 builds the three-step upload against the verified names and headers. |
+| The `create-upload-url` request and response field names, and the signed `PUT`’s required headers and content-length behaviour. | **verified** | `POST /v1/media/create-upload-url` with `{ name, mime_type, size_bytes }` answered `{ media_id: string, name: string, upload_url: string }`. The signed `PUT` carried `Content-Type: image/png`, `Content-Length: 136`, and no `Authorization` header; it answered HTTP 200. The follow-up run repeated the successful PUT with redirects disabled. The transcript intentionally redacts the signed URL, so it does not establish a fixed upload hostname. Fixture sha256 `808300be67e20c6559af29ba909bd89b4017e0501a08da7cc3f4140c4a8f2e8c`. | C75 validates each provider-supplied HTTPS URL, refuses credentials, fragments, and redirects, sets explicit timeouts, and builds the three-step upload against the verified names and headers. |
 | That the five documented `mime_type` values are the whole accepted set, and what the provider answers for a value outside it. | **verified** | `image/webp` was refused with HTTP 400: `mime_type` must be one of `image/png`, `image/jpeg`, `video/mp4`, `video/quicktime`, or `application/pdf`. | C74's type validation and C75's preflight use the verified set. |
 | What `GET /v1/media/{id}` returns for an uploaded asset, and what `describe` says about media a post carries by id rather than by URL. | **verified** | `GET /v1/media/{id}` answered `{ id: string, mime_type: string, object: { isDeleted: boolean, name: string, size_bytes: number, url: string } }`. | C75 reconciles provider media ids where `describe` returns them. |
 | That `media` wins and `media_urls` is ignored when one create request carries both. | **verified** | A create carrying `media` (one uploaded id) and `media_urls` (one unreachable URL) answered HTTP 201. The read-back's `media` was an array of one string, and the post was scheduled. | C75's discriminated `PublishRequest` matches the wire as well as the document, and a URL-only post serializes as it does today. |
 | Whether `DELETE /v1/media/{id}` removes an uploaded asset that is attached to nothing. | **verified** | `DELETE /v1/media/{id}` removed all 3 provider assets this run created. | A probe run leaves no asset behind and C75 may state deletion as available. |
-| The 24-hour unattached expiry and the deletion-on-publish the vendor documents. **A single session cannot answer this**: it needs a dated follow-up read of the inventoried asset ids. | **still unverified** | Every provider asset was deleted explicitly, so the documented 24-hour unattached expiry was never exercised. A deletion is not an expiry. | C75 stays blocked. Today's fail-closed value is unchanged. |
-| The current per-file size, item-count, and video-duration limits that apply to the connected plan through the API. | **verified** | An 8 GiB `size_bytes` was refused with HTTP 400: file exceeds the maximum upload size of 500 MB. | C74 validates against the verified bounds and C75 enforces them before a byte is read. |
+| The 24-hour unattached expiry and the deletion-on-publish the vendor documents. **A single session cannot answer this**: it needs a dated follow-up read of the inventoried asset ids. | **still unverified** | Every provider asset was deleted explicitly, so the documented 24-hour unattached expiry was never exercised. A deletion is not an expiry. | C75 may build without depending on this timing only by labelling it documented but unverified and recording every landed asset; the timing itself remains unavailable as a correctness guarantee. |
+| The current per-file size, item-count, and video-duration limits that apply to the connected plan through the API. | **verified with policy constraint** | The live API refused an 8 GiB reservation with HTTP 400 and stated a 500 MB upload maximum. Current provider support material separately documents images at 8 MB each, 35 images, 500 MB total, and video duration from 3 to 300 seconds; the live probe did not independently exercise those other boundaries. | C74 validates against the verified bounds and C75 enforces them before a byte is read. The constraint recorded beside it is a preflight refusal, not a warning. |
 
 ### Question 3 — Media roles
 
@@ -327,4 +327,4 @@ fail-closed capability value exactly where it is.
 
 | Claim | State | Evidence | Effect on the dependent cards |
 | --- | --- | --- | --- |
-| The headers a `429` carries, **if one arrives without being provoked**. The probe has a fixed request budget and never creates load to discover a limit. | **still unverified** | No 429 arrived. The probe never creates load to discover a limit, so this stays unverified by design. | C75, C80 stay blocked. Today's fail-closed value is unchanged. |
+| The headers a `429` carries, **if one arrives without being provoked**. The probe has a fixed request budget and never creates load to discover a limit. | **still unverified** | No 429 arrived. The probe never creates load to discover a limit, so this stays unverified by design. | C75 keeps the existing conservative fallback and never retries an ambiguous signed transfer; C80 stays blocked on its own rate-limit contract. |

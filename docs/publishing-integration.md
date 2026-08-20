@@ -324,9 +324,8 @@ holds no media bytes at rest.** Referencing, storing, and serving are still refu
 exception the repository has decided is a single server-side stream from a user-selected Drive file
 to the provider's upload URL, immediately behind a confirmed submit, update, or
 restore-and-resubmit — through `server/drive/media.ts`, persisting nothing and writing nothing back
-to Drive. **The stream is still not built**: C75 in
-[`post-bridge-integrations-plan.md`](post-bridge-integrations-plan.md) owns it, and until it lands
-there is no byte path in this app at all.
+to Drive. The implementation re-resolves metadata and refuses a changed fingerprint before opening
+content, then streams the exact declared length through a freshly reserved provider media id.
 
 **What C74 did build is the reference, not the bytes.** `server/drive/media.ts` now resolves one
 user-supplied Drive **link** — parsed as a URL and checked against Drive's own hosts before anything
@@ -347,8 +346,11 @@ through the ordinary Signal edit transaction. The Files boundary is untouched by
 is a second provider interface, `DriveMediaProvider`, and `DriveProvider` — the vocabulary Files is
 handed — still has no way to reach a file by id.
 
-**A provider media id is ephemeral.** It is never a durable Signal reference: it is recreated on
-every submit, update, and restore-and-resubmit, and a stored one may not resolve. The vendor's
+**A provider media id is ephemeral.** It is never a durable Signal media reference: it is recreated
+on every submit, update, and restore-and-resubmit. The publication evidence records both the
+versioned source descriptors and the ids used for that particular provider request. Reconciliation
+compares ids where the provider returns them and reports the comparison unavailable where it does
+not; it never substitutes a Drive viewer URL. The vendor's
 24-hour and on-publish deletion behavior is **documented but unverified** — read off the OpenAPI
 document, not exercised — so nothing may depend on its timing until C73 records live evidence.
 
@@ -637,8 +639,8 @@ of it. Concretely:
 
 ### 7.1 Schema sketch
 
-Additive, in the style of the existing tables — an existing database gains two empty tables and two
-indexes.
+Additive, in the style of the existing tables — an existing database gains the tables and indexes
+below, while later publishing cards add only nullable snapshot columns to the publication table.
 
 ```sql
 CREATE TABLE IF NOT EXISTS signal_publications (
@@ -654,6 +656,8 @@ CREATE TABLE IF NOT EXISTS signal_publications (
   sent_channels TEXT NOT NULL,         -- snapshot, JSON array of SignalChannel
   sent_media TEXT,                     -- snapshot, JSON array of media URLs; NULL is not '[]' (§7.2)
   sent_configurations TEXT,            -- snapshot, JSON platform_configurations (§7.2)
+  sent_media_sources TEXT,             -- nullable versioned URL/Drive source descriptors
+  sent_provider_media_ids TEXT,        -- nullable ids used for this provider request only
   error TEXT,
   created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
@@ -731,6 +735,21 @@ and gates the commit — the importer's rule, for the importer's reason.
 | **Update provider schedule** | Signal's instant, on the content the provider already holds | as above; the instant already matches; **the provider holds content this app did not send** |
 | **Cancel provider post** | `DELETE` | not scheduled or draft — a published post explicitly |
 | **Restore from Signal and resubmit** | withdraw, then a fresh `submit` | published or processing; the plan itself refuses |
+
+Drive media changes what goes on the wire, not the four actions. Immediately before every submit,
+content update, schedule update, or restore-and-resubmit, the service revalidates each stored Drive
+fingerprint and opens a bounded stream only if it still matches. The adapter reserves a new provider
+media id for each source, streams directly to that signed URL, and sends `media`; it never sends the
+Drive viewer address as `media_urls` and never reuses an earlier id. Public-URL submissions retain
+the original `media_urls` wire shape exactly.
+
+The three evidence columns deliberately answer different historical questions. `sent_media` remains
+the nullable string-array snapshot older rows and URL reconciliation understand; NULL still means
+unknown, not an empty array. `sent_media_sources` is a versioned snapshot of the discriminated
+references and their confirmed Drive fingerprints. `sent_provider_media_ids` records the ephemeral
+ids used for that one request. Where `describe` still returns comparable ids they are compared;
+where it does not, the panel says **media comparison unavailable** and refuses the schedule-only
+action rather than inventing equality from a source snapshot.
 
 Two of those refusals are worth their own sentence.
 
@@ -994,10 +1013,11 @@ publishing anything that is not a Signal post; Buffer Bridge transport or creden
 second provider inside this app.
 
 **Media upload has moved off that list, in one direction only.** §3.3 now records the boundary: the
-confirmed publishing path may stream one user-selected Drive file to the provider through
-`server/drive/media.ts`, and nothing is stored. The behavior that would implement it is C74 and C75
-in [`post-bridge-integrations-plan.md`](post-bridge-integrations-plan.md) and is **not built**. What
-stays undecided is everything C73 has to verify first, listed at the end of §3.3.
+confirmed publishing path may stream user-selected Drive files to the provider through
+`server/drive/media.ts`, and nothing is stored. C74 and C75 in
+[`post-bridge-integrations-plan.md`](post-bridge-integrations-plan.md) implement that narrow path.
+What stays undecided is the provider behavior still marked unverified in §14 of the API surface
+note; this implementation does not depend on the vendor's documented cleanup timing.
 
 **Analytics is no longer on that list.** It said "`/v1/analytics` exists and this app has no use for
 it yet"; C68 (#195) gave it one, and §16 is the record. What stays undecided there is named in §16

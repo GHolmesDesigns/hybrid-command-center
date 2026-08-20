@@ -1,13 +1,24 @@
 /* v8 ignore file -- the live adapter is exercised only by the account owner's manual QA; automated publishing tests must use MockPublishProvider. */
 import {
+  PublishMediaUploadError,
   PublishProviderError,
   PUBLISH_RATE_LIMIT_FALLBACK_SECONDS,
   type ProviderPostRecord,
   type PublishProvider,
+  type PublishMediaSource,
+  type PublishMediaUpload,
   type PublishRequest,
   type PublishSubmission,
   type PublishTarget,
 } from './provider.ts';
+import {
+  parsePostBridgeUploadReservation,
+  postBridgeMediaEvidence,
+  postBridgePostBody,
+  postBridgeUploadReservationBody,
+  validatePostBridgeUploadUrl,
+} from './post-bridge-wire.ts';
+import { putSignedMedia } from './post-bridge-upload.ts';
 import type { ProviderPostState } from '../../shared/publish.ts';
 import { ANALYTICS_PLATFORMS, type AnalyticsPlatform } from '../../shared/publish-analytics.ts';
 import type {
@@ -88,6 +99,31 @@ export class PostBridgeProvider implements PublishProvider {
       name: row.username ?? '',
     }));
   }
+  async uploadMedia(source: PublishMediaSource, signal?: AbortSignal): Promise<PublishMediaUpload> {
+    const reservation = parsePostBridgeUploadReservation(
+      await this.request('/media/create-upload-url', {
+        method: 'POST',
+        body: JSON.stringify(postBridgeUploadReservationBody(source)),
+        ...(signal ? { signal } : {}),
+      }),
+    );
+    const uploadUrl = validatePostBridgeUploadUrl(reservation.uploadUrl);
+    try {
+      await putSignedMedia(uploadUrl, source, signal);
+    } catch (error) {
+      if (error instanceof PublishProviderError)
+        throw new PublishMediaUploadError(error.message, reservation.mediaId, error.ambiguous, {
+          cause: error,
+        });
+      throw new PublishMediaUploadError(
+        error instanceof Error ? error.message : 'The media stream failed.',
+        reservation.mediaId,
+        false,
+        { cause: error },
+      );
+    }
+    return { mediaId: reservation.mediaId };
+  }
   /**
    * The per-platform overrides, in the vendor's own vocabulary and nowhere else.
    *
@@ -114,14 +150,7 @@ export class PostBridgeProvider implements PublishProvider {
     const platformConfigurations = PostBridgeProvider.platformConfigurations(request);
     const body = (await this.request('/posts', {
       method: 'POST',
-      body: JSON.stringify({
-        caption: request.caption,
-        media_urls: request.mediaUrls,
-        scheduled_at: request.scheduledInstant,
-        social_accounts: request.targets.map((target) => target.accountId),
-        // Only where non-empty, which is the artifact's own rule for this key.
-        ...(platformConfigurations ? { platform_configurations: platformConfigurations } : {}),
-      }),
+      body: JSON.stringify(postBridgePostBody(request, platformConfigurations)),
     })) as { id: string; status?: string };
     if (!body.id)
       throw new PublishProviderError('Post Bridge answered without a publication id.', true);
@@ -203,19 +232,6 @@ export class PostBridgeProvider implements PublishProvider {
    * Both are read; anything else is dropped rather than stringified, because a diff line reading
    * `[object Object]` is worse than a diff line that is missing.
    */
-  private static mediaUrls(media: unknown): string[] {
-    if (!Array.isArray(media)) return [];
-    return media
-      .map((item) =>
-        typeof item === 'string'
-          ? item
-          : typeof (item as { url?: unknown })?.url === 'string'
-            ? (item as { url: string }).url
-            : undefined,
-      )
-      .filter((url): url is string => Boolean(url));
-  }
-
   async describe(providerPostId: string): Promise<ProviderPostRecord> {
     const post = (await this.request(`/posts/${encodeURIComponent(providerPostId)}`)) as {
       id: string;
@@ -227,12 +243,14 @@ export class PostBridgeProvider implements PublishProvider {
       is_draft?: boolean;
       updated_at?: string;
     };
+    const media = postBridgeMediaEvidence(post.media);
     return {
       providerPostId: String(post.id),
       state: PostBridgeProvider.recordState(post.status, post.is_draft === true),
       caption: post.caption ?? '',
       scheduledInstant: post.scheduled_at ?? null,
-      mediaUrls: PostBridgeProvider.mediaUrls(post.media),
+      mediaUrls: media.mediaUrls,
+      ...(media.mediaIds ? { mediaIds: media.mediaIds } : {}),
       accountIds: (post.social_accounts ?? []).map(Number),
       ...(post.updated_at ? { updatedAt: post.updated_at } : {}),
     };
@@ -252,13 +270,7 @@ export class PostBridgeProvider implements PublishProvider {
     const platformConfigurations = PostBridgeProvider.platformConfigurations(request);
     const body = (await this.request(`/posts/${encodeURIComponent(providerPostId)}`, {
       method: 'PATCH',
-      body: JSON.stringify({
-        caption: request.caption,
-        media_urls: request.mediaUrls,
-        scheduled_at: request.scheduledInstant,
-        social_accounts: request.targets.map((target) => target.accountId),
-        ...(platformConfigurations ? { platform_configurations: platformConfigurations } : {}),
-      }),
+      body: JSON.stringify(postBridgePostBody(request, platformConfigurations)),
     })) as { id?: string; status?: string };
     return {
       providerPostId: body.id ? String(body.id) : providerPostId,

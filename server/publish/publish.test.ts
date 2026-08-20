@@ -51,6 +51,8 @@ import {
 import request from 'supertest';
 import { createApp } from '../app.ts';
 import { seedSignalPost } from '../signal/test-fixture.ts';
+import { MockDriveMediaProvider } from '../drive/mock-provider.ts';
+import type { SignalPostMedia } from '../../shared/signal-media.ts';
 
 let db: Db;
 const targets = [
@@ -63,6 +65,18 @@ beforeEach(() => {
   db = createDb(':memory:');
 });
 const add = (overrides: Parameters<typeof seedSignalPost>[1] = {}) => seedSignalPost(db, overrides);
+const driveDescriptor = (id: string, sizeBytes = 4): SignalPostMedia => ({
+  source: 'DRIVE',
+  url: `https://drive.google.com/file/d/${id}/view`,
+  driveFileId: id,
+  driveName: `${id}.png`,
+  mimeType: 'image/png',
+  sizeBytes,
+  driveVersion: '7',
+  driveModifiedAt: '2026-03-01T12:00:00.000Z',
+  driveChecksum: 'd41d8cd98f00b204e9800998ecf8427e',
+  driveVerifiedAt: '2026-08-20T09:00:00.000Z',
+});
 const reportFor = (plan: PublishPreview, channel: SignalChannel): PublishChannelReport =>
   plan.channels.find((report) => report.channel === channel) as PublishChannelReport;
 /**
@@ -112,6 +126,175 @@ describe('provider boundary', () => {
     ).rejects.toThrow('Publishing is off.');
     await expect(provider.check('missing')).rejects.toThrow('Publishing is off.');
     await expect(provider.cancel('missing')).rejects.toThrow('Publishing is off.');
+  });
+});
+
+describe('Drive media submission', () => {
+  const serviceFor = (provider: MockPublishProvider, drive: MockDriveMediaProvider) =>
+    new PublishService(
+      db,
+      new LocalSignalProvider(db),
+      provider,
+      'America/New_York',
+      () => new Date('2026-01-01T00:00:00.000Z'),
+      drive,
+    );
+
+  it('refuses mixed Drive and public sources during preview by name', () => {
+    const id = 'drive-media-file-mixed';
+    const publicUrl = 'https://cdn.example.com/public.png';
+    const plan = buildPublishPlan(
+      add({
+        channels: ['x'],
+        media: [
+          driveDescriptor(id),
+          {
+            source: 'URL',
+            url: publicUrl,
+            driveFileId: null,
+            driveName: null,
+            mimeType: null,
+            sizeBytes: null,
+            driveVersion: null,
+            driveModifiedAt: null,
+            driveChecksum: null,
+            driveVerifiedAt: null,
+          },
+        ],
+        format: 'CAROUSEL',
+      }),
+      targets,
+      'America/New_York',
+      new Date('2026-01-01T00:00:00.000Z'),
+    );
+    expect(plan.refusals.join(' ')).toContain(`${id}.png`);
+    expect(plan.refusals.join(' ')).toContain(publicUrl);
+    expect(plan.request).toBeUndefined();
+  });
+
+  it('revalidates, streams, submits media ids only, and stores versioned evidence', async () => {
+    const id = 'drive-media-file-001';
+    const post = add({ channels: ['x'], media: [driveDescriptor(id)], format: 'IMAGE' });
+    const provider = new MockPublishProvider(targets);
+    const drive = new MockDriveMediaProvider();
+    drive.seed(id, { size: '4' });
+    drive.seedBody(id, new Uint8Array([1, 2]), new Uint8Array([3, 4]));
+    const service = serviceFor(provider, drive);
+
+    const preview = await service.preview(post.id);
+    expect(preview.refusals).toEqual([]);
+    expect(preview.request).toMatchObject({ mediaIds: [] });
+    const publication = await service.submit(post.id, preview.planHash);
+
+    expect(provider.uploads).toEqual([
+      { name: `${id}.png`, mimeType: 'image/png', sizeBytes: 4, bytesRead: 4 },
+    ]);
+    expect(provider.submissions[0]).toMatchObject({ mediaIds: ['mock-media-1'] });
+    expect(provider.submissions[0]).not.toHaveProperty('mediaUrls');
+    expect(publication.sentProviderMediaIds).toEqual(['mock-media-1']);
+    expect(publication.sentMediaSources).toEqual({ version: 1, items: [driveDescriptor(id)] });
+  });
+
+  it('writes no publication and no provider post when the fingerprint changed', async () => {
+    const id = 'drive-media-file-002';
+    const post = add({ channels: ['x'], media: [driveDescriptor(id)], format: 'IMAGE' });
+    const provider = new MockPublishProvider(targets);
+    const drive = new MockDriveMediaProvider();
+    drive.seed(id, { size: '4' });
+    const service = serviceFor(provider, drive);
+    const preview = await service.preview(post.id);
+    drive.seed(id, { size: '4', version: '8' });
+
+    await expect(service.submit(post.id, preview.planHash)).rejects.toThrow(/changed after/);
+    expect(provider.uploads).toEqual([]);
+    expect(provider.submissions).toEqual([]);
+    expect(service.list(post.id)).toEqual([]);
+    expect(listIntegrationEvents(db)[0]).toMatchObject({ outcome: 'FAILURE' });
+  });
+
+  it('records a partial event and no publication when a later upload fails', async () => {
+    const first = 'drive-media-file-003';
+    const second = 'drive-media-file-004';
+    const post = add({
+      channels: ['x'],
+      media: [driveDescriptor(first), driveDescriptor(second)],
+      format: 'CAROUSEL',
+    });
+    const provider = new MockPublishProvider(targets);
+    provider.uploadFailureAt = 2;
+    const drive = new MockDriveMediaProvider();
+    for (const id of [first, second]) {
+      drive.seed(id, { size: '4' });
+      drive.seedBody(id, new Uint8Array(4));
+    }
+    const service = serviceFor(provider, drive);
+    const preview = await service.preview(post.id);
+
+    await expect(service.submit(post.id, preview.planHash)).rejects.toThrow(/Media upload failed/);
+    expect(provider.submissions).toEqual([]);
+    expect(service.list(post.id)).toEqual([]);
+    expect(listIntegrationEvents(db)[0]).toMatchObject({ outcome: 'PARTIAL' });
+  });
+
+  it('re-uploads fresh provider ids for content updates and restore-and-resubmit', async () => {
+    const id = 'drive-media-file-reupload';
+    const post = add({ channels: ['x'], media: [driveDescriptor(id)], format: 'IMAGE' });
+    const provider = new MockPublishProvider(targets);
+    const drive = new MockDriveMediaProvider();
+    drive.seed(id, { size: '4' });
+    drive.seedBody(id, new Uint8Array(4));
+    const service = serviceFor(provider, drive);
+
+    const firstPlan = await service.preview(post.id);
+    const first = await service.submit(post.id, firstPlan.planHash);
+    db.prepare('UPDATE signal_posts SET text=? WHERE id=?').run('Updated once', post.id);
+    const updatePreview = await service.providerPreview(first.id);
+    const updated = await service.applyProviderAction(
+      first.id,
+      'UPDATE_CONTENT',
+      updatePreview.reconcileHash,
+    );
+
+    expect(provider.uploads).toHaveLength(2);
+    expect(provider.updates[0]?.request).toMatchObject({ mediaIds: ['mock-media-2'] });
+    expect(updated.sentProviderMediaIds).toEqual(['mock-media-2']);
+
+    db.prepare('UPDATE signal_posts SET text=? WHERE id=?').run('Updated twice', post.id);
+    const restorePreview = await service.providerPreview(first.id);
+    const restored = await service.applyProviderAction(
+      first.id,
+      'RESTORE_AND_RESUBMIT',
+      restorePreview.reconcileHash,
+    );
+    expect(provider.uploads).toHaveLength(3);
+    expect(provider.submissions.at(-1)).toMatchObject({ mediaIds: ['mock-media-3'] });
+    expect(restored.id).not.toBe(first.id);
+    expect(restored.sentProviderMediaIds).toEqual(['mock-media-3']);
+  });
+
+  it('reports unavailable provider media evidence and refuses schedule-only reconciliation', async () => {
+    const id = 'drive-media-file-unavailable';
+    const post = add({ channels: ['x'], media: [driveDescriptor(id)], format: 'IMAGE' });
+    const provider = new MockPublishProvider(targets);
+    const drive = new MockDriveMediaProvider();
+    drive.seed(id, { size: '4' });
+    drive.seedBody(id, new Uint8Array(4));
+    const service = serviceFor(provider, drive);
+    const plan = await service.preview(post.id);
+    const publication = await service.submit(post.id, plan.planHash);
+    provider.record = { ...provider.record, mediaIds: undefined };
+    db.prepare('UPDATE signal_posts SET time=? WHERE id=?').run('15:30', post.id);
+
+    const comparison = await service.providerPreview(publication.id);
+    expect(comparison.diffs.find((diff) => diff.field === 'media')).toMatchObject({
+      changed: false,
+      comparisonAvailable: false,
+    });
+    expect(comparison.warnings.join(' ')).toMatch(/Media comparison unavailable/);
+    expect(providerActionOffer(comparison, 'UPDATE_SCHEDULE')?.available).toBe(false);
+    expect(providerActionOffer(comparison, 'UPDATE_SCHEDULE')?.refusals.join(' ')).toMatch(
+      /Media comparison unavailable/,
+    );
   });
 });
 
@@ -1905,7 +2088,7 @@ describe('a publication migrated from before the media snapshot', () => {
   const clear = (publicationId: string) =>
     db
       .prepare(
-        'UPDATE signal_publications SET sent_media=NULL, sent_configurations=NULL WHERE id=?',
+        'UPDATE signal_publications SET sent_media=NULL, sent_configurations=NULL, sent_media_sources=NULL, sent_provider_media_ids=NULL WHERE id=?',
       )
       .run(publicationId);
 
@@ -1927,6 +2110,8 @@ describe('a publication migrated from before the media snapshot', () => {
     // `media` here would send the user to reconcile something nobody can show them.
     const reread = service.get(publication.id) as SignalPublication;
     expect(reread.sentMedia).toBeUndefined();
+    expect(reread.sentMediaSources).toBeUndefined();
+    expect(reread.sentProviderMediaIds).toBeUndefined();
     expect(reread.driftFields).toBeUndefined();
 
     // Both a reschedule and a caption edit, so the reschedule's refusal can be read beside a

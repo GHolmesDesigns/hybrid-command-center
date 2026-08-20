@@ -24,6 +24,7 @@ import {
 import { buildPublishPlan, publishInstantFor } from './plan.ts';
 import { buildProviderReconcile, providerRecordNeedsWithdrawal } from './reconcile.ts';
 import {
+  PublishMediaUploadError,
   PublishProviderError,
   PUBLISH_RATE_LIMIT_FALLBACK_SECONDS,
   type PublishProvider,
@@ -33,6 +34,13 @@ import {
 import { recordSyncHealth } from './sync-health.ts';
 import { toPublication, toTarget, type PublicationRow, type TargetRow } from './rows.ts';
 import { targetRowsFor } from './read.ts';
+import {
+  DisconnectedDriveMediaProvider,
+  DriveMediaError,
+  openDriveMedia,
+  type DriveMediaProvider,
+} from '../drive/media.ts';
+import type { SignalPostMedia } from '../../shared/signal-media.ts';
 
 export class PublishRequestError extends Error {
   readonly status: 400 | 404 | 409;
@@ -49,21 +57,26 @@ export class PublishService {
   private readonly provider: PublishProvider;
   private readonly timezone: string;
   private readonly clock: () => Date;
+  private readonly driveMedia: DriveMediaProvider;
   constructor(
     db: Db,
     signal: SignalProvider,
     provider: PublishProvider,
     timezone: string,
     clock: () => Date = () => new Date(),
+    driveMedia: DriveMediaProvider = new DisconnectedDriveMediaProvider(),
   ) {
     this.db = db;
     this.signal = signal;
     this.provider = provider;
     this.timezone = timezone;
     this.clock = clock;
+    this.driveMedia = driveMedia;
   }
 
-  async preview(postId: string): Promise<PublishPreview & { request?: PublishRequest }> {
+  async preview(
+    postId: string,
+  ): Promise<PublishPreview & { request?: PublishRequest; mediaSources?: SignalPostMedia[] }> {
     if (!this.provider.available || !this.timezone)
       return {
         available: false,
@@ -105,6 +118,68 @@ export class PublishService {
     );
   }
 
+  /** Uploads Drive sources once, after the hash gate and immediately before the post operation. */
+  private async prepareMedia(
+    plan: PublishPreview & { request?: PublishRequest; mediaSources?: SignalPostMedia[] },
+    input: {
+      postId: string;
+      correlationId: string;
+      operation: 'signal.publish' | 'signal.provider-update';
+    },
+  ): Promise<{
+    request: PublishRequest;
+    sources: { version: 1; items: SignalPostMedia[] };
+    providerMediaIds: string[];
+  }> {
+    const request = plan.request as PublishRequest;
+    const sources = plan.mediaSources ?? [];
+    if ('mediaUrls' in request)
+      return { request, sources: { version: 1, items: sources }, providerMediaIds: [] };
+
+    const providerMediaIds: string[] = [];
+    try {
+      for (const stored of sources) {
+        if (stored.source !== 'DRIVE')
+          throw new DriveMediaError(
+            'A Drive upload plan contained a public URL. Preview it again.',
+          );
+        const source = await openDriveMedia({ stored, provider: this.driveMedia });
+        const uploaded = await this.provider.uploadMedia(source);
+        providerMediaIds.push(uploaded.mediaId);
+      }
+    } catch (error) {
+      if (error instanceof PublishMediaUploadError) providerMediaIds.push(error.providerMediaId);
+      const partial = providerMediaIds.length > 0;
+      transaction(this.db, () => {
+        recordIntegrationEvent(this.db, {
+          source: 'signal-campaign',
+          operation: input.operation,
+          outcome: partial ? 'PARTIAL' : 'FAILURE',
+          summary: partial
+            ? `${providerMediaIds.length} provider media asset${providerMediaIds.length === 1 ? '' : 's'} landed before the post request was stopped. Post Bridge documents unattached expiry after 24 hours; that timing remains unverified, so inspect the provider if cleanup matters sooner.`
+            : 'No provider media asset landed, so no post request was made.',
+          entities: [{ type: 'signalPost', id: input.postId, label: plan.caption.slice(0, 80) }],
+          correlationId: input.correlationId,
+          error: error instanceof Error ? error.message : 'Unknown media upload failure',
+        });
+      });
+      throw new PublishRequestError(
+        error instanceof DriveMediaError
+          ? error.message
+          : `Media upload failed before the post request: ${redactSecrets(error instanceof Error ? error.message : 'Unknown failure')}`,
+        409,
+        { cause: error },
+      );
+    }
+    const { mediaIds: _planned, ...base } = request;
+    void _planned;
+    return {
+      request: { ...base, mediaIds: providerMediaIds },
+      sources: { version: 1, items: sources },
+      providerMediaIds,
+    };
+  }
+
   async submit(postId: string, expectedHash: string): Promise<SignalPublication> {
     const plan = await this.preview(postId);
     // The gate is every refusal in the plan, per-channel ones included, so a reason the preview
@@ -112,21 +187,36 @@ export class PublishService {
     const blockers = publishPreviewRefusals(plan);
     if (!plan.available || blockers.length || !plan.request)
       throw new PublishRequestError(blockers.join(' ') || 'Publishing is unavailable.', 400);
-    const request = plan.request;
     if (plan.planHash !== expectedHash)
       throw new PublishRequestError(
         'The post or provider targets changed after preview. Preview it again before submitting.',
         409,
       );
+    const existing = this.db
+      .prepare(
+        "SELECT 1 FROM signal_publications WHERE post_id=? AND state IN ('SUBMITTING','SUBMITTED','UNCONFIRMED') LIMIT 1",
+      )
+      .get(postId);
+    if (existing)
+      throw new PublishRequestError(
+        'This post already has a live publication. Double-submit was blocked.',
+        409,
+      );
     const publicationId = crypto.randomUUID();
+    const prepared = await this.prepareMedia(plan, {
+      postId,
+      correlationId: publicationId,
+      operation: 'signal.publish',
+    });
+    const request = prepared.request;
     const timestamp = this.clock().toISOString();
     try {
       transaction(this.db, () => {
         this.db
           .prepare(
             `INSERT INTO signal_publications(
-          id,post_id,state,provider,provider_post_id,idempotency_key,scheduled_instant,timezone,sent_caption,sent_channels,sent_media,sent_configurations,error,created_at,updated_at
-        ) VALUES(?,?, 'SUBMITTING','post-bridge',NULL,?,?,?,?,?,?,?,NULL,?,?)`,
+          id,post_id,state,provider,provider_post_id,idempotency_key,scheduled_instant,timezone,sent_caption,sent_channels,sent_media,sent_configurations,sent_media_sources,sent_provider_media_ids,error,created_at,updated_at
+        ) VALUES(?,?, 'SUBMITTING','post-bridge',NULL,?,?,?,?,?,?,?,?,?,NULL,?,?)`,
           )
           .run(
             publicationId,
@@ -139,8 +229,10 @@ export class PublishService {
             // The media and the tailoring go into the snapshot beside the caption, so a later
             // comparison against the provider reads the request that was sent rather than
             // re-deriving one from a post that has since been edited.
-            JSON.stringify(request.mediaUrls),
+            JSON.stringify(prepared.sources.items.map((item) => item.url)),
             JSON.stringify(request.platformConfigurations ?? []),
+            JSON.stringify(prepared.sources),
+            prepared.providerMediaIds.length ? JSON.stringify(prepared.providerMediaIds) : null,
             timestamp,
             timestamp,
           );
@@ -154,12 +246,25 @@ export class PublishService {
           insert.run(publicationId, target.channel, target.accountId, target.handle, target.mode);
       });
     } catch (error) {
-      if ((error as Error).message.includes('UNIQUE constraint failed'))
+      if ((error as Error).message.includes('UNIQUE constraint failed')) {
+        if (prepared.providerMediaIds.length)
+          transaction(this.db, () => {
+            recordIntegrationEvent(this.db, {
+              source: 'signal-campaign',
+              operation: 'signal.publish',
+              outcome: 'PARTIAL',
+              summary: `${prepared.providerMediaIds.length} provider media asset${prepared.providerMediaIds.length === 1 ? '' : 's'} landed, but a concurrent submit won the local publication lock before any post request was made. Post Bridge documents unattached expiry after 24 hours; that timing remains unverified.`,
+              entities: [{ type: 'signalPost', id: postId, label: plan.caption.slice(0, 80) }],
+              correlationId: publicationId,
+              error: 'Concurrent double-submit was blocked after media upload.',
+            });
+          });
         throw new PublishRequestError(
           'This post already has a live publication. Double-submit was blocked.',
           409,
           { cause: error },
         );
+      }
       throw error;
     }
 
@@ -601,6 +706,10 @@ export class PublishService {
     action: ProviderAction,
     outgoing: PublishRequest,
     configurations: string,
+    mediaEvidence: {
+      sources: { version: 1; items: SignalPostMedia[] };
+      providerMediaIds: string[];
+    },
   ): Promise<SignalPublication> {
     const providerPostId = publication.providerPostId as string;
     const what = action === 'UPDATE_SCHEDULE' ? 'schedule' : 'content';
@@ -611,15 +720,20 @@ export class PublishService {
         this.db
           .prepare(
             `UPDATE signal_publications SET state=?,provider_post_id=?,scheduled_instant=?,
-             sent_caption=?,sent_media=?,sent_configurations=?,error=?,updated_at=? WHERE id=?`,
+             sent_caption=?,sent_media=?,sent_configurations=?,sent_media_sources=?,
+             sent_provider_media_ids=?,error=?,updated_at=? WHERE id=?`,
           )
           .run(
             result.state,
             result.providerPostId || providerPostId,
             outgoing.scheduledInstant,
             outgoing.caption,
-            JSON.stringify(outgoing.mediaUrls),
+            JSON.stringify(mediaEvidence.sources.items.map((item) => item.url)),
             configurations,
+            JSON.stringify(mediaEvidence.sources),
+            mediaEvidence.providerMediaIds.length
+              ? JSON.stringify(mediaEvidence.providerMediaIds)
+              : null,
             result.error ? redactSecrets(result.error) : null,
             timestamp,
             publication.id,
@@ -656,9 +770,15 @@ export class PublishService {
           source: 'signal-campaign',
           operation: 'signal.provider-update',
           outcome: ambiguous ? 'PARTIAL' : 'FAILURE',
-          summary: ambiguous
-            ? `The provider ${what} update was never answered; the provider may or may not have taken it.`
-            : `The provider refused the ${what} update; it still holds what it had.`,
+          summary: `${
+            ambiguous
+              ? `The provider ${what} update was never answered; the provider may or may not have taken it.`
+              : `The provider refused the ${what} update; it still holds what it had.`
+          }${
+            mediaEvidence.providerMediaIds.length
+              ? ` ${mediaEvidence.providerMediaIds.length} fresh provider media asset${mediaEvidence.providerMediaIds.length === 1 ? '' : 's'} had already landed. Post Bridge documents unattached expiry after 24 hours; that timing remains unverified.`
+              : ''
+          }`,
           entities: [
             {
               type: 'signalPost',
@@ -749,6 +869,11 @@ export class PublishService {
         .prepare('SELECT sent_configurations FROM signal_publications WHERE id=?')
         .get(publicationId) as unknown as { sent_configurations: string }
     ).sent_configurations;
+    const prepared = await this.prepareMedia(plan, {
+      postId: publication.postId,
+      correlationId: publication.id,
+      operation: 'signal.provider-update',
+    });
 
     if (action === 'UPDATE_CONTENT') {
       /**
@@ -761,7 +886,7 @@ export class PublishService {
        * asking it to post right now.
        */
       const outgoing: PublishRequest = {
-        ...request,
+        ...prepared.request,
         scheduledInstant: record.scheduledInstant ?? request.scheduledInstant,
       };
       return this.commitProviderUpdate(
@@ -769,6 +894,7 @@ export class PublishService {
         action,
         outgoing,
         JSON.stringify(request.platformConfigurations ?? []),
+        prepared,
       );
     }
 
@@ -784,8 +910,8 @@ export class PublishService {
      * echoing simply removes the way for them not to be.
      */
     const outgoing: PublishRequest = {
+      ...prepared.request,
       caption: record.caption,
-      mediaUrls: record.mediaUrls,
       scheduledInstant: request.scheduledInstant,
       timezone: request.timezone,
       targets: publication.targets.map((target) => ({
@@ -800,7 +926,7 @@ export class PublishService {
           }
         : {}),
     };
-    return this.commitProviderUpdate(publication, action, outgoing, storedConfigurations);
+    return this.commitProviderUpdate(publication, action, outgoing, storedConfigurations, prepared);
   }
 
   async cancelLiveForPost(postId: string): Promise<void> {

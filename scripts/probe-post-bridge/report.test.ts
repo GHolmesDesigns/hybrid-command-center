@@ -6,7 +6,8 @@
  * keeps, so the risk is not that the renderer is wrong — it is that somebody later edits the table by
  * hand and turns "still unverified" into a sentence that sounds like permission. The document test
  * asserts the structure the renderer produces: one row per claim, one of four states, and a
- * still-unverified row whose disposition is exactly the blocked sentence and nothing else.
+ * still-unverified row whose disposition is exactly the reviewed registry sentence and nothing
+ * else.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -188,7 +189,7 @@ describe('the matrix committed to docs/post-bridge-api-surface.md', () => {
       if (cells.length === 6 && cells[2].startsWith('**')) expect(labels).toContain(cells[2]);
   });
 
-  it('gives a still-unverified row the blocked disposition and nothing that reads as permission', () => {
+  it('gives a still-unverified row exactly its reviewed registry disposition', () => {
     for (const claim of PROBE_CLAIMS) {
       const cells = rows.find((candidate) => candidate[1]?.startsWith(claim.claim.slice(0, 40)));
       if (cells?.[2] !== `**${CLAIM_STATE_LABEL['still-unverified']}**`) continue;
@@ -201,8 +202,8 @@ describe('the matrix committed to docs/post-bridge-api-surface.md', () => {
     }
   });
 
-  it('states the four states and that an unverified claim changes nothing', () => {
+  it('states the four states and the reviewed exception rule for an unverified claim', () => {
     expect(section).toContain('Four states, and no fifth');
-    expect(section).toContain('leaves its dependent cards blocked');
+    expect(section).toContain('unless that work has an explicit path that cannot rely on it');
   });
 });

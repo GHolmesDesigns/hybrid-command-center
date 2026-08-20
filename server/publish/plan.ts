@@ -8,7 +8,12 @@ import {
   type SignalMediaKind,
   type SignalPost,
 } from '../../shared/signal.ts';
-import { signalMediaFingerprint, type SignalPostMedia } from '../../shared/signal-media.ts';
+import {
+  SIGNAL_DRIVE_IMAGE_MAX_ITEMS,
+  SIGNAL_DRIVE_TOTAL_MAX_BYTES,
+  signalMediaFingerprint,
+  type SignalPostMedia,
+} from '../../shared/signal-media.ts';
 import {
   publishCapabilityFor,
   publishKindSupported,
@@ -492,7 +497,7 @@ export function buildPublishPlan(
   zone: string,
   now = new Date(),
   variants: readonly PublishVariantRecord[] = [],
-): PublishPreview & { request?: PublishRequest } {
+): PublishPreview & { request?: PublishRequest; mediaSources?: SignalPostMedia[] } {
   const refusals: string[] = [];
   const warnings: string[] = [];
   const caption = post.text.trim();
@@ -540,22 +545,27 @@ export function buildPublishPlan(
   // media array, whatever each platform would have preferred.
   const media = agreedMedia(channels, post.mediaUrls);
   refusals.push(...media.refusals);
-  /**
-   * A Drive reference cannot be sent yet, and saying so is the whole of this app's obligation here.
-   *
-   * The provider takes media as public addresses, and a Drive row's `url` is Drive's viewer page —
-   * a private HTML document, not the file. Letting it through would hand the provider an address it
-   * cannot fetch and produce a delivery that fails for a reason nobody could read. Uploading the
-   * bytes instead is C75; until that lands this refuses, which is the same fail-closed direction
-   * every unverified capability takes.
-   */
-  const driveCount = media.mediaUrls.filter((url) =>
-    post.media.some((item) => item.url === url && item.source === 'DRIVE'),
-  ).length;
-  if (driveCount > 0)
+  const mediaSources = media.mediaUrls.map(
+    (url) =>
+      post.media.find((item) => item.url === url) ?? ({ source: 'URL', url } as SignalPostMedia),
+  );
+  const driveMedia = mediaSources.filter((item) => item.source === 'DRIVE');
+  const urlMedia = mediaSources.filter((item) => item.source === 'URL');
+  if (driveMedia.length && urlMedia.length) {
+    const driveNames = driveMedia.map((item) => item.driveName ?? item.url).join(', ');
+    const urlNames = urlMedia.map((item) => item.url).join(', ');
     refusals.push(
-      `This post carries ${driveCount} Drive file${driveCount === 1 ? '' : 's'}, and this app cannot send ${driveCount === 1 ? 'one' : 'them'} to the provider yet — a Drive link addresses a viewer page rather than the file. Use a public https address, or remove the Drive media before publishing.`,
+      `This provider cannot mix Drive uploads (${driveNames}) with public URLs (${urlNames}) in one submission. Use only Drive files or only public URLs, or publish them separately.`,
     );
+  }
+  const uploadedImageCount = driveMedia.filter((item) =>
+    item.mimeType?.startsWith('image/'),
+  ).length;
+  if (uploadedImageCount > SIGNAL_DRIVE_IMAGE_MAX_ITEMS)
+    refusals.push(`Post Bridge accepts at most ${SIGNAL_DRIVE_IMAGE_MAX_ITEMS} uploaded images.`);
+  const totalDriveBytes = driveMedia.reduce((total, item) => total + (item.sizeBytes ?? 0), 0);
+  if (totalDriveBytes > SIGNAL_DRIVE_TOTAL_MAX_BYTES)
+    refusals.push('The selected Drive files exceed Post Bridge’s 500 MB total upload limit.');
   const platformConfigurations = platformConfigurationsFor(channels, caption);
 
   const stable = {
@@ -583,7 +593,7 @@ export function buildPublishPlan(
     targets,
     platformConfigurations,
   };
-  const preview: PublishPreview & { request?: PublishRequest } = {
+  const preview: PublishPreview & { request?: PublishRequest; mediaSources?: SignalPostMedia[] } = {
     available: true,
     postId: post.id,
     planHash: planHash(stable),
@@ -594,11 +604,12 @@ export function buildPublishPlan(
     channels,
     warnings,
     refusals,
+    mediaSources,
   };
   if (scheduledInstant && publishPreviewRefusals(preview).length === 0)
     preview.request = {
       caption,
-      mediaUrls: media.mediaUrls,
+      ...(driveMedia.length ? { mediaIds: [] } : { mediaUrls: media.mediaUrls }),
       scheduledInstant,
       timezone: zone,
       targets: targets.map((target) => ({
