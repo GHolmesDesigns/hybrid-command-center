@@ -127,6 +127,9 @@ describe('api', () => {
       .catch((error: Error) => error.message);
     expect(failure).not.toContain('pb_live_secret');
     expect(client.calls.map((call) => call.status)).toEqual([0, 0]);
+
+    const nonErrorFailure = new ProbeTransportError('create', 'pb_live_secret');
+    expect(nonErrorFailure.message).not.toContain('pb_live_secret');
   });
 });
 
