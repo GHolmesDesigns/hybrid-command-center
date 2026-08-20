@@ -324,10 +324,28 @@ holds no media bytes at rest.** Referencing, storing, and serving are still refu
 exception the repository has decided is a single server-side stream from a user-selected Drive file
 to the provider's upload URL, immediately behind a confirmed submit, update, or
 restore-and-resubmit — through `server/drive/media.ts`, persisting nothing and writing nothing back
-to Drive. **It is not built.** C74 and C75 in
-[`post-bridge-integrations-plan.md`](post-bridge-integrations-plan.md) own it, the Files boundary is
-untouched by it (`AGENTS.md`, `shared/drive.ts`, `server/drive/browse.ts` keep their rule exactly),
-and until those cards land there is no byte path in this app at all.
+to Drive. **The stream is still not built**: C75 in
+[`post-bridge-integrations-plan.md`](post-bridge-integrations-plan.md) owns it, and until it lands
+there is no byte path in this app at all.
+
+**What C74 did build is the reference, not the bytes.** `server/drive/media.ts` now resolves one
+user-supplied Drive **link** — parsed as a URL and checked against Drive's own hosts before anything
+is looked up — to the file's canonical metadata and a version fingerprint, and reads no content
+whatsoever. A `signal_post_media` row is therefore discriminated: `source` is `URL` or `DRIVE`, and
+a Drive row carries Drive's name, MIME type, size, and at least one of `version`, `modifiedTime`,
+and a checksum. The fingerprint exists because a file id is not evidence of the bytes anybody
+previewed — Drive may replace a file's content under the same id — and the plan hash covers the
+whole descriptor, so a file that moves invalidates a plan taken before it did. The stored `url` is
+Drive's `webViewLink`: a page for a person to open, never provider-fetchable media, and never
+embedded by the preview.
+
+The paragraph above still holds without qualification: a preview makes no Drive call and no provider
+call. Preflight classifies a Drive reference from the MIME type recorded when it was resolved, and
+the only thing that replaces a stored fingerprint is an explicit **Recheck Drive file**, which goes
+through the ordinary Signal edit transaction. The Files boundary is untouched by any of it
+(`AGENTS.md`, `shared/drive.ts`, `server/drive/browse.ts` keep their rule exactly): the metadata read
+is a second provider interface, `DriveMediaProvider`, and `DriveProvider` — the vocabulary Files is
+handed — still has no way to reach a file by id.
 
 **A provider media id is ephemeral.** It is never a durable Signal reference: it is recreated on
 every submit, update, and restore-and-resubmit, and a stored one may not resolve. The vendor's

@@ -5,7 +5,10 @@
 - `client/`: React UI only; it never imports Google SDKs or reads secrets.
 - `server/domain/`: reusable, framework-free business rules.
 - `server/drive/`: all Drive and OAuth behavior behind `DriveProvider`. `browse.ts` is the
-  read-only half and must stay that way; writes live in `service.ts`.
+  read-only half and must stay that way; writes live in `service.ts`. `media.ts` is a third,
+  narrower capability with a provider interface of its own — one user-supplied Drive link resolved
+  to metadata and version evidence for a Signal media reference, reading no bytes. Files receives
+  `DriveProvider` and cannot reach it.
 - `server/signal/`: Signal Campaign's schedule, split the same way Drive is. `provider.ts` is the
   `SignalProvider` interface and `read.ts` is its implementation — the read-only half everything
   outside Signal consumes; writes live in `service.ts`. `campaigns.ts` is the campaign vocabulary —
@@ -68,15 +71,34 @@
 - The Files module reads and nothing else. It browses a project only at its own Drive folder and the subfolders `drive_steps` recorded for it, matched by ID; any other folder ID is refused rather than fetched. Adding upload, download, move, rename, or delete means a new module beside `browse.ts` with its own confirmation flow, not a method on the browsing path — and it changes what `/files` promises, so the README and the user manual change in the same branch.
 - **Signal publishing media is a separate boundary from Files, and narrower than the media comments
   used to state.** This app stores no media files, serves no media bytes, and holds no media bytes at
-  rest. The only byte path this repository has decided is `server/drive/media.ts`: it reads one
-  user-selected Drive file by ID, streams it straight to the provider's upload URL during a confirmed
-  submit, update, or restore-and-resubmit, persists nothing, and never writes to Drive. **It is not
-  built** — `docs/post-bridge-integrations-plan.md` C74 and C75 own it — and it is unavailable to
-  Files, which keeps the rule above exactly as written: project-scoped browsing with no upload,
-  download, move, rename, or delete, and no byte method on `browse.ts` or `shared/drive.ts`. A
-  provider media ID is ephemeral: it is never a durable Signal reference and is recreated on every
-  submit, update, and restore-and-resubmit. The vendor's 24-hour and on-publish deletion behavior is
-  documented but unverified, so nothing may depend on the timing until C73 records live evidence.
+  rest. `server/drive/media.ts` is that boundary, and it is now half built: it **resolves** one
+  user-supplied Drive link — parsed as a URL and host-checked before anything is looked up — to
+  canonical metadata and a version fingerprint, and reads no bytes at all. The byte path it will
+  gain is still the only one decided: streaming that same file straight to the provider's upload URL
+  during a confirmed submit, update, or restore-and-resubmit, persisting nothing and never writing to
+  Drive. **That half is not built** — `docs/post-bridge-integrations-plan.md` C75 owns it. Neither
+  half is available to Files, which keeps the rule above exactly as written: project-scoped browsing
+  with no upload, download, move, rename, or delete, and no byte method on `browse.ts` or
+  `shared/drive.ts`. The two capabilities are two interfaces on purpose — `DriveProvider` is the
+  browsing vocabulary and `DriveMediaProvider` the metadata read — so widening one cannot widen the
+  other by accident. A provider media ID is ephemeral: it is never a durable Signal reference and is
+  recreated on every submit, update, and restore-and-resubmit. The vendor's 24-hour and on-publish
+  deletion behavior is documented but unverified, so nothing may depend on the timing until C73
+  records live evidence.
+- **A Signal media reference is discriminated, and a Drive one is bound to a version.** A row in
+  `signal_post_media` is a public `https:` URL or a Drive file, never something in between: the rule
+  is one function, `signalPostMediaIssue` in `shared/signal-media.ts`, and it is enforced at the Zod
+  boundary, in the write service, and by SQLite triggers, because a rule stated in one layer is one
+  the next `INSERT` walks around. A Drive row carries Drive's name, MIME type, size, and at least one
+  version signal, because a file ID is not evidence of the bytes anyone previewed — Drive may replace
+  a file's content under the same ID. `url` stays non-null for both and is what display and the
+  per-platform media selection read; a Drive row's `url` is Drive's viewer page and is never fetched
+  or embedded. Classify a reference with `signalMediaKindFor`, never by passing a Drive row's URL to
+  `signalMediaKind`. **A preview makes no Drive call**: preflight reads the stored MIME type, and the
+  plan hash covers the whole descriptor and fingerprint so a file that moves invalidates a plan taken
+  before it did. A stored fingerprint is replaced only by an explicit recheck, which goes through the
+  ordinary Signal edit transaction; an ordinary save carries an existing reference forward untouched,
+  and a failed recheck writes nothing and leaves the last metadata visible.
 - Signal Campaign is authoritative for what is scheduled: `signal_posts` is the only store of planned content, and nothing else keeps a second copy of a schedule. A post carries a `YYYY-MM-DD` date and an `HH:MM` time and never an instant — it belongs to the calendar cell whose local date equals its date string, and no code derives a moment from the pair, which is what keeps a post on its own day in every zone. A null date is the unscheduled queue and belongs to no cell. Channels and campaigns are normalized joins like tags and categories; a post with no campaign is **No campaign** wherever campaigns are grouped, never a hidden post. Anything reading the schedule goes through `SignalProvider`, which has no write method by construction; adding one means a new module beside `read.ts`, not a method on it. Signal's own writes record no `integration_events` — it is local data now, like projects and tasks, and the log is for what an *integration* did.
 - The calendar reads and never writes. Scheduled content and task due dates are two kinds and stay two kinds: two arrays in `shared/calendar.ts`, two headed groups on the page, never one list of "events" with a type tag — the moment they share a list something sorts and counts them together and the difference survives only as a colour. Signal failing degrades the page to task due dates with a visible reason, because an empty calendar and an unreadable schedule are different claims and only one of them is true.
 - Figures are read, never computed, and never written back. `server/publish/analytics.ts` holds an

@@ -31,7 +31,7 @@ import {
   isSignalDate,
   resolveSignalChannelPreset,
   signalChannelPresentation,
-  signalMediaKind,
+  signalMediaKindFor,
   signalTextHasLink,
   type SignalCampaignSummary,
   type SignalChannel,
@@ -41,6 +41,8 @@ import {
   type SignalSlot,
   type SignalStatus,
 } from '../../../shared/signal';
+import { urlPostMedia, type SignalPostMedia } from '../../../shared/signal-media';
+import { formatFileSize } from '../../../shared/drive';
 import {
   CALENDAR_VIEWS,
   calendarViewRange,
@@ -102,7 +104,14 @@ type SignalRange = {
 type Draft = {
   text: string;
   channels: SignalChannel[];
-  mediaUrls: string[];
+  /**
+   * The whole ordered media list as descriptors, public URLs and Drive references together.
+   *
+   * The draft holds what the post holds. A Drive reference's metadata is never edited here and is
+   * never sent back: the save states the source and the link, and the server answers with whatever
+   * Drive says — which is what makes the stored fingerprint evidence rather than a claim.
+   */
+  media: SignalPostMedia[];
   date: string;
   time: string;
   format: SignalFormat;
@@ -152,7 +161,7 @@ const dateLabels = (from: string, to: string) => {
 const draftFor = (post: SignalPost): Draft => ({
   text: post.text,
   channels: post.channels,
-  mediaUrls: post.mediaUrls,
+  media: post.media,
   date: post.date ?? '',
   time: post.time,
   format: post.format,
@@ -510,6 +519,19 @@ function Editor({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [mediaInput, setMediaInput] = useState('');
+  const [driveInput, setDriveInput] = useState('');
+  const [driveBusy, setDriveBusy] = useState(false);
+  /** The refusal from the last paste, shown under the Drive input and cleared by the next one. */
+  const [driveError, setDriveError] = useState('');
+  /**
+   * The refusal from the last recheck of each Drive reference, by file id.
+   *
+   * Kept per reference rather than as one message so that a failure stays attached to the file it
+   * is about — the reference is still there, still showing the metadata it had, and the reason it
+   * could not be confirmed belongs beside it rather than at the top of the form.
+   */
+  const [recheckErrors, setRecheckErrors] = useState<Record<string, string>>({});
+  const [recheckingId, setRecheckingId] = useState('');
   const [publishPreview, setPublishPreview] = useState<PublishPreview | null>(null);
   const [publications, setPublications] = useState<SignalPublication[]>([]);
   /**
@@ -848,6 +870,10 @@ function Editor({
         ...draft,
         text: draft.text.trim(),
         date: draft.date || null,
+        // The source and the address, and nothing else. A Drive item sends its link, which the
+        // server parses and resolves; the metadata beside it here is what the server last said and
+        // is never sent back as if it were a fact this form knows.
+        media: draft.media.map((item) => ({ source: item.source, url: item.url })),
         // Names, so a campaign typed here is resolved or created inside the same transaction as the
         // post. An empty array is *this post belongs to none*, which is why it is always sent.
         campaigns: draft.campaigns.map((campaign) => campaign.name),
@@ -942,31 +968,95 @@ function Editor({
       setError('Media URLs must be valid https addresses.');
       return;
     }
-    setDraft((current) => ({ ...current, mediaUrls: [...current.mediaUrls, value] }));
+    setDraft((current) => ({ ...current, media: [...current.media, urlPostMedia(value)] }));
     setMediaInput('');
     setError('');
+  };
+
+  /**
+   * Resolves a pasted Drive link and puts what came back in the draft.
+   *
+   * The server does the parsing, the host check, and the lookup; this shows the answer. What is
+   * held here is a preview of the reference — the save resolves the link again through the same
+   * rule, so the stored fingerprint is the one taken at the moment of the write.
+   */
+  const addDriveMedia = async () => {
+    const link = driveInput.trim();
+    if (!link) return;
+    setDriveBusy(true);
+    setDriveError('');
+    try {
+      const resolved = await send<SignalPostMedia>('/signal/drive-media/resolve', 'POST', { link });
+      if (
+        draft.media.some(
+          (item) => item.source === 'DRIVE' && item.driveFileId === resolved.driveFileId,
+        )
+      ) {
+        setDriveError('This post already carries that Drive file.');
+        return;
+      }
+      setDraft((current) => ({ ...current, media: [...current.media, resolved] }));
+      setDriveInput('');
+    } catch (reason) {
+      setDriveError((reason as Error).message);
+    } finally {
+      setDriveBusy(false);
+    }
+  };
+
+  /**
+   * Checks one saved Drive reference against Drive again, on purpose.
+   *
+   * Only for a reference the post has actually stored, and only with the form clean: it is a write
+   * through the ordinary edit transaction, so running it over unsaved edits would either discard
+   * them or save them without being asked. A failure leaves the reference and its last known
+   * metadata exactly where they are and shows the reason beside it.
+   */
+  const recheckDriveMedia = async (driveFileId: string) => {
+    setRecheckingId(driveFileId);
+    setDriveError('');
+    setRecheckErrors((current) => {
+      const next = { ...current };
+      delete next[driveFileId];
+      return next;
+    });
+    try {
+      const next = await send<SignalPost>(`/signal/posts/${post.id}/media/recheck`, 'POST', {
+        driveFileId,
+      });
+      setDraft(draftFor(next));
+      // The fingerprint moved, so any preview taken against the old one is no longer the plan.
+      setPublishPreview(null);
+      // `opened` rather than `saved`: saving closes the composer, and a recheck is something you do
+      // while composing — the whole point is to see what came back beside the reference it is about.
+      await opened(next);
+    } catch (reason) {
+      setRecheckErrors((current) => ({ ...current, [driveFileId]: (reason as Error).message }));
+    } finally {
+      setRecheckingId('');
+    }
   };
 
   const updateMedia = (index: number, value: string) =>
     setDraft((current) => ({
       ...current,
-      mediaUrls: current.mediaUrls.map((url, currentIndex) =>
-        currentIndex === index ? value : url,
+      media: current.media.map((item, currentIndex) =>
+        currentIndex === index ? urlPostMedia(value) : item,
       ),
     }));
 
   const moveMedia = (index: number, by: number) =>
     setDraft((current) => {
-      const next = [...current.mediaUrls];
+      const next = [...current.media];
       const [moved] = next.splice(index, 1);
-      next.splice(index + by, 0, moved as string);
-      return { ...current, mediaUrls: next };
+      next.splice(index + by, 0, moved as SignalPostMedia);
+      return { ...current, media: next };
     });
 
   const removeMedia = (index: number) =>
     setDraft((current) => ({
       ...current,
-      mediaUrls: current.mediaUrls.filter((_url, currentIndex) => currentIndex !== index),
+      media: current.media.filter((_item, currentIndex) => currentIndex !== index),
     }));
 
   return (
@@ -1042,21 +1132,70 @@ function Editor({
           </fieldset>
           <fieldset className="signal-media-fieldset">
             <legend>Media</legend>
-            <p>Public https URLs only. Signal stores the references, not the files.</p>
-            {draft.mediaUrls.length > 0 && (
+            <p>
+              A public https URL, or a file in the connected Drive. Signal stores the references and
+              never the files.
+            </p>
+            {draft.media.length > 0 && (
               <ol>
-                {draft.mediaUrls.map((url, index) => (
-                  <li key={`${index}-${url}`}>
-                    <label>
-                      <span>Media URL {index + 1}</span>
-                      <input
-                        type="url"
-                        value={url}
-                        onChange={(event) => updateMedia(index, event.target.value)}
-                        required
-                      />
-                    </label>
-                    <span className="signal-media-kind">{signalMediaKind(url)}</span>
+                {draft.media.map((item, index) => (
+                  <li key={`${index}-${item.url}`}>
+                    {item.source === 'DRIVE' ? (
+                      <div className="signal-media-drive">
+                        <span className="signal-media-source">Drive file {index + 1}</span>
+                        <a href={item.url} target="_blank" rel="noreferrer">
+                          {item.driveName}
+                        </a>
+                        <span className="signal-media-detail">
+                          {`${item.mimeType} · ${formatFileSize(item.sizeBytes)}`}
+                        </span>
+                        <span className="signal-media-detail">
+                          {item.driveVerifiedAt
+                            ? `Checked ${new Date(item.driveVerifiedAt).toLocaleString()}`
+                            : 'Not checked yet'}
+                        </span>
+                        {recheckErrors[item.driveFileId ?? ''] && (
+                          <p className="signal-media-unresolved" role="status">
+                            <AlertTriangle aria-hidden="true" /> Could not confirm this file:{' '}
+                            {recheckErrors[item.driveFileId ?? '']} The details above are the last
+                            ones Drive gave.
+                          </p>
+                        )}
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => recheckDriveMedia(item.driveFileId as string)}
+                          disabled={
+                            busy ||
+                            recheckingId !== '' ||
+                            hasUnsavedChanges ||
+                            !post.media.some(
+                              (stored) =>
+                                stored.source === 'DRIVE' &&
+                                stored.driveFileId === item.driveFileId,
+                            )
+                          }
+                          title={
+                            hasUnsavedChanges
+                              ? 'Save this post before rechecking: a recheck is itself an edit.'
+                              : undefined
+                          }
+                        >
+                          <RefreshCw aria-hidden="true" /> Recheck Drive file
+                        </button>
+                      </div>
+                    ) : (
+                      <label>
+                        <span>Media URL {index + 1}</span>
+                        <input
+                          type="url"
+                          value={item.url}
+                          onChange={(event) => updateMedia(index, event.target.value)}
+                          required
+                        />
+                      </label>
+                    )}
+                    <span className="signal-media-kind">{signalMediaKindFor(item)}</span>
                     <div>
                       <button
                         type="button"
@@ -1071,7 +1210,7 @@ function Editor({
                         type="button"
                         className="icon-btn"
                         onClick={() => moveMedia(index, 1)}
-                        disabled={index === draft.mediaUrls.length - 1}
+                        disabled={index === draft.media.length - 1}
                         aria-label={`Move media ${index + 1} down`}
                       >
                         <ArrowDown />
@@ -1109,6 +1248,37 @@ function Editor({
                 <Plus /> Add media
               </button>
             </div>
+            {/*
+              Pasting a link is the whole input surface for a Drive file: there is no picker, and
+              no way to name a file by id. The link is sent to the server, which parses it, checks
+              the host, and asks Drive what the file is — the browser is shown the answer and never
+              given a way to read the file itself.
+            */}
+            <div className="signal-media-add">
+              <label>
+                Add a Drive file by link
+                <input
+                  type="text"
+                  inputMode="url"
+                  placeholder="https://drive.google.com/file/d/…/view"
+                  value={driveInput}
+                  onChange={(event) => setDriveInput(event.target.value)}
+                />
+              </label>
+              <button
+                type="button"
+                className="secondary"
+                onClick={addDriveMedia}
+                disabled={driveBusy || !driveInput.trim()}
+              >
+                <Plus /> {driveBusy ? 'Checking…' : 'Add Drive file'}
+              </button>
+            </div>
+            {driveError && (
+              <p className="signal-media-unresolved" role="alert">
+                <AlertTriangle aria-hidden="true" /> {driveError}
+              </p>
+            )}
           </fieldset>
           <div className="form-row">
             <label>

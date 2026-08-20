@@ -1,6 +1,7 @@
 ﻿import { google, drive_v3 } from 'googleapis';
 import type { DriveFile } from '../../shared/drive.ts';
 import type { DriveFilePage, DriveFolder, DriveProvider } from './provider.ts';
+import type { DriveMediaFile, DriveMediaProvider } from './media.ts';
 
 const escapeQuery = (value: string) => value.replace(/'/g, "\\'");
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -111,6 +112,49 @@ export class GoogleDriveProvider implements DriveProvider {
 }
 
 /**
+ * Metadata for one file by id, for the Signal media reference in `media.ts`.
+ *
+ * A separate class from `GoogleDriveProvider` rather than a method on it, because it satisfies a
+ * separate interface: `DriveProvider` — the vocabulary Files is handed — has no way to reach a
+ * file by id, and giving it one here would widen Files by a line of plumbing. Both are built from
+ * the same authorized client, which is the only thing they share.
+ *
+ * It reads. `alt=media` is deliberately absent; C75 owns the byte path.
+ */
+export class GoogleDriveMediaProvider implements DriveMediaProvider {
+  readonly connected = true;
+  private drive: drive_v3.Drive;
+  constructor(drive: drive_v3.Drive) {
+    this.drive = drive;
+  }
+
+  async getFile(fileId: string): Promise<DriveMediaFile> {
+    const result = await this.drive.files.get({
+      fileId,
+      fields:
+        'id,name,mimeType,size,webViewLink,modifiedTime,version,md5Checksum,sha256Checksum,trashed,shortcutDetails(targetId,targetMimeType)',
+      // A file on a shared drive is still a file the connected account may have selected.
+      supportsAllDrives: true,
+    });
+    const file = result.data;
+    if (!file.id) throw new Error('Drive returned no id for that file.');
+    return {
+      id: file.id,
+      name: file.name ?? null,
+      mimeType: file.mimeType ?? null,
+      size: file.size ?? null,
+      webViewLink: file.webViewLink ?? null,
+      modifiedTime: file.modifiedTime ?? null,
+      version: file.version ?? null,
+      md5Checksum: file.md5Checksum ?? null,
+      sha256Checksum: file.sha256Checksum ?? null,
+      trashed: file.trashed === true,
+      shortcutTargetId: file.shortcutDetails?.targetId ?? null,
+    };
+  }
+}
+
+/**
  * One Drive item as the app carries it. `size` arrives as a decimal string and is absent
  * on folders and Google-native documents, which is not the same as zero bytes — the
  * difference is preserved rather than flattened, so the UI can say so.
@@ -137,5 +181,10 @@ export function createGoogleProvider(
     credentials.redirectUri,
   );
   auth.setCredentials(tokens);
-  return { provider: new GoogleDriveProvider(google.drive({ version: 'v3', auth })), auth };
+  const drive = google.drive({ version: 'v3', auth });
+  return {
+    provider: new GoogleDriveProvider(drive),
+    media: new GoogleDriveMediaProvider(drive),
+    auth,
+  };
 }

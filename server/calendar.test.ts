@@ -51,7 +51,7 @@ describe('reading a calendar range', () => {
   it('returns the two kinds as two lists, never merged', async () => {
     workspace();
     task('t1', 'Ship the explainer', '2026-09-14');
-    post('Teach first. Sell second.', '2026-09-14');
+    await post('Teach first. Sell second.', '2026-09-14');
 
     const range = await readCalendarRange(
       db,
@@ -71,8 +71,8 @@ describe('reading a calendar range', () => {
     workspace();
     task('t1', 'In range', '2026-09-14');
     task('t2', 'Out of range', '2026-10-14');
-    post('In range', '2026-09-14');
-    post('Out of range', '2026-10-14');
+    await post('In range', '2026-09-14');
+    await post('Out of range', '2026-10-14');
 
     const range = await readCalendarRange(
       db,
@@ -88,8 +88,8 @@ describe('reading a calendar range', () => {
     workspace();
     task('t1', 'First day', '2026-09-01');
     task('t2', 'Last day', '2026-09-30');
-    post('First day', '2026-09-01');
-    post('Last day', '2026-09-30');
+    await post('First day', '2026-09-01');
+    await post('Last day', '2026-09-30');
 
     const range = await readCalendarRange(
       db,
@@ -103,7 +103,7 @@ describe('reading a calendar range', () => {
 
   it('leaves the unscheduled queue out entirely', async () => {
     workspace();
-    createPost(db, signalPostInput.parse({ text: 'Unscheduled idea' }));
+    await createPost(db, signalPostInput.parse({ text: 'Unscheduled idea' }));
 
     const range = await readCalendarRange(
       db,
@@ -116,9 +116,9 @@ describe('reading a calendar range', () => {
 
   it('shows every post status, including a dated draft', async () => {
     workspace();
-    post('A draft with a date', '2026-09-14', { status: 'DRAFT' });
-    post('Scheduled', '2026-09-15', { status: 'SCHEDULED' });
-    post('Already out', '2026-09-16', { status: 'PUBLISHED' });
+    await post('A draft with a date', '2026-09-14', { status: 'DRAFT' });
+    await post('Scheduled', '2026-09-15', { status: 'SCHEDULED' });
+    await post('Already out', '2026-09-16', { status: 'PUBLISHED' });
 
     const range = await readCalendarRange(
       db,
@@ -188,8 +188,8 @@ describe('grouping a range into days', () => {
   it('groups both kinds under one day, still apart', async () => {
     workspace();
     task('t1', 'Ship it', '2026-09-14');
-    post('Post one', '2026-09-14');
-    post('Post two', '2026-09-14');
+    await post('Post one', '2026-09-14');
+    await post('Post two', '2026-09-14');
 
     const [day, ...rest] = calendarDays(
       await readCalendarRange(db, new LocalSignalProvider(db), '2026-09-01', '2026-09-30'),
@@ -202,7 +202,7 @@ describe('grouping a range into days', () => {
 
   it('drops days that carry nothing, and orders the rest', async () => {
     workspace();
-    post('Later', '2026-09-20');
+    await post('Later', '2026-09-20');
     task('t1', 'Earlier', '2026-09-04');
 
     const days = calendarDays(
@@ -226,7 +226,7 @@ describe('the calendar route', () => {
   it('answers a range with both kinds and a healthy signal state', async () => {
     workspace();
     task('t1', 'Ship the explainer', '2026-09-14');
-    post('Teach first. Sell second.', '2026-09-14');
+    await post('Teach first. Sell second.', '2026-09-14');
 
     const response = await request(app())
       .get('/api/calendar?from=2026-09-01&to=2026-09-30')

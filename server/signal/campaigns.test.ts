@@ -51,9 +51,9 @@ describe('the campaign vocabulary', () => {
     expect(() => signalCampaignInput.parse({ name: 'x'.repeat(60) })).not.toThrow();
   });
 
-  it('counts the posts carrying a campaign, and reports zero for one nothing carries', () => {
-    const created = add({ campaigns: ['Clarity Campaign'] });
-    add({ campaigns: ['Clarity Campaign'] });
+  it('counts the posts carrying a campaign, and reports zero for one nothing carries', async () => {
+    const created = await add({ campaigns: ['Clarity Campaign'] });
+    await add({ campaigns: ['Clarity Campaign'] });
     createCampaign(db, signalCampaignInput.parse({ name: 'Unused idea' }));
     expect(listCampaigns(db)).toEqual([
       { id: created.campaigns[0]!.id, name: 'Clarity Campaign', postCount: 2 },
@@ -65,9 +65,9 @@ describe('the campaign vocabulary', () => {
    * The acceptance criterion, and the reason a campaign is a row rather than a string on a post:
    * one `UPDATE` reaches every post, because no post holds a copy of the name.
    */
-  it('renames a campaign with one write, and every post reads the new name', () => {
-    const first = add({ campaigns: ['Wk4'] });
-    const second = add({ campaigns: ['Wk4'] });
+  it('renames a campaign with one write, and every post reads the new name', async () => {
+    const first = await add({ campaigns: ['Wk4'] });
+    const second = await add({ campaigns: ['Wk4'] });
     const campaignId = first.campaigns[0]!.id;
 
     updateCampaign(db, campaignId, { name: 'Week four' });
@@ -103,9 +103,9 @@ describe('the campaign vocabulary', () => {
   });
 
   /** The other acceptance criterion: a deletion detaches and never reaches a post. */
-  it('detaches a campaign on deletion and deletes no post', () => {
-    const first = add({ campaigns: ['Wk4', 'Clarity Campaign'] });
-    const second = add({ campaigns: ['Wk4'] });
+  it('detaches a campaign on deletion and deletes no post', async () => {
+    const first = await add({ campaigns: ['Wk4', 'Clarity Campaign'] });
+    const second = await add({ campaigns: ['Wk4'] });
     const campaignId = first.campaigns.find((campaign) => campaign.name === 'Wk4')!.id;
 
     expect(() => deleteCampaign(db, campaignId, false)).toThrow(SignalCampaignInUseError);
@@ -128,8 +128,8 @@ describe('the campaign vocabulary', () => {
     expect(() => deleteCampaign(db, 'nope', true)).toThrow(SignalCampaignNotFoundError);
   });
 
-  it('takes the join rows with a post when the post is deleted', () => {
-    const created = add({ campaigns: ['Wk4'] });
+  it('takes the join rows with a post when the post is deleted', async () => {
+    const created = await add({ campaigns: ['Wk4'] });
     db.prepare('DELETE FROM signal_posts WHERE id=?').run(created.id);
     expect(db.prepare('SELECT COUNT(*) n FROM signal_post_campaigns').get()).toEqual({ n: 0 });
     // The campaign itself survives: a post going away is not the workspace changing its mind.
@@ -138,9 +138,9 @@ describe('the campaign vocabulary', () => {
 });
 
 describe('backfilling the free-text campaign column', () => {
-  it('creates one campaign per distinct name and attaches the post that carried it', () => {
-    const first = add();
-    const second = add();
+  it('creates one campaign per distinct name and attaches the post that carried it', async () => {
+    const first = await add();
+    const second = await add();
     setLegacyCampaign(first.id, 'Clarity Campaign — Wk1: The Problem');
     setLegacyCampaign(second.id, 'Clarity Campaign — Wk2: The Cause');
 
@@ -159,9 +159,9 @@ describe('backfilling the free-text campaign column', () => {
    * and the spelling kept is the one the earliest post used. Deterministic from the rows themselves,
    * so the same database migrates the same way twice.
    */
-  it('resolves two spellings to one campaign, keeping the earliest post’s spelling', () => {
-    const early = add();
-    const late = add();
+  it('resolves two spellings to one campaign, keeping the earliest post’s spelling', async () => {
+    const early = await add();
+    const late = await add();
     db.prepare('UPDATE signal_posts SET created_at=? WHERE id=?').run(
       '2026-03-01T00:00:00.000Z',
       early.id,
@@ -178,17 +178,17 @@ describe('backfilling the free-text campaign column', () => {
     expect(getPost(db, late.id)?.campaigns[0]!.id).toBe(getPost(db, early.id)?.campaigns[0]!.id);
   });
 
-  it('leaves a post whose column is empty or whitespace with no campaign at all', () => {
-    const blank = add();
-    const spaces = add();
+  it('leaves a post whose column is empty or whitespace with no campaign at all', async () => {
+    const blank = await add();
+    const spaces = await add();
     setLegacyCampaign(blank.id, '');
     setLegacyCampaign(spaces.id, '   ');
     expect(backfillSignalCampaigns(db)).toEqual({ campaigns: 0, attachments: 0 });
     expect(names()).toEqual([]);
   });
 
-  it('writes nothing on a second run, and never re-attaches a post detached by hand', () => {
-    const created = add();
+  it('writes nothing on a second run, and never re-attaches a post detached by hand', async () => {
+    const created = await add();
     setLegacyCampaign(created.id, 'Wk4');
     expect(backfillSignalCampaigns(db)).toEqual({ campaigns: 1, attachments: 1 });
     expect(backfillSignalCampaigns(db)).toEqual({ campaigns: 0, attachments: 0 });
@@ -199,8 +199,8 @@ describe('backfilling the free-text campaign column', () => {
     expect(backfillSignalCampaigns(db)).toEqual({ campaigns: 0, attachments: 1 });
   });
 
-  it('runs on every boot, so a database created before campaigns existed arrives migrated', () => {
-    const created = add();
+  it('runs on every boot, so a database created before campaigns existed arrives migrated', async () => {
+    const created = await add();
     setLegacyCampaign(created.id, 'Wk4');
     // `createDb` on the same file would be the real path; the boot sequence is what is asserted,
     // and calling it again against this handle is the same three statements in the same order.
@@ -208,15 +208,15 @@ describe('backfilling the free-text campaign column', () => {
     expect(getPost(db, created.id)?.campaigns.map((campaign) => campaign.name)).toEqual(['Wk4']);
   });
 
-  it('leaves the frozen column exactly as it found it', () => {
-    const created = add();
+  it('leaves the frozen column exactly as it found it', async () => {
+    const created = await add();
     setLegacyCampaign(created.id, 'Wk4');
     backfillSignalCampaigns(db);
     expect(db.prepare('SELECT campaign FROM signal_posts WHERE id=?').get(created.id)).toEqual({
       campaign: 'Wk4',
     });
     // And nothing written afterwards touches it.
-    const fresh = add({ campaigns: ['Wk5'] });
+    const fresh = await add({ campaigns: ['Wk5'] });
     expect(db.prepare('SELECT campaign FROM signal_posts WHERE id=?').get(fresh.id)).toEqual({
       campaign: null,
     });
@@ -249,9 +249,9 @@ describe('the archive importer, afterwards', () => {
     expect(db.prepare('SELECT COUNT(*) n FROM signal_post_campaigns').get()).toEqual(attachments);
   });
 
-  it('joins a campaign the workspace already has rather than creating a second spelling', () => {
+  it('joins a campaign the workspace already has rather than creating a second spelling', async () => {
     const label = campaignArchive().find((post) => post.campaign)!.campaign as string;
-    const mine = add({ campaigns: [label.toUpperCase()] });
+    const mine = await add({ campaigns: [label.toUpperCase()] });
 
     importCampaignArchive(db);
     const campaign = listCampaigns(db).find(

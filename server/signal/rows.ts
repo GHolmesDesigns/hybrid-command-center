@@ -1,5 +1,6 @@
 import type { Db } from '../db.ts';
 import type { SignalCampaign, SignalChannel, SignalPost } from '../../shared/signal.ts';
+import type { SignalPostMedia } from '../../shared/signal-media.ts';
 import { campaignsByPost } from './campaigns.ts';
 import type { PublishPlatform, PublishPostKind } from '../../shared/publish-capabilities.ts';
 import {
@@ -54,20 +55,59 @@ export function channelsByPost(db: Db, postIds: string[]): Map<string, SignalCha
   return grouped;
 }
 
+export interface SignalPostMediaRow {
+  post_id: string;
+  url: string;
+  source: string;
+  drive_file_id: string | null;
+  drive_name: string | null;
+  mime_type: string | null;
+  size_bytes: number | null;
+  drive_version: string | null;
+  drive_modified_at: string | null;
+  drive_checksum: string | null;
+  drive_verified_at: string | null;
+}
+
+/**
+ * One stored reference as the descriptor.
+ *
+ * `source` is cast the way the post row's enum columns are: nothing but this module's own
+ * validated writes reaches these columns, and the SQLite triggers in `server/db.ts` refuse a third
+ * value outright, so the cast states that invariant rather than guessing at the data.
+ */
+export const toSignalPostMedia = (row: SignalPostMediaRow): SignalPostMedia => ({
+  source: row.source as SignalPostMedia['source'],
+  url: row.url,
+  driveFileId: row.drive_file_id,
+  driveName: row.drive_name,
+  mimeType: row.mime_type,
+  // SQLite hands an INTEGER column back as a number or a bigint depending on its magnitude; the
+  // sizes here are far inside the safe range, and normalising once here keeps every reader from
+  // having to know that.
+  sizeBytes: row.size_bytes === null ? null : Number(row.size_bytes),
+  driveVersion: row.drive_version,
+  driveModifiedAt: row.drive_modified_at,
+  driveChecksum: row.drive_checksum,
+  driveVerifiedAt: row.drive_verified_at,
+});
+
 /** Ordered media references for a set of posts, fetched in one query. */
-export function mediaByPost(db: Db, postIds: string[]): Map<string, string[]> {
-  const grouped = new Map<string, string[]>();
+export function mediaByPost(db: Db, postIds: string[]): Map<string, SignalPostMedia[]> {
+  const grouped = new Map<string, SignalPostMedia[]>();
   if (postIds.length === 0) return grouped;
   const placeholders = postIds.map(() => '?').join(',');
   const rows = db
     .prepare(
-      `SELECT post_id, url FROM signal_post_media
-       WHERE post_id IN (${placeholders}) ORDER BY post_id, position`,
+      `SELECT post_id, url, source, drive_file_id, drive_name, mime_type, size_bytes,
+              drive_version, drive_modified_at, drive_checksum, drive_verified_at
+         FROM signal_post_media
+        WHERE post_id IN (${placeholders}) ORDER BY post_id, position`,
     )
-    .all(...postIds) as { post_id: string; url: string }[];
+    .all(...postIds) as unknown as SignalPostMediaRow[];
   for (const row of rows) {
     const attached = grouped.get(row.post_id) ?? [];
-    attached.push(row.url);
+    attached.push(toSignalPostMedia(row));
     grouped.set(row.post_id, attached);
   }
   return grouped;
@@ -81,7 +121,7 @@ export function mediaByPost(db: Db, postIds: string[]): Map<string, string[]> {
 export function toSignalPost(
   row: SignalPostRow,
   channels: SignalChannel[],
-  mediaUrls: string[],
+  media: SignalPostMedia[],
   campaigns: SignalCampaign[],
 ): SignalPost {
   return {
@@ -89,7 +129,9 @@ export function toSignalPost(
     text: row.text,
     // Empty rather than absent, so every consumer can read `post.channels.length`.
     channels,
-    mediaUrls,
+    media,
+    // Derived here and nowhere else, which is what stops the two from disagreeing.
+    mediaUrls: media.map((item) => item.url),
     date: row.date,
     time: row.time,
     format: row.format as SignalPost['format'],

@@ -1,6 +1,7 @@
 import type { DriveFile } from '../../shared/drive.ts';
 import type { OAuthAuthorizationClient } from './oauth.ts';
 import type { DriveFilePage, DriveFolder, DriveProvider } from './provider.ts';
+import type { DriveMediaFile, DriveMediaProvider } from './media.ts';
 
 /**
  * The Drive stand-in every automated test uses. Real Drive is never contacted from a test
@@ -72,6 +73,52 @@ export class MockDriveProvider implements DriveProvider {
         nextPageToken: index < pages.length - 1 ? `${folderId}-page-${index + 1}` : null,
       })),
     );
+  }
+}
+
+/**
+ * The Drive metadata stand-in for the Signal media reference (C74).
+ *
+ * Separate from `MockDriveProvider` for the same reason the real ones are separate: the two
+ * capabilities are two interfaces, and a test that hands a component the browsing mock must not
+ * thereby hand it a way to read any file in the account. It records every id it was asked for, so
+ * a test can prove that preview asked for none.
+ */
+export class MockDriveMediaProvider implements DriveMediaProvider {
+  connected = true;
+  /** Files by id. An id that is not here fails the way a Drive 404 does. */
+  files = new Map<string, DriveMediaFile>();
+  /** Every id this provider was asked for, in order. */
+  calls: string[] = [];
+  /** Thrown by `getFile` when set, standing in for a Drive call that failed. */
+  error?: string;
+
+  async getFile(fileId: string): Promise<DriveMediaFile> {
+    this.calls.push(fileId);
+    if (this.error) throw new Error(this.error);
+    const file = this.files.get(fileId);
+    if (!file) throw new Error(`File not found: ${fileId}`);
+    return file;
+  }
+
+  /** Seeds one file, defaulting to a small PNG that every rule accepts. */
+  seed(id: string, overrides: Partial<DriveMediaFile> = {}): DriveMediaFile {
+    const file: DriveMediaFile = {
+      id,
+      name: `${id}.png`,
+      mimeType: 'image/png',
+      size: '2048',
+      webViewLink: `https://drive.google.com/file/d/${id}/view`,
+      modifiedTime: '2026-03-01T12:00:00.000Z',
+      version: '7',
+      md5Checksum: 'd41d8cd98f00b204e9800998ecf8427e',
+      sha256Checksum: null,
+      trashed: false,
+      shortcutTargetId: null,
+      ...overrides,
+    };
+    this.files.set(id, file);
+    return file;
   }
 }
 

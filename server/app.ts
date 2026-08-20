@@ -35,9 +35,16 @@ import {
   syncAllToDrive,
 } from './drive/service.ts';
 import { DriveScopeError, driveConfigured, listProjectFiles } from './drive/browse.ts';
+import {
+  DriveMediaError,
+  driveMediaProvider,
+  resolveDriveMedia,
+  type DriveMediaProvider,
+} from './drive/media.ts';
 import { signalProvider } from './signal/read.ts';
 import { readCalendarRange } from './calendar.ts';
 import {
+  SignalMediaError,
   SignalPostNotFoundError,
   SignalVariantError,
   SignalSlotConflictError,
@@ -48,6 +55,7 @@ import {
   getPost,
   getPostVariants,
   listQueue,
+  recheckPostMedia,
   replacePostVariants,
   signalPostInput,
   signalPostPatch,
@@ -200,6 +208,15 @@ export type AppOptions = {
    * every other case this resolves to the encrypted-token provider as usual.
    */
   drive?: (db: Db) => DriveProvider;
+  /**
+   * The Drive **metadata** capability the Signal media routes use, for the same reason and with
+   * the same rule: tests supply a mock so a Drive reference can be resolved without credentials.
+   *
+   * A separate option because it is a separate capability. Handing the browsing routes a mock must
+   * not hand the media routes one, and vice versa — the two interfaces are the boundary C74 drew,
+   * and one option covering both would quietly erase it here.
+   */
+  driveMedia?: (db: Db) => DriveMediaProvider;
   /** Test-only publishing provider; automated tests never contact the real service. */
   publish?: PublishProvider;
   /**
@@ -464,6 +481,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   const production = options.production ?? isProductionRuntime();
   const clock = options.now ?? (() => new Date());
   const oauthClient = options.oauth ?? createGoogleOAuthClient;
+  const driveMedia = () => (options.driveMedia ?? driveMediaProvider)(db);
   const publishProvider =
     options.publish ??
     (publishConfigured()
@@ -1578,9 +1596,31 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       next(error);
     }
   });
-  app.post('/api/signal/posts', (req, res, next) => {
+  app.post('/api/signal/posts', async (req, res, next) => {
     try {
-      res.status(201).json(createPost(db, signalPostInput.parse(req.body)));
+      res.status(201).json(await createPost(db, signalPostInput.parse(req.body), driveMedia()));
+    } catch (error) {
+      next(error);
+    }
+  });
+  /**
+   * What one pasted Drive link resolves to, and nothing else.
+   *
+   * The composer calls this so a person sees the file they are about to bind to before they save,
+   * and the answer is metadata: name, type, size, the canonical viewer link, and the version
+   * fingerprint this app will record. **No bytes, no Drive token, and no file-read endpoint** — the
+   * only thing this route can do with an id is describe it, and the only way to give it an id is to
+   * paste a link it agrees is a Drive file link.
+   *
+   * A refusal is a 400 carrying the specific reason: a folder, a shortcut that resolves to nothing,
+   * a Google-native document, an unsupported type, a size Drive will not report, or a file past the
+   * limit each say so by name. Saving the post resolves again through the same rule, so nothing
+   * here is trusted on the way back in.
+   */
+  app.post('/api/signal/drive-media/resolve', async (req, res, next) => {
+    try {
+      const { link } = z.object({ link: z.string().min(1).max(2048) }).parse(req.body);
+      res.json(await resolveDriveMedia({ link, provider: driveMedia() }));
     } catch (error) {
       next(error);
     }
@@ -1756,9 +1796,27 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       next(error);
     }
   });
-  app.patch('/api/signal/posts/:id', (req, res, next) => {
+  app.patch('/api/signal/posts/:id', async (req, res, next) => {
     try {
-      res.json(updatePost(db, req.params.id, signalPostPatch.parse(req.body)));
+      res.json(await updatePost(db, req.params.id, signalPostPatch.parse(req.body), driveMedia()));
+    } catch (error) {
+      next(error);
+    }
+  });
+  /**
+   * Check one of this post's Drive references against Drive again, because a person asked.
+   *
+   * The only route that replaces a stored fingerprint. It goes through the ordinary Signal edit
+   * transaction, so the post's `updated_at` moves and an open publish preview stops matching — a
+   * file whose content changed must not be sent under a plan that was approved before it did.
+   *
+   * A failure answers 400 and writes nothing: the reference keeps the metadata it had, and the
+   * composer shows the reason beside it rather than dropping the media.
+   */
+  app.post('/api/signal/posts/:id/media/recheck', async (req, res, next) => {
+    try {
+      const { driveFileId } = z.object({ driveFileId: z.string().min(1).max(200) }).parse(req.body);
+      res.json(await recheckPostMedia(db, req.params.id, driveFileId, driveMedia()));
     } catch (error) {
       next(error);
     }
@@ -1893,7 +1951,12 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       error instanceof DriveScopeError ||
       // An override the capability contract will not carry is the caller naming something the
       // provider cannot do, which is their problem to fix and not a failure of the write.
-      error instanceof SignalVariantError
+      error instanceof SignalVariantError ||
+      // A link that is not a Drive file link, or a file this app will not bind a reference to.
+      // Both carry the specific reason and both are answered rather than logged as a fault: the
+      // person pasted something, and what to paste instead is the whole content of the message.
+      error instanceof DriveMediaError ||
+      error instanceof SignalMediaError
         ? 400
         : // Editing or deleting a post that is not there is the caller addressing something
           // that does not exist, not a failure of the write.

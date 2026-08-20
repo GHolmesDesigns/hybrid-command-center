@@ -235,7 +235,10 @@ describe('Signal planner', () => {
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     const patch = requests.find((request) => request.method === 'PATCH');
-    expect(patch?.body.mediaUrls).toEqual([second, first]);
+    expect(patch?.body.media).toEqual([
+      { source: 'URL', url: second },
+      { source: 'URL', url: first },
+    ]);
   });
 
   it('refuses an insecure media reference before adding it to a post', async () => {
@@ -267,6 +270,93 @@ describe('Signal planner', () => {
     expect(screen.getByLabelText('Media URL 1')).toHaveValue('https://cdn.example.com/revised.jpg');
     fireEvent.click(screen.getByRole('button', { name: 'Remove media 1' }));
     expect(screen.queryByLabelText('Media URL 1')).not.toBeInTheDocument();
+  });
+
+  /**
+   * A Drive reference, from the paste that adds it to the recheck that confirms it.
+   *
+   * Three things this proves and one it proves by omission: the composer shows what Drive said, the
+   * save sends a source and a link and nothing else, a recheck replaces the fingerprint, and a
+   * failed recheck leaves the reference and its last known details on screen. Nothing in the
+   * composer ever loads the file — the URL is Drive's viewer page.
+   */
+  const driveMedia = {
+    source: 'DRIVE' as const,
+    url: 'https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/view',
+    driveFileId: '1AbCdEfGhIjKlMnOpQrStUvWxYz012345',
+    driveName: 'launch.mp4',
+    mimeType: 'video/mp4',
+    sizeBytes: 4096,
+    driveVersion: '7',
+    driveModifiedAt: '2026-03-01T12:00:00.000Z',
+    driveChecksum: 'a-checksum',
+    driveVerifiedAt: '2026-08-20T09:00:00.000Z',
+  };
+
+  it('adds a Drive file by link, shows what Drive said, and saves the source and the link alone', async () => {
+    testState.signalPostsPayload = [signalPost('drive-add', 'Add a Drive file here', null)];
+    testState.driveMediaPayload = driveMedia;
+    await openSignal();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Add a Drive file here' }));
+
+    fireEvent.change(screen.getByLabelText('Add a Drive file by link'), {
+      target: { value: driveMedia.url },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add Drive file' }));
+
+    expect(await screen.findByRole('link', { name: 'launch.mp4' })).toHaveAttribute(
+      'href',
+      driveMedia.url,
+    );
+    expect(screen.getByText('video/mp4 · 4.0 KB')).toBeInTheDocument();
+    // The kind comes from the stored MIME type. A share link has no extension, so reading the URL
+    // would have said `unknown` here.
+    expect(screen.getByText('video')).toBeInTheDocument();
+    expect(screen.getByText(/^Checked /)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save post' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    const patch = requests.find((request) => request.method === 'PATCH');
+    expect(patch?.body.media).toEqual([{ source: 'DRIVE', url: driveMedia.url }]);
+  });
+
+  it('shows the server’s reason when a pasted link is refused, and adds nothing', async () => {
+    testState.signalPostsPayload = [signalPost('drive-bad', 'Refuse a folder here', null)];
+    testState.driveMediaError =
+      'That is a Drive folder, and a post carries one file at a time. Open the folder and copy the link of the file you want.';
+    await openSignal();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Refuse a folder here' }));
+
+    fireEvent.change(screen.getByLabelText('Add a Drive file by link'), {
+      target: { value: 'https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOpQrStUv' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add Drive file' }));
+
+    expect(await screen.findByText(/That is a Drive folder/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Recheck Drive file' })).not.toBeInTheDocument();
+  });
+
+  it('replaces the fingerprint on an explicit recheck, and keeps the reference when one fails', async () => {
+    testState.signalPostsPayload = [
+      signalPost('drive-recheck', 'Recheck this file', null, { media: [driveMedia] }),
+    ];
+    testState.driveRecheckPayload = { ...driveMedia, driveName: 'launch-v2.mp4', sizeBytes: 8192 };
+    await openSignal();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Recheck this file' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Recheck Drive file' }));
+    expect(await screen.findByRole('link', { name: 'launch-v2.mp4' })).toBeInTheDocument();
+    expect(screen.getByText('video/mp4 · 8.0 KB')).toBeInTheDocument();
+
+    testState.driveRecheckError = 'Drive could not return that file: File not found: 404';
+    fireEvent.click(screen.getByRole('button', { name: 'Recheck Drive file' }));
+
+    // The reason arrives beside the reference, and the reference keeps the last details Drive gave.
+    expect(await screen.findByText(/Could not confirm this file/)).toHaveTextContent(
+      'File not found: 404',
+    );
+    expect(screen.getByRole('link', { name: 'launch-v2.mp4' })).toBeInTheDocument();
+    expect(screen.getByText('video/mp4 · 8.0 KB')).toBeInTheDocument();
   });
 
   it('validates editor content before sending a patch', async () => {
