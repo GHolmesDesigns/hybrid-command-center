@@ -243,13 +243,20 @@ source of truth where the README puts it, and gives an agent the same refusals a
 - [`post-bridge-hq/agent-mode`](https://github.com/post-bridge-hq/agent-mode) — unverified
 - [`xSAVIKx/post-bridge-mcp`](https://github.com/xSAVIKx/post-bridge-mcp) — unofficial, unverified
 
-## 14. Live probe result matrix — 20 August 2026
+## 14. Live probe result matrix — 21 August 2026
 
 Session ran with 29 of 50 allowed requests (12 of them reserved for teardown).
 
 Four states, and no fifth: **verified**, **verified with policy constraint**, **negative**, and
 **still unverified**. Its reviewed registry disposition remains authoritative: it
 blocks dependent work unless that work has an explicit path that cannot rely on it.
+
+This run was aimed at question 1, which the 20 August run could not ask: no platform had two
+connected accounts, so there was no same-platform pair to put the question to. It named two Facebook
+accounts — `85300` (`G.Holmes Designs`) and `85301` (`Wild Eye Photography`), both owner-controlled
+ventures — and named no LinkedIn, Instagram, YouTube, or TikTok account and no video. **Where it is
+quieter than the run before it, that is a question unasked rather than an answer withdrawn**; the
+note at the end of this section says which results that applies to.
 
 ### Fixtures
 
@@ -263,68 +270,100 @@ blocks dependent work unless that work has an explicit path that cannot rely on 
 
 - Posts created: 3; deleted: 3.
 - Provider assets created: 3; deleted: 3.
-- Independent inventory proof: **verified-absent**. A complete 1-page inventory read afterwards listed none of the 3 posts this run created.
+- Independent inventory proof: **verified-absent**. A complete 1-page inventory read afterwards listed none of the 3 post(s) this run created.
 - Leftovers: none.
 
 ### Question 1 — `account_configurations` and same-platform policy
 
 | Claim | State | Evidence | Effect on the dependent cards |
 | --- | --- | --- | --- |
-| `POST /v1/posts` accepts `account_configurations` and stores a different caption for each of two explicitly approved accounts on one platform. | **still unverified** | No platform had two named accounts, so there was no same-platform pair to ask about. | C77 stays blocked. Today's fail-closed value is unchanged. |
-| Which encoding `account_configurations` takes — a list of objects each carrying `account_id`, or a map keyed by account id. | **still unverified** | No platform had two named accounts, so there was no same-platform pair to ask about. | C77 stays blocked. Today's fail-closed value is unchanged. |
-| The per-account `caption` and `media` read back unchanged through `GET /v1/posts/{id}`, after create and again after `PATCH`. | **still unverified** | No platform had two named accounts, so there was no same-platform pair to ask about. | C77 stays blocked. Today's fail-closed value is unchanged. |
-| What the provider does about two accounts on one platform when the captions are materially different, and in what terms it states any restriction. | **still unverified** | No platform had two named accounts, so there was no same-platform pair to ask about. | C77 stays blocked. Today's fail-closed value is unchanged. |
+| `POST /v1/posts` accepts `account_configurations` and stores a different caption for each of two explicitly approved accounts on one platform. | **verified** | POST /v1/posts accepted account_configurations for accounts 85300 and 85301 on facebook (HTTP 201). | C77 may build explicit same-platform targets and per-account captions for the verified platform. |
+| Which encoding `account_configurations` takes — a list of objects each carrying `account_id`, or a map keyed by account id. | **verified** | A list of objects each carrying account_id was accepted on the first attempt. | C77's request builder emits the accepted encoding and its unit tests assert it. |
+| The per-account `caption` and `media` read back unchanged through `GET /v1/posts/{id}`, after create and again after `PATCH`. | **verified** | After create, account_configurations read back as array(2) of {account_id: number, caption: string}. After PATCH — sent in full, scheduled_at included — it read back as array(2) of {account_id: number, caption: string}. | C77 may reconcile per-account content against the provider record and hash it into the confirmation. |
+| What the provider does about two accounts on one platform when the captions are materially different, and in what terms it states any restriction. | **verified with policy constraint** | The API accepted materially different captions to two facebook accounts in one request and raised no duplicate-content refusal. A positive API response does not erase the vendor's support-page restriction on same-platform content: C77 carries the rule as its own preflight refusal rather than waiting for the provider to enforce it. | C77 carries the verified rule into preflight as a refusal in the provider's own terms. The constraint recorded beside it is a preflight refusal, not a warning. |
 
 ### Question 2 — Upload flow and media lifecycle
 
 | Claim | State | Evidence | Effect on the dependent cards |
 | --- | --- | --- | --- |
-| The `create-upload-url` request and response field names, and the signed `PUT`’s required headers and content-length behaviour. | **verified** | `POST /v1/media/create-upload-url` with `{ name, mime_type, size_bytes }` answered `{ media_id: string, name: string, upload_url: string }`. The signed `PUT` carried `Content-Type: image/png`, `Content-Length: 136`, and no `Authorization` header; it answered HTTP 200. The follow-up run repeated the successful PUT with redirects disabled. The transcript intentionally redacts the signed URL, so it does not establish a fixed upload hostname. Fixture sha256 `808300be67e20c6559af29ba909bd89b4017e0501a08da7cc3f4140c4a8f2e8c`. | C75 validates each provider-supplied HTTPS URL, refuses credentials, fragments, and redirects, sets explicit timeouts, and builds the three-step upload against the verified names and headers. |
-| That the five documented `mime_type` values are the whole accepted set, and what the provider answers for a value outside it. | **verified** | `image/webp` was refused with HTTP 400: `mime_type` must be one of `image/png`, `image/jpeg`, `video/mp4`, `video/quicktime`, or `application/pdf`. | C74's type validation and C75's preflight use the verified set. |
-| What `GET /v1/media/{id}` returns for an uploaded asset, and what `describe` says about media a post carries by id rather than by URL. | **verified** | `GET /v1/media/{id}` answered `{ id: string, mime_type: string, object: { isDeleted: boolean, name: string, size_bytes: number, url: string } }`. | C75 reconciles provider media ids where `describe` returns them. |
-| That `media` wins and `media_urls` is ignored when one create request carries both. | **verified** | A create carrying `media` (one uploaded id) and `media_urls` (one unreachable URL) answered HTTP 201. The read-back's `media` was an array of one string, and the post was scheduled. | C75's discriminated `PublishRequest` matches the wire as well as the document, and a URL-only post serializes as it does today. |
-| Whether `DELETE /v1/media/{id}` removes an uploaded asset that is attached to nothing. | **verified** | `DELETE /v1/media/{id}` removed all 3 provider assets this run created. | A probe run leaves no asset behind and C75 may state deletion as available. |
-| The 24-hour unattached expiry and the deletion-on-publish the vendor documents. **A single session cannot answer this**: it needs a dated follow-up read of the inventoried asset ids. | **still unverified** | Every provider asset was deleted explicitly, so the documented 24-hour unattached expiry was never exercised. A deletion is not an expiry. | C75 may build without depending on this timing only by labelling it documented but unverified and recording every landed asset; the timing itself remains unavailable as a correctness guarantee. |
-| The current per-file size, item-count, and video-duration limits that apply to the connected plan through the API. | **verified with policy constraint** | The live API refused an 8 GiB reservation with HTTP 400 and stated a 500 MB upload maximum. Current provider support material separately documents images at 8 MB each, 35 images, 500 MB total, and video duration from 3 to 300 seconds; the live probe did not independently exercise those other boundaries. | C74 validates against the verified bounds and C75 enforces them before a byte is read. The constraint recorded beside it is a preflight refusal, not a warning. |
+| The `create-upload-url` request and response field names, and the signed `PUT`’s required headers and content-length behaviour. | **verified** | POST /v1/media/create-upload-url { name, mime_type, size_bytes } answered {media_id: string, name: string, upload_url: string}. The signed PUT carried Content-Type image/png and Content-Length 136 and no Authorization header; it answered HTTP 200. Fixture sha256 808300be67e20c6559af29ba909bd89b4017e0501a08da7cc3f4140c4a8f2e8c. | C75 builds the three-step upload against the verified names and headers. |
+| That the five documented `mime_type` values are the whole accepted set, and what the provider answers for a value outside it. | **verified** | image/webp was refused: HTTP 400 — mime_type must be one of the following values: image/png, image/jpeg, video/mp4, video/quicktime, application/pdf; Bad Request. | C74's type validation and C75's preflight use the verified set. |
+| What `GET /v1/media/{id}` returns for an uploaded asset, and what `describe` says about media a post carries by id rather than by URL. | **verified** | GET /v1/media/{id} answered {id: string, mime_type: string, object: {isDeleted: boolean, name: string, size_bytes: number, url: string}}. | C75 reconciles provider media ids where `describe` returns them. |
+| That `media` wins and `media_urls` is ignored when one create request carries both. | **verified** | A create carrying media (one uploaded id) and media_urls (one unreachable URL) answered HTTP 201. The read-back's media read as array(1) of string, and the post is in state scheduled. | C75's discriminated `PublishRequest` matches the wire as well as the document, and a URL-only post serializes as it does today. |
+| Whether `DELETE /v1/media/{id}` removes an uploaded asset that is attached to nothing. | **verified** | DELETE /v1/media/{id} removed 3 of 3 provider asset(s) this run created. | A probe run leaves no asset behind and C75 may state deletion as available. |
+| The 24-hour unattached expiry and the deletion-on-publish the vendor documents. **A single session cannot answer this**: it needs a dated follow-up read of the inventoried asset ids. | **still unverified** | Every provider asset was deleted explicitly, so the documented 24-hour unattached expiry was never exercised. A deletion is not an expiry, and it stays unverified until a dated follow-up observes one. | C75 may build without depending on this timing only by labelling it documented but unverified and recording every landed asset; the timing itself remains unavailable as a correctness guarantee. |
+| The current per-file size, item-count, and video-duration limits that apply to the connected plan through the API. | **verified** | An 8 GiB size_bytes was refused: HTTP 400 — File exceeds the maximum upload size of 500MB; Bad Request. | C74 validates against the verified bounds and C75 enforces them before a byte is read. |
 
 ### Question 3 — Media roles
 
 | Claim | State | Evidence | Effect on the dependent cards |
 | --- | --- | --- | --- |
-| Whether a scheduled post accepts YouTube `thumbnail` as a provider media id and reads it back — against current support guidance saying custom external thumbnails are unavailable. | **still unverified** | No video asset was uploaded, and the role needs a video as the post's own media. | C76, C82 stay blocked. Today's fail-closed value is unchanged. |
-| Whether a scheduled post accepts Instagram `cover_image` as a provider media id and reads it back. | **still unverified** | No video asset was uploaded, and the role needs a video as the post's own media. | C76 stays blocked. Today's fail-closed value is unchanged. |
-| That an `application/pdf` asset plus the already-sent `document_title` reads back as a LinkedIn document post. | **verified** | `POST` accepted an `application/pdf` asset by id with `linkedin.document_title` (HTTP 201). The read-back's `platform_configurations` contained `linkedin.document_title`. Fixture sha256 `8e93985f3ad7832828d8fc84e733372ec58ef43243c0faa92cbb42a70df437c9`. | C76 verifies the existing path end to end rather than adding a role row. |
+| Whether a scheduled post accepts YouTube `thumbnail` as a provider media id and reads it back — against current support guidance saying custom external thumbnails are unavailable. | **still unverified** | No video asset was uploaded, and both roles need a video as the post’s own media. | C76, C82 stay blocked. Today's fail-closed value is unchanged. |
+| Whether a scheduled post accepts Instagram `cover_image` as a provider media id and reads it back. | **still unverified** | No video asset was uploaded, and both roles need a video as the post’s own media. | C76 stays blocked. Today's fail-closed value is unchanged. |
+| That an `application/pdf` asset plus the already-sent `document_title` reads back as a LinkedIn document post. | **still unverified** | No LinkedIn account was named. | C76 stays blocked. Today's fail-closed value is unchanged. |
 
 ### Question 4 — `GET /v1/posts`
 
 | Claim | State | Evidence | Effect on the dependent cards |
 | --- | --- | --- | --- |
-| The complete pagination contract of `GET /v1/posts` — what `meta.next` holds, and how the last page is recognised. | **verified** | Walked one page of `GET /v1/posts` at limit 100 to a null `meta.next`. The meta shape was `{ limit: number, next: null, offset: number, total: number }`. | C78 reads every page before one snapshot write, using the verified token. |
-| Which repeatable encoding of `status` and `platform` the endpoint actually filters on, `name[]` or a bare repeated `name`. | **verified** | Both `status[]=scheduled` and `status=scheduled` returned five scheduled rows and no non-scheduled rows; `status[]` is the encoding C78 sends. | C78's request builder emits the encoding that filtered, asserted by a unit test. |
-| The fields that identify a listed post stably across pages and across reads. | **verified** | Every listed row carried an `id`. Rows also carried account configurations, caption, created/updated times, draft state, media, platform configurations, schedule, social accounts, and status. | C78 keys `signal_provider_posts` on the verified identity field. |
-| That a deleted post is absent from a complete inventory afterwards, rather than present in some other state. | **verified** | A complete one-page inventory read afterwards listed none of the 3 posts this run created. | C78's generation replacement may treat absence as deletion, and this probe's teardown proof is sound. |
-| The shape of a post created in the provider’s own UI rather than by this app. **A named human precondition**: the owner creates one and passes its id; the probe never pretends to have made it. | **still unverified** | No `--provider-ui-post` was supplied. | C78 stays blocked. Today's fail-closed value is unchanged. |
+| The complete pagination contract of `GET /v1/posts` — what `meta.next` holds, and how the last page is recognised. | **verified** | Walked 1 page(s) of GET /v1/posts at limit 100 to a null meta.next. meta shape: {limit: number, next: null, offset: number, total: number}. | C78 reads every page before one snapshot write, using the verified token. |
+| Which repeatable encoding of `status` and `platform` the endpoint actually filters on, `name[]` or a bare repeated `name`. | **verified** | status[]=scheduled: 5 row(s), 1 of them not scheduled. status=scheduled: 5 row(s), 0 of them not scheduled. a bare repeated status returned only scheduled rows, so that is the encoding C78 sends. | C78's request builder emits the encoding that filtered, asserted by a unit test. |
+| The fields that identify a listed post stably across pages and across reads. | **verified** | Every listed row carried an id. Row shape: {account_configurations: null, caption: string, created_at: string, id: string, is_draft: boolean, media: array(1) of …, platform_configurations: null, scheduled_at: string, social_accounts: array(1) of …, status: string, updated_at: string}. | C78 keys `signal_provider_posts` on the verified identity field. |
+| That a deleted post is absent from a complete inventory afterwards, rather than present in some other state. | **verified** | A complete 1-page inventory read afterwards listed none of the 3 post(s) this run created. | C78's generation replacement may treat absence as deletion, and this probe's own teardown proof is sound. |
+| The shape of a post created in the provider’s own UI rather than by this app. **A named human precondition**: the owner creates one and passes its id; the probe never pretends to have made it. | **still unverified** | No --provider-ui-post was supplied. The probe never creates one to stand in for a post a person made in the provider’s UI. | C78 stays blocked. Today's fail-closed value is unchanged. |
 
 ### Question 5 — Analytics
 
 | Claim | State | Evidence | Effect on the dependent cards |
 | --- | --- | --- | --- |
-| The pagination contract of `GET /v1/analytics`, and whether it matches the posts list. | **verified** | `GET /v1/analytics?limit=5&offset=0` answered with meta `{ limit: number, next: null, offset: number, total: number }`. | C80 reads every page before one atomic snapshot replacement. |
-| Whether `timeframe` selects which posts are included or which measurement days are counted, and which window values the endpoint accepts. | **still unverified** | `platform=instagram&timeframe=7d` and `timeframe=all` both returned no rows, so the parameter's meaning was not observable. | C80 stays blocked. Today's fail-closed value is unchanged. |
-| That a filtered response is one row per measured delivery rather than an account aggregate, and that every row still carries `post_result_id`. | **still unverified** | No analytics rows existed on this account, so the grain was not observed. | C80 stays blocked. Today's fail-closed value is unchanged. |
-| How a row maps to a social account — through `post_result_id` and the local publication targets, or through some field of its own. | **still unverified** | No analytics rows existed, so no mapping was observed. | C80 stays blocked. Today's fail-closed value is unchanged. |
-| The actual values `match_confidence` takes, and whether a record can arrive without one. | **still unverified** | No analytics rows existed, so no values were observed. | C79 stays blocked. Today's fail-closed value is unchanged. |
+| The pagination contract of `GET /v1/analytics`, and whether it matches the posts list. | **verified** | GET /v1/analytics?limit=5&offset=0 answered with meta {limit: number, next: null, offset: number, total: number}. | C80 reads every page before one atomic snapshot replacement. |
+| Whether `timeframe` selects which posts are included or which measurement days are counted, and which window values the endpoint accepts. | **still unverified** | No named account is on a platform this provider measures (tiktok, youtube, instagram), so no window filter was sent. | C80 stays blocked. Today's fail-closed value is unchanged. |
+| That a filtered response is one row per measured delivery rather than an account aggregate, and that every row still carries `post_result_id`. | **still unverified** | No analytics rows exist on this account yet, so the grain was not observed. | C80 stays blocked. Today's fail-closed value is unchanged. |
+| How a row maps to a social account — through `post_result_id` and the local publication targets, or through some field of its own. | **still unverified** | No rows, so no mapping was observed. | C80 stays blocked. Today's fail-closed value is unchanged. |
+| The actual values `match_confidence` takes, and whether a record can arrive without one. | **still unverified** | No rows, so no values were observed. | C79 stays blocked. Today's fail-closed value is unchanged. |
 
 ### Question 6 — Platform fields
 
 | Claim | State | Evidence | Effect on the dependent cards |
 | --- | --- | --- | --- |
-| That YouTube `contains_synthetic_media` is accepted on a scheduled post and reads back with the value that was sent. | **still unverified** | No video asset was uploaded, and the role needs a video as the post's own media. | C81 stays blocked. Today's fail-closed value is unchanged. |
+| That YouTube `contains_synthetic_media` is accepted on a scheduled post and reads back with the value that was sent. | **still unverified** | No video asset was uploaded, and both roles need a video as the post’s own media. | C81 stays blocked. Today's fail-closed value is unchanged. |
 | That TikTok `disclose_branded_content` and `disclose_your_brand` are accepted and read back, with `false` distinguishable from unset. | **still unverified** | No TikTok account was named. | C81 stays blocked. Today's fail-closed value is unchanged. |
-| That the already-shipped generic `placement: "story"` path is still accepted for Facebook. | **verified** | The generic story path's `placement: "story"` was accepted for Facebook (HTTP 201), and the read-back's `platform_configurations` retained it. | C81 adds the Facebook fixture as regression coverage and changes no production code. |
+| That the already-shipped generic `placement: "story"` path is still accepted for Facebook. | **verified** | The generic story path's placement: "story" was accepted for Facebook (HTTP 201). The read-back's platform_configurations read as {facebook: {placement: string}}. | C81 adds the Facebook fixture as regression coverage and changes no production code. |
 
 ### Question 7 — Rate-limit evidence
 
 | Claim | State | Evidence | Effect on the dependent cards |
 | --- | --- | --- | --- |
-| The headers a `429` carries, **if one arrives without being provoked**. The probe has a fixed request budget and never creates load to discover a limit. | **still unverified** | No 429 arrived. The probe never creates load to discover a limit, so this stays unverified by design. | C75 keeps the existing conservative fallback and never retries an ambiguous signed transfer; C80 stays blocked on its own rate-limit contract. |
+| The headers a `429` carries, **if one arrives without being provoked**. The probe has a fixed request budget and never creates load to discover a limit. | **still unverified** | No 429 arrived. The probe has a fixed request budget and never creates load to discover a limit, so this stays unverified by design rather than by omission. | C75 keeps the existing conservative fallback and never retries an ambiguous signed transfer; C80 stays blocked on its own rate-limit contract. |
+
+### What the 20 August run established, and this one did not ask
+
+This section is replaced wholesale by each dated run, so the table above is one session rather than
+the sum of them. Three results from the 20 August run are not restated above and are **not**
+withdrawn by their absence — a run that did not ask a question cannot unverify what a run that did
+ask established. Git history holds that run's full table; what still bears on the cards is here.
+
+- **The LinkedIn PDF document post stays verified.** On 20 August, `POST` accepted an
+  `application/pdf` asset by id together with `linkedin.document_title` (HTTP 201) and the
+  read-back's `platform_configurations` carried `document_title`; fixture sha256
+  `8e93985f3ad7832828d8fc84e733372ec58ef43243c0faa92cbb42a70df437c9`. This run named no LinkedIn
+  account, which is why the row above reads *still unverified*. C76 shipped on the 20 August
+  evidence and does not regress.
+- **The upload limits carry a policy constraint the row above drops.** Both runs saw the live API
+  refuse an oversized reservation and state a 500 MB maximum. The 20 August entry additionally
+  recorded the vendor's current support material — images at 8 MB each, 35 images, 500 MB total,
+  and video duration from 3 to 300 seconds — none of it independently exercised by either run. That
+  is a preflight refusal for C74 and C75, not a warning, and the stricter reading governs.
+- **The signed `PUT` was repeated with redirects disabled** on 20 August, and the transcript
+  redacts the signed URL, so neither run establishes a fixed upload hostname. C75's redirect policy
+  rests on that observation.
+
+**One claim genuinely contradicts between the two runs, and it is not settled.** On `GET /v1/posts`
+filtering, 20 August recorded both `status[]=scheduled` and `status=scheduled` returning five
+scheduled rows and no non-scheduled rows, and concluded `status[]` was the encoding to send. This
+run recorded `status[]=scheduled` returning five rows of which **one was not scheduled**, with the
+bare `status=scheduled` returning only scheduled rows, and concluded the opposite. The row above
+reads *verified* because the session verified what it saw; across the two sessions the encoding is
+**unresolved**. C78 must settle it with a dedicated read before building a request builder on
+either answer — an encoding that silently fails to filter returns a superset, and a snapshot
+replacement would carry that straight into the database.

@@ -559,7 +559,7 @@ role was positively verified.
 **Type / branch:** `feat/<issue>-account-configurations`
 **Size:** XXL · **Labels:** `tier-3-schema` `size-xxl`
 **Depends on:** C73 and C75. **Will-not-build if C73 is negative; remains blocked if inconclusive.**
-**Gate outcome: inconclusive — the card is blocked and built nothing. See below.**
+**Gate outcome: positive as of 2026-08-21 — the card is unblocked and not yet built. See below.**
 
 #### Problem
 
@@ -638,7 +638,7 @@ the provider field and policy make that capability safe at all.
 `npm run format:check`, `npm run build`, and `npm run db:migrate` against a real-database
 copy. Manual QA only against the explicitly approved accounts and policy shape C73 verified.
 
-#### Gate outcome — 2026-08-21
+#### Gate outcome — inconclusive on 2026-08-21, positive later the same day
 
 **The gate is inconclusive, so the scope above is unbuilt and the acceptance criteria stay
 unchecked.** C73 ran on 2026-08-20 and `docs/post-bridge-api-surface.md` §14 question 1 records all
@@ -672,6 +672,22 @@ Because Wave C holds only this card, the milestone currently has no `e2e/` spec 
 `e2e/signal-content-variants.spec.ts` is untouched. Wave 12 cannot satisfy `AGENTS.md`'s
 one-spec-per-milestone rule while its only card is blocked; folding #220 into a later implementation
 milestone once it unblocks is the cheaper fix, and is the second thing for the owner to decide.
+
+**Superseded the same day: the gate is now positive.** The owner re-ran C73's question 1 against two
+owner-controlled Facebook pages, `85300` and `85301`, and `docs/post-bridge-api-surface.md` §15
+records all four claims positive — acceptance, the list-of-objects encoding carrying `account_id`,
+per-account `caption` surviving create and `PATCH`, and the same-platform question as **verified
+with policy constraint**. The everything-above stands as the account of why the card waited; it is
+no longer the account of what the card may do.
+
+**#220 is therefore unblocked and buildable, and still unbuilt.** The scope and acceptance criteria
+above apply unchanged, with three things the evidence now pins down: the request builder emits a
+list of objects each carrying `account_id`; `accountContentOverride` may go true for **Facebook
+only**, since no other platform has two connected accounts and none was probed; and the preflight
+rule is written from the *policy constraint*, because the API accepted materially different
+captions without complaint and the vendor's support-page restriction is therefore the only thing
+standing between a user and a policy violation. The Wave 12 e2e question above is unchanged and
+still the owner's to settle.
 
 ---
 
