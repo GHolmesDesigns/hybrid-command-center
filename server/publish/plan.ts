@@ -970,6 +970,13 @@ export function buildPublishPlan(
     timezone: zone,
     targets,
     channels,
+    connectedAccounts: connected.map((account) => ({
+      id: account.id,
+      platform: account.platform,
+      handle: account.handle,
+      name: account.name,
+    })),
+    ...(selections.length ? { selectedTargets: [...selections] } : {}),
     warnings,
     refusals,
     mediaSources,

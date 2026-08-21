@@ -264,35 +264,51 @@ refusals rather than guesses:
   resolves to one account — which §3.1's rule already guarantees by refusing zero or several — and
   the preview says so on the target it applies to rather than leaving the user to infer it.
 
-**The gate that would change that is closed, and C77 (#220) records why.** The live probe
-(`docs/post-bridge-api-surface.md` §14, question 1) left all four `account_configurations` claims
-**still unverified**: whether `POST /v1/posts` stores a different caption for each of two accounts on
-one platform, which encoding the field takes, whether the per-account values read back through
-`GET /v1/posts/{id}` after create and again after `PATCH`, and what the provider does — and in whose
-terms — about two accounts on one platform carrying materially different captions. The reason is a
-precondition rather than a provider answer: the run named no platform with two accounts, so
-`scripts/probe-post-bridge/config.ts` declined to ask question 1 at all. A question nobody put is not
-a negative, and it is not permission either.
+**C77 built the rest of it, and `accountContentOverride` is true for Facebook alone.** C73's live
+probe verified `account_configurations` on 21 August (`docs/post-bridge-api-surface.md` §14,
+question 1): the field is accepted, its encoding is a list of objects each carrying `account_id`,
+and a per-account caption reads back after create and again after `PATCH`. Every other platform
+keeps the single-account rule, because no other platform had two connected accounts for the probe to
+ask the question with — unverified is not unsupported, and `shared/publish-capabilities.test.ts`
+pins the whole matrix rather than a blanket false, so a flip without a dated §14 result fails.
 
-**So C77's gate is inconclusive, not negative, and the card makes no runtime change.** Its own scope
-separates the two outcomes and this is the second one: will-not-build needs the provider to have
-refused, and nothing here refused. Everything the card would have built stays unbuilt, and everything
-it would have replaced stays exactly as this section already describes it — `accountContentOverride`
-false on every platform, pinned for all of them by `shared/publish-capabilities.test.ts`; §3.1's
-one-account resolution in `resolveTarget`; no `signal_post_publish_targets` table and so no explicit
-target selection; no `accountConfigurations` on the provider-neutral request or in the Post Bridge
-request builder; no `sent_account_configurations` snapshot beside the legacy one; and the per-account
-warning above still the sentence a stored account layer produces. A capability flag is not the only
-thing standing between this app and per-account captions, which is the whole reason the card was
-written as a build rather than a flip.
+**A channel publishes to the accounts a person chose, and to one account otherwise.**
+`signal_post_publish_targets` stores that choice — the ids and nothing the provider owns, because a
+cached handle would go stale the moment a page is renamed. **No rows is not a choice to send
+nowhere**: it means nobody chose, so §3.1's rule still decides and the post plans and submits byte
+for byte as it did before the table existed. Where a selection exists it *replaces* that rule rather
+than filtering it, so a page §3.1 would never have matched is reachable by naming it, and an id
+disconnected since refuses by name.
 
-**What would reopen it is a dated §14 result and nothing less.** C73 is re-run under its existing
-safety rules with two explicitly approved accounts on one platform named by `--account`, so that
-question 1 is actually asked, and all four claims land positive. A positive API response alone is
-still not enough: §14 records four states rather than two, and a `verified with policy constraint` on
-the same-platform claim is what C77's preflight refusal would be written from, in the provider's own
-terms. Until then #220 stays open and blocked, and this record is C77's resolution for the purpose of
-C82's dependency — blocked on new evidence, not declined.
+**Every chosen account answers for itself.** `PublishChannelReport.targets` carries one report per
+account — its own resolved content, refusals, warnings, and status — and two account refusals are
+never merged into a sentence about the platform, because "Facebook is blocked" cannot say which page
+a person has to fix. The list is **absent, not empty**, where nobody selected. A channel is blocked
+when any of its accounts is: sending to some of the accounts somebody chose and dropping the rest is
+the one outcome nobody asked for.
+
+**Carrying accounts is not the same as carrying every field per account.** C73 verified a per-account
+caption and per-account media and nothing else, so `PUBLISH_ACCOUNT_DELIVERABLE_FIELDS` is those two.
+A title, a first comment, a post shape, a placement, and a media role stay platform-level, and an
+account layer that sets one warns that its value reaches every account on the platform.
+
+**Per-account media is Drive-only.** It exists solely as provider ids, and a Drive file becomes one
+only by being uploaded immediately before the request (C75). An account given a public address of
+its own **refuses**, named, and is never dropped or replaced with the platform's media; a post whose
+own media is public refuses to give any account files at all, because the request carries `media` or
+`media_urls` and never both. Each account's files are uploaded fresh even where the same file is
+also in the submission's own media — sharing one ephemeral id across two levels would make the
+evidence lie about what was sent where.
+
+**Identical content to two accounts on one platform refuses before it is sent.** The probe recorded
+question 1 as *verified with policy constraint*: the API accepted materially different captions and
+raised nothing of its own, and the vendor's support material restricts same-platform content anyway
+(`shared/publish-same-platform.ts`). An API that accepts a request is not a platform that permits the
+post. The refusal names the accounts that collided and offers the two honest fixes — write each its
+own content, or send to one of them — and recommends no filename or metadata trick. **Only
+*identical* is enforced**: the vendor's threshold for "insufficiently distinct" is not recorded in
+§14, and inventing a similarity ratio would be this app making up a rule and attributing it to the
+provider. Capture that wording and the rule tightens with nothing else moving.
 
 **A synthetic-media disclosure is written into the caption**, because
 `syntheticMediaDisclosure` is `IN_CAPTION` on every platform the contract answers for. The
@@ -464,9 +480,16 @@ verified that pairing live, and `e2e/signal-variant-media.spec.ts` plus
 
 Three Facebook pages are connected in the broader publishing setup: `AdDrive Media`,
 `G.Holmes Designs`, and `Wild Eye Photography`. **Only `G.Holmes Designs` may receive this
-campaign's work.** Target resolution matches that account by stable provider identity and verified
-handle, refuses zero or multiple matches, and never silently falls back to either of the other
-pages.
+campaign's work** unless a person says otherwise. Target resolution matches that account by stable
+provider identity and verified handle, refuses zero or multiple matches, and never silently falls
+back to either of the other pages.
+
+**An explicit selection is that "otherwise", and it is the only one** (C77, §3.3). A post with rows
+in `signal_post_publish_targets` publishes to exactly the pages named there, which is a deliberate
+act with the account list on screen — not a fallback, not a guess, and not something a rename can
+cause. A post with no rows resolves exactly as this section has always described. The business rule
+above is a default for content nobody has thought about; it was never a claim that the other two
+pages are unreachable by someone who means it.
 
 ---
 
@@ -871,6 +894,26 @@ The commit token is `reconcileHash`, over the plan hash **and** the provider rec
 would not do: a plan hash misses a provider that moved under an open panel, and a record hash misses
 a Signal edit. The service rebuilds the whole comparison at commit and refuses a token that no longer
 matches, so anything that moved between looking and pressing sends the user back to look again.
+
+#### What each account was handed
+
+`sent_account_configurations` is a column of its own rather than a new meaning for
+`sent_configurations`, which stays the JSON `platform_configurations` it has always been —
+overloading it would make every row written before C77 ambiguous rather than merely silent about
+accounts. It is versioned, and it has three states rather than two:
+
+| Value | Means | Compared |
+| --- | --- | --- |
+| `NULL` | a row migrated from before the column | **never** — unknown is not a difference |
+| `{ version: 1, items: [] }` | nothing was tailored per account | yes |
+| `{ version: 1, items: [...] }` | what each account was handed | yes |
+
+The empty case is written deliberately: *nobody recorded* and *nothing was tailored* are different
+facts, and only one of them can honestly be compared with a plan. Local drift compares the two
+sorted by account id over caption and media ids together, and reports `accountContent` where they
+disagree. Provider reconciliation compares the same thing against what the provider reports per
+account — and where the provider reports nothing, it says so rather than reading silence as every
+account having been reset.
 
 #### The snapshot that may not be there
 

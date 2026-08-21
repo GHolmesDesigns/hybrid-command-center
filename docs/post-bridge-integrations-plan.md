@@ -559,7 +559,7 @@ role was positively verified.
 **Type / branch:** `feat/<issue>-account-configurations`
 **Size:** XXL · **Labels:** `tier-3-schema` `size-xxl`
 **Depends on:** C73 and C75. **Will-not-build if C73 is negative; remains blocked if inconclusive.**
-**Gate outcome: inconclusive — the card is blocked and built nothing. See below.**
+**Gate outcome: positive on 2026-08-21, and built across eight reviewed pieces. See below.**
 
 #### Problem
 

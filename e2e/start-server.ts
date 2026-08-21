@@ -51,6 +51,10 @@ const publish = new MockPublishProvider([
   // YouTube is here for the one platform Post Bridge names a thumbnail role for: a role needs a
   // resolved account before the composer can offer it.
   { id: 905, platform: 'youtube', handle: '@gholmesdesigns', name: 'G.Holmes Designs' },
+  // A second Facebook page, so C77's two-account case has a same-platform pair to choose between.
+  // Named differently on purpose: §3.1's rule still resolves G.Holmes Designs uniquely for every
+  // post that makes no explicit choice, so the specs written before C77 are unaffected by it.
+  { id: 906, platform: 'facebook', handle: 'wildeyephoto', name: 'Wild Eye Photography' },
 ]);
 /**
  * What a check reports, set here rather than left to the submission.

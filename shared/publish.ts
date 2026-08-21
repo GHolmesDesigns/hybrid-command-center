@@ -173,6 +173,16 @@ export interface PublishPreview {
   targets: PublishTargetPreview[];
   /** One entry per channel on the post, in the post's channel order. */
   channels: PublishChannelReport[];
+  /**
+   * Every account the provider listed when this preview was built (C77).
+   *
+   * The composer offers exactly this list, and `PUT /api/signal/posts/:id/publish-targets`
+   * validates against exactly this list, so a person can never tick something the save will refuse.
+   * Absent where the provider could not be read at all, which is different from an empty list.
+   */
+  connectedAccounts?: { id: number; platform: string; handle: string; name: string }[];
+  /** The explicit selection this preview planned with, so the composer can show what is ticked. */
+  selectedTargets?: PublishTargetSelection[];
   /** Reasons that belong to the whole plan rather than to any one channel. */
   warnings: string[];
   /** Refusals that belong to the whole plan. A channel's own refusals live on its report. */
