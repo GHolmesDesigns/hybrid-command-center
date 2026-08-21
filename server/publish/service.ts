@@ -241,8 +241,8 @@ export class PublishService {
         this.db
           .prepare(
             `INSERT INTO signal_publications(
-          id,post_id,state,provider,provider_post_id,idempotency_key,scheduled_instant,timezone,sent_caption,sent_channels,sent_media,sent_configurations,sent_media_sources,sent_provider_media_ids,error,created_at,updated_at
-        ) VALUES(?,?, 'SUBMITTING','post-bridge',NULL,?,?,?,?,?,?,?,?,?,NULL,?,?)`,
+          id,post_id,state,provider,provider_post_id,idempotency_key,scheduled_instant,timezone,sent_caption,sent_channels,sent_media,sent_configurations,sent_account_configurations,sent_media_sources,sent_provider_media_ids,error,created_at,updated_at
+        ) VALUES(?,?, 'SUBMITTING','post-bridge',NULL,?,?,?,?,?,?,?,?,?,?,NULL,?,?)`,
           )
           .run(
             publicationId,
@@ -257,6 +257,10 @@ export class PublishService {
             // re-deriving one from a post that has since been edited.
             JSON.stringify(prepared.sources.items.map((item) => item.url)),
             JSON.stringify(request.platformConfigurations ?? []),
+            // Versioned, and written even when empty: `{ items: [] }` is *nothing was tailored per
+            // account*, which is a fact worth recording. NULL is reserved for rows migrated from
+            // before this column existed, where the answer is genuinely unknown.
+            JSON.stringify({ version: 1, items: request.accountConfigurations ?? [] }),
             JSON.stringify(prepared.sources),
             prepared.providerMediaIds.length ? JSON.stringify(prepared.providerMediaIds) : null,
             timestamp,
@@ -746,7 +750,7 @@ export class PublishService {
         this.db
           .prepare(
             `UPDATE signal_publications SET state=?,provider_post_id=?,scheduled_instant=?,
-             sent_caption=?,sent_media=?,sent_configurations=?,sent_media_sources=?,
+             sent_caption=?,sent_media=?,sent_configurations=?,sent_account_configurations=?,sent_media_sources=?,
              sent_provider_media_ids=?,error=?,updated_at=? WHERE id=?`,
           )
           .run(
@@ -756,6 +760,7 @@ export class PublishService {
             outgoing.caption,
             JSON.stringify(mediaEvidence.sources.items.map((item) => item.url)),
             configurations,
+            JSON.stringify({ version: 1, items: outgoing.accountConfigurations ?? [] }),
             JSON.stringify(mediaEvidence.sources),
             mediaEvidence.providerMediaIds.length
               ? JSON.stringify(mediaEvidence.providerMediaIds)

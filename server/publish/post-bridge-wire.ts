@@ -140,3 +140,26 @@ export function postBridgeMediaEvidence(media: unknown): {
   }
   return { mediaUrls, ...(mediaIds.length ? { mediaIds } : {}) };
 }
+
+/**
+ * What the provider reports per account, read back off a post record (C77).
+ *
+ * `undefined` where the field is absent or null, which is **not reported** rather than *nothing*.
+ * A row with no per-account content and a provider that stopped returning the field are different
+ * facts, and only one of them is a difference worth showing anybody.
+ */
+export function postBridgeAccountConfigurationEvidence(
+  value: unknown,
+): { accountId: number; caption?: string }[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.flatMap((item) => {
+    const record = item as { account_id?: unknown; caption?: unknown };
+    if (typeof record?.account_id !== 'number') return [];
+    return [
+      {
+        accountId: record.account_id,
+        ...(typeof record.caption === 'string' ? { caption: record.caption } : {}),
+      },
+    ];
+  });
+}

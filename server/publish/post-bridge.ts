@@ -14,6 +14,7 @@ import {
 import {
   parsePostBridgeUploadReservation,
   postBridgeMediaEvidence,
+  postBridgeAccountConfigurationEvidence,
   postBridgeAccountConfigurations,
   postBridgePlatformConfigurations,
   postBridgePostBody,
@@ -223,10 +224,14 @@ export class PostBridgeProvider implements PublishProvider {
       scheduled_at?: string | null;
       social_accounts?: number[];
       media?: unknown;
+      account_configurations?: unknown;
       is_draft?: boolean;
       updated_at?: string;
     };
     const media = postBridgeMediaEvidence(post.media);
+    const accountConfigurations = postBridgeAccountConfigurationEvidence(
+      post.account_configurations,
+    );
     return {
       providerPostId: String(post.id),
       state: PostBridgeProvider.recordState(post.status, post.is_draft === true),
@@ -235,6 +240,7 @@ export class PostBridgeProvider implements PublishProvider {
       mediaUrls: media.mediaUrls,
       ...(media.mediaIds ? { mediaIds: media.mediaIds } : {}),
       accountIds: (post.social_accounts ?? []).map(Number),
+      ...(accountConfigurations ? { accountConfigurations } : {}),
       ...(post.updated_at ? { updatedAt: post.updated_at } : {}),
     };
   }

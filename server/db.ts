@@ -264,6 +264,15 @@ CREATE TABLE IF NOT EXISTS signal_publications (
   -- Versioned source evidence and the ephemeral provider ids used for this exact attempt. NULL on
   -- legacy and URL-only rows; neither column stores bytes or a reusable provider reference.
   sent_media_sources TEXT, sent_provider_media_ids TEXT,
+  -- What each account was handed, as its own versioned snapshot rather than a new meaning for
+  -- sent_configurations (C77). The legacy column is the JSON platform_configurations and stays
+  -- exactly that: a row written before this existed must keep reading the way it always did, and
+  -- overloading it would make every old row ambiguous rather than merely silent about accounts.
+  --
+  -- NULL is **unknown**, not "no accounts were tailored". A migrated row and a row that genuinely
+  -- sent nothing per account are different facts, and only one of them can be compared against a
+  -- plan -- so reconciliation reports no account drift at all where this is NULL.
+  sent_account_configurations TEXT,
   checked_at TEXT, check_attempts INTEGER NOT NULL DEFAULT 0,
   -- What the last provider check concluded, and what the row held before it. Written by a check
   -- and by nothing else: every other state write leaves them alone, which is deliberate, because
