@@ -8,10 +8,38 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [4.5.3] - 2026-08-21
+
+### Notes
+
+- **Nothing in the application changed in this release.** The notes for 4.5.2 were incomplete: two
+  cards had been merged without their entries being written, so the release that first carried
+  publishing straight from Drive, and the owner-run command that probes the publisher's API,
+  described neither. Both are now recorded under 4.5.2, which is the release they actually shipped
+  in — rather than being given release numbers of their own that were never issued.
+
+### Breaking changes
+
+None.
+
 ## [4.5.2] - 2026-08-21
 
 ### Added
 
+- **A Drive file you attach to a post is now actually published.** Until this release a Drive
+  reference could be recorded and previewed but never sent; confirming a submit now streams that
+  exact file straight from Drive to the publisher, and the same happens when you update or resubmit
+  one. The file is re-checked against the version you approved immediately before it goes, so a file
+  whose contents changed since the preview stops the send rather than going out unnoticed. Nothing is
+  copied, cached, or kept here, and the publisher's own copy is temporary and made fresh every time.
+- Each send now records which Drive file it used and the temporary publisher references it created,
+  so a later comparison against the publisher reads what was actually sent rather than re-deriving it
+  from a post that has since been edited.
+- **A send that cannot be completed cleanly is refused rather than half-made**, and says which case
+  it hit: media that mixes Drive files with public addresses, a file that changed after the preview,
+  one past the size or length the publisher accepts, a transfer that redirected, timed out, or
+  stopped part-way. Where something did land before the stop, the count of what landed is reported
+  instead of being left for you to find.
 - **A cover image and a thumbnail can now be a file in the connected Drive rather than a pasted
   address.** Each one is stored per platform — and per account where you tailor one — with the file's
   name, type, size, and version, the same evidence a post's own media has carried since the last
@@ -20,6 +48,24 @@ The version a card ships as is decided at merge time — see the bump rule in `A
   rather than going out quietly.
 - The publishing preview now names each target's cover or thumbnail, and says plainly whether the
   publisher will carry it.
+- **An owner-run command that establishes what the publisher's API actually does, before anything is
+  built on it.** `npm run probe:post-bridge` asks the seven questions the media and analytics work
+  depends on — whether a post can carry a different caption per account, what the upload flow really
+  requires, whether a YouTube thumbnail or an Instagram cover is accepted, how the post list pages,
+  what an analytics window means, and whether the disclosure fields stick — and writes down what it
+  saw.
+- Because it is a write against real connected accounts, it refuses to run without every one of: the
+  API key in the environment rather than on the command line, `--yes`, an explicit statement that the
+  accounts are disposable or approved, a send time at least 48 hours away, a label nothing in the
+  publisher is already using, every account named by its own id, and the label typed back at a
+  prompt. There is no default account and nothing is chosen for you. Run without `--live` it contacts
+  nothing at all and just prints what it would do.
+- Everything it creates is deleted when it finishes, including if it stops early, and then it re-reads
+  the whole list of scheduled posts to prove they are gone rather than assuming it. Anything the
+  publisher will not let it delete is listed by id with what to do about it.
+- It uploads three committed files and nothing else — two flat-colour images and a one-line PDF, all
+  small enough to read in a diff — or a disposable video you point it at. It never touches a campaign
+  asset, and it records each file's fingerprint rather than its contents.
 
 ### Changed
 
@@ -35,6 +81,11 @@ The version a card ships as is decided at merge time — see the bump rule in `A
 - A **LinkedIn PDF publishes as a document post with its title**, end to end — the one media
   behaviour the live probe did verify. This is the ordinary Drive media path plus the title the
   editor already collected; nothing new to fill in.
+- The research note `docs/post-bridge-api-surface.md` now records the first owner-run live session:
+  29 bounded requests, three posts and three provider assets created and deleted, an independent
+  inventory proving the posts absent, and no leftovers. Its dated matrix separates the upload,
+  listing, PDF, and Facebook behavior the provider verified from the lifecycle, platform, and
+  analytics questions that remain unresolved.
 
 ### Fixed
 
@@ -48,6 +99,12 @@ The version a card ships as is decided at merge time — see the bump rule in `A
   place a cover lives rather than two.
 - TikTok's and Pinterest's cover fields are untouched; they belong to platforms whose other settings
   are not built yet.
+- The probe command changes nothing about how the app publishes. It adds a command you run yourself
+  and a document section; no publishing rule, capability, or limit moved because of it, and none will
+  until the probe actually establishes something.
+- A still-unverified claim still leaves the work that depends on it blocked. The live evidence unlocks
+  only the behaviors it actually observed; it does not turn a successful cleanup into proof of
+  24-hour expiry, invent analytics rows, or infer behavior for accounts and media not supplied.
 
 ### Breaking changes
 
