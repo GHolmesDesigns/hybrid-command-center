@@ -74,6 +74,19 @@ describe('the additive migration and the contract it carries', () => {
         position INTEGER NOT NULL CHECK(position >= 0), url TEXT NOT NULL,
         PRIMARY KEY(post_id, position)
       );
+      -- C76 role table, as CREATE TABLE IF NOT EXISTS would have created it at boot: the
+      -- triggers below cover both tables, and the point of this fixture is what reaches a database
+      -- that was migrated rather than created.
+      CREATE TABLE signal_post_variant_media (
+        post_id TEXT NOT NULL REFERENCES signal_posts(id) ON DELETE CASCADE,
+        platform TEXT NOT NULL, account_id INTEGER,
+        role TEXT NOT NULL CHECK(role IN ('COVER_IMAGE','THUMBNAIL')),
+        url TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT 'URL' CHECK(source IN ('URL','DRIVE')),
+        drive_file_id TEXT, drive_name TEXT, mime_type TEXT, size_bytes INTEGER,
+        drive_version TEXT, drive_modified_at TEXT, drive_checksum TEXT, drive_verified_at TEXT,
+        updated_at TEXT NOT NULL
+      );
       INSERT INTO signal_posts(id,text,created_at,updated_at)
         VALUES('p1','Already here','2026-01-01T00:00:00.000Z','2026-01-01T00:00:00.000Z');
       INSERT INTO signal_post_media(post_id,position,url)
@@ -118,6 +131,17 @@ describe('the additive migration and the contract it carries', () => {
         )
         .run(),
     ).toThrow(/signal_post_media/);
+    // And the same rule reaches the role table, which is the whole reason the predicate is built
+    // once and spent on both: a second table under a weaker rule is where the rule stops being true.
+    expect(() =>
+      legacy
+        .prepare(
+          `INSERT INTO signal_post_variant_media(
+             post_id,platform,role,url,source,drive_file_id,updated_at
+           ) VALUES('p1','instagram','COVER_IMAGE','u','DRIVE','file','t')`,
+        )
+        .run(),
+    ).toThrow(/signal_post_variant_media/);
     legacy.close();
   });
 

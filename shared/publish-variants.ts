@@ -5,6 +5,12 @@ import {
   type PublishPlatformCapability,
   type PublishPostKind,
 } from './publish-capabilities.ts';
+import {
+  publishRoleComposable,
+  PUBLISH_VARIANT_MEDIA_ROLES,
+  type PublishVariantMediaRole,
+} from './publish-variant-media.ts';
+import type { SignalPostMedia } from './signal-media.ts';
 
 /**
  * Platform and account content variants: the one place the inheritance is defined.
@@ -72,8 +78,8 @@ export const PUBLISH_VARIANT_FIELDS = [
   'title',
   'firstComment',
   'discloseSyntheticMedia',
-  'coverImageUrl',
-  'thumbnailUrl',
+  'coverImage',
+  'thumbnail',
 ] as const;
 export type PublishVariantField = (typeof PUBLISH_VARIANT_FIELDS)[number];
 
@@ -84,9 +90,21 @@ export const PUBLISH_VARIANT_FIELD_LABEL: Record<PublishVariantField, string> = 
   title: 'Title',
   firstComment: 'First comment',
   discloseSyntheticMedia: 'Synthetic-media disclosure',
-  coverImageUrl: 'Cover image',
-  thumbnailUrl: 'Thumbnail',
+  coverImage: 'Cover image',
+  thumbnail: 'Thumbnail',
 };
+
+/**
+ * The two override fields that are media roles rather than text, and the role each one is.
+ *
+ * A record rather than two `if`s, so preflight, the write service, and the composer walk the roles
+ * in one agreed order and a role added to `PUBLISH_VARIANT_MEDIA_ROLES` is one none of them can
+ * silently forget.
+ */
+export const PUBLISH_VARIANT_MEDIA_FIELD: Record<
+  PublishVariantMediaRole,
+  'coverImage' | 'thumbnail'
+> = { COVER_IMAGE: 'coverImage', THUMBNAIL: 'thumbnail' };
 
 /** One override layer. Absent field means inherit; see the note on empty values above. */
 export interface PublishContentVariant {
@@ -98,8 +116,17 @@ export interface PublishContentVariant {
   title?: string;
   firstComment?: string;
   discloseSyntheticMedia?: boolean;
-  coverImageUrl?: string;
-  thumbnailUrl?: string;
+  /**
+   * The cover image and the thumbnail, as whole discriminated references rather than URL strings.
+   *
+   * C76's change, and the reason it is not a string: a role backed by Drive needs the identity,
+   * metadata, and version fingerprint post media has carried since C74, and a file id in a column
+   * whose contract is "URL string" is exactly the overloading `signal_post_variant_media` exists to
+   * avoid. `shared/publish-variant-media.ts` says which platforms may hold one and which may send
+   * one — they are not the same question today, and nothing here assumes they are.
+   */
+  coverImage?: SignalPostMedia;
+  thumbnail?: SignalPostMedia;
 }
 
 /**
@@ -116,6 +143,35 @@ export interface PublishVariantRecord extends PublishContentVariant {
   /** When the layer was last written. Absent on a layer that has not been stored yet. */
   updatedAt?: string;
 }
+
+/**
+ * One layer as a **request** states it, which is not quite how it is stored.
+ *
+ * A stored role is a whole descriptor; a requested one is a source and an address, because nothing
+ * about a Drive file's metadata is ever accepted from a caller — the name, type, size, and version
+ * fingerprint are whatever Drive said when this app resolved the link, and a caller that could
+ * describe a file into existence would be a caller that could describe a different file into a
+ * confirmed plan. The conversion is here rather than in the composer so the browser and any other
+ * caller state a layer the same way.
+ */
+export interface PublishVariantPayload extends Omit<
+  PublishVariantRecord,
+  'coverImage' | 'thumbnail'
+> {
+  coverImage?: { source: SignalPostMedia['source']; url: string };
+  thumbnail?: { source: SignalPostMedia['source']; url: string };
+}
+
+export const variantRolePayload = (variant: PublishVariantRecord): PublishVariantPayload => {
+  const payload: PublishVariantPayload = { ...variant };
+  for (const role of PUBLISH_VARIANT_MEDIA_ROLES) {
+    const field = PUBLISH_VARIANT_MEDIA_FIELD[role];
+    const media = variant[field];
+    if (media) payload[field] = { source: media.source, url: media.url };
+    else delete payload[field];
+  }
+  return payload;
+};
 
 /** The content a post itself carries, before any layer touches it. */
 export interface PublishVariantBase {
@@ -144,8 +200,8 @@ export interface PublishResolvedContent {
   title?: string;
   firstComment?: string;
   discloseSyntheticMedia: boolean;
-  coverImageUrl?: string;
-  thumbnailUrl?: string;
+  coverImage?: SignalPostMedia;
+  thumbnail?: SignalPostMedia;
   sources: Record<PublishVariantField, PublishVariantScope>;
 }
 
@@ -174,10 +230,10 @@ export function normalizePublishVariant(variant: PublishContentVariant): Publish
   if (firstComment !== undefined) normalized.firstComment = firstComment;
   if (variant.discloseSyntheticMedia !== undefined)
     normalized.discloseSyntheticMedia = variant.discloseSyntheticMedia;
-  const coverImageUrl = trimmed(variant.coverImageUrl);
-  if (coverImageUrl !== undefined) normalized.coverImageUrl = coverImageUrl;
-  const thumbnailUrl = trimmed(variant.thumbnailUrl);
-  if (thumbnailUrl !== undefined) normalized.thumbnailUrl = thumbnailUrl;
+  // Descriptors rather than text, so there is nothing to trim: a role is either a whole reference
+  // or absent, and a half-formed one is refused by `publishRoleMediaIssue` rather than blanked here.
+  if (variant.coverImage !== undefined) normalized.coverImage = variant.coverImage;
+  if (variant.thumbnail !== undefined) normalized.thumbnail = variant.thumbnail;
   return normalized;
 }
 
@@ -240,8 +296,8 @@ export function resolvePublishContent(
   const title = pick('title', undefined, layers);
   const firstComment = pick('firstComment', undefined, layers);
   const disclose = pick('discloseSyntheticMedia', false, layers);
-  const coverImageUrl = pick('coverImageUrl', undefined, layers);
-  const thumbnailUrl = pick('thumbnailUrl', undefined, layers);
+  const coverImage = pick('coverImage', undefined, layers);
+  const thumbnail = pick('thumbnail', undefined, layers);
   return {
     caption: caption.value as string,
     mediaUrls: [...(mediaUrls.value as string[])],
@@ -249,8 +305,8 @@ export function resolvePublishContent(
     ...(title.value !== undefined ? { title: title.value } : {}),
     ...(firstComment.value !== undefined ? { firstComment: firstComment.value } : {}),
     discloseSyntheticMedia: disclose.value as boolean,
-    ...(coverImageUrl.value !== undefined ? { coverImageUrl: coverImageUrl.value } : {}),
-    ...(thumbnailUrl.value !== undefined ? { thumbnailUrl: thumbnailUrl.value } : {}),
+    ...(coverImage.value !== undefined ? { coverImage: coverImage.value } : {}),
+    ...(thumbnail.value !== undefined ? { thumbnail: thumbnail.value } : {}),
     sources: {
       caption: caption.scope,
       mediaUrls: mediaUrls.scope,
@@ -258,8 +314,8 @@ export function resolvePublishContent(
       title: title.scope,
       firstComment: firstComment.scope,
       discloseSyntheticMedia: disclose.scope,
-      coverImageUrl: coverImageUrl.scope,
-      thumbnailUrl: thumbnailUrl.scope,
+      coverImage: coverImage.scope,
+      thumbnail: thumbnail.scope,
     },
   };
 }
@@ -340,10 +396,15 @@ export function publishVariantFieldSupported(
       return capability.title.supported;
     case 'firstComment':
       return capability.firstComment.supported;
-    case 'coverImageUrl':
-      return capability.coverImage;
-    case 'thumbnailUrl':
-      return capability.thumbnail;
+    // Composable rather than deliverable, which is the distinction `mediaUrls` above already makes:
+    // the provider names a cover for Instagram and a thumbnail for YouTube, so those are the two
+    // places a role can be chosen and stored at all. Whether one may be *sent* is
+    // `publishRoleDelivers`, false everywhere until the live probe verifies the field
+    // (`shared/publish-variant-media.ts`).
+    case 'coverImage':
+      return publishRoleComposable(capability.platform, 'COVER_IMAGE');
+    case 'thumbnail':
+      return publishRoleComposable(capability.platform, 'THUMBNAIL');
   }
 }
 

@@ -176,15 +176,47 @@ CREATE TABLE IF NOT EXISTS signal_post_media (
 -- media_urls is a JSON array of URLs the post already carries: a selection of its own media, never
 -- a new reference. NULL means the platform inherits the post's media and '[]' means it deliberately
 -- receives none, which are different answers. Nothing here is fetched, uploaded, or proxied by the
--- server -- the rule signal_post_media above states, restated because cover_image_url and
--- thumbnail_url are the two columns most likely to tempt someone into breaking it. Those two reach
--- no provider field today and C76 is where they would; a byte path arriving for the publishing
--- stream does not make one for this table.
+-- server -- the rule signal_post_media above states, restated because a byte path arriving for the
+-- publishing stream does not make one for this table.
+--
+-- cover_image_url and thumbnail_url are frozen (C76). They held a role as a URL string, which a
+-- Drive-backed role cannot be without overloading a column whose contract is "URL string", so a
+-- role now lives in signal_post_variant_media below. backfillSignalVariantRoleMedia moves each
+-- legacy value into a URL role row exactly once and clears the column in the same transaction, so
+-- there is one writable source of truth rather than two. The columns are kept rather than dropped
+-- for the reason signal_posts.campaign is: this module is additive by design and a drop is a table
+-- rebuild. Nothing reads them after the backfill and nothing writes them again.
 CREATE TABLE IF NOT EXISTS signal_post_variants (
   post_id TEXT NOT NULL REFERENCES signal_posts(id) ON DELETE CASCADE,
   platform TEXT NOT NULL, account_id INTEGER,
   caption TEXT, media_urls TEXT, post_kind TEXT, title TEXT, first_comment TEXT,
   disclose_synthetic_media INTEGER, cover_image_url TEXT, thumbnail_url TEXT,
+  updated_at TEXT NOT NULL,
+  CHECK(account_id IS NULL OR account_id > 0)
+);
+-- One media role on one variant layer: the cover image or the thumbnail a platform, or one of its
+-- accounts, would send. Keyed the way the layer above is keyed, plus the role, so a layer carries at
+-- most one of each; the uniqueness is the expression index below for the same reason -- the platform
+-- layer's account_id is NULL and SQLite would not have refused a duplicate.
+--
+-- The reference itself is signal_post_media's contract, column for column: source discriminates a
+-- public https URL from a version-bound Drive file, url stays NOT NULL for both and is Drive's
+-- viewer page on a DRIVE row, and the Drive columns are the identity and the version fingerprint
+-- together. The same two triggers below enforce the same cross-field rule, because a second table
+-- holding the same kind of thing under a weaker rule is the first place the rule stops being true.
+--
+-- This stores no bytes and fetches nothing, like every other reference in this file. A role also
+-- reaches no provider field yet: the live probe left Instagram's cover_image and YouTube's thumbnail
+-- unverified, so a stored role is warned about in the preview rather than uploaded (C76, and
+-- docs/post-bridge-api-surface.md section 14).
+CREATE TABLE IF NOT EXISTS signal_post_variant_media (
+  post_id TEXT NOT NULL REFERENCES signal_posts(id) ON DELETE CASCADE,
+  platform TEXT NOT NULL, account_id INTEGER,
+  role TEXT NOT NULL CHECK(role IN ('COVER_IMAGE','THUMBNAIL')),
+  url TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'URL' CHECK(source IN ('URL','DRIVE')),
+  drive_file_id TEXT, drive_name TEXT, mime_type TEXT, size_bytes INTEGER,
+  drive_version TEXT, drive_modified_at TEXT, drive_checksum TEXT, drive_verified_at TEXT,
   updated_at TEXT NOT NULL,
   CHECK(account_id IS NULL OR account_id > 0)
 );
@@ -324,6 +356,9 @@ CREATE INDEX IF NOT EXISTS idx_signal_post_campaigns_campaign
 -- layer's account_id is NULL and SQLite's PRIMARY KEY would not have refused a duplicate.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_signal_post_variants_layer
   ON signal_post_variants(post_id, platform, COALESCE(account_id, -1));
+-- One row per role per layer, over the coalesced key for the same reason the layer index is.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_signal_post_variant_media_role
+  ON signal_post_variant_media(post_id, platform, COALESCE(account_id, -1), role);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_signal_publications_live ON signal_publications(post_id)
   WHERE state IN ('SUBMITTING','SUBMITTED','UNCONFIRMED');
 CREATE INDEX IF NOT EXISTS idx_signal_publications_post ON signal_publications(post_id);
@@ -340,30 +375,34 @@ CREATE INDEX IF NOT EXISTS idx_signal_publication_targets_result
 `;
 
 /**
- * The cross-field rule on `signal_post_media`, in the strongest form SQLite can be given
- * *additively*.
+ * The cross-field rule on `signal_post_media` and `signal_post_variant_media`, in the strongest
+ * form SQLite can be given *additively*.
  *
- * A CHECK constraint would be the natural home, and the fresh-install schema above carries the one
- * CHECK a single column can hold. It cannot be the whole answer: a cross-column CHECK has to be a
- * table constraint, SQLite adds table constraints only by rebuilding the table, and
+ * A CHECK constraint would be the natural home, and the fresh-install schema above carries the ones
+ * a single column can hold. It cannot be the whole answer: a cross-column CHECK has to be a table
+ * constraint, SQLite adds table constraints only by rebuilding the table, and
  * `applyAdditiveMigrations` is additive by design. Worse, `PRAGMA table_info` does not report CHECK
- * constraints at all, so even the column-level one above is dropped on the `ALTER TABLE` path — a
+ * constraints at all, so even the column-level ones above are dropped on the `ALTER TABLE` path — a
  * database migrated into these columns would have no constraint whatsoever.
  *
  * A trigger has neither problem. `CREATE TRIGGER IF NOT EXISTS` is additive, it reaches a migrated
- * database and a fresh one identically, and it can see every column at once. These two say exactly
- * what `signalPostMediaIssue` in `shared/signal-media.ts` says, restated here rather than imported
- * because this module is the schema and imports nothing from `shared/` -- and stated at all
- * because a rule enforced only at the Zod boundary is a rule the next writer of an INSERT walks
- * around.
+ * database and a fresh one identically, and it can see every column at once. These say exactly what
+ * `signalPostMediaIssue` in `shared/signal-media.ts` says, restated here rather than imported
+ * because this module is the schema and imports nothing from `shared/` -- and stated at all because
+ * a rule enforced only at the Zod boundary is a rule the next writer of an INSERT walks around.
+ *
+ * The predicate is built once and spent on both tables rather than typed out four times. C76 added
+ * the second table, and a copy of this condition that had drifted by one column would be a
+ * discriminated reference that is discriminated in one place and not the other.
  *
  * They run after the migration, for the same reason the indexes do: the columns have to exist.
  * Existing rows are untouched -- a migrated URL row has `source='URL'` from the column default and
  * NULL in every Drive column, which is precisely the first branch.
  */
-export const triggerSchema = `
-CREATE TRIGGER IF NOT EXISTS signal_post_media_source_insert
-BEFORE INSERT ON signal_post_media FOR EACH ROW WHEN NOT (
+const MEDIA_SOURCE_MESSAGE =
+  'a URL reference carries no Drive fields, and a DRIVE reference needs an id, a name, a MIME type, a positive size, and at least one version signal.';
+
+const mediaSourceRule = `(
   (NEW.source = 'URL'
     AND NEW.drive_file_id IS NULL AND NEW.drive_name IS NULL AND NEW.mime_type IS NULL
     AND NEW.size_bytes IS NULL AND NEW.drive_version IS NULL AND NEW.drive_modified_at IS NULL
@@ -375,27 +414,23 @@ BEFORE INSERT ON signal_post_media FOR EACH ROW WHEN NOT (
     AND NEW.size_bytes IS NOT NULL AND NEW.size_bytes > 0
     AND (NEW.drive_version IS NOT NULL OR NEW.drive_modified_at IS NOT NULL
          OR NEW.drive_checksum IS NOT NULL))
-)
+)`;
+
+const mediaSourceTriggers = (table: string) =>
+  (['INSERT', 'UPDATE'] as const)
+    .map(
+      (event) => `
+CREATE TRIGGER IF NOT EXISTS ${table}_source_${event.toLowerCase()}
+BEFORE ${event} ON ${table} FOR EACH ROW WHEN NOT ${mediaSourceRule}
 BEGIN
-  SELECT RAISE(ABORT, 'signal_post_media: a URL reference carries no Drive fields, and a DRIVE reference needs an id, a name, a MIME type, a positive size, and at least one version signal.');
-END;
-CREATE TRIGGER IF NOT EXISTS signal_post_media_source_update
-BEFORE UPDATE ON signal_post_media FOR EACH ROW WHEN NOT (
-  (NEW.source = 'URL'
-    AND NEW.drive_file_id IS NULL AND NEW.drive_name IS NULL AND NEW.mime_type IS NULL
-    AND NEW.size_bytes IS NULL AND NEW.drive_version IS NULL AND NEW.drive_modified_at IS NULL
-    AND NEW.drive_checksum IS NULL AND NEW.drive_verified_at IS NULL)
-  OR (NEW.source = 'DRIVE'
-    AND TRIM(COALESCE(NEW.drive_file_id, '')) <> ''
-    AND TRIM(COALESCE(NEW.drive_name, '')) <> ''
-    AND TRIM(COALESCE(NEW.mime_type, '')) <> ''
-    AND NEW.size_bytes IS NOT NULL AND NEW.size_bytes > 0
-    AND (NEW.drive_version IS NOT NULL OR NEW.drive_modified_at IS NOT NULL
-         OR NEW.drive_checksum IS NOT NULL))
-)
-BEGIN
-  SELECT RAISE(ABORT, 'signal_post_media: a URL reference carries no Drive fields, and a DRIVE reference needs an id, a name, a MIME type, a positive size, and at least one version signal.');
-END;
+  SELECT RAISE(ABORT, '${table}: ${MEDIA_SOURCE_MESSAGE}');
+END;`,
+    )
+    .join('');
+
+export const triggerSchema = `${mediaSourceTriggers('signal_post_media')}${mediaSourceTriggers(
+  'signal_post_variant_media',
+)}
 `;
 
 const schema = `${tableSchema}${indexSchema}`;
@@ -647,6 +682,77 @@ export function backfillSignalCampaigns(db: Db): { campaigns: number; attachment
   });
 }
 
+/**
+ * Moves the legacy `cover_image_url` and `thumbnail_url` values on `signal_post_variants` into
+ * `signal_post_variant_media` role rows, once, and returns how many it moved.
+ *
+ * ## Why it moves rather than copies
+ *
+ * C76's rule is one writable source of truth. A copy would leave two columns and two rows saying
+ * what a layer's cover is, and the next edit would have to keep both — which is the state this
+ * migration exists to end. So each value becomes a `URL` role row and the column it came from is
+ * set to NULL **in the same transaction**: after this, the columns are frozen in the strict sense
+ * that they hold nothing and nothing writes them.
+ *
+ * That is also what makes it idempotent in the only way that matters. A second run finds no
+ * non-null legacy value and writes nothing, and — more to the point — a role a person deliberately
+ * removed after the migration is **not** resurrected, because the column it would have come back
+ * from is empty. Guarding on "the layer has no role row yet" instead would have re-added it on the
+ * next boot.
+ *
+ * `INSERT OR IGNORE` covers the one case where both could exist: a database that already carries a
+ * role row for that layer and role, written by this release, keeps the row it has and the legacy
+ * value is still cleared. The stored row is the newer statement of the two by construction.
+ *
+ * Runs on every boot, for the same reason `backfillProjectActivity` and `backfillSignalCampaigns`
+ * do: the table is created by one statement and filled by another, and a crash between them would
+ * otherwise strand those values for good.
+ */
+export function backfillSignalVariantRoleMedia(db: Db): number {
+  const pending = db
+    .prepare(
+      `SELECT post_id, platform, account_id, cover_image_url, thumbnail_url, updated_at
+         FROM signal_post_variants
+        WHERE (cover_image_url IS NOT NULL AND TRIM(cover_image_url) <> '')
+           OR (thumbnail_url IS NOT NULL AND TRIM(thumbnail_url) <> '')`,
+    )
+    .all() as unknown as {
+    post_id: string;
+    platform: string;
+    account_id: number | null;
+    cover_image_url: string | null;
+    thumbnail_url: string | null;
+    updated_at: string;
+  }[];
+  if (pending.length === 0) return 0;
+
+  return transaction(db, () => {
+    const insert = db.prepare(
+      `INSERT OR IGNORE INTO signal_post_variant_media(
+         post_id, platform, account_id, role, url, source, updated_at
+       ) VALUES(?,?,?,?,?, 'URL', ?)`,
+    );
+    const clear = db.prepare(
+      `UPDATE signal_post_variants SET cover_image_url=NULL, thumbnail_url=NULL
+        WHERE post_id=? AND platform=? AND account_id IS ?`,
+    );
+    let moved = 0;
+    for (const layer of pending) {
+      for (const [role, url] of [
+        ['COVER_IMAGE', layer.cover_image_url],
+        ['THUMBNAIL', layer.thumbnail_url],
+      ] as const) {
+        const value = url?.trim();
+        if (!value) continue;
+        insert.run(layer.post_id, layer.platform, layer.account_id, role, value, layer.updated_at);
+        moved += 1;
+      }
+      clear.run(layer.post_id, layer.platform, layer.account_id);
+    }
+    return moved;
+  });
+}
+
 export function createDb(
   filename = config.databasePath,
   onMigration?: (statements: readonly string[]) => void,
@@ -663,6 +769,10 @@ export function createDb(
   backfillSignalCampaigns(db);
   db.exec(indexSchema);
   db.exec(triggerSchema);
+  // After the index and the triggers, and deliberately: the role rows it writes go through the
+  // same uniqueness and the same cross-field rule every later write does, so the migration cannot
+  // put a row in that an ordinary INSERT would have been refused.
+  backfillSignalVariantRoleMedia(db);
   db.exec('PRAGMA optimize');
   onMigration?.(applied);
   return db;

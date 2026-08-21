@@ -5,9 +5,14 @@ import { campaignsByPost } from './campaigns.ts';
 import type { PublishPlatform, PublishPostKind } from '../../shared/publish-capabilities.ts';
 import {
   normalizePublishVariant,
+  PUBLISH_VARIANT_MEDIA_FIELD,
   type PublishContentVariant,
   type PublishVariantRecord,
 } from '../../shared/publish-variants.ts';
+import {
+  PUBLISH_VARIANT_MEDIA_ROLES,
+  type PublishVariantMediaRole,
+} from '../../shared/publish-variant-media.ts';
 
 /**
  * Turning `signal_posts` rows into `SignalPost`s, shared by the read half and the write half so
@@ -55,8 +60,14 @@ export function channelsByPost(db: Db, postIds: string[]): Map<string, SignalCha
   return grouped;
 }
 
-export interface SignalPostMediaRow {
-  post_id: string;
+/**
+ * The columns a stored media reference is made of, on whichever table holds it.
+ *
+ * `signal_post_media` and `signal_post_variant_media` carry the same eleven columns under the same
+ * cross-field rule, so one parse serves both. The row types below add whatever keys their own table
+ * is addressed by.
+ */
+export interface SignalMediaColumns {
   url: string;
   source: string;
   drive_file_id: string | null;
@@ -69,6 +80,10 @@ export interface SignalPostMediaRow {
   drive_verified_at: string | null;
 }
 
+export interface SignalPostMediaRow extends SignalMediaColumns {
+  post_id: string;
+}
+
 /**
  * One stored reference as the descriptor.
  *
@@ -76,7 +91,7 @@ export interface SignalPostMediaRow {
  * validated writes reaches these columns, and the SQLite triggers in `server/db.ts` refuse a third
  * value outright, so the cast states that invariant rather than guessing at the data.
  */
-export const toSignalPostMedia = (row: SignalPostMediaRow): SignalPostMedia => ({
+export const toSignalPostMedia = (row: SignalMediaColumns): SignalPostMedia => ({
   source: row.source as SignalPostMedia['source'],
   url: row.url,
   driveFileId: row.drive_file_id,
@@ -172,9 +187,62 @@ export interface SignalPostVariantRow {
   title: string | null;
   first_comment: string | null;
   disclose_synthetic_media: number | null;
-  cover_image_url: string | null;
-  thumbnail_url: string | null;
+  /**
+   * `cover_image_url` and `thumbnail_url` are deliberately absent, exactly as
+   * `signal_posts.campaign` is absent from `SignalPostRow`.
+   *
+   * Both columns are still on the table and are frozen: C76 moved every value into a
+   * `signal_post_variant_media` role row and cleared them, so a row shape that named them would be
+   * an invitation to read a column that holds nothing and could never hold a Drive reference. What a
+   * layer's cover and thumbnail are comes from `variantMediaByPost`.
+   */
   updated_at: string;
+}
+
+/** One role row: the layer it belongs to, the role it fills, and the reference itself. */
+export interface SignalPostVariantMediaRow extends SignalMediaColumns {
+  post_id: string;
+  platform: string;
+  account_id: number | null;
+  role: string;
+}
+
+/**
+ * The key a layer is addressed by here. The platform layer's account is `null`, the same shape
+ * `publishVariantLayers` looks a layer up with.
+ */
+export const variantLayerKey = (platform: string, accountId: number | null) =>
+  `${platform}:${accountId ?? 'platform'}`;
+
+export type SignalVariantRoleMedia = Partial<Record<PublishVariantMediaRole, SignalPostMedia>>;
+
+/**
+ * Every role row on one post, grouped by the layer it belongs to.
+ *
+ * One query for the whole post rather than one per layer, the way `mediaByPost` reads a month's
+ * media in one statement. A row whose `role` is not one this release knows is skipped rather than
+ * cast: the column has a CHECK constraint, so reaching that means a database written by a later
+ * release, and dropping the role is honest where guessing at it is not.
+ */
+export function variantMediaByPost(db: Db, postId: string): Map<string, SignalVariantRoleMedia> {
+  const rows = db
+    .prepare(
+      `SELECT post_id, platform, account_id, role, url, source, drive_file_id, drive_name,
+              mime_type, size_bytes, drive_version, drive_modified_at, drive_checksum,
+              drive_verified_at
+         FROM signal_post_variant_media
+        WHERE post_id=? ORDER BY platform, account_id, role`,
+    )
+    .all(postId) as unknown as SignalPostVariantMediaRow[];
+  const grouped = new Map<string, SignalVariantRoleMedia>();
+  for (const row of rows) {
+    if (!(PUBLISH_VARIANT_MEDIA_ROLES as readonly string[]).includes(row.role)) continue;
+    const key = variantLayerKey(row.platform, row.account_id);
+    const roles = grouped.get(key) ?? {};
+    roles[row.role as PublishVariantMediaRole] = toSignalPostMedia(row);
+    grouped.set(key, roles);
+  }
+  return grouped;
 }
 
 /**
@@ -189,7 +257,10 @@ export interface SignalPostVariantRow {
  * anything but a scalar, and a plan that cannot be previewed at all is a worse answer than one
  * that shows the post's own media and lets the selection be made again.
  */
-export function toSignalPostVariant(row: SignalPostVariantRow): PublishVariantRecord {
+export function toSignalPostVariant(
+  row: SignalPostVariantRow,
+  roles: SignalVariantRoleMedia = {},
+): PublishVariantRecord {
   const variant: PublishContentVariant = {};
   if (row.caption !== null) variant.caption = row.caption;
   if (row.media_urls !== null) {
@@ -205,8 +276,12 @@ export function toSignalPostVariant(row: SignalPostVariantRow): PublishVariantRe
   if (row.first_comment !== null) variant.firstComment = row.first_comment;
   if (row.disclose_synthetic_media !== null)
     variant.discloseSyntheticMedia = row.disclose_synthetic_media !== 0;
-  if (row.cover_image_url !== null) variant.coverImageUrl = row.cover_image_url;
-  if (row.thumbnail_url !== null) variant.thumbnailUrl = row.thumbnail_url;
+  // The roles arrive from their own table rather than from this row's frozen legacy columns, which
+  // is what lets one of them be a version-bound Drive file rather than a URL string.
+  for (const role of PUBLISH_VARIANT_MEDIA_ROLES) {
+    const media = roles[role];
+    if (media) variant[PUBLISH_VARIANT_MEDIA_FIELD[role]] = media;
+  }
   return {
     platform: row.platform as PublishPlatform,
     accountId: row.account_id,
@@ -228,5 +303,49 @@ export function listPostVariants(db: Db, postId: string): PublishVariantRecord[]
        ORDER BY platform, account_id IS NOT NULL, account_id`,
     )
     .all(postId) as unknown as SignalPostVariantRow[];
-  return rows.map(toSignalPostVariant);
+  const roles = variantMediaByPost(db, postId);
+  const layers = rows.map((row) =>
+    toSignalPostVariant(row, roles.get(variantLayerKey(row.platform, row.account_id)) ?? {}),
+  );
+  // A layer whose only override is a role has no text row to be read from: `signal_post_variants`
+  // is the text table, and a row there that overrode no text would make a platform read as tailored
+  // on fields it is not. So a role-only layer is composed from the role table alone, which is what
+  // keeps `publishVariantLayers` able to find every layer by platform and account without knowing
+  // which table answered for it.
+  const seen = new Set(layers.map((layer) => variantLayerKey(layer.platform, layer.accountId)));
+  const roleOnly = db
+    .prepare(
+      `SELECT platform, account_id, MAX(updated_at) AS updated_at
+         FROM signal_post_variant_media WHERE post_id=?
+        GROUP BY platform, account_id
+        ORDER BY platform, account_id IS NOT NULL, account_id`,
+    )
+    .all(postId) as unknown as {
+    platform: string;
+    account_id: number | null;
+    updated_at: string;
+  }[];
+  for (const row of roleOnly) {
+    const key = variantLayerKey(row.platform, row.account_id);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    layers.push(
+      toSignalPostVariant(
+        {
+          post_id: postId,
+          platform: row.platform,
+          account_id: row.account_id,
+          caption: null,
+          media_urls: null,
+          post_kind: null,
+          title: null,
+          first_comment: null,
+          disclose_synthetic_media: null,
+          updated_at: row.updated_at,
+        },
+        roles.get(key) ?? {},
+      ),
+    );
+  }
+  return layers;
 }

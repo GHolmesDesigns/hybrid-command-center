@@ -51,6 +51,37 @@ export function validatePostBridgeUploadUrl(value: string): URL {
   return url;
 }
 
+/**
+ * The per-platform overrides, in the vendor's own vocabulary and nowhere else.
+ *
+ * `document_title` on LinkedIn and `title` everywhere else are the same field to this app and two
+ * field names to Post Bridge, which is exactly the kind of difference that belongs in this module
+ * and no other. It lives here rather than inside the live adapter so it can be asserted without
+ * contacting the vendor: the LinkedIn PDF document post is the one media role C73 actually verified
+ * (`docs/post-bridge-api-surface.md` §14, question 3), and what verifies it end to end is this
+ * mapping plus the ordinary C75 upload path — not a role row.
+ *
+ * A placement is sent only for a story, because that is the only placement the source records; a
+ * reel reaches the platform as its single video.
+ *
+ * **No `cover_image` and no `thumbnail`.** Both are named by OpenAPI and neither is verified, and
+ * inventing a wire field from a document is what C76 put out of scope. A stored role warns in the
+ * preview instead; when a §14 result verifies one, this is the function it is added to.
+ */
+export function postBridgePlatformConfigurations(request: PublishRequest) {
+  const entries = (request.platformConfigurations ?? []).map((configuration) => {
+    const fields: Record<string, unknown> = {};
+    if (configuration.caption !== undefined) fields.caption = configuration.caption;
+    if (configuration.firstComment !== undefined) fields.first_comment = configuration.firstComment;
+    if (configuration.title !== undefined)
+      fields[configuration.platform === 'linkedin' ? 'document_title' : 'title'] =
+        configuration.title;
+    if (configuration.story) fields.placement = 'story';
+    return [configuration.platform, fields] as const;
+  });
+  return entries.length ? Object.fromEntries(entries) : undefined;
+}
+
 export function postBridgePostBody(request: PublishRequest, platformConfigurations?: unknown) {
   return {
     caption: request.caption,

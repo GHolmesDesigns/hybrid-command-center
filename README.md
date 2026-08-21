@@ -539,12 +539,22 @@ it and never writes.
   the confirmed submit's single stream from the selected Drive file to the provider, storing
   nothing. Files, the read-only Drive browser below, is unaffected — it is a separate capability
   with a separate interface, and it still browses a project's own folders and nothing else.
+- **A cover image and a thumbnail are references too, and neither is delivered yet.** A platform
+  layer — and an account layer — can carry one of each in `signal_post_variant_media`, under exactly
+  the contract a post's own media has: a public `https:` URL or a version-bound Drive file, with its
+  own **Recheck** and its own place in the plan hash, so a role edited or a role file replaced makes
+  an open confirmation stale. What no role does is reach the provider. Post Bridge's document names
+  an Instagram cover and a YouTube thumbnail, the live probe established neither, and its current
+  support material says custom external YouTube thumbnails are unavailable — so a role can be chosen
+  exactly where the provider names the field, is stored and version-checked, and says everywhere it
+  appears that it is held rather than sent. The one media role that *is* verified needs no role row:
+  a LinkedIn PDF publishes as a document post with the title the editor already collects.
 - **One post can read differently per channel.** A post's content is the base; a platform override
   sits over it and an account override over that, resolved in that order by
   `shared/publish-variants.ts`. A layer says only what it changes, and clearing a field restores the
   post's own. A field is offered only where the provider capability contract carries it — X takes a
-  first comment, YouTube takes a title, no platform takes a chosen cover or thumbnail — and the API
-  refuses one it does not, from the same function the form renders from. What the provider cannot
+  first comment, YouTube takes a title — and the API refuses one it does not, from the same function
+  the form renders from. What the provider cannot
   express refuses rather than guesses: it sends one media array per submission, so channels given
   different media are refused by name, and one set of content per platform, so an account override
   arrives as its platform's while that platform resolves to a single account.

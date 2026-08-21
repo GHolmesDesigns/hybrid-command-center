@@ -56,10 +56,12 @@ import {
   getPostVariants,
   listQueue,
   recheckPostMedia,
+  recheckVariantMedia,
   replacePostVariants,
   signalPostInput,
   signalPostPatch,
   signalRangeQuery,
+  signalVariantMediaRecheckInput,
   signalVariantsInput,
   signalSlotFromQuery,
   signalSlotInput,
@@ -1648,9 +1650,43 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       next(error);
     }
   });
-  app.put('/api/signal/posts/:id/variants', (req, res, next) => {
+  app.put('/api/signal/posts/:id/variants', async (req, res, next) => {
     try {
-      res.json(replacePostVariants(db, req.params.id, signalVariantsInput.parse(req.body)));
+      // Asynchronous since C76: a layer may carry a cover image or a thumbnail, and a Drive-backed
+      // one has to be resolved through the media capability before it can be stored. A set whose
+      // roles are all public URLs, or which has none, still contacts nothing.
+      res.json(
+        await replacePostVariants(
+          db,
+          req.params.id,
+          signalVariantsInput.parse(req.body),
+          driveMedia(),
+        ),
+      );
+    } catch (error) {
+      next(error);
+    }
+  });
+  /**
+   * Check one layer's cover image or thumbnail against Drive again, because a person asked.
+   *
+   * The role counterpart of `POST /api/signal/posts/:id/media/recheck`, and it keeps that route's
+   * two properties: it is the only way a stored role fingerprint is replaced, and it writes through
+   * the ordinary variant replacement, so the post's `updated_at` moves — and an open publish
+   * confirmation goes stale — exactly when the file's version actually changed.
+   *
+   * A failure answers 400 and writes nothing: the role keeps the metadata it had.
+   */
+  app.post('/api/signal/posts/:id/variants/media/recheck', async (req, res, next) => {
+    try {
+      res.json(
+        await recheckVariantMedia(
+          db,
+          req.params.id,
+          signalVariantMediaRecheckInput.parse(req.body),
+          driveMedia(),
+        ),
+      );
     } catch (error) {
       next(error);
     }

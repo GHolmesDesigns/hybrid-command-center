@@ -175,19 +175,20 @@ describe('which fields a platform will carry', () => {
     expect(publishVariantFieldSupported('title', PUBLISH_CAPABILITIES.bluesky)).toBe(false);
   });
 
-  it('offers a cover image and a thumbnail nowhere, because no platform records one', () => {
+  it('offers a role exactly where the provider names one, verified or not', () => {
+    // Composable, not deliverable. Post Bridge names a cover for Instagram and a thumbnail for
+    // YouTube, so those two are the only places a role can be chosen at all — and whether either
+    // one is *sent* is `publishRoleDelivers`, which `publish-variant-media.test.ts` pins to the
+    // capability flags.
+    expect(publishVariantFieldSupported('coverImage', PUBLISH_CAPABILITIES.instagram)).toBe(true);
+    expect(publishVariantFieldSupported('thumbnail', PUBLISH_CAPABILITIES.youtube)).toBe(true);
+    expect(publishVariantFieldSupported('thumbnail', PUBLISH_CAPABILITIES.instagram)).toBe(false);
+    expect(publishVariantFieldSupported('coverImage', PUBLISH_CAPABILITIES.youtube)).toBe(false);
     for (const capability of Object.values(PUBLISH_CAPABILITIES)) {
-      expect(publishVariantFieldSupported('coverImageUrl', capability)).toBe(false);
-      expect(publishVariantFieldSupported('thumbnailUrl', capability)).toBe(false);
+      if (capability.platform === 'instagram' || capability.platform === 'youtube') continue;
+      expect(publishVariantFieldSupported('coverImage', capability)).toBe(false);
+      expect(publishVariantFieldSupported('thumbnail', capability)).toBe(false);
     }
-    // Supported is a property of the contract and not of this function: a platform that recorded a
-    // thumbnail would be offered one, which is what keeps the field honest rather than decorative.
-    expect(
-      publishVariantFieldSupported('thumbnailUrl', {
-        ...PUBLISH_CAPABILITIES.youtube,
-        thumbnail: true,
-      }),
-    ).toBe(true);
   });
 
   it('offers a placement only where there is more than one shape to choose', () => {
@@ -217,6 +218,16 @@ describe('which fields a platform will carry', () => {
       'postKind',
       'title',
       'discloseSyntheticMedia',
+      'thumbnail',
+    ]);
+    // Instagram is the other half of the pair: a cover and no thumbnail, which is exactly what the
+    // provider names for it.
+    expect(publishVariantFieldsFor(PUBLISH_CAPABILITIES.instagram)).toEqual([
+      'caption',
+      'mediaUrls',
+      'postKind',
+      'discloseSyntheticMedia',
+      'coverImage',
     ]);
   });
 });

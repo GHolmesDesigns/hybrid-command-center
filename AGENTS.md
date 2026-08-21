@@ -99,6 +99,18 @@
   before it did. A stored fingerprint is replaced only by an explicit recheck, which goes through the
   ordinary Signal edit transaction; an ordinary save carries an existing reference forward untouched,
   and a failed recheck writes nothing and leaves the last metadata visible.
+- **A variant media role is the same reference under the same rule, one table over.** A cover image
+  and a thumbnail live in `signal_post_variant_media`, keyed `(post_id, platform, account_id, role)`,
+  under `signalPostMediaIssue` and the same two SQLite triggers — built once in `server/db.ts` and
+  spent on both tables, because a second table holding the same kind of thing under a weaker rule is
+  where the rule stops being true. `signal_post_variants.cover_image_url` and `.thumbnail_url` are
+  frozen: `backfillSignalVariantRoleMedia` moves each value into a `URL` role row and clears the
+  column in the same transaction, so there is one writable source and a role a person removes is not
+  resurrected on the next boot. **Storing a role and delivering one are separate questions** —
+  `publishRoleComposable` and `publishRoleDelivers` in `shared/publish-variant-media.ts` — and a
+  capability flag goes true only where `docs/post-bridge-api-surface.md` §14 records the provider
+  accepting the field and reading it back. Nothing is uploaded for an undelivered role and no wire
+  field is invented from OpenAPI; a stored role warns, by platform and by role, everywhere it appears.
 - Signal Campaign is authoritative for what is scheduled: `signal_posts` is the only store of planned content, and nothing else keeps a second copy of a schedule. A post carries a `YYYY-MM-DD` date and an `HH:MM` time and never an instant — it belongs to the calendar cell whose local date equals its date string, and no code derives a moment from the pair, which is what keeps a post on its own day in every zone. A null date is the unscheduled queue and belongs to no cell. Channels and campaigns are normalized joins like tags and categories; a post with no campaign is **No campaign** wherever campaigns are grouped, never a hidden post. Anything reading the schedule goes through `SignalProvider`, which has no write method by construction; adding one means a new module beside `read.ts`, not a method on it. Signal's own writes record no `integration_events` — it is local data now, like projects and tasks, and the log is for what an *integration* did.
 - The calendar reads and never writes. Scheduled content and task due dates are two kinds and stay two kinds: two arrays in `shared/calendar.ts`, two headed groups on the page, never one list of "events" with a type tag — the moment they share a list something sorts and counts them together and the difference survives only as a colour. Signal failing degrades the page to task due dates with a visible reason, because an empty calendar and an unreadable schedule are different claims and only one of them is true.
 - Figures are read, never computed, and never written back. `server/publish/analytics.ts` holds an

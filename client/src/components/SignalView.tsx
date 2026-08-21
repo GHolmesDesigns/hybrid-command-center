@@ -88,7 +88,8 @@ import {
   PUBLISH_PLATFORM_LABEL,
   type PublishPlatform,
 } from '../../../shared/publish-capabilities';
-import type { PublishVariantRecord } from '../../../shared/publish-variants';
+import { variantRolePayload, type PublishVariantRecord } from '../../../shared/publish-variants';
+import type { PublishVariantMediaRole } from '../../../shared/publish-variant-media';
 import { PlatformVariantsEditor, PublishPreviewTabs } from './SignalVariants';
 import { SignalHealthPanel } from './SignalHealth';
 import { SignalMetrics } from './SignalMetrics';
@@ -640,7 +641,10 @@ function Editor({
       const stored = await send<PublishVariantRecord[]>(
         `/signal/posts/${post.id}/variants`,
         'PUT',
-        { variants: variantList(layers) },
+        // The roles go out as `{ source, url }` rather than as whole descriptors: Drive metadata is
+        // never accepted from a request, so a Drive role is stated as its link and resolved again by
+        // the server (`server/signal/service.ts`).
+        { variants: variantList(layers).map(variantRolePayload) },
       );
       setSavedLayers(variantMap(stored));
       setLayers(variantMap(stored));
@@ -651,6 +655,40 @@ function Editor({
     } finally {
       setBusy(false);
     }
+  };
+
+  /**
+   * One pasted Drive link resolved for a variant role, through the same route the composer's own
+   * media uses.
+   *
+   * The server parses, host-checks, and looks the file up; this only hands back what it answered.
+   * Saving the layer resolves the link again through the same rule, so the stored fingerprint is the
+   * one taken at the moment of the write rather than at the moment of the paste.
+   */
+  const resolveRoleDrive = (link: string) =>
+    send<SignalPostMedia>('/signal/drive-media/resolve', 'POST', { link });
+
+  /**
+   * Checks one layer's stored role against Drive again, on purpose.
+   *
+   * The route rewrites the whole variant set through the ordinary replacement, so the answer is the
+   * new set and the post's `updated_at` moves exactly when the file's version did — which is why the
+   * open preview is dropped here rather than left showing a plan that may no longer be current.
+   */
+  const recheckRoleMedia = async (
+    platform: PublishPlatform,
+    accountId: number | null,
+    role: PublishVariantMediaRole,
+  ) => {
+    const stored = await send<PublishVariantRecord[]>(
+      `/signal/posts/${post.id}/variants/media/recheck`,
+      'POST',
+      { platform, accountId, role },
+    );
+    setSavedLayers(variantMap(stored));
+    setLayers(variantMap(stored));
+    setPublishPreview(null);
+    await opened(post);
   };
 
   const previewPublish = async () => {
@@ -1407,6 +1445,8 @@ function Editor({
               layers={layers}
               onChange={setLayers}
               onSave={() => void saveVariants()}
+              onRecheckRole={recheckRoleMedia}
+              resolveDrive={resolveRoleDrive}
               dirty={hasUnsavedVariants}
               busy={busy}
             />
@@ -1562,6 +1602,8 @@ function Editor({
                 savedLayers={savedLayers}
                 onChange={setLayers}
                 onSaveAccount={() => void saveAccountVariant()}
+                onRecheckRole={recheckRoleMedia}
+                resolveDrive={resolveRoleDrive}
                 busy={busy}
               />
               {publishPreview.warnings.map((warning) => (

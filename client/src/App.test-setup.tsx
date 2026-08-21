@@ -716,6 +716,20 @@ const respondTo = (url: string, init?: RequestInit) => {
     testState.signalPostsPayload = [...testState.signalPostsPayload, created];
     return created;
   }
+  const variantRecheckPath = url.match(/\/api\/signal\/posts\/([^/?]+)\/variants\/media\/recheck$/);
+  if (variantRecheckPath && method === 'POST') {
+    if (testState.driveRecheckError) return reply(400, { error: testState.driveRecheckError });
+    const next = testState.driveRecheckPayload ?? testState.driveMediaPayload;
+    if (!next) return reply(400, { error: 'No Drive file was staged.' });
+    // The role recheck answers with the whole layer set, the way the route does: it writes through
+    // the ordinary variant replacement rather than a path of its own.
+    testState.signalVariantsPayload = testState.signalVariantsPayload.map((layer) =>
+      layer.platform === body.platform && (layer.accountId ?? null) === (body.accountId ?? null)
+        ? { ...layer, [body.role === 'COVER_IMAGE' ? 'coverImage' : 'thumbnail']: next }
+        : layer,
+    );
+    return testState.signalVariantsPayload;
+  }
   const variantsPath = url.match(/\/api\/signal\/posts\/([^/?]+)\/variants$/);
   if (variantsPath && method === 'GET') return testState.signalVariantsPayload;
   if (variantsPath && method === 'PUT') {

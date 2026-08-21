@@ -4429,6 +4429,25 @@ button.tag-chip.toggle.active {
   padding: 0;
   list-style: none;
 }
+.signal-variant-role {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.signal-variant-role-head {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  font-size: 12px;
+}
+.signal-variant-role-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .signal-variant-actions {
   display: flex;
   justify-content: flex-end;

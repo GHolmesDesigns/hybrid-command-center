@@ -20,14 +20,23 @@ import {
   toSignalPosts,
   channelsByPost,
   mediaByPost,
+  variantLayerKey,
+  variantMediaByPost,
   type SignalPostRow,
+  type SignalVariantRoleMedia,
 } from './rows.ts';
 import { campaignsByPost, signalPostCampaignNames, writePostCampaigns } from './campaigns.ts';
 import {
+  signalMediaFingerprint,
   signalPostMediaIssue,
   urlPostMedia,
   type SignalPostMedia,
 } from '../../shared/signal-media.ts';
+import {
+  publishRoleMediaIssue,
+  PUBLISH_VARIANT_MEDIA_ROLES,
+  PUBLISH_VARIANT_MEDIA_ROLE_LABEL,
+} from '../../shared/publish-variant-media.ts';
 import {
   driveMediaProvider,
   parseDriveMediaLink,
@@ -47,6 +56,8 @@ import {
   publishVariantIsEmpty,
   PUBLISH_VARIANT_FIELDS,
   PUBLISH_VARIANT_FIELD_LABEL,
+  PUBLISH_VARIANT_MEDIA_FIELD,
+  type PublishContentVariant,
   type PublishVariantRecord,
 } from '../../shared/publish-variants.ts';
 
@@ -100,13 +111,31 @@ export class SignalSlotConflictError extends Error {
 }
 
 const channel = z.enum(SIGNAL_CHANNELS);
+
+/**
+ * Whether an address is a usable `https:` one, without throwing on something that is not an
+ * address at all.
+ *
+ * Zod collects every issue rather than stopping at the first, so a refinement runs even when the
+ * `.url()` check on the same string has already failed — and `new URL('not-a-url')` throws, which
+ * would leave the route answering 500 to a value the schema had correctly refused. The refusal is
+ * the answer; the exception was never one.
+ */
+const isHttpsUrl = (value: string): boolean => {
+  try {
+    return new URL(value).protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
 const mediaUrl = z
   .string()
   .trim()
   .min(1, 'A media URL cannot be empty.')
   .max(2048, 'A media URL is too long.')
   .url('Use a valid media URL.')
-  .refine((value) => new URL(value).protocol === 'https:', 'Media URLs must use https.');
+  .refine(isHttpsUrl, 'Media URLs must use https.');
 
 /**
  * One media reference as a request states it.
@@ -575,7 +604,7 @@ const variantUrl = z
   .min(1)
   .max(2048, 'A media URL is too long.')
   .url('Use a valid media URL.')
-  .refine((value) => new URL(value).protocol === 'https:', 'Media URLs must use https.');
+  .refine(isHttpsUrl, 'Media URLs must use https.');
 
 /**
  * One stored layer, structurally.
@@ -598,8 +627,16 @@ const variantInput = z.object({
   title: z.string().max(500).optional(),
   firstComment: z.string().max(20_000).optional(),
   discloseSyntheticMedia: z.boolean().optional(),
-  coverImageUrl: variantUrl.optional(),
-  thumbnailUrl: variantUrl.optional(),
+  /**
+   * The two media roles, stated the way a post's own media is stated: a public `https:` URL, or a
+   * Drive **link** that this app parses, host-checks, and resolves itself.
+   *
+   * Nothing about a Drive file's metadata is accepted here either — see `mediaItemInput`. A role
+   * reaching no provider field yet is still stored under the full C74 contract, because the whole
+   * point of the normalized table is that a role verified later needs no second migration.
+   */
+  coverImage: mediaItemInput.optional(),
+  thumbnail: mediaItemInput.optional(),
 });
 
 export const signalVariantsInput = z.object({
@@ -610,6 +647,125 @@ export const signalVariantsInput = z.object({
     .default([]),
 });
 export type SignalVariantsInput = z.output<typeof signalVariantsInput>;
+
+/** Which layer's role a person asked to check against Drive again. */
+export const signalVariantMediaRecheckInput = z.object({
+  platform: z.enum(PUBLISH_PLATFORMS),
+  accountId: z.number().int().positive('A provider account id is a positive number.').nullable(),
+  role: z.enum(PUBLISH_VARIANT_MEDIA_ROLES),
+});
+export type SignalVariantMediaRecheckInput = z.output<typeof signalVariantMediaRecheckInput>;
+
+type VariantInput = z.output<typeof variantInput>;
+
+/**
+ * One layer as it will be written: its text overrides, and its role references already resolved.
+ *
+ * Split in two because they are two tables. The text half is what `signal_post_variants` holds and
+ * is stored only when it says something; the roles are `signal_post_variant_media` rows and are
+ * stored whether or not the text half exists, which is what makes a cover image on its own a real
+ * override rather than one that needs a caption to hang from.
+ */
+interface ResolvedVariantLayer {
+  platform: PublishVariantRecord['platform'];
+  accountId: number | null;
+  text: PublishContentVariant;
+  roles: SignalVariantRoleMedia;
+}
+
+/** The role references stored for one post, by layer and role. Empty for a post with none. */
+const storedRoleMedia = (db: Db, postId: string) => variantMediaByPost(db, postId);
+
+/**
+ * The two halves of a layer as the one record every rule is stated against.
+ *
+ * The tables are two; the layer is one. Every check — the capability contract, the empty-layer rule,
+ * the media selection — asks about the layer, so it is assembled once here rather than spread back
+ * together at each call.
+ */
+const variantRecordOf = (layer: ResolvedVariantLayer): PublishVariantRecord => ({
+  platform: layer.platform,
+  accountId: layer.accountId,
+  ...layer.text,
+  ...Object.fromEntries(
+    PUBLISH_VARIANT_MEDIA_ROLES.flatMap((role) =>
+      layer.roles[role] ? [[PUBLISH_VARIANT_MEDIA_FIELD[role], layer.roles[role]] as const] : [],
+    ),
+  ),
+});
+
+/**
+ * Resolves the role references one request stated, carrying every existing one forward untouched.
+ *
+ * The same asymmetry `resolveMediaItems` is built on, and for the same reason: a save that
+ * re-resolved every Drive role would let a file replaced under the same id be adopted by an edit
+ * that was about a caption. A role the layer already holds at that file id is carried forward
+ * exactly as it stands; only a new link, or one named in `recheck`, is looked up. Resolution
+ * happens before the write transaction, because a Drive round trip inside `BEGIN IMMEDIATE` would
+ * hold the write lock for its length.
+ */
+async function resolveVariantRoles(
+  stored: Map<string, SignalVariantRoleMedia>,
+  layer: VariantInput,
+  provider: DriveMediaProvider,
+  recheck: ReadonlySet<string> = new Set(),
+): Promise<SignalVariantRoleMedia> {
+  const roles: SignalVariantRoleMedia = {};
+  const key = variantLayerKey(layer.platform, layer.accountId);
+  for (const role of PUBLISH_VARIANT_MEDIA_ROLES) {
+    const item = layer[PUBLISH_VARIANT_MEDIA_FIELD[role]];
+    if (item === undefined) continue;
+    if (item.source === 'URL') {
+      roles[role] = urlPostMedia(item.url);
+      continue;
+    }
+    const fileId = parseDriveMediaLink(item.url);
+    const existing = stored.get(key)?.[role];
+    if (
+      existing?.source === 'DRIVE' &&
+      existing.driveFileId === fileId &&
+      !recheck.has(`${key}:${role}`)
+    ) {
+      roles[role] = existing;
+      continue;
+    }
+    roles[role] = await resolveDriveMedia({ link: item.url, provider });
+  }
+  return roles;
+}
+
+/** The role references on a post as one comparable value, for deciding whether they moved. */
+const roleFingerprints = (layers: readonly ResolvedVariantLayer[]) =>
+  JSON.stringify(
+    layers
+      .flatMap((layer) =>
+        PUBLISH_VARIANT_MEDIA_ROLES.flatMap((role) => {
+          const media = layer.roles[role];
+          return media
+            ? [
+                [
+                  `${variantLayerKey(layer.platform, layer.accountId)}:${role}`,
+                  signalMediaFingerprint(media),
+                ] as const,
+              ]
+            : [];
+        }),
+      )
+      .sort((a, b) => a[0].localeCompare(b[0])),
+  );
+
+/** The same value, taken from what the post currently holds. */
+const storedRoleFingerprints = (stored: Map<string, SignalVariantRoleMedia>) =>
+  JSON.stringify(
+    [...stored.entries()]
+      .flatMap(([key, roles]) =>
+        PUBLISH_VARIANT_MEDIA_ROLES.flatMap((role) => {
+          const media = roles[role];
+          return media ? [[`${key}:${role}`, signalMediaFingerprint(media)] as const] : [];
+        }),
+      )
+      .sort((a, b) => a[0].localeCompare(b[0])),
+  );
 
 /**
  * Refuses a layer the platform's own capability entry does not accept.
@@ -636,6 +792,19 @@ function checkVariantAgainstContract(variant: PublishVariantRecord, postMedia: s
     throw new SignalVariantError(
       `${capability.label} does not accept a ${PUBLISH_POST_KIND_LABEL[variant.postKind]} from this provider.`,
     );
+  for (const role of PUBLISH_VARIANT_MEDIA_ROLES) {
+    const media = variant[PUBLISH_VARIANT_MEDIA_FIELD[role]];
+    if (!media) continue;
+    // The C74 cross-field rule, plus the two bounds a role adds: a cover and a thumbnail are still
+    // images, and the 8 MB image ceiling C73 measured applies to one exactly as it does to post
+    // media. Refused here rather than warned about, because a role the provider would reject is
+    // not a role worth storing.
+    const issue = publishRoleMediaIssue(media, role);
+    if (issue)
+      throw new SignalVariantError(
+        `${capability.label} ${PUBLISH_VARIANT_MEDIA_ROLE_LABEL[role]}: ${issue}`,
+      );
+  }
   if (variant.mediaUrls) {
     const unknown = variant.mediaUrls.find((url) => !postMedia.includes(url));
     if (unknown)
@@ -655,61 +824,172 @@ function checkVariantAgainstContract(variant: PublishVariantRecord, postMedia: s
  * reported as having failed. An empty layer is dropped rather than stored — a row overriding nothing
  * would make a platform read as tailored when it is not.
  */
-export function replacePostVariants(
+export async function replacePostVariants(
   db: Db,
   postId: string,
   input: SignalVariantsInput,
-): PublishVariantRecord[] {
+  provider: DriveMediaProvider = driveMediaProvider(db),
+  recheck: ReadonlySet<string> = new Set(),
+): Promise<PublishVariantRecord[]> {
   const post = getPost(db, postId);
   if (!post) throw new SignalPostNotFoundError(`No Signal post ${postId}.`);
+  const stored = storedRoleMedia(db, postId);
   const seen = new Set<string>();
-  const layers = input.variants
-    .map((variant) => ({
-      platform: variant.platform,
-      accountId: variant.accountId,
-      ...normalizePublishVariant(variant),
-    }))
-    .filter((variant) => !publishVariantIsEmpty(variant));
-  for (const layer of layers) {
-    const key = `${layer.platform}:${layer.accountId ?? 'platform'}`;
+  const layers: ResolvedVariantLayer[] = [];
+  for (const variant of input.variants) {
+    const key = variantLayerKey(variant.platform, variant.accountId);
     if (seen.has(key))
       throw new SignalVariantError('That platform and account was given two overrides at once.');
     seen.add(key);
-    checkVariantAgainstContract(layer, post.mediaUrls);
+    // The Drive lookups happen out here, one layer at a time, and before anything is written.
+    const roles = await resolveVariantRoles(stored, variant, provider, recheck);
+    const { coverImage: _cover, thumbnail: _thumbnail, ...text } = variant;
+    void _cover;
+    void _thumbnail;
+    layers.push({
+      platform: variant.platform,
+      accountId: variant.accountId,
+      text: normalizePublishVariant(text),
+      roles,
+    });
   }
+  // An empty layer is dropped rather than stored, roles included — a layer overriding nothing would
+  // make a platform read as tailored when it is not.
+  const checked = layers.filter((layer) => !publishVariantIsEmpty(variantRecordOf(layer)));
+  for (const layer of checked) checkVariantAgainstContract(variantRecordOf(layer), post.mediaUrls);
+  // Whether a role moved, decided before the write and over the fingerprints rather than the rows:
+  // a recheck that finds the same version must leave the post's `updated_at` alone, or every open
+  // publish confirmation would go stale for a file nobody had touched.
+  const rolesMoved = roleFingerprints(checked) !== storedRoleFingerprints(stored);
   const timestamp = now();
   db.exec('BEGIN');
   try {
     db.prepare('DELETE FROM signal_post_variants WHERE post_id=?').run(postId);
+    db.prepare('DELETE FROM signal_post_variant_media WHERE post_id=?').run(postId);
     const insert = db.prepare(
       `INSERT INTO signal_post_variants(
          post_id,platform,account_id,caption,media_urls,post_kind,title,first_comment,
          disclose_synthetic_media,cover_image_url,thumbnail_url,updated_at
-       ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+       ) VALUES(?,?,?,?,?,?,?,?,?,NULL,NULL,?)`,
     );
-    for (const layer of layers)
-      insert.run(
-        postId,
-        layer.platform,
-        layer.accountId,
-        layer.caption ?? null,
-        // Serialized rather than dropped when empty: `'[]'` is a platform that receives no media
-        // and NULL is one that inherits the post's, and the two must survive the round trip.
-        layer.mediaUrls ? JSON.stringify(layer.mediaUrls) : null,
-        layer.postKind ?? null,
-        layer.title ?? null,
-        layer.firstComment ?? null,
-        layer.discloseSyntheticMedia === undefined ? null : layer.discloseSyntheticMedia ? 1 : 0,
-        layer.coverImageUrl ?? null,
-        layer.thumbnailUrl ?? null,
-        timestamp,
-      );
+    const insertRole = db.prepare(
+      `INSERT INTO signal_post_variant_media(
+         post_id, platform, account_id, role, url, source, drive_file_id, drive_name, mime_type,
+         size_bytes, drive_version, drive_modified_at, drive_checksum, drive_verified_at, updated_at
+       ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    );
+    for (const layer of checked) {
+      // The text row exists only where there is text to store. A layer whose sole override is a
+      // cover image is a real layer and has no row here: it is read back from the role table, which
+      // is what stops `signal_post_variants` from carrying rows that override nothing.
+      if (!publishVariantIsEmpty(layer.text))
+        insert.run(
+          postId,
+          layer.platform,
+          layer.accountId,
+          layer.text.caption ?? null,
+          // Serialized rather than dropped when empty: `'[]'` is a platform that receives no media
+          // and NULL is one that inherits the post's, and the two must survive the round trip.
+          layer.text.mediaUrls ? JSON.stringify(layer.text.mediaUrls) : null,
+          layer.text.postKind ?? null,
+          layer.text.title ?? null,
+          layer.text.firstComment ?? null,
+          layer.text.discloseSyntheticMedia === undefined
+            ? null
+            : layer.text.discloseSyntheticMedia
+              ? 1
+              : 0,
+          timestamp,
+        );
+      for (const role of PUBLISH_VARIANT_MEDIA_ROLES) {
+        const media = layer.roles[role];
+        if (!media) continue;
+        // The same rule the Zod boundary applied and the SQLite triggers will apply again, stated
+        // here because this is the only function that writes the table.
+        const issue = signalPostMediaIssue(media);
+        if (issue) throw new SignalMediaError(issue);
+        insertRole.run(
+          postId,
+          layer.platform,
+          layer.accountId,
+          role,
+          media.url,
+          media.source,
+          media.driveFileId,
+          media.driveName,
+          media.mimeType,
+          media.sizeBytes,
+          media.driveVersion,
+          media.driveModifiedAt,
+          media.driveChecksum,
+          media.driveVerifiedAt,
+          timestamp,
+        );
+      }
+    }
+    // A role edit is an edit to what a target receives, so it moves the post's `updated_at` and an
+    // open publish confirmation stops matching — the same thing a recheck of the post's own media
+    // does, through the same column, for the same reason. Text overrides need no bump: the plan hash
+    // already covers the configurations they become.
+    if (rolesMoved)
+      db.prepare('UPDATE signal_posts SET updated_at=? WHERE id=?').run(timestamp, postId);
     db.exec('COMMIT');
   } catch (error) {
     db.exec('ROLLBACK');
     throw error;
   }
   return listPostVariants(db, postId);
+}
+
+/**
+ * Checks one layer's role reference against Drive again, because a person asked.
+ *
+ * The counterpart of `recheckPostMedia`, and the only way a stored role fingerprint is replaced. It
+ * resolves from the reference's own stored link — Drive's canonical `webViewLink`, which parses back
+ * to the same id — and rewrites the whole variant set through the ordinary replacement above, so the
+ * post's `updated_at` moves exactly when the version actually changed.
+ *
+ * A failure throws and writes nothing: the row keeps the metadata it had and the composer shows the
+ * reason beside it. C75 owns the mandatory revalidation at submit; this is the one a person asks for.
+ */
+export async function recheckVariantMedia(
+  db: Db,
+  postId: string,
+  input: SignalVariantMediaRecheckInput,
+  provider: DriveMediaProvider = driveMediaProvider(db),
+): Promise<PublishVariantRecord[]> {
+  if (!getPost(db, postId)) throw new SignalPostNotFoundError(`No Signal post ${postId}.`);
+  const key = variantLayerKey(input.platform, input.accountId);
+  const target = storedRoleMedia(db, postId).get(key)?.[input.role];
+  if (!target || target.source !== 'DRIVE')
+    throw new SignalMediaError(
+      `No Drive ${PUBLISH_VARIANT_MEDIA_ROLE_LABEL[input.role]} is stored for that platform.`,
+    );
+  const variants = listPostVariants(db, postId).map((layer) => ({
+    platform: layer.platform,
+    accountId: layer.accountId,
+    ...(layer.caption !== undefined ? { caption: layer.caption } : {}),
+    ...(layer.mediaUrls !== undefined ? { mediaUrls: layer.mediaUrls } : {}),
+    ...(layer.postKind !== undefined ? { postKind: layer.postKind } : {}),
+    ...(layer.title !== undefined ? { title: layer.title } : {}),
+    ...(layer.firstComment !== undefined ? { firstComment: layer.firstComment } : {}),
+    ...(layer.discloseSyntheticMedia !== undefined
+      ? { discloseSyntheticMedia: layer.discloseSyntheticMedia }
+      : {}),
+    ...(layer.coverImage
+      ? { coverImage: { source: layer.coverImage.source, url: layer.coverImage.url } }
+      : {}),
+    ...(layer.thumbnail
+      ? { thumbnail: { source: layer.thumbnail.source, url: layer.thumbnail.url } }
+      : {}),
+  }));
+  return replacePostVariants(
+    db,
+    postId,
+    signalVariantsInput.parse({ variants }),
+    provider,
+    new Set([`${key}:${input.role}`]),
+  );
 }
 
 /** Every layer on a post, for the composer to edit. The publisher reads them through the provider. */

@@ -182,7 +182,7 @@ What the contract answers for each platform:
 | Account content override | `accountContentOverride` | False everywhere: tailoring is per platform, so two accounts on one platform get identical text |
 | First comments | `firstComment` | X only |
 | Titles and descriptions | `title`, `description` | YouTube's title is separate and capped at 100; LinkedIn's is a document title and applies only to a PDF |
-| Cover images and thumbnails | `coverImage`, `thumbnail` | False everywhere; the platform picks its own, and a reel says so in the preview |
+| Cover images and thumbnails | `coverImage`, `thumbnail` | Whether the provider will **carry** one. False everywhere: OpenAPI names Instagram's `cover_image` and YouTube's `thumbnail`, the live probe verified neither, and current support material says custom external YouTube thumbnails are unavailable. A role can still be *stored* where the provider names the field — §3.4 |
 | Synthetic-media disclosure | `syntheticMediaDisclosure` | `IN_CAPTION` everywhere: no provider flag exists, so a disclosure is written into the caption |
 | Provider drafts | `providerDraft` | False everywhere; submitting an existing Post Bridge draft is broken upstream (§4) |
 
@@ -245,9 +245,9 @@ are worth stating because they look alike and are not:
 control, `PUT /api/signal/posts/:id/variants` refuses a value, and preflight refuses a value already
 stored against a platform the table has since stopped answering yes for. A form offering what the
 API rejects teaches the user something untrue about the provider, and a limit enforced on one side
-only is a limit met after pressing send. `coverImage` and `thumbnail` are false on every platform,
-so a cover and a thumbnail are offered nowhere — the field is in the model and refused at the
-boundary, and a contract entry that recorded one would be offered it without another edit here.
+only is a limit met after pressing send. `coverImage` and `thumbnail` are the one pair where *offered* and
+*delivered* come apart, which §3.4 is about: the control exists where the provider names the field
+and the flag decides whether anything is sent.
 
 **What the provider carries, and what it does not.** `platform_configurations` is keyed by platform
 and carries text: a caption, a first comment, a title (`document_title` on LinkedIn), and a
@@ -360,6 +360,69 @@ media-role fields (YouTube `thumbnail`, Instagram `cover_image`), the analytics 
 than verified behavior. **The fail-closed values in `shared/publish-capabilities.ts` remain
 authoritative** — `accountContentOverride` included — until the card that verifies each one lands.
 A field appearing in a spec is not permission to flip a capability.
+
+### 3.4 Media roles: a cover image and a thumbnail
+
+**A role is a reference, not a URL string.** C76 moved the cover image and the thumbnail out of the
+`signal_post_variants.cover_image_url` and `.thumbnail_url` columns and into
+`signal_post_variant_media`, keyed `(post_id, platform, account_id, role)` where the role is
+`COVER_IMAGE` or `THUMBNAIL`. The row is `signal_post_media`'s contract column for column — `source`
+discriminates a public `https:` URL from a version-bound Drive file, the same eleven columns carry
+the identity and the version fingerprint, and the same two SQLite triggers enforce the same
+cross-field rule, built once and spent on both tables. A Drive-backed role needs exactly the evidence
+post media has needed since C74, and a file id in a column whose contract is "URL string" is the
+overloading this table exists to avoid.
+
+**One writable source of truth.** The two legacy columns are kept — this app's schema module is
+additive by design and a drop is a table rebuild — and they are frozen in the strict sense:
+`backfillSignalVariantRoleMedia` moves each value into a `URL` role row and clears the column in the
+same transaction, on every boot, and nothing writes either column again. That is what makes the
+migration idempotent in the way that matters: a role a person deliberately removes afterwards is not
+resurrected on the next start, because the column it would come back from is empty.
+
+**Storing a role and delivering one are two questions.** They are answered by two functions in
+`shared/publish-variant-media.ts`:
+
+| Question | Function | Answer today |
+| --- | --- | --- |
+| Can this platform hold this role? | `publishRoleComposable` | Instagram's cover and YouTube's thumbnail — the two the provider names |
+| Will the provider carry it? | `publishRoleDelivers` | Nowhere. Both capability flags are false |
+
+The live probe (`docs/post-bridge-api-surface.md` §14, question 3) left both roles **still
+unverified**: no video asset was uploaded and each role needs a video as the post's own media. For
+YouTube there is a second reason to stay closed — current provider support material states that
+custom external thumbnails are not available, so the conflict with OpenAPI is unresolved rather than
+resolved positively. **C76 records that as will-not-build and leaves `thumbnail: false`.** No
+`cover_image` and no `thumbnail` key is emitted by `postBridgePlatformConfigurations`, and a unit
+test asserts their absence: inventing a wire field from a document is precisely what the card put out
+of scope. Flipping either flag takes a dated §14 result, and one function-level test pins the flags
+to the recorded states so a flip without evidence fails.
+
+**So a stored role warns, everywhere.** The composer names the state under the control, and preflight
+says it again per target: a role the provider defines no field for, and a role it defines that nobody
+has watched work, are two different sentences because they are two different facts and only one of
+them might change. A reel on a platform with no role still gets the older *the platform chooses its
+own* warning — but only where no role is set, so one fact never arrives as two sentences. A role
+whose contents the provider would reject outright — a video or a PDF in the role, an image past the
+8 MB ceiling C73 measured — **refuses** rather than warning, at the write boundary and again at
+preflight.
+
+**A role is version-bound and hashed.** The plan hash covers every resolved role's whole fingerprint
+beside the post's own media, so a role edited between preview and confirm refuses the commit, and so
+does a Drive file whose content was replaced under the same id. A role's fingerprint is replaced only
+by an explicit recheck — `POST /api/signal/posts/:id/variants/media/recheck` — which goes through the
+ordinary variant replacement and moves the post's `updated_at` **exactly when the version actually
+moved**: rechecking a file nobody has touched must leave an open confirmation valid. A failed recheck
+writes nothing and leaves the last metadata visible beside the reason. No Drive call happens in a
+preview, roles included.
+
+**Nothing is uploaded for a role.** Until a role is verified there is no request field to put a
+provider media id in, so no role asset is created — which is also why there is no role snapshot on a
+publication to reconcile: uploading bytes to fill a field nobody will read would be the worst of both
+answers. The verified media role is a different shape entirely: **a LinkedIn PDF document post**,
+which is the ordinary C75 media path plus the `document_title` this app has always collected. §14
+verified that pairing live, and `e2e/signal-variant-media.spec.ts` plus
+`post-bridge-wire.test.ts` walk it from the Drive link to the vendor's own field name.
 
 ### 3.1 The Facebook account rule
 
