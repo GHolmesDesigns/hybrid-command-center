@@ -25,12 +25,14 @@ const FB_GHD = 85300;
 const FB_WILD = 85301;
 const FB_ADDRIVE = 85299;
 const IG = 85292;
+const BSKY = 85298;
 
 const CONNECTED: PublishTarget[] = [
   { id: FB_GHD, platform: 'facebook', handle: 'gholmesdesigns', name: 'G.Holmes Designs' },
   { id: FB_WILD, platform: 'facebook', handle: 'wildeyephoto', name: 'Wild Eye Photography' },
   { id: FB_ADDRIVE, platform: 'facebook', handle: 'addrivemedia', name: 'AdDrive Media' },
   { id: IG, platform: 'instagram', handle: 'gholmesdesigns', name: 'G.Holmes Designs' },
+  { id: BSKY, platform: 'bluesky', handle: 'gholmesdesigns', name: 'G.Holmes Designs' },
 ];
 
 let db: Db;
@@ -253,5 +255,85 @@ describe('the same-platform policy rule', () => {
 
   it('builds no request while the collision stands', () => {
     expect(plan(seed(['fb']), bothPages).request).toBeUndefined();
+  });
+});
+
+describe('two accounts, distinct content, one request (C77 acceptance)', () => {
+  const bothPages: PublishTargetSelections = [
+    { channel: 'fb', providerAccountId: FB_GHD },
+    { channel: 'fb', providerAccountId: FB_WILD },
+  ];
+  const tailored = [
+    { platform: 'facebook', accountId: FB_GHD, caption: 'For the studio', updatedAt: 'x' },
+    { platform: 'facebook', accountId: FB_WILD, caption: 'For the gallery', updatedAt: 'x' },
+  ] as unknown as PublishVariantRecord[];
+
+  it('sends one request naming both accounts, each with its own caption', () => {
+    const preview = plan(seed(['fb']), bothPages, tailored);
+    expect(preview.request?.targets).toHaveLength(2);
+    expect(preview.request?.accountConfigurations).toEqual([
+      { accountId: FB_GHD, caption: 'For the studio' },
+      { accountId: FB_WILD, caption: 'For the gallery' },
+    ]);
+  });
+
+  it('omits an account whose caption is the post’s own, rather than repeating it', () => {
+    const preview = plan(seed(['fb']), bothPages, [
+      { platform: 'facebook', accountId: FB_GHD, caption: 'For the studio', updatedAt: 'x' },
+    ] as unknown as PublishVariantRecord[]);
+    // Wild Eye resolves the post's own caption, so it needs no configuration of its own — the
+    // submission's caption already says it.
+    expect(preview.request?.accountConfigurations).toEqual([
+      { accountId: FB_GHD, caption: 'For the studio' },
+    ]);
+  });
+
+  it('carries no accountConfigurations key at all where nobody selected', () => {
+    expect(plan(seed(['fb'])).request).not.toHaveProperty('accountConfigurations');
+  });
+
+  it('emits nothing per account for a platform the evidence does not cover', () => {
+    // Bluesky's accountContentOverride is false: no §14 result names it, and unverified is not
+    // the same as unsupported. An account layer there still travels as the platform's. Bluesky
+    // rather than Instagram because Instagram refuses a post carrying no media, and a blocked
+    // plan builds no request at all -- which would pass this assertion for the wrong reason.
+    const preview = plan(seed(['bsky']), [{ channel: 'bsky', providerAccountId: BSKY }], [
+      { platform: 'bluesky', accountId: BSKY, caption: 'Just this account', updatedAt: 'x' },
+    ] as unknown as PublishVariantRecord[]);
+    expect(preview.request).toBeDefined();
+    expect(preview.request).not.toHaveProperty('accountConfigurations');
+  });
+});
+
+describe('fields that stay platform-level even where accounts are carried', () => {
+  it('warns that an account’s first comment reaches every account on the platform', () => {
+    const report = fb(
+      plan(seed(['fb']), [{ channel: 'fb', providerAccountId: FB_GHD }], [
+        {
+          platform: 'facebook',
+          accountId: FB_GHD,
+          firstComment: 'account-only tags',
+          updatedAt: 'x',
+        },
+      ] as unknown as PublishVariantRecord[]),
+    );
+    expect(report?.warnings.join(' ')).toMatch(/not first comment/i);
+    expect(report?.warnings.join(' ')).toMatch(/reaches every account/i);
+  });
+
+  it('does not warn about a caption, which this provider does carry per account', () => {
+    const report = fb(
+      plan(seed(['fb']), [{ channel: 'fb', providerAccountId: FB_GHD }], [
+        { platform: 'facebook', accountId: FB_GHD, caption: 'Just this page', updatedAt: 'x' },
+      ] as unknown as PublishVariantRecord[]),
+    );
+    expect(report?.warnings.join(' ')).not.toMatch(/reaches every account/i);
+  });
+
+  it('still gives the old platform-level warning where the flag is false', () => {
+    const report = plan(seed(['ig']), [{ channel: 'ig', providerAccountId: IG }], [
+      { platform: 'instagram', accountId: IG, caption: 'Just this account', updatedAt: 'x' },
+    ] as unknown as PublishVariantRecord[]).channels.find((entry) => entry.channel === 'ig');
+    expect(report?.warnings.join(' ')).toMatch(/one set of content per platform/i);
   });
 });

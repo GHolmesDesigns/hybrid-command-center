@@ -41,9 +41,11 @@ describe('the provider capability contract', () => {
       expect(capability.captionMax).toBeGreaterThan(0);
       // No provider draft anywhere: submitting an existing Post Bridge draft is broken upstream.
       expect(capability.providerDraft).toBe(false);
-      // Tailoring is per platform, never per account.
+      // Tailoring is per platform everywhere, and per account only where a dated §14 result
+      // says the provider carries it. Pinned to the recorded matrix rather than to a blanket
+      // false, so a flip still fails this test unless the evidence moved with it.
       expect(capability.platformContentOverride).toBe(true);
-      expect(capability.accountContentOverride).toBe(false);
+      expect(capability.accountContentOverride).toBe(platform === 'facebook');
       expect(capability.syntheticMediaDisclosure).toBe('IN_CAPTION');
       expect(PUBLISH_POST_KINDS.every((kind) => capability.kinds[kind] !== undefined)).toBe(true);
       // A standard post is the one shape every platform takes.

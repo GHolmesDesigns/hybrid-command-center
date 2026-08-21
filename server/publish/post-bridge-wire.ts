@@ -82,13 +82,38 @@ export function postBridgePlatformConfigurations(request: PublishRequest) {
   return entries.length ? Object.fromEntries(entries) : undefined;
 }
 
-export function postBridgePostBody(request: PublishRequest, platformConfigurations?: unknown) {
+/**
+ * `account_configurations`, in the encoding C73 verified.
+ *
+ * **A list of objects each carrying `account_id`**, not a map keyed by id — the probe accepted that
+ * shape on the first attempt and read it back unchanged after create and after `PATCH`
+ * (`docs/post-bridge-api-surface.md` §14, question 1). The alternative encoding was never
+ * accepted by anything, so it is not offered here.
+ *
+ * Only `caption` travels beside the id. A title, a first comment, a placement, and a media role are
+ * platform-level on this provider and are emitted by `postBridgePlatformConfigurations` above; the
+ * preview says so per account rather than this function silently dropping them.
+ */
+export function postBridgeAccountConfigurations(request: PublishRequest) {
+  const entries = (request.accountConfigurations ?? []).map((configuration) => ({
+    account_id: configuration.accountId,
+    ...(configuration.caption !== undefined ? { caption: configuration.caption } : {}),
+  }));
+  return entries.length ? entries : undefined;
+}
+
+export function postBridgePostBody(
+  request: PublishRequest,
+  platformConfigurations?: unknown,
+  accountConfigurations?: unknown,
+) {
   return {
     caption: request.caption,
     ...('mediaIds' in request ? { media: request.mediaIds } : { media_urls: request.mediaUrls }),
     scheduled_at: request.scheduledInstant,
     social_accounts: request.targets.map((target) => target.accountId),
     ...(platformConfigurations ? { platform_configurations: platformConfigurations } : {}),
+    ...(accountConfigurations ? { account_configurations: accountConfigurations } : {}),
   };
 }
 

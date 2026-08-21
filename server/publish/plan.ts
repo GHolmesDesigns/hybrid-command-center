@@ -29,6 +29,7 @@ import {
   publishVariantFieldSupported,
   publishVariantLayers,
   resolvePublishContent,
+  PUBLISH_ACCOUNT_DELIVERABLE_FIELDS,
   PUBLISH_VARIANT_FIELDS,
   PUBLISH_VARIANT_FIELD_LABEL,
   PUBLISH_VARIANT_MEDIA_FIELD,
@@ -50,7 +51,12 @@ import type {
   PublishPreview,
 } from '../../shared/publish.ts';
 import { deliveryModeForCapability, publishPreviewRefusals } from '../../shared/publish.ts';
-import type { PublishPlatformConfiguration, PublishRequest, PublishTarget } from './provider.ts';
+import type {
+  PublishAccountConfiguration,
+  PublishPlatformConfiguration,
+  PublishRequest,
+  PublishTarget,
+} from './provider.ts';
 
 const partsInZone = (instant: Date, zone: string) => {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -448,6 +454,19 @@ function resolveForTarget(
     warnings.push(
       `${capability.label} carries one set of content per platform from this provider, so this account's ${fromAccount.map((field) => PUBLISH_VARIANT_FIELD_LABEL[field].toLowerCase()).join(' and ')} is sent as the platform's. That is unambiguous only because ${capability.label} resolved to a single account.`,
     );
+  // A platform that carries per-account content still does not carry every field that way. C73
+  // verified a per-account caption and per-account media and nothing else, so an account layer
+  // setting a title, a first comment, a post shape, or a role travels as its platform's — and the
+  // preview says which fields those were rather than letting them look account-level.
+  if (capability.accountContentOverride) {
+    const platformLevel = fromAccount.filter(
+      (field) => !PUBLISH_ACCOUNT_DELIVERABLE_FIELDS.includes(field),
+    );
+    if (platformLevel.length > 0)
+      warnings.push(
+        `This provider carries a caption and media per account, but not ${platformLevel.map((field) => PUBLISH_VARIANT_FIELD_LABEL[field].toLowerCase()).join(' or ')}, so this account's ${platformLevel.length === 1 ? 'value' : 'values'} for ${platformLevel.length === 1 ? 'it' : 'those'} is sent as ${capability.label}'s and reaches every account on it.`,
+      );
+  }
   const content: PublishChannelContent = {
     ...resolved,
     // The effective caption from here on: what the limit is measured against and what is sent.
@@ -583,6 +602,35 @@ function reportForChannel(
  * submission's own caption or adds a field, which is what keeps an untailored post sending exactly
  * the request it sent before any of this existed.
  */
+/**
+ * The per-account content the provider is given, one entry per selected account that differs.
+ *
+ * Only for a platform whose `accountContentOverride` is true, which is the one platform C73's
+ * evidence covers. Only where the account's caption actually differs from the submission's own,
+ * for the same reason `platformConfigurationsFor` is selective: an untailored account adds no key
+ * and the request stays the one it would have been.
+ *
+ * The caption compared is the **effective** one — the disclosure sentence already appended — so
+ * what is hashed, previewed, measured against the limit, and sent are all the same string.
+ */
+function accountConfigurationsFor(
+  reports: PublishChannelReport[],
+  baseCaption: string,
+): PublishAccountConfiguration[] {
+  const configurations: PublishAccountConfiguration[] = [];
+  for (const report of reports) {
+    if (report.status !== 'READY' || !report.platform || !report.targets) continue;
+    const capability = publishCapabilityFor(report.platform);
+    if (!capability?.accountContentOverride) continue;
+    for (const entry of report.targets) {
+      if (entry.status !== 'READY' || !entry.content) continue;
+      if (entry.content.caption === baseCaption) continue;
+      configurations.push({ accountId: entry.accountId, caption: entry.content.caption });
+    }
+  }
+  return configurations;
+}
+
 function platformConfigurationsFor(
   reports: PublishChannelReport[],
   baseCaption: string,
@@ -755,6 +803,7 @@ export function buildPublishPlan(
   if (totalDriveBytes > SIGNAL_DRIVE_TOTAL_MAX_BYTES)
     refusals.push('The selected Drive files exceed Post Bridge’s 500 MB total upload limit.');
   const platformConfigurations = platformConfigurationsFor(channels, caption);
+  const accountConfigurations = accountConfigurationsFor(channels, caption);
 
   const stable = {
     postId: post.id,
@@ -780,6 +829,9 @@ export function buildPublishPlan(
     timezone: zone,
     targets,
     platformConfigurations,
+    // Conditional for the same reason `accountContent` above is: an untouched post's hash must be
+    // the number it has always been, and an empty array is not the same as an absent key.
+    ...(accountConfigurations.length ? { accountConfigurations } : {}),
     /**
      * Every resolved media role, as a fingerprint, keyed by the channel it belongs to.
      *
@@ -843,6 +895,7 @@ export function buildPublishPlan(
         accountId: target.accountId,
         platform: target.platform,
       })),
+      ...(accountConfigurations.length ? { accountConfigurations } : {}),
       // Omitted rather than empty, so the provider adapter sends no key at all for an untailored
       // post — the artifact's own rule for `platform_configurations`.
       ...(platformConfigurations.length ? { platformConfigurations } : {}),

@@ -14,6 +14,7 @@ import {
 import {
   parsePostBridgeUploadReservation,
   postBridgeMediaEvidence,
+  postBridgeAccountConfigurations,
   postBridgePlatformConfigurations,
   postBridgePostBody,
   postBridgeUploadReservationBody,
@@ -127,9 +128,12 @@ export class PostBridgeProvider implements PublishProvider {
   }
   async submit(request: PublishRequest): Promise<PublishSubmission> {
     const platformConfigurations = postBridgePlatformConfigurations(request);
+    const accountConfigurations = postBridgeAccountConfigurations(request);
     const body = (await this.request('/posts', {
       method: 'POST',
-      body: JSON.stringify(postBridgePostBody(request, platformConfigurations)),
+      body: JSON.stringify(
+        postBridgePostBody(request, platformConfigurations, accountConfigurations),
+      ),
     })) as { id: string; status?: string };
     if (!body.id)
       throw new PublishProviderError('Post Bridge answered without a publication id.', true);
@@ -247,9 +251,12 @@ export class PostBridgeProvider implements PublishProvider {
    */
   async update(providerPostId: string, request: PublishRequest): Promise<PublishSubmission> {
     const platformConfigurations = postBridgePlatformConfigurations(request);
+    const accountConfigurations = postBridgeAccountConfigurations(request);
     const body = (await this.request(`/posts/${encodeURIComponent(providerPostId)}`, {
       method: 'PATCH',
-      body: JSON.stringify(postBridgePostBody(request, platformConfigurations)),
+      body: JSON.stringify(
+        postBridgePostBody(request, platformConfigurations, accountConfigurations),
+      ),
     })) as { id?: string; status?: string };
     return {
       providerPostId: body.id ? String(body.id) : providerPostId,

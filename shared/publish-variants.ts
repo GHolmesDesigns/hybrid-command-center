@@ -83,6 +83,24 @@ export const PUBLISH_VARIANT_FIELDS = [
 ] as const;
 export type PublishVariantField = (typeof PUBLISH_VARIANT_FIELDS)[number];
 
+/**
+ * The fields this provider carries **per account**, as opposed to per platform (C77).
+ *
+ * Two, because two is what C73 verified: `account_configurations` accepted a per-account caption
+ * and per-account media ids, read back after create and after `PATCH`
+ * (`docs/post-bridge-api-surface.md` §14, question 1). A title, a first comment, a post shape, and
+ * a media role are platform-level on this provider whatever the capability flag says, so an account
+ * layer that sets one of them still travels as its platform's and the preview says so.
+ *
+ * This is deliberately not the same question as `accountContentOverride`. That flag asks *does this
+ * platform carry per-account content at all*; this list asks *which fields*, and both have to be
+ * true for a value to reach the account level.
+ */
+export const PUBLISH_ACCOUNT_DELIVERABLE_FIELDS: readonly PublishVariantField[] = [
+  'caption',
+  'mediaUrls',
+];
+
 export const PUBLISH_VARIANT_FIELD_LABEL: Record<PublishVariantField, string> = {
   caption: 'Caption',
   mediaUrls: 'Media',
