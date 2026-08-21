@@ -264,6 +264,36 @@ refusals rather than guesses:
   resolves to one account — which §3.1's rule already guarantees by refusing zero or several — and
   the preview says so on the target it applies to rather than leaving the user to infer it.
 
+**The gate that would change that is closed, and C77 (#220) records why.** The live probe
+(`docs/post-bridge-api-surface.md` §14, question 1) left all four `account_configurations` claims
+**still unverified**: whether `POST /v1/posts` stores a different caption for each of two accounts on
+one platform, which encoding the field takes, whether the per-account values read back through
+`GET /v1/posts/{id}` after create and again after `PATCH`, and what the provider does — and in whose
+terms — about two accounts on one platform carrying materially different captions. The reason is a
+precondition rather than a provider answer: the run named no platform with two accounts, so
+`scripts/probe-post-bridge/config.ts` declined to ask question 1 at all. A question nobody put is not
+a negative, and it is not permission either.
+
+**So C77's gate is inconclusive, not negative, and the card makes no runtime change.** Its own scope
+separates the two outcomes and this is the second one: will-not-build needs the provider to have
+refused, and nothing here refused. Everything the card would have built stays unbuilt, and everything
+it would have replaced stays exactly as this section already describes it — `accountContentOverride`
+false on every platform, pinned for all of them by `shared/publish-capabilities.test.ts`; §3.1's
+one-account resolution in `resolveTarget`; no `signal_post_publish_targets` table and so no explicit
+target selection; no `accountConfigurations` on the provider-neutral request or in the Post Bridge
+request builder; no `sent_account_configurations` snapshot beside the legacy one; and the per-account
+warning above still the sentence a stored account layer produces. A capability flag is not the only
+thing standing between this app and per-account captions, which is the whole reason the card was
+written as a build rather than a flip.
+
+**What would reopen it is a dated §14 result and nothing less.** C73 is re-run under its existing
+safety rules with two explicitly approved accounts on one platform named by `--account`, so that
+question 1 is actually asked, and all four claims land positive. A positive API response alone is
+still not enough: §14 records four states rather than two, and a `verified with policy constraint` on
+the same-platform claim is what C77's preflight refusal would be written from, in the provider's own
+terms. Until then #220 stays open and blocked, and this record is C77's resolution for the purpose of
+C82's dependency — blocked on new evidence, not declined.
+
 **A synthetic-media disclosure is written into the caption**, because
 `syntheticMediaDisclosure` is `IN_CAPTION` on every platform the contract answers for. The
 disclosure sentence is appended once, the preview shows the caption with it already in it, and the
@@ -352,14 +382,20 @@ versioned source descriptors and the ids used for that particular provider reque
 compares ids where the provider returns them and reports the comparison unavailable where it does
 not; it never substitutes a Drive viewer URL. The vendor's
 24-hour and on-publish deletion behavior is **documented but unverified** — read off the OpenAPI
-document, not exercised — so nothing may depend on its timing until C73 records live evidence.
+document, and not exercised by C73 either, which deleted every asset it made explicitly and so never
+let one expire (§14, question 2). Nothing may depend on its timing until a dated follow-up read of
+inventoried asset ids records it.
 
-**Everything else the surface note found stays pending C73.** `account_configurations`, the
-media-role fields (YouTube `thumbnail`, Instagram `cover_image`), the analytics filters and
-`match_confidence`, and the platform disclosure fields are vocabulary in an OpenAPI document rather
-than verified behavior. **The fail-closed values in `shared/publish-capabilities.ts` remain
-authoritative** — `accountContentOverride` included — until the card that verifies each one lands.
-A field appearing in a spec is not permission to flip a capability.
+**Everything else the surface note found is still unverified, and C73 having run did not change
+that.** The probe went out on 2026-08-20 and its dated result matrix is
+`docs/post-bridge-api-surface.md` §14. It settled the upload contract, the MIME enum, the deletion
+half of the media lifecycle, the posts list and its pagination, and the Facebook story path. It left
+`account_configurations`, the media-role fields (YouTube `thumbnail`, Instagram `cover_image`), the
+analytics filters and `match_confidence`, and the platform disclosure fields where it found them —
+vocabulary in an OpenAPI document rather than verified behavior. **The fail-closed values in
+`shared/publish-capabilities.ts` remain authoritative** — `accountContentOverride` included — until a
+dated §14 result verifies each one. A field appearing in a spec is not permission to flip a
+capability, and neither is a probe run that never reached the question (§3.3, §3.4).
 
 ### 3.4 Media roles: a cover image and a thumbnail
 

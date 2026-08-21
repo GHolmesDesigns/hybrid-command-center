@@ -559,6 +559,7 @@ role was positively verified.
 **Type / branch:** `feat/<issue>-account-configurations`
 **Size:** XXL · **Labels:** `tier-3-schema` `size-xxl`
 **Depends on:** C73 and C75. **Will-not-build if C73 is negative; remains blocked if inconclusive.**
+**Gate outcome: inconclusive — the card is blocked and built nothing. See below.**
 
 #### Problem
 
@@ -636,6 +637,41 @@ the provider field and policy make that capability safe at all.
 `npm test`, `npm run test:coverage`, `npm run test:e2e`, `npm run typecheck`, `npm run lint`,
 `npm run format:check`, `npm run build`, and `npm run db:migrate` against a real-database
 copy. Manual QA only against the explicitly approved accounts and policy shape C73 verified.
+
+#### Gate outcome — 2026-08-21
+
+**The gate is inconclusive, so the scope above is unbuilt and the acceptance criteria stay
+unchecked.** C73 ran on 2026-08-20 and `docs/post-bridge-api-surface.md` §14 question 1 records all
+four `account_configurations` claims as **still unverified**, each against the same evidence: no
+platform had two named accounts, so there was no same-platform pair to ask about. That is the run's
+own precondition check in `scripts/probe-post-bridge/config.ts` refusing to pretend, not the provider
+declining anything — which is why this is the *inconclusive* branch of the gate and not the
+*negative* one. Will-not-build would need a refusal, and no refusal was collected.
+
+Accordingly, and as the first scope bullet requires, **this card made no runtime change**: no schema,
+no route, no planner refactor, no request field, no snapshot, no capability flip, no UI. What it
+produced is this record and the corresponding entry in `docs/publishing-integration.md` §3.3, next to
+the behaviour that stays true. `accountContentOverride` remains false on all ten platforms and
+`shared/publish-capabilities.test.ts` already pins it there for every one of them, so the fail-closed
+value needed no new guard to hold.
+
+**Proposed disposition, for the owner to action — nothing here mutates GitHub state.** #220 stays
+**open** and **blocked**, keeping its `tier-3-schema` and `size-xxl` labels and its Wave 12 —
+Account overrides milestone; it is not closed and not relabelled will-not-build, because a card
+blocked on missing evidence and a card the provider refused are different claims. The one thing that
+unblocks it is a re-run of C73's question 1 under that card's existing safety rules — `--live`,
+`--yes`, `--accounts-approved`, an instant at least 48 hours out, a fresh `--probe-label`, and two
+explicitly approved accounts on one platform each named by `--account <platform>:<id>` — landing all
+four claims positive in a new dated §14 matrix. A `verified with policy constraint` on the
+same-platform claim is a positive outcome for this card and is what its preflight refusal would be
+written from; it is not a reason to keep the card shut. If the owner would rather not connect a
+second account on any one platform, the honest resolution is to move #220 to will-not-build and hand
+it to C82 — but that is a decision about which accounts exist, not one this record can take.
+
+Because Wave C holds only this card, the milestone currently has no `e2e/` spec to add and
+`e2e/signal-content-variants.spec.ts` is untouched. Wave 12 cannot satisfy `AGENTS.md`'s
+one-spec-per-milestone rule while its only card is blocked; folding #220 into a later implementation
+milestone once it unblocks is the cheaper fix, and is the second thing for the owner to decide.
 
 ---
 
