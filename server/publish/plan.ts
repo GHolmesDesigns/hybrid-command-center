@@ -342,6 +342,55 @@ function resolveTarget(
 }
 
 /**
+ * The same resolution, as the list every later stage reads.
+ *
+ * Today it holds one account or none, because `resolveTarget` above is still the only thing that
+ * decides — this is the seam and not the change. C77's next piece replaces what fills the list with
+ * a person's explicit selection, and everything downstream already handles a list by then, so the
+ * behaviour change lands in one place instead of being threaded through the planner in the same
+ * commit that adds the feature.
+ */
+function resolveChannelTargets(
+  platform: string,
+  label: string,
+  connected: PublishTarget[],
+): { targets: PublishTarget[]; refusal?: string } {
+  const { target, refusal } = resolveTarget(platform, label, connected);
+  return { targets: target ? [target] : [], ...(refusal ? { refusal } : {}) };
+}
+
+/**
+ * One account's resolved content and its own verdict.
+ *
+ * Per target rather than per channel, which is the distinction the whole card turns on: two
+ * accounts on one platform can resolve different content and refuse for different reasons, and a
+ * sentence about "the platform" cannot say which of them it meant. Nothing collapses these into a
+ * platform-level answer here; `reportForChannel` decides how to present them.
+ */
+interface PublishTargetResolution {
+  target?: PublishTarget;
+  content: PublishChannelContent;
+  refusals: string[];
+  warnings: string[];
+}
+
+function resolutionForTarget(
+  base: PublishPlanBase,
+  capability: PublishPlatformCapability,
+  variants: readonly PublishVariantRecord[],
+  target: PublishTarget | undefined,
+): PublishTargetResolution {
+  const { content, warnings } = resolveForTarget(base, capability, variants, target?.id);
+  const preflight = preflightPlatform({ capability, content, media: base.media });
+  return {
+    ...(target ? { target } : {}),
+    content,
+    refusals: [...preflight.refusals],
+    warnings: [...warnings, ...preflight.warnings],
+  };
+}
+
+/**
  * One channel's resolved content, and what resolving it cost.
  *
  * A media selection is intersected with the post's own media, in the selection's order. A post can
@@ -426,23 +475,37 @@ function reportForChannel(
       ],
       warnings: [],
     };
-  const { target, refusal } = resolveTarget(capability.platform, capability.label, connected);
-  const { content, warnings } = resolveForTarget(base, capability, variants, target?.id);
-  const preflight = preflightPlatform({ capability, content, media: base.media });
-  const refusals = [...preflight.refusals];
+  const { targets, refusal } = resolveChannelTargets(
+    capability.platform,
+    capability.label,
+    connected,
+  );
+  // One resolution per account the channel resolved to, and one anyway when it resolved to none —
+  // a channel whose account did not resolve still reports its platform-layer content, because the
+  // refusal is about the connection and the user should still see what would have gone.
+  //
+  // The list is one entry long today. It is built as a list so that the piece which teaches this
+  // planner about an explicit selection changes what fills it rather than how it is read.
+  const resolutions = targets.length
+    ? targets.map((target) => resolutionForTarget(base, capability, variants, target))
+    : [resolutionForTarget(base, capability, variants, undefined)];
+  const primary = resolutions[0] as PublishTargetResolution;
+  const refusals = [...primary.refusals];
   if (refusal) refusals.push(refusal);
   return {
     channel,
     platform: capability.platform,
-    kind: content.postKind,
+    kind: primary.content.postKind,
     // The resolved kind, not the post's: a placement override changes what the shape is and can
     // change how it is delivered, so the route is read after the layers resolved.
-    mode: content.deliveryMode,
+    mode: primary.content.deliveryMode,
     status: refusals.length ? 'BLOCKED' : 'READY',
-    ...(target ? { accountId: target.id, handle: target.handle || target.name } : {}),
-    content,
+    ...(primary.target
+      ? { accountId: primary.target.id, handle: primary.target.handle || primary.target.name }
+      : {}),
+    content: primary.content,
     refusals,
-    warnings: [...warnings, ...preflight.warnings],
+    warnings: primary.warnings,
   };
 }
 
