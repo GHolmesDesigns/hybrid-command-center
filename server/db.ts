@@ -220,6 +220,27 @@ CREATE TABLE IF NOT EXISTS signal_post_variant_media (
   updated_at TEXT NOT NULL,
   CHECK(account_id IS NULL OR account_id > 0)
 );
+-- Which provider accounts a person explicitly chose for one Signal channel (C77).
+--
+-- This is a **choice**, not a copy of a provider account record: the row holds the id the user
+-- picked and nothing the provider owns, because a name or a handle cached here would be a second
+-- source of truth that goes stale the moment the account is renamed. Every display of an account
+-- reads the provider's own list; this table only remembers which of them were ticked.
+--
+-- **No rows means unchanged.** A post with no row for a channel resolves exactly as it did before
+-- this table existed -- server/publish/plan.ts finds the channel's single account and refuses zero
+-- or several -- so the table is additive in behaviour as well as in schema, and an existing
+-- database arrives with it empty and publishes identically.
+--
+-- Uniqueness is one row per (post, channel, account): selecting the same account twice for one
+-- channel is the same selection, and the index makes a repeated write idempotent rather than
+-- something the service has to remember to guard.
+CREATE TABLE IF NOT EXISTS signal_post_publish_targets (
+  post_id TEXT NOT NULL REFERENCES signal_posts(id) ON DELETE CASCADE,
+  channel TEXT NOT NULL,
+  provider_account_id INTEGER NOT NULL CHECK(provider_account_id > 0),
+  created_at TEXT NOT NULL
+);
 -- Delivery, which is a different fact from the planning status on signal_posts. checked_at is
 -- the last reconciliation of either kind and check_attempts is the automatic budget alone, so a
 -- manual refresh can update what the planner shows without spending a scheduled check.
@@ -359,6 +380,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_signal_post_variants_layer
 -- One row per role per layer, over the coalesced key for the same reason the layer index is.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_signal_post_variant_media_role
   ON signal_post_variant_media(post_id, platform, COALESCE(account_id, -1), role);
+-- One selection per account per channel. account_id is NOT NULL here, unlike the variant layers,
+-- so an ordinary unique index is the whole rule.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_signal_post_publish_targets_choice
+  ON signal_post_publish_targets(post_id, channel, provider_account_id);
+CREATE INDEX IF NOT EXISTS idx_signal_post_publish_targets_post
+  ON signal_post_publish_targets(post_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_signal_publications_live ON signal_publications(post_id)
   WHERE state IN ('SUBMITTING','SUBMITTED','UNCONFIRMED');
 CREATE INDEX IF NOT EXISTS idx_signal_publications_post ON signal_publications(post_id);

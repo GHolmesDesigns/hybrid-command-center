@@ -70,6 +70,42 @@ export interface PublishChannelContent extends PublishResolvedContent {
   deliveryMode: DeliveryMode;
 }
 
+/**
+ * How many accounts one channel's explicit selection may name.
+ *
+ * A bound on input rather than a statement about the provider: nothing here knows how many pages a
+ * person can connect, and the number exists so a malformed request cannot ask this app to plan an
+ * unbounded number of targets. Raise it when a real account list needs more.
+ */
+export const PUBLISH_TARGET_SELECTION_MAX = 10;
+
+/**
+ * One provider account a person explicitly chose to publish a Signal channel to (C77).
+ *
+ * A **selection**, not a provider record. It carries the channel and the account id and nothing
+ * the provider owns: a handle or a name stored beside them would be a second copy of something
+ * Post Bridge can rename underneath this app, and every screen that shows an account reads the
+ * provider's own list instead.
+ *
+ * **An empty set for a channel is not a choice to send nowhere.** It means no explicit selection
+ * exists, and the channel resolves the way it always has — one account, refusing zero or several
+ * (`docs/publishing-integration.md` §3.1). That is what keeps this additive: a post nobody has
+ * touched plans and submits byte for byte as it did before the table existed.
+ */
+export interface PublishTargetSelection {
+  channel: SignalChannel;
+  providerAccountId: number;
+}
+
+/**
+ * Every explicit selection a post carries, grouped the way the preview shows it.
+ *
+ * Ordered by channel and then by account id, so two reads of an unchanged post produce the same
+ * list — the plan hash covers these ids, and an order that wandered would invalidate a
+ * confirmation nobody had touched.
+ */
+export type PublishTargetSelections = readonly PublishTargetSelection[];
+
 export interface PublishChannelReport {
   channel: SignalChannel;
   /** `null` where no provider platform exists for the channel. */

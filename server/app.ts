@@ -46,6 +46,7 @@ import { readCalendarRange } from './calendar.ts';
 import {
   SignalMediaError,
   SignalPostNotFoundError,
+  SignalPublishTargetError,
   SignalVariantError,
   SignalSlotConflictError,
   applyPostSlot,
@@ -53,15 +54,18 @@ import {
   deletePost,
   duplicatePost,
   getPost,
+  getPostPublishTargets,
   getPostVariants,
   listQueue,
   recheckPostMedia,
   recheckVariantMedia,
+  replacePostPublishTargets,
   replacePostVariants,
   signalPostInput,
   signalPostPatch,
   signalRangeQuery,
   signalVariantMediaRecheckInput,
+  signalPublishTargetsInput,
   signalVariantsInput,
   signalSlotFromQuery,
   signalSlotInput,
@@ -1668,6 +1672,46 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     }
   });
   /**
+   * Which provider accounts a person explicitly chose for each Signal channel (C77).
+   *
+   * An empty answer is the ordinary case and is not the same as choosing nothing: it means no
+   * explicit selection exists and every channel resolves the way §3.1 has always resolved it, to
+   * exactly one account, refusing zero or several.
+   */
+  app.get('/api/signal/posts/:id/publish-targets', (req, res, next) => {
+    try {
+      res.json(getPostPublishTargets(db, req.params.id));
+    } catch (error) {
+      next(error);
+    }
+  });
+  /**
+   * Replace that selection, validated against the account list the preview was built from.
+   *
+   * The provider list is read here and handed to the service rather than fetched inside it, so the
+   * refusals are about accounts the user could actually have seen. A provider that cannot be
+   * reached refuses the write instead of accepting a selection nothing has checked — saving a
+   * target against an unknown account list is how a stale id survives to a submit.
+   *
+   * Like every Signal write, it records no `integration_events` row: this is local data, and the
+   * log is for what an integration did.
+   */
+  app.put('/api/signal/posts/:id/publish-targets', async (req, res, next) => {
+    try {
+      res.json(
+        replacePostPublishTargets(
+          db,
+          req.params.id,
+          signalPublishTargetsInput.parse(req.body),
+          await publishProvider.listTargets(),
+          clock,
+        ),
+      );
+    } catch (error) {
+      next(error);
+    }
+  });
+  /**
    * Check one layer's cover image or thumbnail against Drive again, because a person asked.
    *
    * The role counterpart of `POST /api/signal/posts/:id/media/recheck`, and it keeps that route's
@@ -1989,6 +2033,10 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       // An override the capability contract will not carry is the caller naming something the
       // provider cannot do, which is their problem to fix and not a failure of the write.
       error instanceof SignalVariantError ||
+      // A target the provider's current account list does not support: disconnected, on another
+      // platform, or on a channel the provider cannot reach. The account list moved under a
+      // preview that was taken before it did, so the fix is a new preview rather than a retry.
+      error instanceof SignalPublishTargetError ||
       // A link that is not a Drive file link, or a file this app will not bind a reference to.
       // Both carry the specific reason and both are answered rather than logged as a fault: the
       // person pasted something, and what to paste instead is the whole content of the message.
