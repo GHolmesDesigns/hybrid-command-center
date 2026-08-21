@@ -8,6 +8,33 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [4.5.4] - 2026-08-21
+
+### Notes
+
+- **Nothing in the application changed here.** Sending one post to two accounts on the same platform,
+  each with its own wording, is still not something this app offers — and this card is the written
+  reason rather than the change. The work was conditional from the day it was planned: it could only
+  be built if the owner-run probe of the publisher's API first established that the publisher really
+  does store a separate caption per account, and on what terms it allows two accounts on one platform
+  to post at once.
+- **The probe never got to ask.** When it ran on 20 August it had only one account named on any
+  platform, so there was no same-platform pair to test with, and it recorded the four questions as
+  unanswered rather than guessing. An unanswered question is not a "no": the publisher did not refuse
+  anything. It also is not a "yes", which is why nothing was built on it.
+- **So the existing behaviour stands, unchanged and for the same reason as before.** Each channel
+  still resolves to exactly one account and refuses if it finds none or several; content is still
+  tailored per platform; and tailoring written against a single account is still sent as that
+  platform's content, with the preview saying so on the target it applies to.
+- What would change the answer is a second approved account on one platform and another run of the
+  probe. Until that happens the card stays open and blocked rather than being closed — the
+  distinction between "we asked and were told no" and "we have not been able to ask yet" is worth
+  keeping, because only one of them is settled.
+
+### Breaking changes
+
+None. No screen, stored record, publishing behaviour, or published post is affected.
+
 ## [4.5.3] - 2026-08-21
 
 ### Notes
