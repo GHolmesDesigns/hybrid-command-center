@@ -28,6 +28,7 @@ import {
   type SignalVariantRoleMedia,
 } from './rows.ts';
 import { campaignsByPost, signalPostCampaignNames, writePostCampaigns } from './campaigns.ts';
+import { listPostPublishTargets } from './rows.ts';
 import {
   signalMediaFingerprint,
   signalPostMediaIssue,
@@ -1119,19 +1120,7 @@ export type SignalPublishTargetsInput = z.output<typeof signalPublishTargetsInpu
  * nobody had touched.
  */
 export function getPostPublishTargets(db: Db, postId: string): PublishTargetSelection[] {
-  return db
-    .prepare(
-      `SELECT channel, provider_account_id FROM signal_post_publish_targets
-       WHERE post_id=? ORDER BY channel, provider_account_id`,
-    )
-    .all(postId)
-    .map((row) => {
-      const record = row as { channel: string; provider_account_id: number };
-      return {
-        channel: record.channel as SignalChannel,
-        providerAccountId: record.provider_account_id,
-      };
-    });
+  return listPostPublishTargets(db, postId);
 }
 
 /**

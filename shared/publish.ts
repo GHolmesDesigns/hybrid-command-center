@@ -106,6 +106,27 @@ export interface PublishTargetSelection {
  */
 export type PublishTargetSelections = readonly PublishTargetSelection[];
 
+/**
+ * One selected account's own verdict inside a channel (C77).
+ *
+ * Present only where a person made an explicit selection. A channel resolving the way §3.1 has
+ * always resolved it — one account, refusing zero or several — carries no `targets` list at all,
+ * which is what keeps an untouched post planning byte for byte as it did before this existed.
+ *
+ * Every account gets its own refusals and its own warnings, and they are never merged into a
+ * platform-level sentence: two accounts can fail for two different reasons, and "Facebook is
+ * blocked" cannot say which of them a person has to fix.
+ */
+export interface PublishChannelTargetReport {
+  accountId: number;
+  handle: string;
+  /** This account's resolved content, absent only where the account itself did not resolve. */
+  content?: PublishChannelContent;
+  status: PublishChannelStatus;
+  refusals: string[];
+  warnings: string[];
+}
+
 export interface PublishChannelReport {
   channel: SignalChannel;
   /** `null` where no provider platform exists for the channel. */
@@ -128,6 +149,16 @@ export interface PublishChannelReport {
    * to tailor and an empty object would read as "tailored to nothing".
    */
   content?: PublishChannelContent;
+  /**
+   * Every explicitly selected account, in the order the selection is stored.
+   *
+   * **Absent, not empty, when nobody selected anything.** That distinction is the additive
+   * guarantee: a post with no selection serializes exactly the report it always did, and the
+   * channel-level `accountId`, `handle`, and `content` above remain the whole answer. Where the
+   * list is present it names every account, and the channel-level fields describe the first of
+   * them so that a reader which predates this list still sees something true.
+   */
+  targets?: PublishChannelTargetReport[];
   refusals: string[];
   warnings: string[];
 }

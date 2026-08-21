@@ -45,6 +45,7 @@ const throwingProvider: SignalProvider = {
   // The calendar never asks for content overrides; a provider that failed differently for this
   // method would make that harder to notice, not easier.
   listVariants: () => Promise.reject(new Error('The schedule store is locked.')),
+  listPublishTargets: () => Promise.reject(new Error('The schedule store is locked.')),
 };
 
 describe('reading a calendar range', () => {

@@ -44,6 +44,8 @@ import {
 import type {
   PublishChannelContent,
   PublishChannelReport,
+  PublishChannelStatus,
+  PublishTargetSelections,
   PublishPreview,
 } from '../../shared/publish.ts';
 import { deliveryModeForCapability, publishPreviewRefusals } from '../../shared/publish.ts';
@@ -354,9 +356,29 @@ function resolveChannelTargets(
   platform: string,
   label: string,
   connected: PublishTarget[],
-): { targets: PublishTarget[]; refusal?: string } {
-  const { target, refusal } = resolveTarget(platform, label, connected);
-  return { targets: target ? [target] : [], ...(refusal ? { refusal } : {}) };
+  selected: readonly number[],
+): { targets: PublishTarget[]; refusal?: string; explicit: boolean } {
+  // No selection is not a selection of nothing. It means nobody has chosen, so §3.1's rule still
+  // decides and the channel plans exactly as it did before this card.
+  if (!selected.length) {
+    const { target, refusal } = resolveTarget(platform, label, connected);
+    return { targets: target ? [target] : [], ...(refusal ? { refusal } : {}), explicit: false };
+  }
+  // An explicit selection replaces the rule rather than filtering its result: the whole point is
+  // that a person said which accounts, so "resolved to several" is no longer a refusal and
+  // G.Holmes Designs is no longer implied. What an id must still be is connected and on this
+  // platform, because a selection saved yesterday can name an account disconnected since.
+  const targets: PublishTarget[] = [];
+  const missing: number[] = [];
+  for (const id of selected) {
+    const target = connected.find((entry) => entry.id === id && entry.platform === platform);
+    if (target) targets.push(target);
+    else missing.push(id);
+  }
+  const refusal = missing.length
+    ? `${label} was told to publish to ${missing.length === 1 ? 'an account' : 'accounts'} ${missing.join(', ')}, which this provider no longer lists for it. Choose its accounts again.`
+    : undefined;
+  return { targets, ...(refusal ? { refusal } : {}), explicit: true };
 }
 
 /**
@@ -447,6 +469,7 @@ function reportForChannel(
   base: PublishPlanBase,
   connected: PublishTarget[],
   variants: readonly PublishVariantRecord[],
+  selected: readonly number[] = [],
 ): PublishChannelReport {
   const channelLabel = SIGNAL_CHANNEL_LABEL[channel] ?? channel;
   const platform = publishPlatformFor(channel);
@@ -475,10 +498,11 @@ function reportForChannel(
       ],
       warnings: [],
     };
-  const { targets, refusal } = resolveChannelTargets(
+  const { targets, refusal, explicit } = resolveChannelTargets(
     capability.platform,
     capability.label,
     connected,
+    selected,
   );
   // One resolution per account the channel resolved to, and one anyway when it resolved to none —
   // a channel whose account did not resolve still reports its platform-layer content, because the
@@ -490,8 +514,30 @@ function reportForChannel(
     ? targets.map((target) => resolutionForTarget(base, capability, variants, target))
     : [resolutionForTarget(base, capability, variants, undefined)];
   const primary = resolutions[0] as PublishTargetResolution;
+  // The channel-level fields describe the first target, so a reader written before per-account
+  // reports existed still sees something true rather than nothing.
   const refusals = [...primary.refusals];
   if (refusal) refusals.push(refusal);
+  // Every selected account's own verdict, and only where somebody selected. A channel resolving
+  // by §3.1's rule carries no list, which is what keeps its report byte-identical to before.
+  const targetReports = explicit
+    ? resolutions
+        .filter((resolution) => resolution.target)
+        .map((resolution) => {
+          const target = resolution.target as PublishTarget;
+          return {
+            accountId: target.id,
+            handle: target.handle || target.name,
+            content: resolution.content,
+            status: (resolution.refusals.length ? 'BLOCKED' : 'READY') as PublishChannelStatus,
+            refusals: resolution.refusals,
+            warnings: resolution.warnings,
+          };
+        })
+    : undefined;
+  // A channel is blocked when any of its accounts is: sending to some of the accounts a person
+  // chose and quietly dropping the rest is the one outcome nobody asked for.
+  const anyTargetBlocked = (targetReports ?? []).some((entry) => entry.status === 'BLOCKED');
   return {
     channel,
     platform: capability.platform,
@@ -499,11 +545,12 @@ function reportForChannel(
     // The resolved kind, not the post's: a placement override changes what the shape is and can
     // change how it is delivered, so the route is read after the layers resolved.
     mode: primary.content.deliveryMode,
-    status: refusals.length ? 'BLOCKED' : 'READY',
+    status: refusals.length || anyTargetBlocked ? 'BLOCKED' : 'READY',
     ...(primary.target
       ? { accountId: primary.target.id, handle: primary.target.handle || primary.target.name }
       : {}),
     content: primary.content,
+    ...(targetReports ? { targets: targetReports } : {}),
     refusals,
     warnings: primary.warnings,
   };
@@ -592,6 +639,7 @@ export function buildPublishPlan(
   zone: string,
   now = new Date(),
   variants: readonly PublishVariantRecord[] = [],
+  selections: PublishTargetSelections = [],
 ): PublishPreview & { request?: PublishRequest; mediaSources?: SignalPostMedia[] } {
   const refusals: string[] = [];
   const warnings: string[] = [];
@@ -619,18 +667,45 @@ export function buildPublishPlan(
     media: post.media,
     postKind: publishPostKindFor(post.format),
   };
+  // Grouped once rather than filtered per channel, and kept in the order the service read them —
+  // the ids ride into the plan hash through `targets`, so an order that wandered between two reads
+  // of an unchanged post would invalidate a confirmation nobody had touched.
+  const selectedByChannel = new Map<string, number[]>();
+  for (const selection of selections)
+    selectedByChannel.set(selection.channel, [
+      ...(selectedByChannel.get(selection.channel) ?? []),
+      selection.providerAccountId,
+    ]);
   const channels = post.channels.map((channel) =>
-    reportForChannel(channel, base, connected, variants),
+    reportForChannel(channel, base, connected, variants, selectedByChannel.get(channel) ?? []),
   );
-  const targets: PublishPreview['targets'] = channels
-    .filter((report) => report.status === 'READY' && report.platform && report.accountId)
-    .map((report) => ({
-      channel: report.channel,
-      platform: report.platform as string,
-      accountId: report.accountId as number,
-      handle: report.handle as string,
-      mode: report.mode,
-    }));
+  // One entry per account that will actually be sent to. A channel with an explicit selection
+  // contributes each of its ready accounts; a channel without one contributes the single account
+  // §3.1 resolved, exactly as it always did.
+  const targets: PublishPreview['targets'] = channels.flatMap((report) => {
+    if (report.status !== 'READY' || !report.platform) return [];
+    if (report.targets)
+      return report.targets
+        .filter((entry) => entry.status === 'READY')
+        .map((entry) => ({
+          channel: report.channel,
+          platform: report.platform as string,
+          accountId: entry.accountId,
+          handle: entry.handle,
+          mode: report.mode,
+        }));
+    return report.accountId
+      ? [
+          {
+            channel: report.channel,
+            platform: report.platform as string,
+            accountId: report.accountId,
+            handle: report.handle as string,
+            mode: report.mode,
+          },
+        ]
+      : [];
+  });
   // Plan-level only when nothing resolved at all. A channel that resolved and is blocked has
   // already said why, and repeating it here as "nothing resolved" would contradict its own report.
   if (channels.every((report) => report.accountId === undefined))
@@ -695,6 +770,29 @@ export function buildPublishPlan(
      * viewer link does not change when the bytes behind it do. This is what makes a role edit, and a
      * recheck that finds a new version, refuse a confirmation taken before it.
      */
+    /**
+     * What each explicitly selected account resolved to, present only where somebody selected.
+     *
+     * Conditional on purpose. `targets` above already carries the chosen ids, so this adds the
+     * *content* those ids resolved to — editing one account's caption has to refuse a confirmation
+     * taken before the edit. Omitting the key entirely when nothing is selected is what keeps an
+     * untouched post's hash the number it has always been.
+     */
+    ...(selections.length
+      ? {
+          accountContent: channels.flatMap((report) =>
+            (report.targets ?? []).map((entry) => ({
+              channel: report.channel,
+              accountId: entry.accountId,
+              caption: entry.content?.caption,
+              mediaUrls: entry.content?.mediaUrls,
+              postKind: entry.content?.postKind,
+              title: entry.content?.title,
+              firstComment: entry.content?.firstComment,
+            })),
+          ),
+        }
+      : {}),
     roleMedia: channels.flatMap((report) =>
       PUBLISH_VARIANT_MEDIA_ROLES.flatMap((role) => {
         const media = report.content?.[PUBLISH_VARIANT_MEDIA_FIELD[role]];
