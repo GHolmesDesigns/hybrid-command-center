@@ -30,9 +30,17 @@ import {
   resolvePublishContent,
   PUBLISH_VARIANT_FIELDS,
   PUBLISH_VARIANT_FIELD_LABEL,
+  PUBLISH_VARIANT_MEDIA_FIELD,
   type PublishVariantField,
   type PublishVariantRecord,
 } from '../../shared/publish-variants.ts';
+import {
+  publishRoleDelivers,
+  publishRoleMediaIssue,
+  publishRoleWarning,
+  PUBLISH_VARIANT_MEDIA_ROLES,
+  PUBLISH_VARIANT_MEDIA_ROLE_LABEL,
+} from '../../shared/publish-variant-media.ts';
 import type {
   PublishChannelContent,
   PublishChannelReport,
@@ -132,8 +140,8 @@ function mediaKindsFor(
 const REFUSABLE_VARIANT_FIELDS: PublishVariantField[] = [
   'title',
   'firstComment',
-  'coverImageUrl',
-  'thumbnailUrl',
+  'coverImage',
+  'thumbnail',
 ];
 
 /**
@@ -188,6 +196,25 @@ export function preflightPlatform(input: PlatformPreflight): {
     refusals.push(
       `${label} limits the first comment to ${commentMax} characters and this one is ${content.firstComment.length}. Remove ${content.firstComment.length - commentMax}.`,
     );
+  /**
+   * A stored role: whether it is usable, and whether it can be delivered.
+   *
+   * Two answers, and they are separate. A cover or a thumbnail the provider would reject outright —
+   * a video in the role, or an image past the 8 MB ceiling C73 measured — refuses, because a
+   * submission carrying it would fail at the wire. A role the provider *names* but the live probe has
+   * not verified warns instead: it is stored, it is version-bound, and it does not go out, which is
+   * a state the preview has to say out loud rather than imply by silence.
+   */
+  for (const role of PUBLISH_VARIANT_MEDIA_ROLES) {
+    const media = content[PUBLISH_VARIANT_MEDIA_FIELD[role]];
+    if (media === undefined) continue;
+    // Already refused by the loop above where the platform has no such field at all.
+    if (!publishVariantFieldSupported(PUBLISH_VARIANT_MEDIA_FIELD[role], capability)) continue;
+    const issue = publishRoleMediaIssue(media, role);
+    if (issue) refusals.push(`${label} ${PUBLISH_VARIANT_MEDIA_ROLE_LABEL[role]}: ${issue}`);
+    else if (!publishRoleDelivers(capability, role))
+      warnings.push(publishRoleWarning(capability, role));
+  }
   if (content.discloseSyntheticMedia && capability.syntheticMediaDisclosure === 'IN_CAPTION')
     warnings.push(
       `${label} has no synthetic-media disclosure field from this provider, so the disclosure is written into the caption and counts against its limit.`,
@@ -264,8 +291,13 @@ export function preflightPlatform(input: PlatformPreflight): {
     warnings.push(
       `${label} takes a title separate from the description and none is set, so the caption is used as the title.`,
     );
-  if (kind === 'REEL' && !capability.thumbnail)
+  // The absence case, and only the absence case: a role that *is* set has already been answered
+  // above, and saying both "you set one and it is not sent" and "the platform picks its own" about
+  // one reel would be two sentences for one fact.
+  if (kind === 'REEL' && !capability.thumbnail && content.thumbnail === undefined)
     warnings.push(`${label} chooses its own thumbnail; this provider sends none.`);
+  if (kind === 'REEL' && !capability.coverImage && content.coverImage === undefined)
+    warnings.push(`${label} chooses its own cover image; this provider sends none.`);
 
   return { refusals, warnings };
 }
@@ -592,6 +624,22 @@ export function buildPublishPlan(
     timezone: zone,
     targets,
     platformConfigurations,
+    /**
+     * Every resolved media role, as a fingerprint, keyed by the channel it belongs to.
+     *
+     * A role is per platform and per account rather than per submission, so it cannot ride along in
+     * `media` above; and it is a whole descriptor for the same reason post media is — a Drive
+     * viewer link does not change when the bytes behind it do. This is what makes a role edit, and a
+     * recheck that finds a new version, refuse a confirmation taken before it.
+     */
+    roleMedia: channels.flatMap((report) =>
+      PUBLISH_VARIANT_MEDIA_ROLES.flatMap((role) => {
+        const media = report.content?.[PUBLISH_VARIANT_MEDIA_FIELD[role]];
+        return media
+          ? [{ channel: report.channel, role, media: signalMediaFingerprint(media) }]
+          : [];
+      }),
+    ),
   };
   const preview: PublishPreview & { request?: PublishRequest; mediaSources?: SignalPostMedia[] } = {
     available: true,

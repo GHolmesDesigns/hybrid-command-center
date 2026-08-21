@@ -50,8 +50,8 @@ const allBase = (): Record<string, PublishVariantScope> => ({
   title: 'BASE',
   firstComment: 'BASE',
   discloseSyntheticMedia: 'BASE',
-  coverImageUrl: 'BASE',
-  thumbnailUrl: 'BASE',
+  coverImage: 'BASE',
+  thumbnail: 'BASE',
 });
 
 const report = (
@@ -120,9 +120,15 @@ describe('Signal content variants', () => {
     const youtube = within(screen.getByRole('group', { name: 'YouTube' }));
     expect(youtube.getByLabelText(/^Title/)).toBeInTheDocument();
     expect(youtube.queryByLabelText('First comment')).not.toBeInTheDocument();
-    // No platform records a chosen cover or thumbnail, so neither is offered anywhere.
-    expect(screen.queryByLabelText('Cover image')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Thumbnail')).not.toBeInTheDocument();
+    // A role control exists exactly where the provider names the field. X and YouTube are the two
+    // platforms on this post: YouTube gets the thumbnail Post Bridge names for it, and neither
+    // platform gets a cover, because the provider defines one only for Instagram.
+    expect(youtube.getByText('Thumbnail')).toBeInTheDocument();
+    expect(youtube.getByLabelText('Add a Drive file as the YouTube thumbnail')).toBeInTheDocument();
+    // And the control says what it does today rather than implying a delivery nobody has watched.
+    expect(youtube.getByText(/has not verified that it is accepted/)).toBeInTheDocument();
+    expect(x.queryByText('Thumbnail')).not.toBeInTheDocument();
+    expect(screen.queryByText('Cover image')).not.toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'Blog' })).not.toBeInTheDocument();
   });
 
@@ -151,6 +157,116 @@ describe('Signal content variants', () => {
       { platform: 'twitter', accountId: null, caption: 'The short version' },
     ]);
     await waitFor(() => expect(screen.getByRole('button', { name: 'Show preview' })).toBeEnabled());
+  });
+
+  /**
+   * A role is chosen the way the post's own media is chosen, and stated to the server the same way.
+   *
+   * The composer holds a whole descriptor so it can show what Drive said about the file; the request
+   * carries the source and the address, because nothing about a Drive file's metadata is ever
+   * accepted from a caller.
+   */
+  it('chooses a Drive file for a role, sends it as a link, and reports a refusal', async () => {
+    testState.signalPostsPayload = [
+      signalPost('variant-post', 'Tailor me', '2026-09-14', {
+        channels: ['yt'],
+        mediaUrls: [VIDEO],
+        format: 'VIDEO',
+      }),
+    ];
+    testState.driveMediaError = 'That is a Drive folder, and a post carries one file at a time.';
+    await openSignal();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Tailor me' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Show preview' })).toBeEnabled());
+
+    const role = document.querySelector('[data-role="THUMBNAIL"]') as HTMLElement;
+    const within_ = within(role);
+    // A recheck is an edit, so it is not offered against a role that is not stored yet.
+    expect(within_.queryByRole('button', { name: /Recheck/ })).not.toBeInTheDocument();
+
+    fireEvent.change(within_.getByLabelText('Add a Drive file as the YouTube thumbnail'), {
+      target: { value: 'https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOpQrStUv' },
+    });
+    fireEvent.click(within_.getByRole('button', { name: 'Use this Drive file' }));
+    expect(await within_.findByRole('status')).toHaveTextContent(/carries one file at a time/);
+
+    testState.driveMediaError = null;
+    testState.driveMediaPayload = {
+      source: 'DRIVE',
+      url: 'https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/view',
+      driveFileId: '1AbCdEfGhIjKlMnOpQrStUvWxYz012345',
+      driveName: 'cover.png',
+      mimeType: 'image/png',
+      sizeBytes: 2048,
+      driveVersion: '7',
+      driveModifiedAt: '2026-03-01T12:00:00.000Z',
+      driveChecksum: null,
+      driveVerifiedAt: '2026-08-20T09:00:00.000Z',
+    };
+    fireEvent.change(within_.getByLabelText('Add a Drive file as the YouTube thumbnail'), {
+      target: { value: 'https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/view' },
+    });
+    fireEvent.click(within_.getByRole('button', { name: 'Use this Drive file' }));
+    expect(await within_.findByText('cover.png')).toBeInTheDocument();
+    expect(within_.getByText('image/png · 2.0 KB')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save per-platform content' }));
+    await waitFor(() =>
+      expect(
+        requests.some((entry) => entry.method === 'PUT' && entry.url.endsWith('/variants')),
+      ).toBe(true),
+    );
+    // The link, not the metadata: the server resolves it again through the one parsing rule.
+    expect(testState.signalVariantsPayload).toEqual([
+      {
+        platform: 'youtube',
+        accountId: null,
+        thumbnail: {
+          source: 'DRIVE',
+          url: 'https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/view',
+        },
+      },
+    ]);
+  });
+
+  it('rechecks a stored role and removes one on request', async () => {
+    testState.signalPostsPayload = [
+      signalPost('variant-post', 'Tailor me', '2026-09-14', {
+        channels: ['yt'],
+        mediaUrls: [VIDEO],
+        format: 'VIDEO',
+      }),
+    ];
+    const stored = {
+      source: 'DRIVE' as const,
+      url: 'https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/view',
+      driveFileId: '1AbCdEfGhIjKlMnOpQrStUvWxYz012345',
+      driveName: 'cover.png',
+      mimeType: 'image/png',
+      sizeBytes: 2048,
+      driveVersion: '7',
+      driveModifiedAt: '2026-03-01T12:00:00.000Z',
+      driveChecksum: null,
+      driveVerifiedAt: '2026-08-20T09:00:00.000Z',
+    };
+    testState.signalVariantsPayload = [
+      { platform: 'youtube', accountId: null, thumbnail: stored, updatedAt: 'saved' },
+    ];
+    testState.driveRecheckPayload = { ...stored, sizeBytes: 3072, driveVersion: '9' };
+    await openSignal();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Tailor me' }));
+    const role = (await waitFor(() =>
+      document.querySelector('[data-role="THUMBNAIL"]'),
+    )) as HTMLElement;
+    const within_ = within(role);
+    await within_.findByText('cover.png');
+
+    fireEvent.click(within_.getByRole('button', { name: 'Recheck thumbnail' }));
+    await waitFor(() => expect(within_.getByText('image/png · 3.0 KB')).toBeInTheDocument());
+
+    // Removing it puts the field back to the address input, and nothing is stored until it is saved.
+    fireEvent.click(within_.getByRole('button', { name: 'Remove thumbnail' }));
+    expect(within_.getByLabelText('Thumbnail address for YouTube')).toHaveValue('');
   });
 
   it('reports a refused override without storing it', async () => {

@@ -22,6 +22,22 @@ driveMedia.seed('1AbCdEfGhIjKlMnOpQrStUvWxYz012345', {
   size: '4',
 });
 driveMedia.seedBody('1AbCdEfGhIjKlMnOpQrStUvWxYz012345', new Uint8Array([137, 80, 78, 71]));
+// The LinkedIn document post: the one media role the live probe verified (C76). A PDF plus the
+// existing document-title override, rather than a role row of its own.
+driveMedia.seed('2PdFeFgHiJkLmNoPqRsTuVwXyZ0123456', {
+  name: 'e2e-drive-report.pdf',
+  mimeType: 'application/pdf',
+  size: '5',
+});
+driveMedia.seedBody('2PdFeFgHiJkLmNoPqRsTuVwXyZ0123456', new Uint8Array([37, 80, 68, 70, 45]));
+// And a still image for a variant media role, which is stored, version-bound, and — until the
+// provider role is verified — deliberately not sent.
+driveMedia.seed('3CoVeRgHiJkLmNoPqRsTuVwXyZ0123456', {
+  name: 'e2e-drive-cover.png',
+  mimeType: 'image/png',
+  size: '4',
+});
+driveMedia.seedBody('3CoVeRgHiJkLmNoPqRsTuVwXyZ0123456', new Uint8Array([137, 80, 78, 71]));
 
 // One account per platform, which is what target resolution requires and what makes a
 // per-account override deliverable as its platform's configuration.
@@ -32,6 +48,9 @@ const publish = new MockPublishProvider([
   // TikTok is here because it is one of the three platforms the provider reports figures for, and a
   // figure needs a delivery to belong to.
   { id: 904, platform: 'tiktok', handle: '@gholmes', name: 'G.Holmes Designs' },
+  // YouTube is here for the one platform Post Bridge names a thumbnail role for: a role needs a
+  // resolved account before the composer can offer it.
+  { id: 905, platform: 'youtube', handle: '@gholmesdesigns', name: 'G.Holmes Designs' },
 ]);
 /**
  * What a check reports, set here rather than left to the submission.

@@ -214,9 +214,26 @@ export interface PublishPlatformCapability {
   firstComment: PublishTextField;
   title: PublishTextField;
   description: PublishTextField;
-  /** A cover image chosen for the submission rather than taken from the media. */
+  /**
+   * A cover image chosen for the submission rather than taken from the media, and a video
+   * thumbnail chosen for it. **Whether the provider will carry one**, which is not the same
+   * question as whether this app can store one.
+   *
+   * False on every platform, and each false has a reason recorded rather than assumed. Post
+   * Bridge's OpenAPI names `cover_image` on Instagram's platform configuration and `thumbnail` on
+   * YouTube's (`docs/post-bridge-api-surface.md` §8), and the 20 August 2026 live probe left both
+   * **still unverified** — no video asset was uploaded and each role needs a video as the post's own
+   * media (§14, question 3). Current provider support material separately states that custom
+   * external YouTube thumbnails are not available, so that conflict is unresolved rather than
+   * resolved positively: C76 records it as will-not-build and leaves this flag false.
+   *
+   * A role may still be *chosen and stored* where the provider names the field —
+   * `publishRoleComposable` in `shared/publish-variant-media.ts` — and every stored role that
+   * cannot be delivered warns, by platform and by role, in the preview. Flipping one of these to
+   * true is what makes a role reach a request, and it takes a dated §14 result saying the provider
+   * accepted the field and read it back.
+   */
   coverImage: boolean;
-  /** A video thumbnail chosen for the submission. */
   thumbnail: boolean;
   syntheticMediaDisclosure: PublishDisclosure;
   /**

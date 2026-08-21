@@ -14,11 +14,19 @@ import {
   publishVariantFieldSupported,
   publishVariantPlacements,
   PUBLISH_VARIANT_FIELD_LABEL,
+  PUBLISH_VARIANT_MEDIA_FIELD,
   PUBLISH_VARIANT_SCOPE_LABEL,
   type PublishContentVariant,
   type PublishVariantField,
   type PublishVariantRecord,
 } from '../../../shared/publish-variants';
+import {
+  publishRoleDelivers,
+  publishRoleWarning,
+  PUBLISH_VARIANT_MEDIA_ROLES,
+  PUBLISH_VARIANT_MEDIA_ROLE_LABEL,
+  type PublishVariantMediaRole,
+} from '../../../shared/publish-variant-media';
 import {
   DELIVERY_MODE_LABEL,
   PUBLISH_CHANNEL_STATUS_LABEL,
@@ -35,7 +43,10 @@ import { previewPlatforms, variantFieldCount, variantKey } from './signal-varian
  * 1. **A control exists only where the provider would carry it.** Every field is rendered from
  *    `publishVariantFieldSupported`, the same function the HTTP boundary refuses with and the
  *    publisher's preflight checks stored content against. A form offering a field the API rejects
- *    is a form that teaches the user something untrue about the provider.
+ *    is a form that teaches the user something untrue about the provider. The two media roles
+ *    (C76) are the one place where *offered* and *delivered* come apart, and the control says so:
+ *    Post Bridge names a cover for Instagram and a thumbnail for YouTube, the live probe verified
+ *    neither, so the role is stored, version-bound, and reported as held rather than sent.
  * 2. **Nothing remote loads until the preview is asked for.** No thumbnail, no video, no provider
  *    call. The composer above renders text alone, and pressing **Show preview** is the only thing
  *    in this file that causes the browser to fetch anything at all. Video needs a second explicit
@@ -44,6 +55,167 @@ import { previewPlatforms, variantFieldCount, variantKey } from './signal-varian
  * The server fetches none of these URLs, before or after. It never has, for media or anything else
  * (`server/db.ts`, `signal_post_media`), and a preview is the last place to start.
  */
+
+/**
+ * How a layer's cover image or thumbnail is chosen, and what is said about where it goes.
+ *
+ * The same two sources the post's own media has since C74 — a public `https:` address typed in, or a
+ * Drive link resolved by the server — and the same asymmetry: an address is text the form holds, and
+ * a Drive file is metadata the server answered with. Nothing here fetches the media itself; a Drive
+ * role shows what Drive said about the file and links to the viewer page, exactly as the composer's
+ * media list does.
+ *
+ * The note under the control is the honest part. Post Bridge names a cover for Instagram and a
+ * thumbnail for YouTube, and the live probe has verified neither, so a role chosen today is stored,
+ * version-bound, and **not sent**. Saying that here rather than only in the preview is the
+ * difference between a control that teaches the provider's real state and one that implies a
+ * delivery nobody has watched happen.
+ */
+function VariantRoleField({
+  capability,
+  role,
+  media,
+  onChange,
+  resolveDrive,
+  onRecheck,
+  canRecheck,
+  disabled,
+}: {
+  capability: PublishPlatformCapability;
+  role: PublishVariantMediaRole;
+  media: SignalPostMedia | undefined;
+  onChange: (next: SignalPostMedia | undefined) => void;
+  resolveDrive: (link: string) => Promise<SignalPostMedia>;
+  onRecheck?: () => Promise<void>;
+  canRecheck: boolean;
+  disabled?: boolean;
+}) {
+  const id = useId();
+  const [link, setLink] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const word = PUBLISH_VARIANT_MEDIA_ROLE_LABEL[role];
+  const label = PUBLISH_VARIANT_FIELD_LABEL[PUBLISH_VARIANT_MEDIA_FIELD[role]];
+
+  const addDrive = async () => {
+    const value = link.trim();
+    if (!value) return;
+    setBusy(true);
+    setError('');
+    try {
+      onChange(await resolveDrive(value));
+      setLink('');
+    } catch (reason) {
+      setError((reason as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const recheck = async () => {
+    if (!onRecheck) return;
+    setBusy(true);
+    setError('');
+    try {
+      await onRecheck();
+    } catch (reason) {
+      setError((reason as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="signal-variant-role" data-role={role}>
+      <p className="signal-variant-role-head">
+        <strong>{label}</strong>
+        <span className="signal-variant-count" id={`${id}-state`}>
+          {publishRoleDelivers(capability, role)
+            ? `${capability.label} receives this ${word}.`
+            : publishRoleWarning(capability, role)}
+        </span>
+      </p>
+      {media?.source === 'DRIVE' ? (
+        <div className="signal-media-drive">
+          <a href={media.url} target="_blank" rel="noreferrer" referrerPolicy="no-referrer">
+            {media.driveName}
+          </a>
+          <span className="signal-media-detail">
+            {`${media.mimeType} · ${formatFileSize(media.sizeBytes)}`}
+          </span>
+          <span className="signal-media-detail">
+            {media.driveVerifiedAt
+              ? `Checked ${new Date(media.driveVerifiedAt).toLocaleString()}`
+              : 'Not checked yet'}
+          </span>
+          {onRecheck && (
+            <button
+              type="button"
+              className="secondary"
+              disabled={disabled || busy || !canRecheck}
+              onClick={recheck}
+              title={
+                canRecheck
+                  ? undefined
+                  : `Save this override before rechecking: a recheck is itself an edit.`
+              }
+            >
+              <RefreshCw aria-hidden="true" /> Recheck {word}
+            </button>
+          )}
+        </div>
+      ) : (
+        <label>
+          <span className="sr-only">
+            {label} address for {capability.label}
+          </span>
+          <input
+            type="url"
+            value={media?.url ?? ''}
+            disabled={disabled || busy}
+            aria-describedby={`${id}-state`}
+            placeholder={`A public https address, or add a Drive file below`}
+            onChange={(event) =>
+              onChange(event.target.value.trim() ? urlPostMedia(event.target.value) : undefined)
+            }
+          />
+        </label>
+      )}
+      <label>
+        <span className="sr-only">
+          Add a Drive file as the {capability.label} {word}
+        </span>
+        <input
+          type="text"
+          value={link}
+          disabled={disabled || busy}
+          placeholder="Paste a Google Drive file link"
+          onChange={(event) => setLink(event.target.value)}
+        />
+      </label>
+      <div className="signal-variant-role-actions">
+        <button type="button" className="secondary" disabled={disabled || busy} onClick={addDrive}>
+          Use this Drive file
+        </button>
+        {media && (
+          <button
+            type="button"
+            className="text-btn"
+            disabled={disabled || busy}
+            onClick={() => onChange(undefined)}
+          >
+            Remove {word}
+          </button>
+        )}
+      </div>
+      {error && (
+        <p className="signal-media-unresolved" role="status">
+          <AlertTriangle aria-hidden="true" /> {error}
+        </p>
+      )}
+    </div>
+  );
+}
 
 /**
  * One layer's fields, for whichever layer is being edited.
@@ -57,6 +229,9 @@ function VariantFields({
   value,
   postMedia,
   onChange,
+  resolveDrive,
+  onRecheckRole,
+  canRecheckRole,
   disabled,
 }: {
   capability: PublishPlatformCapability;
@@ -70,10 +245,19 @@ function VariantFields({
    */
   postMedia: readonly SignalPostMedia[];
   onChange: (next: PublishContentVariant) => void;
+  /** Resolves one pasted Drive link to a descriptor, through the server's media capability. */
+  resolveDrive: (link: string) => Promise<SignalPostMedia>;
+  /** Checks one saved role against Drive again. Absent while the layer has never been saved. */
+  onRecheckRole?: (role: PublishVariantMediaRole) => Promise<void>;
+  /** Whether a recheck is safe right now: the layer is stored and the form holds no unsaved edits. */
+  canRecheckRole?: (role: PublishVariantMediaRole) => boolean;
   disabled?: boolean;
 }) {
   const id = useId();
   const supports = (field: PublishVariantField) => publishVariantFieldSupported(field, capability);
+  const roles = PUBLISH_VARIANT_MEDIA_ROLES.filter((role) =>
+    supports(PUBLISH_VARIANT_MEDIA_FIELD[role]),
+  );
   const set = (patch: PublishContentVariant) => onChange({ ...value, ...patch });
   const placements = publishVariantPlacements(capability);
   const selection = value.mediaUrls;
@@ -151,28 +335,19 @@ function VariantFields({
           </select>
         </label>
       )}
-      {supports('coverImageUrl') && (
-        <label>
-          {PUBLISH_VARIANT_FIELD_LABEL.coverImageUrl}
-          <input
-            type="url"
-            value={value.coverImageUrl ?? ''}
-            disabled={disabled}
-            onChange={(event) => set({ coverImageUrl: event.target.value })}
-          />
-        </label>
-      )}
-      {supports('thumbnailUrl') && (
-        <label>
-          {PUBLISH_VARIANT_FIELD_LABEL.thumbnailUrl}
-          <input
-            type="url"
-            value={value.thumbnailUrl ?? ''}
-            disabled={disabled}
-            onChange={(event) => set({ thumbnailUrl: event.target.value })}
-          />
-        </label>
-      )}
+      {roles.map((role) => (
+        <VariantRoleField
+          key={role}
+          capability={capability}
+          role={role}
+          media={value[PUBLISH_VARIANT_MEDIA_FIELD[role]]}
+          disabled={disabled}
+          resolveDrive={resolveDrive}
+          canRecheck={canRecheckRole?.(role) ?? false}
+          {...(onRecheckRole ? { onRecheck: () => onRecheckRole(role) } : {})}
+          onChange={(next) => set({ [PUBLISH_VARIANT_MEDIA_FIELD[role]]: next })}
+        />
+      ))}
       {supports('discloseSyntheticMedia') && (
         <div className="signal-variant-field">
           <label className="signal-variant-check">
@@ -268,6 +443,8 @@ export function PlatformVariantsEditor({
   layers,
   onChange,
   onSave,
+  onRecheckRole,
+  resolveDrive,
   dirty,
   busy,
 }: {
@@ -275,6 +452,13 @@ export function PlatformVariantsEditor({
   layers: Map<string, PublishVariantRecord>;
   onChange: (next: Map<string, PublishVariantRecord>) => void;
   onSave: () => void;
+  /** Rechecks one stored role. The layer's platform and account are the caller's to supply. */
+  onRecheckRole: (
+    platform: PublishPlatform,
+    accountId: number | null,
+    role: PublishVariantMediaRole,
+  ) => Promise<void>;
+  resolveDrive: (link: string) => Promise<SignalPostMedia>;
   dirty: boolean;
   busy: boolean;
 }) {
@@ -327,6 +511,13 @@ export function PlatformVariantsEditor({
                 value={stored ?? {}}
                 postMedia={post.media}
                 disabled={busy}
+                resolveDrive={resolveDrive}
+                onRecheckRole={(role) => onRecheckRole(platform, null, role)}
+                // A recheck is an edit through the ordinary replacement, so it is offered only
+                // while there is nothing unsaved for it to discard or silently save.
+                canRecheckRole={(role) =>
+                  !dirty && stored?.[PUBLISH_VARIANT_MEDIA_FIELD[role]]?.source === 'DRIVE'
+                }
                 onChange={(next) => update(platform, next)}
               />
               {overridden > 0 && (
@@ -470,6 +661,8 @@ function PreviewPanel({
   accountLayer,
   onAccountChange,
   onAccountSave,
+  onRecheckRole,
+  resolveDrive,
   accountDirty,
   busy,
 }: {
@@ -479,6 +672,12 @@ function PreviewPanel({
   accountLayer: PublishContentVariant | undefined;
   onAccountChange: (next: PublishContentVariant) => void;
   onAccountSave: () => void;
+  onRecheckRole: (
+    platform: PublishPlatform,
+    accountId: number | null,
+    role: PublishVariantMediaRole,
+  ) => Promise<void>;
+  resolveDrive: (link: string) => Promise<SignalPostMedia>;
   accountDirty: boolean;
   busy: boolean;
 }) {
@@ -536,6 +735,19 @@ function PreviewPanel({
               <strong>{PUBLISH_VARIANT_FIELD_LABEL.discloseSyntheticMedia}:</strong> included
             </p>
           )}
+          {/* A role is named beside the text rather than embedded, and never fetched: what it says
+              is which file this target's cover or thumbnail is, and the report's own warnings
+              already say whether the provider will carry it. */}
+          {PUBLISH_VARIANT_MEDIA_ROLES.map((role) => {
+            const media = content[PUBLISH_VARIANT_MEDIA_FIELD[role]];
+            if (!media) return null;
+            return (
+              <p className="signal-preview-field" key={role} data-role={role}>
+                <strong>{PUBLISH_VARIANT_FIELD_LABEL[PUBLISH_VARIANT_MEDIA_FIELD[role]]}:</strong>{' '}
+                {media.source === 'DRIVE' ? `Drive file · ${media.driveName}` : media.url}
+              </p>
+            );
+          })}
           <h4>Media, in this order</h4>
           {content.mediaUrls.length === 0 ? (
             <p className="signal-preview-field">No media on this target.</p>
@@ -581,6 +793,13 @@ function PreviewPanel({
             value={accountLayer ?? {}}
             postMedia={post.media}
             disabled={busy}
+            resolveDrive={resolveDrive}
+            onRecheckRole={(role) =>
+              onRecheckRole(capability.platform, report.accountId as number, role)
+            }
+            canRecheckRole={(role) =>
+              !accountDirty && accountLayer?.[PUBLISH_VARIANT_MEDIA_FIELD[role]]?.source === 'DRIVE'
+            }
             onChange={onAccountChange}
           />
           <button
@@ -610,6 +829,8 @@ export function PublishPreviewTabs({
   layers,
   onChange,
   onSaveAccount,
+  onRecheckRole,
+  resolveDrive,
   savedLayers,
   busy,
 }: {
@@ -618,6 +839,12 @@ export function PublishPreviewTabs({
   layers: Map<string, PublishVariantRecord>;
   onChange: (next: Map<string, PublishVariantRecord>) => void;
   onSaveAccount: () => void;
+  onRecheckRole: (
+    platform: PublishPlatform,
+    accountId: number | null,
+    role: PublishVariantMediaRole,
+  ) => Promise<void>;
+  resolveDrive: (link: string) => Promise<SignalPostMedia>;
   /** What the server currently holds, so an account layer knows whether it is unsaved. */
   savedLayers: Map<string, PublishVariantRecord>;
   busy: boolean;
@@ -689,6 +916,8 @@ export function PublishPreviewTabs({
           report={selected}
           preview={preview}
           post={post}
+          onRecheckRole={onRecheckRole}
+          resolveDrive={resolveDrive}
           accountLayer={accountLayer}
           accountDirty={JSON.stringify(accountLayer) !== JSON.stringify(savedAccount)}
           busy={busy}

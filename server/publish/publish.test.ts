@@ -5,7 +5,7 @@ import { listIntegrationEvents } from '../integration-log.ts';
 import { buildPublishPlan, preflightPlatform, publishInstantFor } from './plan.ts';
 import { MockPublishProvider } from './mock-provider.ts';
 import { PublishProviderError } from './provider.ts';
-import { UnavailablePublishProvider } from './provider.ts';
+import { UnavailablePublishProvider, type PublishRequest } from './provider.ts';
 import { PublishService } from './service.ts';
 import {
   deliveryModeFor,
@@ -53,6 +53,7 @@ import { createApp } from '../app.ts';
 import { seedSignalPost } from '../signal/test-fixture.ts';
 import { MockDriveMediaProvider } from '../drive/mock-provider.ts';
 import type { SignalPostMedia } from '../../shared/signal-media.ts';
+import { postBridgePlatformConfigurations } from './post-bridge-wire.ts';
 
 let db: Db;
 const targets = [
@@ -170,6 +171,70 @@ describe('Drive media submission', () => {
     expect(plan.refusals.join(' ')).toContain(`${id}.png`);
     expect(plan.refusals.join(' ')).toContain(publicUrl);
     expect(plan.request).toBeUndefined();
+  });
+
+  /**
+   * The one media role C73 actually verified, end to end.
+   *
+   * §14 question 3 records it: `POST` accepted an `application/pdf` asset by id together with
+   * `linkedin.document_title`, and the read-back kept the configuration. So it is **not** a role row
+   * — it is the ordinary C75 upload plus the title override this app has always had, and what C76
+   * owed it was a test that walks the whole path rather than a new column. From the Drive PDF through
+   * revalidation, the bounded stream, the provider media id, and the tailored configuration, to the
+   * vendor field name.
+   */
+  it('publishes a Drive PDF to LinkedIn as a document post with its title', async () => {
+    const id = 'drive-media-file-pdf';
+    const linkedin = [
+      { id: 7, platform: 'linkedin', handle: '@gholmes-designs', name: 'G.Holmes Designs' },
+    ];
+    const post = add({
+      channels: ['li'],
+      media: [
+        {
+          ...driveDescriptor(id, 622),
+          driveName: 'q3-report.pdf',
+          mimeType: 'application/pdf',
+        },
+      ],
+      format: 'IMAGE',
+    });
+    await replacePostVariants(db, post.id, {
+      variants: [{ platform: 'linkedin', accountId: null, title: 'Q3 report' }],
+    });
+    const provider = new MockPublishProvider(linkedin);
+    const drive = new MockDriveMediaProvider();
+    drive.seed(id, { name: 'q3-report.pdf', mimeType: 'application/pdf', size: '622' });
+    drive.seedBody(id, new Uint8Array(622));
+    const service = new PublishService(
+      db,
+      new LocalSignalProvider(db),
+      provider,
+      'America/New_York',
+      () => new Date('2026-01-01T00:00:00.000Z'),
+      drive,
+    );
+
+    const preview = await service.preview(post.id);
+    expect(preview.refusals).toEqual([]);
+    // A PDF on its own is a document post on LinkedIn, and the title is the thing that names it.
+    expect(reportFor(preview, 'li')).toMatchObject({ status: 'READY', kind: 'POST' });
+    expect(reportFor(preview, 'li').content?.title).toBe('Q3 report');
+
+    await service.submit(post.id, preview.planHash);
+    expect(provider.uploads).toEqual([
+      { name: 'q3-report.pdf', mimeType: 'application/pdf', sizeBytes: 622, bytesRead: 622 },
+    ]);
+    const submission = provider.submissions[0] as PublishRequest;
+    expect(submission).toMatchObject({
+      mediaIds: ['mock-media-1'],
+      platformConfigurations: [{ platform: 'linkedin', title: 'Q3 report' }],
+    });
+    expect(submission.mediaUrls).toBeUndefined();
+    // And the vendor's own field name, from the builder the live adapter calls.
+    expect(postBridgePlatformConfigurations(submission)).toEqual({
+      linkedin: { document_title: 'Q3 report' },
+    });
   });
 
   it('revalidates, streams, submits media ids only, and stores versioned evidence', async () => {
@@ -1285,7 +1350,7 @@ describe('platform and account content variants', () => {
       channels: ['x'],
       mediaUrls: ['https://cdn.example.com/a.jpg', 'https://cdn.example.com/clip.mp4'],
     });
-    replacePostVariants(db, post.id, {
+    await replacePostVariants(db, post.id, {
       variants: [
         {
           platform: 'twitter',
@@ -1322,15 +1387,15 @@ describe('storing content variants', () => {
   const media = ['https://cdn.example.com/a.jpg', 'https://cdn.example.com/b.jpg'];
   const app = () => createApp(db, { publish: new MockPublishProvider(targets) });
 
-  it('replaces the whole set and drops a layer that overrides nothing', () => {
+  it('replaces the whole set and drops a layer that overrides nothing', async () => {
     const post = add({ channels: ['x'], mediaUrls: media });
-    replacePostVariants(db, post.id, {
+    await replacePostVariants(db, post.id, {
       variants: [
         { platform: 'twitter', accountId: null, caption: 'First' },
         { platform: 'linkedin', accountId: null, caption: 'Second' },
       ],
     });
-    const replaced = replacePostVariants(db, post.id, {
+    const replaced = await replacePostVariants(db, post.id, {
       variants: [
         { platform: 'twitter', accountId: null, caption: '   ' },
         { platform: 'linkedin', accountId: null, caption: 'Still here' },
@@ -1340,9 +1405,9 @@ describe('storing content variants', () => {
     expect(replaced[0]).toMatchObject({ caption: 'Still here', accountId: null });
   });
 
-  it('keeps an empty media selection apart from no selection across the round trip', () => {
+  it('keeps an empty media selection apart from no selection across the round trip', async () => {
     const post = add({ channels: ['x'], mediaUrls: media });
-    const stored = replacePostVariants(db, post.id, {
+    const stored = await replacePostVariants(db, post.id, {
       variants: [
         { platform: 'twitter', accountId: null, mediaUrls: [] },
         { platform: 'linkedin', accountId: null, caption: 'No selection here' },
@@ -1352,28 +1417,50 @@ describe('storing content variants', () => {
     expect(stored.find((v) => v.platform === 'linkedin')?.mediaUrls).toBeUndefined();
   });
 
-  it('refuses a field the platform does not carry, and media the post does not have', () => {
+  it('refuses a field the platform does not carry, and media the post does not have', async () => {
     const post = add({ channels: ['x'], mediaUrls: media });
-    expect(() =>
+    await expect(
       replacePostVariants(db, post.id, {
         variants: [{ platform: 'bluesky', accountId: null, title: 'Nowhere' }],
       }),
-    ).toThrow(/Bluesky takes no title/);
-    expect(() =>
+    ).rejects.toThrow(/Bluesky takes no title/);
+    // A role the provider defines no field for at all. Bluesky has neither, so neither can be
+    // stored against it; YouTube's thumbnail and Instagram's cover are the two the provider names,
+    // and those are stored and warned about rather than refused.
+    await expect(
       replacePostVariants(db, post.id, {
-        variants: [{ platform: 'youtube', accountId: null, thumbnailUrl: 'https://x.test/t.jpg' }],
+        variants: [
+          {
+            platform: 'bluesky',
+            accountId: null,
+            thumbnail: { source: 'URL', url: 'https://x.test/t.jpg' },
+          },
+        ],
       }),
-    ).toThrow(/YouTube takes no thumbnail/);
-    expect(() =>
+    ).rejects.toThrow(/Bluesky takes no thumbnail/);
+    await expect(
       replacePostVariants(db, post.id, {
         variants: [{ platform: 'twitter', accountId: null, mediaUrls: ['https://x.test/new.jpg'] }],
       }),
-    ).toThrow(/media the post already carries/);
-    expect(() =>
+    ).rejects.toThrow(/media the post already carries/);
+    await expect(
       replacePostVariants(db, post.id, {
         variants: [{ platform: 'twitter', accountId: null, postKind: 'STORY' }],
       }),
-    ).toThrow(/X does not accept a story/);
+    ).rejects.toThrow(/X does not accept a story/);
+    // A role the provider does name, refused on its own contents rather than on the platform: a
+    // cover is a still image, and a video in the role would be refused at the wire.
+    await expect(
+      replacePostVariants(db, post.id, {
+        variants: [
+          {
+            platform: 'instagram',
+            accountId: null,
+            coverImage: { source: 'URL', url: 'https://cdn.example.com/clip.mp4' },
+          },
+        ],
+      }),
+    ).rejects.toThrow(/cover image has to be an image/);
   });
 
   it('answers the routes, refuses a bad layer with a 400, and goes with the post', async () => {
@@ -1415,7 +1502,7 @@ describe('storing content variants', () => {
       'America/New_York',
       () => new Date('2026-01-01'),
     );
-    replacePostVariants(db, post.id, {
+    await replacePostVariants(db, post.id, {
       variants: [
         {
           platform: 'twitter',

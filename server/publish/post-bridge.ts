@@ -14,6 +14,7 @@ import {
 import {
   parsePostBridgeUploadReservation,
   postBridgeMediaEvidence,
+  postBridgePlatformConfigurations,
   postBridgePostBody,
   postBridgeUploadReservationBody,
   validatePostBridgeUploadUrl,
@@ -124,30 +125,8 @@ export class PostBridgeProvider implements PublishProvider {
     }
     return { mediaId: reservation.mediaId };
   }
-  /**
-   * The per-platform overrides, in the vendor's own vocabulary and nowhere else.
-   *
-   * `document_title` on LinkedIn and `title` everywhere else are the same field to this app and two
-   * field names to Post Bridge, which is exactly the kind of difference that belongs in this module
-   * and no other. A placement is sent only for a story, because that is the only placement the
-   * source records; a reel reaches the platform as its single video.
-   */
-  private static platformConfigurations(request: PublishRequest) {
-    const entries = (request.platformConfigurations ?? []).map((configuration) => {
-      const fields: Record<string, unknown> = {};
-      if (configuration.caption !== undefined) fields.caption = configuration.caption;
-      if (configuration.firstComment !== undefined)
-        fields.first_comment = configuration.firstComment;
-      if (configuration.title !== undefined)
-        fields[configuration.platform === 'linkedin' ? 'document_title' : 'title'] =
-          configuration.title;
-      if (configuration.story) fields.placement = 'story';
-      return [configuration.platform, fields] as const;
-    });
-    return entries.length ? Object.fromEntries(entries) : undefined;
-  }
   async submit(request: PublishRequest): Promise<PublishSubmission> {
-    const platformConfigurations = PostBridgeProvider.platformConfigurations(request);
+    const platformConfigurations = postBridgePlatformConfigurations(request);
     const body = (await this.request('/posts', {
       method: 'POST',
       body: JSON.stringify(postBridgePostBody(request, platformConfigurations)),
@@ -267,7 +246,7 @@ export class PostBridgeProvider implements PublishProvider {
    * any endpoint, so repeating a `PATCH` is safe and repeating a `POST` is not.
    */
   async update(providerPostId: string, request: PublishRequest): Promise<PublishSubmission> {
-    const platformConfigurations = PostBridgeProvider.platformConfigurations(request);
+    const platformConfigurations = postBridgePlatformConfigurations(request);
     const body = (await this.request(`/posts/${encodeURIComponent(providerPostId)}`, {
       method: 'PATCH',
       body: JSON.stringify(postBridgePostBody(request, platformConfigurations)),
