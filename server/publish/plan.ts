@@ -616,7 +616,9 @@ function reportForChannel(
 function accountConfigurationsFor(
   reports: PublishChannelReport[],
   baseCaption: string,
+  perAccountMedia: readonly { accountId: number; mediaUrls: string[] }[] = [],
 ): PublishAccountConfiguration[] {
+  const ownMediaAccounts = new Set(perAccountMedia.map((entry) => entry.accountId));
   const configurations: PublishAccountConfiguration[] = [];
   for (const report of reports) {
     if (report.status !== 'READY' || !report.platform || !report.targets) continue;
@@ -624,8 +626,18 @@ function accountConfigurationsFor(
     if (!capability?.accountContentOverride) continue;
     for (const entry of report.targets) {
       if (entry.status !== 'READY' || !entry.content) continue;
-      if (entry.content.caption === baseCaption) continue;
-      configurations.push({ accountId: entry.accountId, caption: entry.content.caption });
+      const ownCaption = entry.content.caption !== baseCaption;
+      const ownMedia = ownMediaAccounts.has(entry.accountId);
+      if (!ownCaption && !ownMedia) continue;
+      configurations.push({
+        accountId: entry.accountId,
+        ...(ownCaption ? { caption: entry.content.caption } : {}),
+        // The ids do not exist yet. They are produced by uploading immediately before the request,
+        // so the plan records only *that this account has its own media*; the publish service
+        // fills the ids in. A plan never carries a provider media id — it is not a durable
+        // reference and it is recreated on every submit, update, and restore-and-resubmit.
+        ...(ownMedia ? { mediaIds: [] } : {}),
+      });
     }
   }
   return configurations;
@@ -652,6 +664,55 @@ function platformConfigurationsFor(
     if (Object.keys(configuration).length > 1) configurations.push(configuration);
   }
   return configurations;
+}
+
+/**
+ * The accounts that chose media of their own, and the refusals that shape makes possible.
+ *
+ * **Only an all-Drive post can do this.** The provider takes one media array for the submission and
+ * a list of media ids per account, and a Drive file becomes an id only by being uploaded
+ * immediately before the request (C75). A public URL never becomes an id, so an account override
+ * naming one has nowhere to go — and the card is explicit that it must **refuse** rather than be
+ * dropped or quietly replaced with the platform's media, which is exactly what would otherwise
+ * happen: `agreedMedia` reads the channel's primary target and would never see the difference.
+ *
+ * Mixing is refused for the same reason C75 refuses it at the submission level. A post whose own
+ * media is public URLs cannot give one account Drive files, because the request carries `media`
+ * **or** `media_urls` and never both.
+ */
+function accountMediaFor(
+  reports: PublishChannelReport[],
+  postMedia: readonly SignalPostMedia[],
+): {
+  perAccount: { accountId: number; mediaUrls: string[]; items: SignalPostMedia[] }[];
+  refusals: string[];
+} {
+  const perAccount: { accountId: number; mediaUrls: string[]; items: SignalPostMedia[] }[] = [];
+  const refusals: string[] = [];
+  const descriptorFor = (url: string) =>
+    postMedia.find((item) => item.url === url) ?? ({ source: 'URL', url } as SignalPostMedia);
+  for (const report of reports) {
+    if (!report.platform || !report.targets) continue;
+    const capability = publishCapabilityFor(report.platform);
+    if (!capability?.accountContentOverride) continue;
+    // The channel's own media is the first target's, which is what the submission would carry.
+    const channelMedia = JSON.stringify(report.content?.mediaUrls ?? []);
+    for (const entry of report.targets) {
+      if (!entry.content) continue;
+      const own = entry.content.mediaUrls;
+      if (JSON.stringify(own) === channelMedia) continue;
+      const items = own.map(descriptorFor);
+      const publicUrls = items.filter((item) => item.source !== 'DRIVE');
+      if (publicUrls.length) {
+        refusals.push(
+          `${entry.handle || entry.accountId} was given ${publicUrls.length === 1 ? 'a public address' : 'public addresses'} of its own on ${capability.label} (${publicUrls.map((item) => item.url).join(', ')}). This provider only carries media per account as files uploaded from Drive, so that selection cannot be sent — and it is not dropped or replaced with the platform's. Choose Drive files for it, or give it the same media as the rest of the channel.`,
+        );
+        continue;
+      }
+      perAccount.push({ accountId: entry.accountId, mediaUrls: own, items });
+    }
+  }
+  return { perAccount, refusals };
 }
 
 /**
@@ -706,7 +767,11 @@ export function buildPublishPlan(
   now = new Date(),
   variants: readonly PublishVariantRecord[] = [],
   selections: PublishTargetSelections = [],
-): PublishPreview & { request?: PublishRequest; mediaSources?: SignalPostMedia[] } {
+): PublishPreview & {
+  request?: PublishRequest;
+  mediaSources?: SignalPostMedia[];
+  accountMediaSources?: { accountId: number; items: SignalPostMedia[] }[];
+} {
   const refusals: string[] = [];
   const warnings: string[] = [];
   const caption = post.text.trim();
@@ -802,8 +867,21 @@ export function buildPublishPlan(
   const totalDriveBytes = driveMedia.reduce((total, item) => total + (item.sizeBytes ?? 0), 0);
   if (totalDriveBytes > SIGNAL_DRIVE_TOTAL_MAX_BYTES)
     refusals.push('The selected Drive files exceed Post Bridge’s 500 MB total upload limit.');
+  const accountMedia = accountMediaFor(channels, post.media);
+  refusals.push(...accountMedia.refusals);
+  // Per-account media only exists as provider ids, so the whole post has to be Drive-sourced. A
+  // URL post that gave one account its own files would need `media` and `media_urls` in one
+  // request, which C75 refuses at the submission level for exactly this reason.
+  if (accountMedia.perAccount.length && urlMedia.length)
+    refusals.push(
+      `This post's own media is ${urlMedia.length === 1 ? 'a public address' : 'public addresses'}, and per-account media is only sent as files uploaded from Drive. Give the post Drive files, or give every account the same media.`,
+    );
   const platformConfigurations = platformConfigurationsFor(channels, caption);
-  const accountConfigurations = accountConfigurationsFor(channels, caption);
+  const accountConfigurations = accountConfigurationsFor(
+    channels,
+    caption,
+    accountMedia.perAccount,
+  );
 
   const stable = {
     postId: post.id,
@@ -832,6 +910,17 @@ export function buildPublishPlan(
     // Conditional for the same reason `accountContent` above is: an untouched post's hash must be
     // the number it has always been, and an empty array is not the same as an absent key.
     ...(accountConfigurations.length ? { accountConfigurations } : {}),
+    // The per-account files as whole descriptors, for the reason the submission's media is hashed
+    // that way: a Drive viewer link does not change when the bytes behind it do, so a hash over
+    // urls alone would call a plan current after the thing it planned to send had been swapped.
+    ...(accountMedia.perAccount.length
+      ? {
+          accountMedia: accountMedia.perAccount.map((entry) => ({
+            accountId: entry.accountId,
+            media: entry.items.map((item) => signalMediaFingerprint(item)),
+          })),
+        }
+      : {}),
     /**
      * Every resolved media role, as a fingerprint, keyed by the channel it belongs to.
      *
@@ -884,6 +973,14 @@ export function buildPublishPlan(
     warnings,
     refusals,
     mediaSources,
+    ...(accountMedia.perAccount.length
+      ? {
+          accountMediaSources: accountMedia.perAccount.map((entry) => ({
+            accountId: entry.accountId,
+            items: entry.items,
+          })),
+        }
+      : {}),
   };
   if (scheduledInstant && publishPreviewRefusals(preview).length === 0)
     preview.request = {

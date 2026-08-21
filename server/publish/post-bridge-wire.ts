@@ -98,6 +98,7 @@ export function postBridgeAccountConfigurations(request: PublishRequest) {
   const entries = (request.accountConfigurations ?? []).map((configuration) => ({
     account_id: configuration.accountId,
     ...(configuration.caption !== undefined ? { caption: configuration.caption } : {}),
+    ...(configuration.mediaIds ? { media: configuration.mediaIds } : {}),
   }));
   return entries.length ? entries : undefined;
 }

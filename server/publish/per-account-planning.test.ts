@@ -337,3 +337,106 @@ describe('fields that stay platform-level even where accounts are carried', () =
     expect(report?.warnings.join(' ')).toMatch(/one set of content per platform/i);
   });
 });
+
+describe('media an account chose for itself', () => {
+  const bothPages: PublishTargetSelections = [
+    { channel: 'fb', providerAccountId: FB_GHD },
+    { channel: 'fb', providerAccountId: FB_WILD },
+  ];
+  const DRIVE_A = 'https://drive.google.com/file/d/1AAA/view';
+  const DRIVE_B = 'https://drive.google.com/file/d/1BBB/view';
+  const PUBLIC = 'https://example.com/a.png';
+
+  const driveItem = (url: string, name: string) =>
+    ({
+      source: 'DRIVE',
+      url,
+      driveFileId: name,
+      driveName: `${name}.png`,
+      mimeType: 'image/png',
+      sizeBytes: 1024,
+      driveVersion: '1',
+      driveModifiedAt: '2027-01-01T00:00:00.000Z',
+      driveChecksum: `sum-${name}`,
+      driveVerifiedAt: '2027-01-01T00:00:00.000Z',
+    }) as unknown as SignalPost['media'][number];
+
+  const urlItem = (url: string) =>
+    ({
+      source: 'URL',
+      url,
+      driveFileId: null,
+      driveName: null,
+      mimeType: null,
+      sizeBytes: null,
+      driveVersion: null,
+      driveModifiedAt: null,
+      driveChecksum: null,
+      driveVerifiedAt: null,
+    }) as unknown as SignalPost['media'][number];
+
+  const seedWithMedia = (media: SignalPost['media']) =>
+    getPost(
+      db,
+      seedSignalPost(db, {
+        channels: ['fb'],
+        media,
+        mediaUrls: media.map((item) => item.url),
+      }).id,
+    ) as SignalPost;
+
+  it('sends one account its own Drive files, as ids the plan does not yet hold', () => {
+    const post = seedWithMedia([driveItem(DRIVE_A, 'aaa'), driveItem(DRIVE_B, 'bbb')]);
+    const preview = plan(post, bothPages, [
+      { platform: 'facebook', accountId: FB_WILD, mediaUrls: [DRIVE_B], updatedAt: 'x' },
+    ] as unknown as PublishVariantRecord[]);
+    expect(preview.refusals).toEqual([]);
+    // The plan names the account as having its own media and carries the files to upload; the ids
+    // are empty because a provider media id is made immediately before the request, never planned.
+    expect(preview.request?.accountConfigurations).toEqual([{ accountId: FB_WILD, mediaIds: [] }]);
+    expect(
+      (preview as { accountMediaSources?: { accountId: number; items: unknown[] }[] })
+        .accountMediaSources,
+    ).toEqual([{ accountId: FB_WILD, items: [expect.objectContaining({ url: DRIVE_B })] }]);
+  });
+
+  it('refuses a public address chosen for one account, and does not drop it', () => {
+    const post = seedWithMedia([driveItem(DRIVE_A, 'aaa'), urlItem(PUBLIC)]);
+    const preview = plan(post, bothPages, [
+      { platform: 'facebook', accountId: FB_WILD, mediaUrls: [PUBLIC], updatedAt: 'x' },
+    ] as unknown as PublishVariantRecord[]);
+    const said = preview.refusals.join(' ') + preview.channels.flatMap((c) => c.refusals).join(' ');
+    expect(said).toMatch(/only carries media per account as files uploaded from Drive/);
+    expect(said).toContain('wildeyephoto');
+    // Never silently replaced with the platform's media.
+    expect(preview.request).toBeUndefined();
+  });
+
+  it('refuses per-account files on a post whose own media is public', () => {
+    const post = seedWithMedia([urlItem(PUBLIC), driveItem(DRIVE_B, 'bbb')]);
+    const preview = plan(post, bothPages, [
+      { platform: 'facebook', accountId: FB_WILD, mediaUrls: [DRIVE_B], updatedAt: 'x' },
+    ] as unknown as PublishVariantRecord[]);
+    expect(preview.refusals.join(' ')).toMatch(/only sent as files uploaded from Drive/);
+  });
+
+  it('says nothing per account where every account keeps the channel’s media', () => {
+    const post = seedWithMedia([driveItem(DRIVE_A, 'aaa')]);
+    const preview = plan(post, bothPages, [
+      { platform: 'facebook', accountId: FB_GHD, caption: 'For the studio', updatedAt: 'x' },
+      { platform: 'facebook', accountId: FB_WILD, caption: 'For the gallery', updatedAt: 'x' },
+    ] as unknown as PublishVariantRecord[]);
+    expect(preview.request?.accountConfigurations?.every((entry) => !entry.mediaIds)).toBe(true);
+  });
+
+  it('moves the plan hash when an account’s own media changes', () => {
+    const post = seedWithMedia([driveItem(DRIVE_A, 'aaa'), driveItem(DRIVE_B, 'bbb')]);
+    const one = plan(post, bothPages, [
+      { platform: 'facebook', accountId: FB_WILD, mediaUrls: [DRIVE_B], updatedAt: 'x' },
+    ] as unknown as PublishVariantRecord[]).planHash;
+    const two = plan(post, bothPages, [
+      { platform: 'facebook', accountId: FB_WILD, mediaUrls: [DRIVE_A], updatedAt: 'x' },
+    ] as unknown as PublishVariantRecord[]).planHash;
+    expect(two).not.toBe(one);
+  });
+});

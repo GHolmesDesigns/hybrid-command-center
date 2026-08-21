@@ -54,6 +54,14 @@ export interface PublishAccountConfiguration {
   accountId: number;
   /** Present when this account's effective caption differs from the request's own. */
   caption?: string;
+  /**
+   * Provider media ids for this account alone, present only where it selected its own media.
+   *
+   * Ids and never URLs, for the reason the whole request is a discriminated union: per-account
+   * media exists only for an all-Drive post, uploaded immediately before the request through the
+   * C75 path. A public-URL account override refuses at preview rather than arriving here.
+   */
+  mediaIds?: string[];
 }
 
 interface PublishRequestBase {

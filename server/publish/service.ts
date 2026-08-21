@@ -121,7 +121,11 @@ export class PublishService {
 
   /** Uploads Drive sources once, after the hash gate and immediately before the post operation. */
   private async prepareMedia(
-    plan: PublishPreview & { request?: PublishRequest; mediaSources?: SignalPostMedia[] },
+    plan: PublishPreview & {
+      request?: PublishRequest;
+      mediaSources?: SignalPostMedia[];
+      accountMediaSources?: { accountId: number; items: SignalPostMedia[] }[];
+    },
     input: {
       postId: string;
       correlationId: string;
@@ -138,15 +142,28 @@ export class PublishService {
       return { request, sources: { version: 1, items: sources }, providerMediaIds: [] };
 
     const providerMediaIds: string[] = [];
+    // Per account, in the plan's order, and counted into the same `providerMediaIds` ledger as the
+    // submission's own files — a partial failure has to report every asset that landed, whichever
+    // level it belonged to, because they all expire on the provider's clock and not on ours.
+    const accountMediaIds = new Map<number, string[]>();
+    const uploadOne = async (stored: SignalPostMedia) => {
+      if (stored.source !== 'DRIVE')
+        throw new DriveMediaError('A Drive upload plan contained a public URL. Preview it again.');
+      const source = await openDriveMedia({ stored, provider: this.driveMedia });
+      const uploaded = await this.provider.uploadMedia(source);
+      providerMediaIds.push(uploaded.mediaId);
+      return uploaded.mediaId;
+    };
     try {
-      for (const stored of sources) {
-        if (stored.source !== 'DRIVE')
-          throw new DriveMediaError(
-            'A Drive upload plan contained a public URL. Preview it again.',
-          );
-        const source = await openDriveMedia({ stored, provider: this.driveMedia });
-        const uploaded = await this.provider.uploadMedia(source);
-        providerMediaIds.push(uploaded.mediaId);
+      for (const stored of sources) await uploadOne(stored);
+      for (const account of plan.accountMediaSources ?? []) {
+        const ids: string[] = [];
+        // Uploaded fresh for this account rather than reusing an id from the submission's own
+        // files, even where the same Drive file appears in both. A provider media id is ephemeral
+        // and belongs to one request; sharing one across two levels would make the evidence lie
+        // about what was sent where.
+        for (const stored of account.items) ids.push(await uploadOne(stored));
+        accountMediaIds.set(account.accountId, ids);
       }
     } catch (error) {
       if (error instanceof PublishMediaUploadError) providerMediaIds.push(error.providerMediaId);
@@ -174,8 +191,16 @@ export class PublishService {
     }
     const { mediaIds: _planned, ...base } = request;
     void _planned;
+    const accountConfigurations = base.accountConfigurations?.map((configuration) => {
+      const ids = accountMediaIds.get(configuration.accountId);
+      return ids ? { ...configuration, mediaIds: ids } : configuration;
+    });
     return {
-      request: { ...base, mediaIds: providerMediaIds },
+      request: {
+        ...base,
+        ...(accountConfigurations ? { accountConfigurations } : {}),
+        mediaIds: providerMediaIds,
+      },
       sources: { version: 1, items: sources },
       providerMediaIds,
     };
