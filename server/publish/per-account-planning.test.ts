@@ -98,10 +98,19 @@ describe('an explicit selection', () => {
   });
 
   it('puts both accounts on the plan-level target list, so both would be sent to', () => {
-    const preview = plan(seed(['fb']), [
-      { channel: 'fb', providerAccountId: FB_GHD },
-      { channel: 'fb', providerAccountId: FB_WILD },
-    ]);
+    // Tailored apart, because the same-platform rule below refuses two pages given the same
+    // content and this case is about the target list rather than about that refusal.
+    const preview = plan(
+      seed(['fb']),
+      [
+        { channel: 'fb', providerAccountId: FB_GHD },
+        { channel: 'fb', providerAccountId: FB_WILD },
+      ],
+      [
+        { platform: 'facebook', accountId: FB_GHD, caption: 'For the studio', updatedAt: 'x' },
+        { platform: 'facebook', accountId: FB_WILD, caption: 'For the gallery', updatedAt: 'x' },
+      ] as unknown as PublishVariantRecord[],
+    );
     expect(preview.targets.map((target) => target.accountId)).toEqual([FB_GHD, FB_WILD]);
     expect(preview.request?.targets).toEqual([
       { accountId: FB_GHD, platform: 'facebook' },
@@ -195,5 +204,54 @@ describe('a channel with no selection, beside one with', () => {
     ]);
     expect(preview.channels.find((entry) => entry.channel === 'ig')?.targets).toBeUndefined();
     expect(preview.channels.find((entry) => entry.channel === 'fb')?.targets).toHaveLength(2);
+  });
+});
+
+describe('the same-platform policy rule', () => {
+  const bothPages: PublishTargetSelections = [
+    { channel: 'fb', providerAccountId: FB_GHD },
+    { channel: 'fb', providerAccountId: FB_WILD },
+  ];
+
+  it('refuses two accounts given the post’s own untailored content', () => {
+    // Nothing is tailored, so both pages resolve the same caption. The provider would take it;
+    // §14 recorded that it raises no duplicate-content refusal of its own.
+    const report = fb(plan(seed(['fb']), bothPages));
+    expect(report?.status).toBe('BLOCKED');
+    expect(report?.refusals.join(' ')).toContain('gholmesdesigns and wildeyephoto');
+  });
+
+  it('allows two accounts once each has its own caption', () => {
+    const report = fb(
+      plan(seed(['fb']), bothPages, [
+        { platform: 'facebook', accountId: FB_GHD, caption: 'For the studio', updatedAt: 'x' },
+        { platform: 'facebook', accountId: FB_WILD, caption: 'For the gallery', updatedAt: 'x' },
+      ] as unknown as PublishVariantRecord[]),
+    );
+    expect(report?.refusals).toEqual([]);
+    expect(report?.status).toBe('READY');
+  });
+
+  it('still refuses when only one of the two was tailored', () => {
+    const report = fb(
+      plan(seed(['fb']), bothPages, [
+        { platform: 'facebook', accountId: FB_GHD, caption: 'For the studio', updatedAt: 'x' },
+      ] as unknown as PublishVariantRecord[]),
+    );
+    // One account moved, the other still carries the post's own caption — they are distinct now.
+    expect(report?.status).toBe('READY');
+  });
+
+  it('never fires for a single account, however many are connected', () => {
+    const report = fb(plan(seed(['fb']), [{ channel: 'fb', providerAccountId: FB_GHD }]));
+    expect(report?.refusals).toEqual([]);
+  });
+
+  it('never fires where nobody selected, so an untouched post is untouched', () => {
+    expect(fb(plan(seed(['fb'])))?.refusals).toEqual([]);
+  });
+
+  it('builds no request while the collision stands', () => {
+    expect(plan(seed(['fb']), bothPages).request).toBeUndefined();
   });
 });

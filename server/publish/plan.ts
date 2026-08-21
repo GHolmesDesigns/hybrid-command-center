@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { samePlatformPolicyRefusal } from '../../shared/publish-same-platform.ts';
 import {
   signalMediaKind,
   signalMediaKindFor,
@@ -538,6 +539,23 @@ function reportForChannel(
   // A channel is blocked when any of its accounts is: sending to some of the accounts a person
   // chose and quietly dropping the rest is the one outcome nobody asked for.
   const anyTargetBlocked = (targetReports ?? []).some((entry) => entry.status === 'BLOCKED');
+  // The same-platform rule, applied here because only this scope knows every account one platform
+  // is about to receive. C73 verified the API will *not* refuse identical content itself
+  // (`docs/post-bridge-api-surface.md` §14, question 1, "verified with policy constraint"), so a
+  // provider that accepts the request is not a platform that permits the posts.
+  const duplicate =
+    targetReports && targetReports.length > 1
+      ? samePlatformPolicyRefusal(
+          capability.label,
+          targetReports.map((entry) => ({
+            accountId: entry.accountId,
+            handle: entry.handle,
+            caption: entry.content?.caption ?? '',
+            mediaUrls: entry.content?.mediaUrls ?? [],
+          })),
+        )
+      : undefined;
+  if (duplicate) refusals.push(duplicate);
   return {
     channel,
     platform: capability.platform,
