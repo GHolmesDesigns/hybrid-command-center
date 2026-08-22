@@ -137,14 +137,14 @@ videos." Google Business "Text, or a single image. Video is rejected."
 
 ### 3.1 Signal channel mapping
 
-Identical to the mapping in `publishing-integration.md` §3, extended with `yt` and `tt`:
+Identical to the mapping in `publishing-integration.md` §3:
 
 ```js
 var SIGNAL_CHANNEL = {
-  ig: "instagram", x: "twitter", li: "linkedin", fb: "facebook",
-  yt: "youtube", tt: "tiktok", bsky: "bluesky"
+  blog: null, bsky: "bluesky", fb: "facebook", ig: "instagram", li: "linkedin",
+  th: "threads", tt: "tiktok", x: "twitter", yt: "youtube"
 };
-// "blog" has no platform and is intentionally absent.
+// `blog` has no platform and is intentionally null.
 ```
 
 ---

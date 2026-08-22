@@ -136,18 +136,19 @@ in use.
 The original four-channel ceiling was a consequence of `SignalPost` not modelling media, not a
 provider limitation. C47 (#149) is therefore a prerequisite to the publisher: it adds ordered
 public `https:` media references without uploading or storing files. With that prerequisite in
-place, the first publisher can plan all **seven** Signal social channels:
+place, the first publisher can plan all **eight** Signal social channels:
 
 | Signal channel | Post Bridge platform | First release |
 | --- | --- | --- |
-| `x` | `twitter` | publishes when its text and media pass preflight |
-| `fb` | `facebook` | publishes only to the `G.Holmes Designs` page (section 3.1) |
-| `li` | `linkedin` | publishes when its text and media pass preflight |
-| `bsky` | `bluesky` | publishes when its text and media pass preflight |
-| `ig` | `instagram` | publishes with required supported media |
-| `tt` | `tiktok` | publishes with required supported media |
-| `yt` | `youtube` | publishes with exactly one video |
 | `blog` | *(none)* | never published; see §10 |
+| `bsky` | `bluesky` | publishes when its text and media pass preflight |
+| `fb` | `facebook` | publishes only to the `G.Holmes Designs` page (section 3.1) |
+| `ig` | `instagram` | publishes with required supported media |
+| `li` | `linkedin` | publishes when its text and media pass preflight |
+| `th` | `threads` | publishes when its text and media pass preflight |
+| `tt` | `tiktok` | publishes with required supported media |
+| `x` | `twitter` | publishes when its text and media pass preflight |
+| `yt` | `youtube` | publishes with exactly one video |
 
 The planner carries the artifact's complete platform capability table and preflight rules rather
 than treating media as present-or-absent. That table is `shared/publish-capabilities.ts` and §3.2
@@ -157,10 +158,10 @@ an empty effective caption is always a refusal even when the target platform vis
 only the media — a provider-wide rule, which is why it is a plan-level refusal in `plan.ts` rather
 than a field on a platform.
 
-Post Bridge also reaches `pinterest`, `threads`, and `google_business`. Signal has no channel for
-them and the mapping is not extended to invent one — a channel exists because content is planned
-for it, not because a provider supports it. The capability table still answers for all ten, because
-the contract is about what the provider can do and a channel is about what is planned.
+Post Bridge also reaches `pinterest` and `google_business`. Signal has no channel for them and the
+mapping is not extended to invent one — a channel exists because content is planned for it, not
+because a provider supports it. The capability table still answers for all ten, because the contract
+is about what the provider can do and a channel is about what is planned.
 
 ### 3.2 The supported contract
 

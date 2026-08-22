@@ -372,6 +372,7 @@ describe('preflight against the shared capability contract', () => {
     { id: 6, platform: 'bluesky', handle: '@gholmes', name: 'G.Holmes Designs' },
     { id: 7, platform: 'youtube', handle: '@gholmes', name: 'G.Holmes Designs' },
     { id: 8, platform: 'tiktok', handle: '@gholmes', name: 'G.Holmes Designs' },
+    { id: 9, platform: 'threads', handle: '@gholmes', name: 'G.Holmes Designs' },
   ];
 
   it('reports every channel in SIGNAL_CHANNELS, blog as unavailable rather than unknown', () => {
@@ -393,7 +394,7 @@ describe('preflight against the shared capability contract', () => {
       'Blog is not available from this provider. Publish it yourself and mark the post published.',
     ]);
     // One video reaches every social channel that takes one; the two that cannot say why.
-    for (const channel of ['x', 'bsky', 'li', 'fb', 'yt', 'tt'] as const)
+    for (const channel of ['x', 'bsky', 'li', 'fb', 'yt', 'tt', 'th'] as const)
       expect(reportFor(plan, channel)).toMatchObject({ status: 'READY' });
     expect(reportFor(plan, 'ig')).toMatchObject({ status: 'READY' });
     expect(plan.refusals).toEqual([]);
@@ -818,6 +819,7 @@ describe('delivery mode, decided from the capability contract', () => {
       SIGNAL_CHANNELS.map((channel) => deliveryModeFor(publishPlatformFor(channel), 'POST')),
     ).toEqual([
       'UNSUPPORTED',
+      'AUTOMATIC',
       'AUTOMATIC',
       'AUTOMATIC',
       'AUTOMATIC',
