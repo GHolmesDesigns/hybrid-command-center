@@ -1,7 +1,16 @@
 name: Quality gates
 
+# Two triggers, and between them they cover everything that can reach `main`: the pull-request
+# event gates `refs/pull/N/merge`, which is the tree that will actually land, and the push event
+# gates each merge commit once it has. `push` used to be unrestricted, which meant a commit on a
+# card branch with an open pull request ran the whole gate twice on the same tree — and the
+# Windows job bills at 2x, so the duplicate was the expensive half of ~30 billable minutes per
+# commit. What is deliberately not covered: a branch pushed before its pull request exists. Under
+# `AGENTS.md` a card opens its pull request as a draft from the first push, so that window is the
+# exception rather than the flow.
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions:
@@ -9,8 +18,9 @@ permissions:
 
 # Pushing twice to a branch used to run both sets of gates to completion, and the answer from
 # the superseded commit was thrown away on arrival. The Windows end-to-end job is the expensive
-# one to waste. Keyed on the ref, so a pull-request run (`refs/pull/N/merge`) and a branch push
-# run (`refs/heads/...`) are separate groups and neither cancels the other.
+# one to waste. Keyed on the ref, which is now one group per branch: a card branch is reached
+# only through `refs/pull/N/merge` and `main` only through `refs/heads/main`, so a superseded
+# commit is cancelled by its successor without a second trigger racing it.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   # Except on the default branch: a push there is a merge, and every merge commit keeps its own
