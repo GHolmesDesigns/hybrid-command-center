@@ -37,7 +37,13 @@ beforeEach(() => {
  */
 function seedDelivery(
   postId: string,
-  targets: { channel: SignalChannel; accountId: number; resultId?: string; handle?: string }[],
+  targets: {
+    channel: SignalChannel;
+    accountId: number;
+    resultId?: string;
+    handle?: string;
+    outcome?: 'SUCCESS' | 'FAILURE';
+  }[],
   options: { publicationId?: string; createdAt?: string } = {},
 ) {
   const publicationId = options.publicationId ?? `publication-${postId}`;
@@ -62,7 +68,7 @@ function seedDelivery(
   const insert = db.prepare(
     `INSERT INTO signal_publication_targets(
        publication_id,channel,provider_account_id,handle,mode,outcome,post_result_id
-     ) VALUES(?,?,?,?,'AUTOMATIC','SUCCESS',?)`,
+     ) VALUES(?,?,?,?,'AUTOMATIC',?,?)`,
   );
   for (const target of targets)
     insert.run(
@@ -70,6 +76,7 @@ function seedDelivery(
       target.channel,
       target.accountId,
       target.handle ?? `@account-${target.accountId}`,
+      target.outcome ?? 'SUCCESS',
       target.resultId ?? null,
     );
   return publicationId;
@@ -154,6 +161,16 @@ describe('reading figures', () => {
       'AWAITING_RESULT',
     );
   });
+
+  it('does not describe a failed delivery as awaiting figures', () => {
+    const post = seedSignalPost(db, { channels: ['ig'] });
+    seedDelivery(post.id, [
+      { channel: 'ig', accountId: 1, resultId: 'result-ig', outcome: 'FAILURE' },
+    ]);
+    const target = targetFor(service(new MockAnalyticsProvider()).read(post.id), 'ig');
+    expect(target?.availability).toBe('NOT_AVAILABLE');
+    expect(target?.outcome).toBe('FAILURE');
+  });
 });
 
 describe('an on-demand refresh', () => {
@@ -220,6 +237,21 @@ describe('an on-demand refresh', () => {
     expect(
       db.prepare('SELECT COUNT(*) AS total FROM signal_post_metrics').get() as { total: number },
     ).toEqual({ total: 1 });
+  });
+
+  it('does not ask the provider about a failed delivery that carries a result identity', async () => {
+    const post = seedSignalPost(db, { channels: ['ig'] });
+    seedDelivery(post.id, [
+      { channel: 'ig', accountId: 1, resultId: 'result-ig', outcome: 'FAILURE' },
+    ]);
+    const provider = loadedProvider();
+    const summary = await service(provider).refresh(post.id);
+
+    expect(provider.syncs).toEqual([]);
+    expect(provider.lists).toEqual([]);
+    expect(targetFor(summary, 'ig')?.availability).toBe('NOT_AVAILABLE');
+    expect(summary.refresh.allowed).toBe(false);
+    expect(summary.refresh.reason).toMatch(/did not go out/);
   });
 
   it('reaches no provider at all when nothing on the post can be measured', async () => {

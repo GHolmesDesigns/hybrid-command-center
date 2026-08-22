@@ -121,6 +121,21 @@ describe('the cross-field rule', () => {
     expect(signalPostMediaIssue(drive({ driveVersion: null, driveChecksum: null }))).toBeNull();
     expect(signalPostMediaIssue(drive({ driveVersion: null, driveModifiedAt: null }))).toBeNull();
   });
+
+  it('refuses a Drive host on a public reference and names the Drive input', () => {
+    expect(
+      signalPostMediaIssue(
+        urlPostMedia(
+          'https://drive.google.com/file/d/1OUDJgha1n6kkDezljf4U52b7rvDBiuAj/view?usp=drive_link',
+        ),
+      ),
+    ).toBe('drive.google.com is not public media. Add it with Add a Drive file by link instead.');
+    expect(
+      signalPostMediaIssue(
+        urlPostMedia('https://docs.google.com/file/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/view'),
+      ),
+    ).toBe('docs.google.com is not public media. Add it with Add a Drive file by link instead.');
+  });
 });
 
 describe('the fail-closed provider limits', () => {

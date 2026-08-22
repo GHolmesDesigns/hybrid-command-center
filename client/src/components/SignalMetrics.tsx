@@ -3,11 +3,11 @@ import { BarChart3, MinusCircle, RefreshCw } from 'lucide-react';
 import { api, send } from '../api';
 import {
   postMetricDayDeltas,
+  postMetricAvailabilityDetail,
+  postMetricAvailabilityLabel,
   postMetricsMeasurable,
   ANALYTICS_METRIC_LABEL,
   ANALYTICS_METRICS,
-  POST_METRIC_AVAILABILITY_DETAIL,
-  POST_METRIC_AVAILABILITY_LABEL,
   type PostMetricsSummary,
   type PostTargetMetrics,
 } from '../../../shared/publish-analytics';
@@ -107,7 +107,8 @@ function TargetFigures({ target }: { target: PostTargetMetrics }) {
         {/* The state carries its own icon and its own words beside the colour, so the difference
             between measured and unmeasured survives greyscale and a screen reader. */}
         <span className="signal-metric-availability">
-          <Icon aria-hidden="true" /> {POST_METRIC_AVAILABILITY_LABEL[target.availability]}
+          <Icon aria-hidden="true" />{' '}
+          {postMetricAvailabilityLabel(target.availability, target.outcome)}
         </span>
       </p>
       {available ? (
@@ -130,7 +131,7 @@ function TargetFigures({ target }: { target: PostTargetMetrics }) {
         </>
       ) : (
         <p className="signal-metric-unavailable">
-          {POST_METRIC_AVAILABILITY_DETAIL[target.availability]}
+          {postMetricAvailabilityDetail(target.availability, target.outcome)}
         </p>
       )}
     </li>

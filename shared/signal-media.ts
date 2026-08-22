@@ -18,9 +18,13 @@ import type { SignalMediaKind } from './signal.ts';
  * `url` is non-null for both kinds, which is what keeps every existing display and selection path
  * working: a URL row stores the public URL, and a Drive row stores Drive's canonical
  * `webViewLink`. **A Drive row's `url` is a page for a person to open, never provider-fetchable
- * media.** The confirmed publishing path is the only path that reads a Drive row's bytes, and it
- * does so from `driveFileId` only after revalidating the fingerprint below.
+ * media.** A `URL` row must not carry a Drive host either — the same viewer page, pasted into the
+ * wrong field. The confirmed publishing path is the only path that reads a Drive row's bytes, and
+ * it does so from `driveFileId` only after revalidating the fingerprint below.
  */
+
+/** The two hosts a Drive share link may come from. Kept here so the cross-field rule can refuse one. */
+const DRIVE_MEDIA_HOSTS = new Set(['drive.google.com', 'docs.google.com']);
 
 export const SIGNAL_MEDIA_SOURCES = ['URL', 'DRIVE'] as const;
 export type SignalMediaSource = (typeof SIGNAL_MEDIA_SOURCES)[number];
@@ -149,6 +153,14 @@ export function signalPostMediaIssue(media: SignalPostMedia): string | null {
   if (media.source === 'URL') {
     for (const [field, description] of DRIVE_ONLY_FIELDS)
       if (media[field] !== null) return `A public media reference cannot carry ${description}.`;
+    try {
+      const url = new URL(media.url.trim());
+      if (url.protocol === 'https:' && DRIVE_MEDIA_HOSTS.has(url.hostname))
+        return `${url.hostname} is not public media. Add it with Add a Drive file by link instead.`;
+    } catch {
+      // Malformed addresses are caught by the URL check above or by the boundary; this guard only
+      // names the Drive mistake for links that parse.
+    }
     return null;
   }
   if (!media.driveFileId?.trim()) return 'A Drive media reference needs a Drive file id.';
