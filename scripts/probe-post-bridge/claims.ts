@@ -85,8 +85,12 @@ export const PROBE_CLAIMS: readonly ProbeClaimDefinition[] = [
     claim:
       'What the provider does about two accounts on one platform when the captions are materially different, and in what terms it states any restriction.',
     dependents: ['C77'],
+    // Reachable two ways, and the difference is who owns the rule. Accepted-and-silent is
+    // `verified`: the provider imposes nothing, and C77's refusal is its own judgement. A refusal
+    // in the provider's own terms is `verified-with-policy-constraint`, and `claimDisposition`
+    // appends the sentence that says a constraint is a preflight refusal rather than a warning.
     whenVerified:
-      "C77 carries the verified rule into preflight as a refusal in the provider's own terms.",
+      'C77 may send materially different captions to two accounts on one platform. Any rule stricter than what the provider states is this app’s own judgement and is recorded as such, never as the provider’s words.',
     whenNegative:
       'Same-platform posting is refused outright, so C77 is will-not-build and the existing single-account refusal is already correct.',
   },

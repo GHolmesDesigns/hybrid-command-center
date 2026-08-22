@@ -1,5 +1,8 @@
 import crypto from 'node:crypto';
-import { samePlatformPolicyRefusal } from '../../shared/publish-same-platform.ts';
+import {
+  samePlatformNearDuplicateWarning,
+  samePlatformPolicyRefusal,
+} from '../../shared/publish-same-platform.ts';
 import {
   signalMediaKind,
   signalMediaKindFor,
@@ -559,22 +562,26 @@ function reportForChannel(
   // chose and quietly dropping the rest is the one outcome nobody asked for.
   const anyTargetBlocked = (targetReports ?? []).some((entry) => entry.status === 'BLOCKED');
   // The same-platform rule, applied here because only this scope knows every account one platform
-  // is about to receive. C73 verified the API will *not* refuse identical content itself
-  // (`docs/post-bridge-api-surface.md` §14, question 1, "verified with policy constraint"), so a
-  // provider that accepts the request is not a platform that permits the posts.
-  const duplicate =
+  // is about to receive. C73 verified the API accepts identical content and refuses nothing
+  // (`docs/post-bridge-api-surface.md` §14, question 1), so both halves below are this app's own
+  // judgement rather than a provider rule being relayed — `shared/publish-same-platform.ts` says
+  // why, and why the refusal no longer claims otherwise.
+  //
+  // Identical content refuses; content that only reads as identical warns and leaves the decision
+  // with the person, which is the one thing a rule here cannot do honestly.
+  const samePlatform =
     targetReports && targetReports.length > 1
-      ? samePlatformPolicyRefusal(
-          capability.label,
-          targetReports.map((entry) => ({
-            accountId: entry.accountId,
-            handle: entry.handle,
-            caption: entry.content?.caption ?? '',
-            mediaUrls: entry.content?.mediaUrls ?? [],
-          })),
-        )
+      ? targetReports.map((entry) => ({
+          accountId: entry.accountId,
+          handle: entry.handle,
+          caption: entry.content?.caption ?? '',
+          mediaUrls: entry.content?.mediaUrls ?? [],
+        }))
       : undefined;
+  const duplicate = samePlatform && samePlatformPolicyRefusal(capability.label, samePlatform);
   if (duplicate) refusals.push(duplicate);
+  const nearDuplicate =
+    samePlatform && samePlatformNearDuplicateWarning(capability.label, samePlatform);
   return {
     channel,
     platform: capability.platform,
@@ -589,7 +596,11 @@ function reportForChannel(
     content: primary.content,
     ...(targetReports ? { targets: targetReports } : {}),
     refusals,
-    warnings: primary.warnings,
+    // The first target's warnings, plus the one warning that belongs to the channel rather than to
+    // any single account: no account can see that another was given the same words. A channel
+    // nobody selected accounts for has no second target and no near-duplicate to report, so its
+    // warnings stay exactly the list they were before this existed.
+    warnings: nearDuplicate ? [...primary.warnings, nearDuplicate] : primary.warnings,
   };
 }
 

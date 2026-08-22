@@ -658,9 +658,15 @@ async function questionOneAccounts(context: ProbeContext): Promise<void> {
         : `PATCH was refused: ${refusal(patched)}.`,
     ],
   );
-  context.ledger.record('same-platform-duplicate-policy', 'verified-with-policy-constraint', [
+  // Accepted, and the provider said nothing. That is a `verified` observation and not a policy
+  // constraint: a constraint belongs in this matrix only when the provider states one, which is the
+  // branch above. The earlier version of this line recorded the accept case as a constraint and
+  // asserted a vendor support-page restriction in its evidence — wording no run ever read and §13
+  // never cited. C77 still refuses same-platform duplicates, by its own judgement, and
+  // `shared/publish-same-platform.ts` is where that judgement is argued rather than attributed.
+  context.ledger.record('same-platform-duplicate-policy', 'verified', [
     `The API accepted materially different captions to two ${platform} accounts in one request and raised no duplicate-content refusal.`,
-    "A positive API response does not erase the vendor's support-page restriction on same-platform content: C77 carries the rule as its own preflight refusal rather than waiting for the provider to enforce it.",
+    'It stated no restriction of its own, so this run records none on the provider’s behalf. Any stricter rule the app carries is the app’s, and is documented as such.',
   ]);
 }
 

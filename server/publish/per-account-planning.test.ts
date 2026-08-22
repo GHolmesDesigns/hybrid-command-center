@@ -258,6 +258,56 @@ describe('the same-platform policy rule', () => {
   });
 });
 
+describe('the near-duplicate remark, which warns rather than refuses', () => {
+  const bothPages: PublishTargetSelections = [
+    { channel: 'fb', providerAccountId: FB_GHD },
+    { channel: 'fb', providerAccountId: FB_WILD },
+  ];
+  const cosmetic = [
+    { platform: 'facebook', accountId: FB_GHD, caption: 'Booking August now!', updatedAt: 'x' },
+    { platform: 'facebook', accountId: FB_WILD, caption: 'booking august now', updatedAt: 'x' },
+  ] as unknown as PublishVariantRecord[];
+
+  it('warns about two captions that differ only cosmetically, and still sends', () => {
+    const preview = plan(seed(['fb']), bothPages, cosmetic);
+    const report = fb(preview);
+    expect(report?.warnings.join(' ')).toContain('gholmesdesigns and wildeyephoto');
+    expect(report?.status).toBe('READY');
+    expect(report?.refusals).toEqual([]);
+    // The point of a warning rather than a refusal: the request exists and the person may confirm
+    // it. Only they know whether these two audiences overlap.
+    expect(preview.request?.accountConfigurations).toHaveLength(2);
+  });
+
+  it('is a channel warning, because no single account can see the collision', () => {
+    const report = fb(plan(seed(['fb']), bothPages, cosmetic));
+    for (const target of report?.targets ?? [])
+      expect(target.warnings.join(' ')).not.toContain('very close');
+  });
+
+  it('says nothing where the two captions genuinely differ', () => {
+    const report = fb(
+      plan(seed(['fb']), bothPages, [
+        { platform: 'facebook', accountId: FB_GHD, caption: 'For the studio', updatedAt: 'x' },
+        { platform: 'facebook', accountId: FB_WILD, caption: 'For the gallery', updatedAt: 'x' },
+      ] as unknown as PublishVariantRecord[]),
+    );
+    expect(report?.warnings.join(' ')).not.toContain('very close');
+  });
+
+  it('refuses identical content without also remarking on it', () => {
+    const report = fb(plan(seed(['fb']), bothPages));
+    expect(report?.status).toBe('BLOCKED');
+    expect(report?.warnings.join(' ')).not.toContain('very close');
+  });
+
+  it('leaves a post nobody selected for with exactly the warnings it always had', () => {
+    // The additive guarantee, for this piece: no second target means no channel-level remark, so
+    // the list is the first target's and nothing else, as it was before any of this existed.
+    expect(fb(plan(seed(['fb'])))?.warnings.join(' ')).not.toContain('very close');
+  });
+});
+
 describe('two accounts, distinct content, one request (C77 acceptance)', () => {
   const bothPages: PublishTargetSelections = [
     { channel: 'fb', providerAccountId: FB_GHD },

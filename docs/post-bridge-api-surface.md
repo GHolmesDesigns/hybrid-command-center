@@ -280,7 +280,7 @@ note at the end of this section says which results that applies to.
 | `POST /v1/posts` accepts `account_configurations` and stores a different caption for each of two explicitly approved accounts on one platform. | **verified** | POST /v1/posts accepted account_configurations for accounts 85300 and 85301 on facebook (HTTP 201). | C77 may build explicit same-platform targets and per-account captions for the verified platform. |
 | Which encoding `account_configurations` takes — a list of objects each carrying `account_id`, or a map keyed by account id. | **verified** | A list of objects each carrying account_id was accepted on the first attempt. | C77's request builder emits the accepted encoding and its unit tests assert it. |
 | The per-account `caption` and `media` read back unchanged through `GET /v1/posts/{id}`, after create and again after `PATCH`. | **verified** | After create, account_configurations read back as array(2) of {account_id: number, caption: string}. After PATCH — sent in full, scheduled_at included — it read back as array(2) of {account_id: number, caption: string}. | C77 may reconcile per-account content against the provider record and hash it into the confirmation. |
-| What the provider does about two accounts on one platform when the captions are materially different, and in what terms it states any restriction. | **verified with policy constraint** | The API accepted materially different captions to two facebook accounts in one request and raised no duplicate-content refusal. A positive API response does not erase the vendor's support-page restriction on same-platform content: C77 carries the rule as its own preflight refusal rather than waiting for the provider to enforce it. | C77 carries the verified rule into preflight as a refusal in the provider's own terms. The constraint recorded beside it is a preflight refusal, not a warning. |
+| What the provider does about two accounts on one platform when the captions are materially different, and in what terms it states any restriction. | **verified** | **Corrected 22 August 2026 — see the note below; this row read *verified with policy constraint* until then.** The API accepted materially different captions to two facebook accounts in one request and raised no duplicate-content refusal. It stated no restriction of its own, so this run records none on the provider's behalf. Any stricter rule the app carries is the app's, and is documented as such. | C77 may send materially different captions to two accounts on one platform. Any rule stricter than what the provider states is this app's own judgement and is recorded as such, never as the provider's words. |
 
 ### Question 2 — Upload flow and media lifecycle
 
@@ -357,6 +357,53 @@ ask established. Git history holds that run's full table; what still bears on th
 - **The signed `PUT` was repeated with redirects disabled** on 20 August, and the transcript
   redacts the signed URL, so neither run establishes a fixed upload hostname. C75's redirect policy
   rests on that observation.
+
+### Correction, 22 August 2026 — the same-platform restriction was never the vendor's
+
+The question 1 row on same-platform content read **verified with policy constraint** until today,
+and its evidence said "a positive API response does not erase the vendor's support-page restriction
+on same-platform content". **That restriction is not recorded anywhere.** No URL, no quotation, in
+§13's sources or in either run's table — and the owner confirms it was never read on a Post Bridge
+page. It was a reasonable inference from how the platforms themselves behave, written in a sentence
+shaped like a citation.
+
+Corrected, rather than deleted, because the observation underneath it is sound and still governs:
+
+- **The row is now `verified`.** What the run saw is that the API accepts materially different
+  captions to two same-platform accounts and states no restriction. A `policy constraint` belongs in
+  this matrix only where the provider states one in its own terms — which is exactly what the probe's
+  other branch records when a create is refused with duplicate-content language.
+- **C77 still refuses identical same-platform content**, as its own judgement, argued in
+  `shared/publish-same-platform.ts`. The refusal a user sees no longer attributes the rule to
+  Post Bridge, and content that merely *reads* as identical now warns instead of being ignored.
+- **The probe no longer re-asserts it.** Its accept branch records `verified` with evidence about
+  what was observed, so the next dated run cannot regenerate the claim.
+
+If a vendor rule does exist, this is how it comes back: put its wording and URL in §13 and in the
+next run's §14, and `shared/publish-same-platform.ts` can then quote the provider instead of
+speaking for itself. Nothing else has to move.
+
+### Not yet asked — LinkedIn same-platform, as of 22 August 2026
+
+Question 1 has been asked on Facebook alone, and `accountContentOverride` is true for Facebook
+alone. **The precondition for asking it on LinkedIn now exists**: the owner has a personal LinkedIn
+profile that administers two company pages, `G.Holmes Designs` and `AdDrive Media`.
+
+Two things stay unverified until a dated run says otherwise, and neither is assumed here:
+
+1. **That Post Bridge connects those pages as two separate `linkedin` social accounts** with ids of
+   their own. A profile administering two pages is a LinkedIn fact, not a provider one. `GET
+   /v1/social-accounts` answers it, reads only, and needs no live write.
+2. **That `account_configurations` carries a per-account caption on `linkedin`.** Facebook's result
+   does not transfer: the capability table pins the recorded matrix precisely so a flip without
+   evidence fails its test.
+
+The owner-run command, once both page ids are known from step 1 — never in CI, and it writes real
+scheduled posts before deleting them:
+
+```bash
+npm run probe:post-bridge -- --live --yes --accounts-approved --probe-label <unused-label> --scheduled-at <instant at least 48h out, with Z or an offset> --account linkedin:<first page id> --account linkedin:<second page id>
+```
 
 **One claim genuinely contradicts between the two runs, and it is not settled.** On `GET /v1/posts`
 filtering, 20 August recorded both `status[]=scheduled` and `status=scheduled` returning five
