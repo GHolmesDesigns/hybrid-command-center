@@ -25,6 +25,7 @@ import {
   type SignalPost,
 } from './signal.ts';
 import type { PublicationState, SignalPublication, SignalPublicationTarget } from './publish.ts';
+import type { ProviderInventoryPost } from './provider-inventory.ts';
 
 /**
  * The rules, against fixtures rather than a page.
@@ -648,5 +649,114 @@ describe('order and headline', () => {
 
   it('carries the configuration it was measured with', () => {
     expect(derive({}, { coverageDays: 3 }).config.coverageDays).toBe(3);
+  });
+});
+
+describe('posts in the provider this app did not send', () => {
+  const listed = (overrides: Partial<ProviderInventoryPost> = {}): ProviderInventoryPost => ({
+    providerPostId: 'remote-9',
+    state: 'SCHEDULED',
+    scheduledInstant: '2026-08-20T13:00:00.000Z',
+    captionExcerpt: 'Scheduled straight in Post Bridge',
+    accountIds: [11],
+    ...overrides,
+  });
+
+  it('says nothing at all when nobody has read the provider', () => {
+    expect(kindsOf(derive({ publications: [publication()] }))).not.toContain('PROVIDER_ORPHAN');
+  });
+
+  it('raises exactly one alert for a listed post with no local publication', () => {
+    const summary = derive({ providerPosts: [listed()], knownProviderPostIds: [] });
+    const orphan = alertOf(summary, 'PROVIDER_ORPHAN');
+    expect(summary.alerts.filter((alert) => alert.kind === 'PROVIDER_ORPHAN')).toHaveLength(1);
+    expect(orphan?.severity).toBe('WATCH');
+    expect(orphan?.title).toBe('1 post in Post Bridge this app did not send');
+    expect(orphan?.detail).toContain('Scheduled straight in Post Bridge');
+    expect(orphan?.detail).toContain('nothing here can adopt, change, or withdraw it');
+    expect(orphan?.href).toBe('/signal');
+    // It is about the provider rather than about one of this workspace's posts, so it names no post.
+    expect(orphan?.postId).toBeUndefined();
+    expect(orphan?.publicationId).toBeUndefined();
+  });
+
+  it('raises none for a listed post a publication claims', () => {
+    const summary = derive({
+      providerPosts: [listed({ providerPostId: 'remote-1' })],
+      knownProviderPostIds: ['remote-1'],
+    });
+    expect(kindsOf(summary)).not.toContain('PROVIDER_ORPHAN');
+  });
+
+  it('counts them together, names the first three, and says how many more there are', () => {
+    const summary = derive({
+      providerPosts: [
+        listed({ providerPostId: 'a', captionExcerpt: 'One' }),
+        listed({ providerPostId: 'b', captionExcerpt: 'Two' }),
+        listed({ providerPostId: 'c', captionExcerpt: 'Three' }),
+        listed({ providerPostId: 'd', captionExcerpt: 'Four' }),
+      ],
+      knownProviderPostIds: [],
+    });
+    const orphan = alertOf(summary, 'PROVIDER_ORPHAN');
+    expect(orphan?.title).toBe('4 posts in Post Bridge this app did not send');
+    expect(orphan?.detail).toContain('and 1 more');
+    expect(orphan?.detail).not.toContain('Four');
+  });
+
+  it('names a post with no caption by its state and its id', () => {
+    const summary = derive({
+      providerPosts: [listed({ captionExcerpt: '', state: 'DRAFT', providerPostId: 'remote-3' })],
+      knownProviderPostIds: [],
+    });
+    expect(alertOf(summary, 'PROVIDER_ORPHAN')?.detail).toContain('Held as a draft · remote-3');
+  });
+
+  it('acknowledges, and comes back live once one of them is published', () => {
+    const orphans = { providerPosts: [listed()], knownProviderPostIds: [] };
+    const live = alertOf(derive(orphans), 'PROVIDER_ORPHAN');
+    const acknowledgement: QueueAlertAcknowledgement = {
+      alertId: live?.id as string,
+      fingerprint: live?.fingerprint as string,
+      acknowledgedAt: '2026-08-19T13:00:00.000Z',
+    };
+    expect(
+      alertOf(derive({ ...orphans, acknowledgements: [acknowledgement] }), 'PROVIDER_ORPHAN')
+        ?.acknowledged,
+    ).toBe(true);
+    const published = derive({
+      providerPosts: [listed({ state: 'PUBLISHED' })],
+      knownProviderPostIds: [],
+      acknowledgements: [acknowledgement],
+    });
+    expect(alertOf(published, 'PROVIDER_ORPHAN')?.acknowledged).toBe(false);
+  });
+
+  it('comes back live when a second one appears, rather than hiding under the first', () => {
+    const live = alertOf(
+      derive({ providerPosts: [listed({ providerPostId: 'a' })], knownProviderPostIds: [] }),
+      'PROVIDER_ORPHAN',
+    );
+    const both = derive({
+      providerPosts: [listed({ providerPostId: 'a' }), listed({ providerPostId: 'b' })],
+      knownProviderPostIds: [],
+      acknowledgements: [
+        {
+          alertId: live?.id as string,
+          fingerprint: live?.fingerprint as string,
+          acknowledgedAt: '2026-08-19T13:00:00.000Z',
+        },
+      ],
+    });
+    expect(alertOf(both, 'PROVIDER_ORPHAN')?.acknowledged).toBe(false);
+  });
+
+  it('reads last of the watch alerts, after the ones about this workspace itself', () => {
+    const summary = derive({
+      usedChannels: ['x'],
+      providerPosts: [listed()],
+      knownProviderPostIds: [],
+    });
+    expect(kindsOf(summary)).toEqual(['CHANNEL_UNCOVERED', 'PROVIDER_ORPHAN']);
   });
 });

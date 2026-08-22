@@ -96,6 +96,7 @@ import { variantRolePayload, type PublishVariantRecord } from '../../../shared/p
 import type { PublishVariantMediaRole } from '../../../shared/publish-variant-media';
 import { PlatformVariantsEditor, PublishPreviewTabs } from './SignalVariants';
 import { SignalHealthPanel } from './SignalHealth';
+import { SignalProviderInventoryPanel } from './SignalProviderInventory';
 import { SignalMetrics } from './SignalMetrics';
 import { previewPlatforms, variantList, variantMap } from './signal-variants';
 
@@ -2013,6 +2014,11 @@ export function SignalView() {
           )}
         </section>
       </div>
+      {/* Below the planner and above the figures, because it is about the schedule rather than about
+          what a post did: a slot that looks empty in the grid above may already have something going
+          out into it. A local read of stored rows — nothing here contacts the provider until
+          somebody presses its own refresh. */}
+      <SignalProviderInventoryPanel reloadKey={healthKey} />
       {/* Below the planner, because it is what happened rather than what is planned — and because it
           reads the figures a post's own panel already stored, so it belongs after the posts and not
           in front of them. `healthKey` is bumped by every save here, which is also every edit that

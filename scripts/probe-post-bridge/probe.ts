@@ -51,6 +51,7 @@ import {
 } from './requests.ts';
 import { publishCapabilityFor } from '../../shared/publish-capabilities.ts';
 import { ANALYTICS_PLATFORMS } from '../../shared/publish-analytics.ts';
+import { providerInventoryNextPage } from '../../shared/provider-inventory.ts';
 
 /**
  * How wide and how deep one inventory read goes.
@@ -231,21 +232,22 @@ interface InventoryRead {
  * anything else stops the walk and is recorded as the shape it saw. Inventing a `?cursor=` parameter
  * would produce a page that might be the second page or might be the first one again, and question 4
  * exists precisely because C78 cannot be built on a maybe.
+ *
+ * The rule itself is `shared/provider-inventory.ts`, which is where the app's own inventory read
+ * gets it. This wrapper only turns a refusal into the sentence the result matrix records, because
+ * the shape a probe *saw* is evidence and the app has no use for it.
  */
 export function nextInventoryOffset(
   meta: unknown,
 ): { done: true } | { offset: number } | { unknown: string } {
-  if (!meta || typeof meta !== 'object') return { unknown: `meta is ${describeShape(meta, 1)}` };
-  const next = (meta as Record<string, unknown>).next;
-  if (next === null || next === undefined || next === false) return { done: true };
-  if (typeof next === 'number') return { offset: next };
-  if (typeof next === 'string') {
-    const match = /(?:^|[?&])offset=(\d+)/.exec(next);
-    return match
-      ? { offset: Number(match[1]) }
-      : { unknown: 'meta.next is a string carrying no offset' };
-  }
-  return { unknown: `meta.next is ${describeShape(next, 1)}` };
+  const next = providerInventoryNextPage(meta);
+  if (!('unknown' in next)) return next;
+  if (next.unknown === 'META') return { unknown: `meta is ${describeShape(meta, 1)}` };
+  if (next.unknown === 'NEXT_STRING')
+    return { unknown: 'meta.next is a string carrying no offset' };
+  return {
+    unknown: `meta.next is ${describeShape((meta as Record<string, unknown>).next, 1)}`,
+  };
 }
 
 async function readInventory(

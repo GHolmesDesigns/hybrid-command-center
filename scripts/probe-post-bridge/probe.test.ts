@@ -44,8 +44,12 @@ interface FakeOptions {
   mediaDeleteStatus?: number;
   postDeleteStatus?: number;
   uploadStatus?: number;
-  /** What `meta.next` says when there is more to read. */
-  pagination?: 'offset' | 'cursor';
+  /**
+   * What `meta.next` says when there is more to read. `stuck` answers with the offset just read,
+   * which is what a repeated cursor looks like from here — the walk has to stop rather than ask the
+   * same page again for ever.
+   */
+  pagination?: 'offset' | 'cursor' | 'stuck';
   /** A state a read-back reports for a post the probe created. */
   readBackStatus?: string;
   /** Posts the delete call pretends to remove but the inventory keeps listing. */
@@ -108,7 +112,13 @@ function fakeProvider(options: FakeOptions = {}) {
   const page = (rows: FakePost[], offset: number, limit: number, filtered: FakePost[]) => {
     const slice = rows.slice(offset, offset + limit);
     const more = offset + limit < rows.length;
-    const next = !more ? null : options.pagination === 'cursor' ? 'eyJvIjoxfQ' : offset + limit;
+    const next = !more
+      ? null
+      : options.pagination === 'cursor'
+        ? 'eyJvIjoxfQ'
+        : options.pagination === 'stuck'
+          ? offset
+          : offset + limit;
     return json(200, {
       data: slice,
       meta: { total: filtered.length, offset, limit, next },
@@ -610,6 +620,20 @@ describe('pagination it cannot follow', () => {
     const { result } = await run({ existingPosts });
     expect(state(result, 'posts-list-pagination')).toBe('verified');
     expect(evidence(result, 'posts-list-pagination')).toContain('page(s)');
+  });
+
+  it('stops rather than asking the same page again when meta.next does not advance', async () => {
+    const existingPosts = Array.from({ length: 150 }, (_, index) => ({
+      id: `old-${index}`,
+      status: 'scheduled',
+    }));
+    const { result, sent } = await run({ pagination: 'stuck', existingPosts });
+    expect(state(result, 'posts-list-pagination')).toBe('still-unverified');
+    expect(evidence(result, 'posts-list-pagination')).toContain('did not advance past offset 0');
+    // One page per inventory read — the baseline and the teardown proof — and neither loops.
+    expect(sent.filter((request) => request.url.includes('/posts?limit=100&offset=0'))).toHaveLength(
+      2,
+    );
   });
 });
 

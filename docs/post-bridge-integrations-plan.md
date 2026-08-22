@@ -760,6 +760,17 @@ is empty.
 `npm run lint`, `npm run format:check`, `npm run build`, and
 `npm run db:migrate` against a copy of a real database.
 
+#### Disposition, 22 August 2026 — built as #221, on the verified list alone
+
+`docs/post-bridge-api-surface.md` §14 leaves question 4 with two things this card may not assume: the
+shape of a post created in the provider's own UI is **still unverified**, and the repeatable filter
+encoding is **unresolved** between the two runs. Both dispositions stand, and this card was built
+anyway under §14's own exception — a claim blocks dependent work unless that work has an explicit path
+that cannot rely on it. That path, and what it leaves unbuilt, is recorded in
+`post-bridge-api-surface.md` §14 under *Disposition, 22 August 2026*: every page comes from the
+verified list contract, an unreadable row fails the refresh rather than being stored, no filter is
+sent at all, and nothing acts on what is found.
+
 ---
 
 ### C79 — A figure says how the provider matched it

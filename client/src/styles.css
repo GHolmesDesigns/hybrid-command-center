@@ -4888,3 +4888,118 @@ button.tag-chip.toggle.active {
   border-radius: 2px 2px 0 0;
   background: var(--blue);
 }
+
+/* Provider inventory: a read of what Post Bridge is holding, with no control that writes. */
+.signal-inventory {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 18px;
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.signal-inventory-headline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-weight: 700;
+}
+.signal-inventory-headline svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+.signal-inventory-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  max-width: 78ch;
+}
+.signal-inventory-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.signal-inventory-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-left-color: var(--line);
+  border-radius: 8px;
+  font-size: 12px;
+}
+/* An orphan is marked by its border, its words, and its icon. The colour is the least of the three:
+   the row says "Not sent from here" whatever a reader can see. */
+.signal-inventory-row.is-orphan {
+  border-left-color: #b9c6dd;
+  background: #f7f9fd;
+}
+.signal-inventory-row > p {
+  margin: 0;
+}
+.signal-inventory-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.signal-inventory-origin {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.signal-inventory-origin svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+}
+.signal-inventory-origin.is-orphan {
+  border-color: #b9c6dd;
+  background: #eaf0fa;
+  color: #2f4b93;
+}
+.signal-inventory-state {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.signal-inventory-detail {
+  color: var(--muted);
+  line-height: 1.5;
+}
+.signal-inventory-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.signal-inventory-meta a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.signal-inventory-meta svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+}

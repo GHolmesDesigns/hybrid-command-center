@@ -850,8 +850,8 @@ comparison is taken again, so you are never acting on a difference that has alre
 #### Queue health
 
 **What needs attention** sits above the planner and is the one place a problem surfaces without
-your going to look for it. It reports six things, each one read from your own posts and deliveries
-rather than from anything a provider was asked:
+your going to look for it. It reports seven things, each one read from your own posts, deliveries, and the last inventory you
+read rather than from anything a provider is asked while the page loads:
 
 - **Delivery** — a post that was not delivered, was only partly delivered, or whose result the
   provider never confirmed. Failed accounts are named.
@@ -865,6 +865,10 @@ rather than from anything a provider was asked:
   about every channel you have ever posted to.
 - **Provider synchronisation** — the provider rate-limiting this app, or delivery answers older
   than the window while a submission is still waiting on one.
+- **Provider inventory** — posts Post Bridge is holding that no submission from here claims. It
+  appears once you have read the inventory at least once, names the first few, and comes back if one
+  of them is published or another one turns up. **What Post Bridge is holding**, below the planner,
+  is where the whole list is.
 
 Each line names the post it is about, and the name is a link that opens that post — including a post
 in another month. **Alert windows** changes the three windows the rules measure against, and lets you
@@ -878,6 +882,38 @@ acknowledgement.
 
 Nothing here is emailed, texted, or pushed to a phone. The summary exists in the app and is read when
 you open the planner.
+
+#### What Post Bridge is holding
+
+**What Post Bridge is holding** sits below the planner and answers a different question from the
+grid: not *what have I planned*, but *what is out there*. A post scheduled straight in Post Bridge —
+by you in its own interface, by a virtual assistant, or by an agent using the API key — never
+appeared anywhere in this app before, and it is exactly the post that goes out into a slot the
+planner shows as empty.
+
+**Refresh inventory** is the only thing that reads the provider. Opening the planner shows the last
+inventory that was read and contacts nothing, so no page load spends a provider request. One press
+reads every page of the provider's list, then replaces the whole inventory at once.
+
+Each row says:
+
+- whether the post was **Sent from here** or **Not sent from here** — in those words, not in a colour;
+- what state the provider holds it in — scheduled, held as a draft, going out now, already published,
+  or failed;
+- when it goes out, or that the provider has no instant for it;
+- which accounts it names, by handle where this app knows the account and by id where it does not;
+- the provider's own id, and a link out where the provider supplies one.
+
+**A refresh either replaces the whole inventory or replaces none of it.** If a page cannot be read,
+or the provider's list will not page properly, the inventory you were already looking at stays
+exactly as it was and the reason appears above it. You never see half of one read mixed with half of
+another, and a post that has genuinely been deleted at the provider disappears from the list on the
+next complete read.
+
+**Nothing in this panel writes.** There is one button and it refreshes. This app cannot adopt,
+import, edit, reschedule, or withdraw a post it did not send — that post stays the provider's to act
+on, and the panel exists so it stops being invisible. Posts here that no submission from here claims
+also raise the **Provider inventory** line in **What needs attention** above the planner.
 
 ### Import
 
@@ -1253,6 +1289,8 @@ Delivery never changes the planning status. **Mark published** is always an expl
 and **Mark … finished** on a manual-finish delivery records only that one delivery, not the post.
 Figures change nothing at all: reading them writes only the figures themselves, and no number a
 platform reports can move a post, a schedule, or a delivery answer.
+Reading what the provider is holding changes nothing either: it writes that list and the record of
+when it was read, and never a post, a schedule, or a delivery answer.
 Deleting a post with a live provider submission cancels it first; publication history then protects
 the Signal post from deletion so the audit record stays readable.
 

@@ -56,7 +56,7 @@ Seventeen operations across seven tags (`Auth`, `Getting Started`, `Media`, `Pos
 | | `GET /v1/posts/{id}` | yes | `check`, `describe` |
 | | `PATCH /v1/posts/{id}` | yes | `update` — always sends `scheduled_at` (§7.2) |
 | | `DELETE /v1/posts/{id}` | yes | `cancel` — the vendor `400`s a published post |
-| | `GET /v1/posts` | **no** | **§6 below.** `?offset`, `?limit`, `?platform[]`, `?status[]` |
+| | `GET /v1/posts` | yes | `ProviderInventoryProvider` — **§6 below.** `?offset` and `?limit` only; `?platform`/`?status` exist and are not sent |
 | **Post Results** | `GET /v1/post-results?post_id=` | yes | `check` |
 | | `GET /v1/post-results/{id}` | no | Marginal — the list already carries the row |
 | **Social Accounts** | `GET /v1/social-accounts` | yes | `listTargets`, `limit=100` |
@@ -146,6 +146,18 @@ an agent over MCP is invisible to this app.
 `describe`/diff machinery in §7.2 — same four actions, same staleness rules — and it is the
 prerequisite for §9 below rather than an independent feature.
 
+**Built by C78 (#221), and read unfiltered.** `ProviderInventoryProvider` asks for one page at a
+time at `limit=100`; `ProviderInventoryService` walks every page before it writes a row, then
+replaces the whole `signal_provider_posts` generation in one transaction or replaces nothing.
+Absence is deletion, on the strength of §14's own teardown proof.
+
+The walk sends **no** `status` or `platform` filter, for two reasons that agree. A filter is a list
+of the states this app already expects, and an orphan in a state nobody thought to ask about is the
+one worth seeing; and the repeatable encoding is the one claim §14's two runs contradict each other
+on, so an unfiltered read is the only one that cannot be a silent superset. `postBridgeInventoryPath`
+holds the filter shape with a unit test on it and nothing calls it with one — sending a filter takes
+a dated §14 result that settles the encoding.
+
 ## 7. Analytics filters and fields already being discarded
 
 **Filters not used.** `GET /v1/analytics` takes `?platform` and `?timeframe` (`7d`, `30d`, `90d`,
@@ -219,7 +231,8 @@ source of truth where the README puts it, and gives an agent the same refusals a
    assumption, and it is the only item that removes a refusal.
 2. **§5 media upload** — the widest unlock, and a prerequisite for thumbnails, cover images, PDFs,
    and per-account media. Design around the 24-hour/on-publish deletion.
-3. **§6 `GET /v1/posts`** — cheap, fits §7.2 as it stands, and the safety net for §9.
+3. **§6 `GET /v1/posts`** — cheap, fits §7.2 as it stands, and the safety net for §9. **Done:**
+   C78 (#221).
 4. **§7 analytics filters** — new panels from endpoints already wired.
 5. **§8 platform fields** — incremental. Google Business CTA and the TikTok disclosures first.
 
@@ -414,3 +427,28 @@ reads *verified* because the session verified what it saw; across the two sessio
 **unresolved**. C78 must settle it with a dedicated read before building a request builder on
 either answer — an encoding that silently fails to filter returns a superset, and a snapshot
 replacement would carry that straight into the database.
+
+### Disposition, 22 August 2026 — what C78 (#221) was built on, and what it was not
+
+Question 4 leaves C78 two things it may not assume, and neither row above moves: the shape of a post
+created in the provider's own **UI** is still unverified, and the repeatable filter **encoding** is
+unresolved across the two runs. Both registry dispositions stand as written. C78 ships anyway, under
+the exception this section already states — a claim blocks dependent work *unless that work has an
+explicit path that cannot rely on it* — and the explicit path is this:
+
+- **It reads the list, not a UI post's shape.** Every page comes from `GET /v1/posts`, whose
+  pagination contract, identity field, and absence-after-deletion are verified above. A listed row's
+  identity and state are parsed strictly and anything else is a failed refresh that replaces nothing;
+  a `status` value this build has never seen becomes `PROCESSING`, the fail-closed state. So a post
+  made in the UI is read as a listed row like any other, and a row shaped in a way nobody has seen
+  cannot be stored as a half-understood snapshot.
+- **It sends no filter at all**, so the unresolved encoding cannot affect what is stored. An
+  unfiltered read returns the superset on purpose. The filter shape lives in one tested function and
+  nothing calls it with one.
+- **It does nothing with what it finds.** No adoption, no linking, no import, no cancel, no update —
+  §0.3 of the plan declines all of them, and the provider interface the inventory holds has no method
+  for any of them. The alert it raises is `WATCH`, and acknowledging it writes one row in
+  `signal_alert_acks`.
+
+What a future run settling either claim would unblock is a filtered read and anything that acts on an
+orphan. Neither is built here.

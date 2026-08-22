@@ -9,12 +9,19 @@ import {
 import {
   deliveryTargetAwaitsPerson,
   isReconcilableState,
+  PROVIDER_POST_STATE_LABEL,
   PUBLICATION_STATE_DESCRIPTION,
   PUBLICATION_STATE_LABEL,
   type PublicationState,
   type SignalPublication,
   type SignalPublicationTarget,
 } from './publish.ts';
+import {
+  providerInventoryFingerprint,
+  providerInventoryOrphans,
+  providerInventoryPostName,
+  type ProviderInventoryPost,
+} from './provider-inventory.ts';
 
 /**
  * Queue health: the alerts a Signal workspace derives about itself.
@@ -22,11 +29,15 @@ import {
  * ## Derived, never stored
  *
  * Every alert in here is a conclusion about rows that already exist — posts, publications, targets,
- * and the record of the last provider synchronisation. Nothing is written when an alert appears and
- * nothing is written when it goes away, which is what makes the summary safe to recompute on every
- * read and impossible to leave stale. There is no alerts table, and adding one would introduce the
- * two states a derived summary cannot have: an alert for a fact that has since changed, and a fact
- * with no alert because a write was missed.
+ * the record of the last provider synchronisation, and the stored snapshot of what the provider is
+ * holding. Nothing is written when an alert appears and nothing is written when it goes away, which
+ * is what makes the summary safe to recompute on every read and impossible to leave stale. There is
+ * no alerts table, and adding one would introduce the two states a derived summary cannot have: an
+ * alert for a fact that has since changed, and a fact with no alert because a write was missed.
+ *
+ * The provider snapshot is rows like any other: it was stored by somebody's own press of **Refresh
+ * inventory** and reading it is local, so the orphan rule below costs no provider call and this
+ * module keeps its no-network property exactly as it was.
  *
  * ## Acknowledgement does not change anything it reports
  *
@@ -62,7 +73,7 @@ export interface QueueHealthNow {
  * One kind per bullet of the card that asked for them, so a kind is a question rather than a
  * severity: *did a delivery go wrong*, *is a slot about to pass unfilled*, *is someone waiting on
  * me*, *did the provider tell us something new*, *is a channel empty*, *is our copy of the
- * provider's answers behind*.
+ * provider's answers behind*, *is the provider holding something we did not send it*.
  */
 export const QUEUE_ALERT_KINDS = [
   'DELIVERY_ATTENTION',
@@ -71,6 +82,11 @@ export const QUEUE_ALERT_KINDS = [
   'PROVIDER_STATE_CHANGED',
   'CHANNEL_UNCOVERED',
   'SYNC_BEHIND',
+  // *Is there something out there we did not put there* — the one question that is not about this
+  // workspace's own rows at all. Appended rather than filed beside `PROVIDER_STATE_CHANGED`, because
+  // the order of this list is the order alerts read down the page and an existing one should not
+  // move to make room for a new one.
+  'PROVIDER_ORPHAN',
 ] as const;
 export type QueueAlertKind = (typeof QUEUE_ALERT_KINDS)[number];
 
@@ -81,6 +97,7 @@ export const QUEUE_ALERT_KIND_LABEL: Record<QueueAlertKind, string> = {
   PROVIDER_STATE_CHANGED: 'Provider answer',
   CHANNEL_UNCOVERED: 'Channel coverage',
   SYNC_BEHIND: 'Provider synchronisation',
+  PROVIDER_ORPHAN: 'Provider inventory',
 };
 
 /**
@@ -106,6 +123,7 @@ export const QUEUE_ALERT_KIND_SEVERITY: Record<QueueAlertKind, QueueAlertSeverit
   PROVIDER_STATE_CHANGED: 'WATCH',
   CHANNEL_UNCOVERED: 'WATCH',
   SYNC_BEHIND: 'WATCH',
+  PROVIDER_ORPHAN: 'WATCH',
 };
 
 /**
@@ -195,6 +213,22 @@ export interface QueueHealthFacts {
   usedChannels: readonly SignalChannel[];
   sync?: QueueSyncFacts;
   acknowledgements: readonly QueueAlertAcknowledgement[];
+  /**
+   * What the provider was holding when somebody last refreshed the inventory.
+   *
+   * Absent is *nobody has looked*, which is not the same as *the provider holds nothing* — a
+   * workspace that has never refreshed carries no orphan alert rather than an all-clear about
+   * something it has not read.
+   */
+  providerPosts?: readonly ProviderInventoryPost[];
+  /**
+   * Every provider post id a local publication claims — **all** of them, not `publications`'.
+   *
+   * Separate from `publications` because that list is a window, and an orphan is defined by absence:
+   * a post this app sent before the lookback began is still one it sent, and reading orphanhood off
+   * a windowed list would report every old delivery as somebody else's post.
+   */
+  knownProviderPostIds?: readonly string[];
 }
 
 export interface QueueHealthAlert {
@@ -424,6 +458,52 @@ const syncCandidate = (facts: QueueHealthFacts, config: QueueHealthConfig, now: 
   };
 };
 
+/**
+ * The posts the provider is holding that this app did not send it.
+ *
+ * **One alert for the set, not one per post**, and the fingerprint is why: it covers every orphan's
+ * id together with the state it is in, so acknowledging *these, in these states* is exactly what was
+ * acknowledged. An orphan that gets published has moved on and asks again; a new one appearing makes
+ * a situation nobody has seen. One alert per post would let a fourth orphan arrive silently under
+ * three that were dismissed.
+ *
+ * The alert names what it can and then stops: an inventory row carries a bounded excerpt of somebody
+ * else's caption, and repeating twenty of them into an alert detail would make the list unreadable.
+ * The panel is where the whole inventory is read.
+ *
+ * Nothing about this is actionable *here*, and the detail says so rather than implying a button
+ * exists. Adoption, linking, importing, cancelling, and updating an orphan are all declined in §0.3
+ * of `docs/post-bridge-integrations-plan.md`; what the alert is for is the collision — a slot this
+ * app believes is empty that already has something going out into it.
+ */
+const orphanCandidate = (facts: QueueHealthFacts): Candidate | undefined => {
+  const orphans = providerInventoryOrphans(
+    facts.providerPosts ?? [],
+    facts.knownProviderPostIds ?? [],
+  );
+  if (!orphans.length) return undefined;
+  const named = orphans
+    .slice(0, 3)
+    .map((post) => `${providerInventoryPostName(post)} (${PROVIDER_POST_STATE_LABEL[post.state]})`);
+  const rest = orphans.length - named.length;
+  const one = orphans.length === 1;
+  return {
+    kind: 'PROVIDER_ORPHAN',
+    subject: 'Post Bridge inventory',
+    title: `${orphans.length} ${one ? 'post' : 'posts'} in Post Bridge this app did not send`,
+    detail: `${named.join('; ')}${rest ? `; and ${rest} more` : ''}. ${
+      one ? 'It was' : 'They were'
+    } created somewhere else — the Post Bridge UI, or an agent with its own key — so nothing here can adopt, change, or withdraw ${
+      one ? 'it' : 'them'
+    }. Read the whole inventory below the planner, and check ${
+      one ? 'its slot' : 'those slots'
+    } before planning into ${one ? 'it' : 'them'}.`,
+    href: PLANNER_PATH,
+    key: 'provider',
+    fingerprint: providerInventoryFingerprint(orphans),
+  };
+};
+
 const KIND_ORDER = new Map(QUEUE_ALERT_KINDS.map((kind, index) => [kind, index]));
 const SEVERITY_ORDER = new Map(QUEUE_ALERT_SEVERITIES.map((severity, index) => [severity, index]));
 
@@ -498,6 +578,9 @@ export function deriveQueueHealth(
 
   const sync = syncCandidate(facts, config, now);
   if (sync) candidates.push(sync);
+
+  const orphans = orphanCandidate(facts);
+  if (orphans) candidates.push(orphans);
 
   const acknowledged = new Map(
     facts.acknowledgements.map((record) => [record.alertId, record] as const),

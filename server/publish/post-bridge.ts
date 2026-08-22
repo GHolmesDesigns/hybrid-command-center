@@ -22,7 +22,13 @@ import {
   validatePostBridgeUploadUrl,
 } from './post-bridge-wire.ts';
 import { putSignedMedia } from './post-bridge-upload.ts';
-import type { ProviderPostState } from '../../shared/publish.ts';
+import {
+  parsePostBridgeInventoryPage,
+  postBridgeInventoryPath,
+  postBridgeRecordState,
+} from './post-bridge-inventory-wire.ts';
+import type { ProviderInventoryPage, ProviderInventoryProvider } from './inventory-provider.ts';
+import { PROVIDER_INVENTORY_PAGE_SIZE } from '../../shared/provider-inventory.ts';
 import { ANALYTICS_PLATFORMS, type AnalyticsPlatform } from '../../shared/publish-analytics.ts';
 import type {
   AnalyticsProvider,
@@ -186,29 +192,6 @@ export class PostBridgeProvider implements PublishProvider {
     return { providerPostId: String(post.id), state, targets };
   }
   /**
-   * The vendor's `status` and `is_draft` collapsed into the one union the rules read.
-   *
-   * `is_draft` wins over `status`, because a draft the vendor also calls `scheduled` is still a
-   * draft — nothing goes out until it is updated — and treating it as scheduled would let the app
-   * tell someone a post is on its way when it is sitting in Post Bridge waiting for them. Anything
-   * unrecognised becomes `PROCESSING`, which is the fail-closed answer: it is the one state the
-   * mutation rules refuse, so a status this adapter has never seen cannot be written over.
-   */
-  private static recordState(status: string | undefined, isDraft: boolean): ProviderPostState {
-    if (isDraft) return 'DRAFT';
-    switch (status) {
-      case 'posted':
-        return 'PUBLISHED';
-      case 'failed':
-        return 'FAILED';
-      case 'scheduled':
-        return 'SCHEDULED';
-      default:
-        return 'PROCESSING';
-    }
-  }
-
-  /**
    * The provider's media array as plain URLs.
    *
    * The vendor documents `media` as an object and returns either bare strings or rows carrying a
@@ -234,7 +217,7 @@ export class PostBridgeProvider implements PublishProvider {
     );
     return {
       providerPostId: String(post.id),
-      state: PostBridgeProvider.recordState(post.status, post.is_draft === true),
+      state: postBridgeRecordState(post.status, post.is_draft === true),
       caption: post.caption ?? '',
       scheduledInstant: post.scheduled_at ?? null,
       mediaUrls: media.mediaUrls,
@@ -380,5 +363,36 @@ export class PostBridgeAnalyticsProvider implements AnalyticsProvider {
         comments: Number(snapshot.comment_count ?? 0),
         shares: Number(snapshot.share_count ?? 0),
       }));
+  }
+}
+
+/**
+ * The inventory half of Post Bridge: `GET /v1/posts`, one page at a time.
+ *
+ * A third class in this file, satisfying a third interface, and the separation is the point
+ * (`inventory-provider.ts`): what the orphan panel is handed can list and nothing else. It shares the
+ * one `PostBridgeApi`, so it shares one bearer token and one reading of a `429`, and nothing else.
+ *
+ * There is no walk in here. This asks for the page it was told to ask for and hands back what the
+ * page said, including the provider's own next-page answer verbatim through
+ * `providerInventoryNextPage`. Every rule about how far a walk may go, what a repeated offset means,
+ * and when a page is unreadable lives where a fixture can drive it — `ProviderInventoryService` and
+ * `post-bridge-inventory-wire.ts` — because this file is the one automated tests may not run.
+ */
+export class PostBridgeInventoryProvider implements ProviderInventoryProvider {
+  readonly available = true;
+  private readonly api: PostBridgeApi;
+  constructor(apiKey: string, baseUrl = 'https://api.post-bridge.com/v1') {
+    this.api = new PostBridgeApi(apiKey, baseUrl);
+  }
+  async page(offset: number): Promise<ProviderInventoryPage> {
+    return parsePostBridgeInventoryPage(
+      await this.api.request(
+        // No `status` or `platform` filter, deliberately: the question this read answers is *what
+        // else is in there*, and a filter is a list of the states this app already expects. An orphan
+        // in a state nobody thought to ask about is exactly the one worth seeing.
+        postBridgeInventoryPath({ limit: PROVIDER_INVENTORY_PAGE_SIZE, offset }),
+      ),
+    );
   }
 }

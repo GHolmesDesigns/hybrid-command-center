@@ -6,13 +6,15 @@ import type {
   PublishSubmission,
   PublishTarget,
 } from './provider.ts';
-import { PublishMediaUploadError } from './provider.ts';
+import { PublishMediaUploadError, PublishProviderError } from './provider.ts';
 import type {
   AnalyticsProvider,
   ProviderAnalyticsDay,
   ProviderAnalyticsRecord,
 } from './analytics-provider.ts';
+import type { ProviderInventoryPage, ProviderInventoryProvider } from './inventory-provider.ts';
 import { ANALYTICS_PLATFORMS, type AnalyticsPlatform } from '../../shared/publish-analytics.ts';
+import type { ProviderInventoryPost } from '../../shared/provider-inventory.ts';
 
 /**
  * The provider every automated test runs against. Nothing here contacts Post Bridge.
@@ -182,5 +184,38 @@ export class MockAnalyticsProvider implements AnalyticsProvider {
     this.dayReads.push(analyticsId);
     if (this.daysFailure) throw this.daysFailure;
     return this.daysByRecord[analyticsId] ?? [];
+  }
+}
+
+/**
+ * The inventory provider every automated test runs against. Nothing here contacts Post Bridge.
+ *
+ * Pages are answered in the order they are asked for rather than looked up by offset, which is what
+ * lets one fixture be a provider that pages properly and another be a provider that keeps handing
+ * back the offset it was already on. `reads` is the proof a test needs most often: every offset the
+ * walk asked for, in order, so "every page was read before anything was written" is an assertion
+ * about a list rather than a hope.
+ */
+export class MockProviderInventoryProvider implements ProviderInventoryProvider {
+  readonly available = true;
+  /** Every offset `page` was asked for, in order. */
+  readonly reads: number[] = [];
+  /** What to answer, one entry per call. A walk that asks for more than there are fails. */
+  pages: ProviderInventoryPage[] = [];
+  /** Raise instead of answering this one-based call — the page-failure fixture. */
+  failureAt?: number;
+  failure?: Error;
+  async page(offset: number): Promise<ProviderInventoryPage> {
+    const call = this.reads.length + 1;
+    this.reads.push(offset);
+    if (this.failureAt === call)
+      throw this.failure ?? new PublishProviderError(`Post Bridge refused page ${call}.`, false);
+    const page = this.pages[call - 1];
+    if (!page) throw new PublishProviderError(`The mock provider has no page ${call}.`, false);
+    return page;
+  }
+  /** One complete page: what the provider holds, and no next page. */
+  hold(posts: ProviderInventoryPost[]): void {
+    this.pages = [{ posts, next: { done: true } }];
   }
 }

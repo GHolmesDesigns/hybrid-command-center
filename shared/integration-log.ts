@@ -35,6 +35,11 @@ export const INTEGRATION_OPERATIONS = [
   // post, no publication, and no target -- it stores what the platforms counted -- and a log reader
   // asking "what did this app do to my schedule" should be able to tell it apart at a glance.
   'signal.analytics-sync',
+  // Reading what else is in the provider. Separate again, and for the sharper version of the reason
+  // above: it changes no post, no publication, no target, and no figure -- it replaces one snapshot of
+  // somebody else's records. A log reader asking 'what did this app do to my schedule' can see at a
+  // glance that the answer here is nothing.
+  'signal.provider-inventory-refresh',
 ] as const;
 export type IntegrationOperation = (typeof INTEGRATION_OPERATIONS)[number];
 
@@ -114,6 +119,7 @@ export const INTEGRATION_OPERATION_LABEL: Record<IntegrationOperation, string> =
   'signal.provider-update': 'Signal provider update',
   'signal.provider-cancel': 'Signal provider cancel',
   'signal.analytics-sync': 'Signal analytics sync',
+  'signal.provider-inventory-refresh': 'Signal provider inventory refresh',
 };
 
 export const INTEGRATION_OUTCOME_LABEL: Record<IntegrationOutcome, string> = {

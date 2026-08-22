@@ -5,7 +5,11 @@ import { getDb } from '../server/db.ts';
 import { resetE2eDatabase } from './database.ts';
 import { handleE2eStopRequest } from './endpoints.ts';
 import { stopWhenTheRunEnds } from './shutdown.ts';
-import { MockAnalyticsProvider, MockPublishProvider } from '../server/publish/mock-provider.ts';
+import {
+  MockAnalyticsProvider,
+  MockProviderInventoryProvider,
+  MockPublishProvider,
+} from '../server/publish/mock-provider.ts';
 import { MockDriveMediaProvider } from '../server/drive/mock-provider.ts';
 
 const databasePath = resetE2eDatabase();
@@ -91,10 +95,39 @@ analytics.daysByRecord = {
   ],
 };
 
+/**
+ * What the provider is holding, for the one flow only a browser can prove: a post this app did not
+ * make, surfacing because somebody pressed refresh.
+ *
+ * One complete page, because the pagination walk itself — several pages, a repeated offset, a
+ * malformed row, a page that fails — is covered against fixtures in `server/publish/inventory.test.ts`
+ * where each of those can be arranged exactly. `mock-publication` is the id `MockPublishProvider`
+ * hands back from every submit, so the second row is the one an end-to-end run can prove is *not* an
+ * orphan once a spec has submitted something.
+ */
+const inventory = new MockProviderInventoryProvider();
+inventory.hold([
+  {
+    providerPostId: 'e2e-provider-orphan',
+    state: 'SCHEDULED',
+    scheduledInstant: '2099-09-16T13:00:00.000Z',
+    captionExcerpt: 'Scheduled straight in Post Bridge, not from here',
+    accountIds: [901],
+  },
+  {
+    providerPostId: 'mock-publication',
+    state: 'SCHEDULED',
+    scheduledInstant: '2099-09-15T13:00:00.000Z',
+    captionExcerpt: 'Submitted by this app',
+    accountIds: [901],
+  },
+]);
+
 const app = createApp(db, {
   publishTimezone: 'America/New_York',
   publish,
   analytics,
+  inventory,
   driveMedia: () => driveMedia,
 });
 const server: Server = app.listen(config.port, config.host, () =>

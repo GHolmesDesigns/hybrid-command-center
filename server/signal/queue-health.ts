@@ -17,6 +17,7 @@ import {
 import { isSignalChannel, type SignalChannel } from '../../shared/signal.ts';
 import { toSignalPosts, type SignalPostRow } from './rows.ts';
 import { publicationsForHealth } from '../publish/read.ts';
+import { knownProviderPostIds, readProviderInventoryPosts } from '../publish/inventory-rows.ts';
 
 /**
  * The queue-health summary, gathered here and concluded in `shared/queue-health.ts`.
@@ -189,6 +190,11 @@ export function readQueueHealth(db: Db, now: Date): QueueHealthSummary {
       publications,
       usedChannels: usedChannels(db),
       ...(sync ? { sync } : {}),
+      // What the provider was holding when somebody last pressed refresh, and every provider id this
+      // app's own publications claim. Both are local reads through the read-only inventory module —
+      // no provider call happens here, which is what keeps loading the planner free of one.
+      providerPosts: readProviderInventoryPosts(db),
+      knownProviderPostIds: knownProviderPostIds(db),
       acknowledgements: readAcknowledgements(db),
     },
     config,

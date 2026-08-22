@@ -350,6 +350,40 @@ CREATE TABLE IF NOT EXISTS signal_post_metric_days (
 CREATE TABLE IF NOT EXISTS signal_alert_acks (
   alert_id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, acknowledged_at TEXT NOT NULL
 );
+-- What Post Bridge is holding, including the posts this app did not make: one generation of a
+-- snapshot, replaced whole by a person's own press of Refresh inventory and by nothing else.
+--
+-- provider_post_id is the primary key because it is the provider's stable identity for a post --
+-- C73 verified that every listed row carries an id and that a deleted post is absent from a later
+-- complete read (docs/post-bridge-api-surface.md section 14, question 4), which together are what
+-- make a generation replaceable by id and absence readable as deletion.
+--
+-- No raw response and no unbounded caption. caption_excerpt is bounded by
+-- providerInventoryCaptionExcerpt because a row exists to answer "is this one of mine", not to hold
+-- a copy of content the provider owns; provider_url is NULL unless the provider supplied an address,
+-- and nothing here invents one.
+--
+-- account_ids is a JSON array, which is the one place in the Signal schema that packs ids into a
+-- column on purpose. The normalized-join rule is about labels a person maintains -- tags,
+-- categories, campaigns -- where a rename is one write and a lookup has to be joinable. This is
+-- neither: it is somebody else's record of somebody else's post, replaced whole on every refresh,
+-- never filtered on, and never renamed. A join table would be a second generation to keep in step
+-- with this one, which is exactly the mixed-generation state the card refuses. It is the same
+-- reasoning signal_publications.sent_channels is stored under.
+--
+-- Nothing here is ever written by a failed refresh. Every page is read before the first statement
+-- runs, and the replacement -- delete the ids the provider no longer lists, upsert the rest, stamp
+-- snapshot_at -- is one transaction, so a refusal leaves the whole prior generation in place rather
+-- than half of a new one.
+CREATE TABLE IF NOT EXISTS signal_provider_posts (
+  provider_post_id TEXT PRIMARY KEY,
+  state TEXT NOT NULL,
+  scheduled_instant TEXT,
+  caption_excerpt TEXT NOT NULL,
+  account_ids TEXT NOT NULL DEFAULT '[]',
+  provider_url TEXT,
+  snapshot_at TEXT NOT NULL
+);
 `;
 
 /**
@@ -408,6 +442,11 @@ CREATE INDEX IF NOT EXISTS idx_signal_alert_acks_time ON signal_alert_acks(ackno
 -- arrives with a result id and nothing else is matched back to the delivery it belongs to.
 CREATE INDEX IF NOT EXISTS idx_signal_publication_targets_result
   ON signal_publication_targets(post_result_id);
+-- The inventory panel and the orphan alert both read the generation in schedule order, soonest
+-- first, and a workspace can hold a page of it. The primary key answers the replacement's own
+-- lookups, so this is the only other access path there is.
+CREATE INDEX IF NOT EXISTS idx_signal_provider_posts_scheduled
+  ON signal_provider_posts(scheduled_instant);
 `;
 
 /**

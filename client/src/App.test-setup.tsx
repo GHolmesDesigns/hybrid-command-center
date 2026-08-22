@@ -44,6 +44,10 @@ import {
   type QueueHealthAlert,
   type QueueHealthSummary,
 } from '../../shared/queue-health';
+import type {
+  ProviderInventoryEntry,
+  ProviderInventorySnapshot,
+} from '../../shared/provider-inventory';
 
 export {
   DEFAULT_BRANDING,
@@ -272,6 +276,18 @@ export const testState = {
   signalCampaignAnalyticsError: null as string | null,
   /** Every campaign-figures request, so a case can prove which filters reached the API. */
   signalCampaignAnalyticsRequests: [] as string[],
+  /**
+   * The provider inventory the planner reads beside the grid.
+   *
+   * Unset answers an inventory nobody has refreshed yet, which is what every suite that is not about
+   * the inventory should see: a panel that says so and has contacted nothing.
+   */
+  providerInventoryPayload: null as ProviderInventorySnapshot | null,
+  /** What a refresh answers, where a case wants it to differ from what was already on screen. */
+  providerInventoryRefreshPayload: null as ProviderInventorySnapshot | null,
+  providerInventoryError: null as string | null,
+  /** Every inventory request, so a case can prove a page load contacted the provider or did not. */
+  providerInventoryRequests: [] as string[],
 };
 
 /** A summary with nothing on it, which is what an untouched planner suite should be handed. */
@@ -283,6 +299,37 @@ export function clearQueueHealth(): QueueHealthSummary {
     counts: { action: 0, watch: 0, acknowledged: 0 },
   };
 }
+
+/** An inventory nobody has read yet: available, empty, and stamped with no refresh. */
+export function emptyProviderInventory(): ProviderInventorySnapshot {
+  return { available: true, entries: [], counts: { posts: 0, orphans: 0 } };
+}
+
+/** One listed provider post, with only the fields a case cares about spelled out. */
+export const providerInventoryEntry = (
+  overrides: Partial<ProviderInventoryEntry> & Pick<ProviderInventoryEntry, 'providerPostId'>,
+): ProviderInventoryEntry => ({
+  state: 'SCHEDULED',
+  scheduledInstant: '2026-09-16T13:00:00.000Z',
+  captionExcerpt: 'Scheduled straight in Post Bridge',
+  accountIds: [901],
+  snapshotAt: '2026-09-14T12:00:00.000Z',
+  orphan: true,
+  accounts: [{ accountId: 901 }],
+  ...overrides,
+});
+
+/** A snapshot around a set of entries, with the counts its own rows imply. */
+export const providerInventorySnapshot = (
+  entries: ProviderInventoryEntry[],
+  overrides: Partial<ProviderInventorySnapshot> = {},
+): ProviderInventorySnapshot => ({
+  available: true,
+  entries,
+  counts: { posts: entries.length, orphans: entries.filter((entry) => entry.orphan).length },
+  lastRefreshAt: '2026-09-14T12:00:00.000Z',
+  ...overrides,
+});
 
 /** One alert, with only the fields a case cares about spelled out. */
 export const queueHealthAlert = (
@@ -590,6 +637,23 @@ const respondTo = (url: string, init?: RequestInit) => {
     if (!testState.queueHealthSummary.alerts.some((alert) => alert.id === alertId))
       return reply(404, { error: 'That alert is not in the current summary.' });
     return setQueueHealthAcknowledged(alertId, method === 'POST');
+  }
+  /**
+   * The provider inventory. A read answers stored rows and a refresh answers whatever the case set
+   * up for it, so a suite can prove that mounting the panel is a read and only the button is a
+   * refresh.
+   */
+  if (url.endsWith('/api/signal/provider-inventory') && method === 'GET') {
+    testState.providerInventoryRequests.push('read');
+    return testState.providerInventoryError
+      ? reply(503, { error: testState.providerInventoryError })
+      : (testState.providerInventoryPayload ?? emptyProviderInventory());
+  }
+  if (url.endsWith('/api/signal/provider-inventory/refresh') && method === 'POST') {
+    testState.providerInventoryRequests.push('refresh');
+    if (testState.providerInventoryRefreshPayload)
+      testState.providerInventoryPayload = testState.providerInventoryRefreshPayload;
+    return testState.providerInventoryPayload ?? emptyProviderInventory();
   }
   if (url.endsWith('/api/signal/campaigns') && method === 'GET')
     return testState.signalCampaignsPayload;
@@ -1295,6 +1359,10 @@ beforeEach(() => {
   testState.signalCampaignAnalyticsPayload = null;
   testState.signalCampaignAnalyticsError = null;
   testState.signalCampaignAnalyticsRequests = [];
+  testState.providerInventoryPayload = null;
+  testState.providerInventoryRefreshPayload = null;
+  testState.providerInventoryError = null;
+  testState.providerInventoryRequests = [];
   requests.length = 0;
   vi.stubGlobal(
     'fetch',
