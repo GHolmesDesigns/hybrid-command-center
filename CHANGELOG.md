@@ -8,6 +8,29 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [4.7.1] - 2026-08-22
+
+### Notes
+
+- **Nothing in the application changed here.** This corrects what the publisher's research notes
+  claim about eight open questions.
+- **Eight questions were recorded as "not verified yet" when the truth is "cannot be asked from
+  here".** They all need an account on a platform the publisher measures — TikTok, YouTube, or
+  Instagram — and none is connected to it: TikTok and YouTube are posted from Buffer. Running the
+  owner-only test command again would answer none of them, whatever arguments it were given. The
+  notes now say so, name the four questions that are unaffected and why, and record what would make
+  the eight askable: an account connected on one of those three platforms, and for the figures
+  questions, a post published from it that the platform has actually counted.
+- **Figures, media roles, and disclosure toggles are the work this holds up.** The cards that depend
+  on those answers now say on their own page that they are waiting on a connected account rather
+  than on a scheduled test run, so nobody plans one expecting it to help.
+- **The match-quality work already shipped is unaffected**, because it was deliberately built not to
+  depend on the answer.
+
+### Breaking changes
+
+None.
+
 ## [4.7.0] - 2026-08-22
 
 ### Added
