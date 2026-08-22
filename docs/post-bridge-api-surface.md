@@ -428,6 +428,76 @@ reads *verified* because the session verified what it saw; across the two sessio
 either answer — an encoding that silently fails to filter returns a superset, and a snapshot
 replacement would carry that straight into the database.
 
+### Not askable from this workspace, as of 22 August 2026
+
+Eight claims above read **still unverified** with evidence naming what the run did not have — no
+TikTok account, no video, no analytics rows. Read plainly, that says a run with better arguments
+settles them. For these eight it does not, and the difference matters: *nobody has asked yet* and
+*nothing here can ask* are different claims, and only the second one is true of these.
+
+**The workspace fact.** TikTok and YouTube are published from the owner's **Buffer** account
+(owner, 22 August 2026). Neither is a connected Post Bridge channel. Post Bridge measures exactly
+`tiktok`, `youtube`, and `instagram` — the enum on its own `POST /v1/analytics/sync`, which §7
+already takes as the definition of the measured set — so with those two elsewhere, at most one of
+the three could be connected here, and neither dated run named one.
+
+**What is not established, and the read that settles it.** Whether *any* account on a measured
+platform is connected to Post Bridge. Both runs named none, which is consistent with none being
+connected and is not proof of it. `GET /v1/social-accounts` answers it outright: it reads, it
+writes nothing, it needs no `--live` probe at all, and this app already calls it as `listTargets`.
+Until that read shows an account on a measured platform, the eight below cannot be asked.
+
+| Claim | Needs |
+| --- | --- |
+| Q5 — `timeframe` semantics | any measured platform connected, **and** a post published from it that the provider has already counted |
+| Q5 — response grain is one row per delivery | the same |
+| Q5 — how a row maps to a social account | the same |
+| Q5 — the values `match_confidence` takes | the same |
+| Q3 — YouTube `thumbnail` role | a connected YouTube account and `--video` |
+| Q3 — Instagram `cover_image` role | a connected Instagram account and `--video` |
+| Q6 — YouTube `contains_synthetic_media` | a connected YouTube account and `--video` |
+| Q6 — TikTok `disclose_branded_content` / `disclose_your_brand` | a connected TikTok account |
+
+**The four Question 5 rows need more than a connected account.** Analytics rows exist only after a
+post has actually published and the provider has synced it. A probe run cannot manufacture one: it
+refuses any instant less than 48 hours out and deletes every post it created in a `finally`, so by
+construction it never publishes anything. Those four are waiting on real content that goes out and
+stays up, not on an argument.
+
+**Why this is a section and not a fifth state.** `scripts/probe-post-bridge/report.ts` generates the
+preamble, the fixtures, the teardown, and every claim table, and a dated run replaces all of it
+wholesale. A fifth state hand-written into a row would be regenerated back to *still unverified* by
+the next run, silently. The four states also describe what a run *observed*, and this is a fact
+about which accounts are connected — not a kind of observation. So it lives here, beside the other
+hand-written sections, and **it must be carried forward when the matrix is regenerated**, exactly as
+the correction and the dispositions above it are.
+
+**What this does not touch.** Four other rows read *still unverified* for reasons of their own and
+none of them is this one:
+
+- **The LinkedIn PDF document role** was verified on 20 August and simply went unasked on the 22nd.
+  The precondition for reasking it exists and is written up two sections above.
+- **The shape of a provider-UI post** needs a post a person made in Post Bridge's own interface and
+  its id passed as `--provider-ui-post`. That is a human step, not a connected account.
+- **The 24-hour unattached media expiry** cannot close in one session by construction; it needs a
+  dated follow-up read of inventoried asset ids.
+- **The headers a `429` carries** stay out of reach by design, because the probe never creates load
+  to discover a limit.
+
+**Effect on the dependent cards.** C80 and C81 stay blocked, and what blocks them is a workspace
+fact rather than an unscheduled run — rerunning the probe changes nothing for either. C82 records
+`duration`, `cover_image_url`, and `video_description` as read and unused, which needs no evidence
+from any of these rows. C79 (#222) is deliberately built not to rely on its row: it stores a shape
+rather than an enum, defaults nothing, and cannot render an unrecognised value as a documented one.
+
+**If the accounts move.** Connecting one measured account to Post Bridge — a disposable or
+explicitly approved Instagram or TikTok account is enough for the four Question 5 rows — makes them
+askable in the ordinary way, and the stop conditions at the top of this document apply to it exactly
+as they do to any other account. Publishing TikTok and YouTube through Post Bridge instead of Buffer
+would settle all eight, and is a decision about how the business posts rather than about this
+document. Adding Buffer as a second provider is neither: it is a §0 decision in
+`post-bridge-integrations-plan.md` with cards of its own.
+
 ### Disposition, 22 August 2026 — what C78 (#221) was built on, and what it was not
 
 Question 4 leaves C78 two things it may not assume, and neither row above moves: the shape of a post

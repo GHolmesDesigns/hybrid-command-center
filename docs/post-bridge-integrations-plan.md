@@ -828,6 +828,14 @@ real-database copy.
 **Size:** XL · **Labels:** `tier-3-schema` `size-xl`
 **Depends on:** C73. **Blocked unless C73 verifies response grain and timeframe semantics.**
 
+**Blocked by a workspace fact, not an unscheduled run (22 August 2026).** Every claim this card
+waits on — timeframe semantics, response grain, account mapping — needs analytics rows to exist, and
+`GET /v1/analytics` answers with none because no account on a platform Post Bridge measures is
+connected to it: TikTok and YouTube are published from the owner's Buffer account. Rerunning the
+probe changes nothing. What would: a connected account on a measured platform, and a post published
+from it that the provider has counted. Recorded in `post-bridge-api-surface.md` §14 under *Not
+askable from this workspace*.
+
 #### Problem
 
 The existing analytics contract is per delivery result: `AnalyticsProvider.list` accepts
@@ -905,6 +913,13 @@ real-database copy.
 **Size:** L · **Labels:** `enhancement` `size-l`
 **Depends on:** C73.
 
+**Blocked by a workspace fact, not an unscheduled run (22 August 2026).** YouTube
+`contains_synthetic_media` needs a connected YouTube account and a video; the TikTok disclosure
+toggles need a connected TikTok account. Both platforms are published from the owner's Buffer
+account and neither is a connected Post Bridge channel, so no probe run with any arguments can ask
+either question. Recorded in `post-bridge-api-surface.md` §14 under *Not askable from this
+workspace*.
+
 #### Problem
 
 `signal_post_variants.disclose_synthetic_media` never reaches a provider field, and OpenAPI names
@@ -969,6 +984,13 @@ against its explicitly approved account; none for negative or inconclusive field
 **Size:** S · **Labels:** `docs` `size-s`
 **Depends on:** every preceding card having a recorded resolution—merged, negative, or
 will-not-build. A negative C73 result does not block documentation of that result.
+
+**A recorded resolution may be *not askable here* (22 August 2026).** Several §14 claims are not
+waiting on a run: no account on a platform Post Bridge measures is connected to it, because TikTok
+and YouTube are published from the owner's Buffer account. That is a recorded resolution in this
+card's sense — the ground is named and the precondition is written down — and it is not a negative
+result, which would be the provider having answered. `post-bridge-api-surface.md` §14 under *Not
+askable from this workspace* is what this card cites rather than restates.
 
 #### Problem
 
