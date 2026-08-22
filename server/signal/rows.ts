@@ -3,6 +3,7 @@ import type { SignalCampaign, SignalChannel, SignalPost } from '../../shared/sig
 import type { SignalPostMedia } from '../../shared/signal-media.ts';
 import { campaignsByPost } from './campaigns.ts';
 import type { PublishPlatform, PublishPostKind } from '../../shared/publish-capabilities.ts';
+import type { PublishTargetSelection } from '../../shared/publish.ts';
 import {
   normalizePublishVariant,
   PUBLISH_VARIANT_MEDIA_FIELD,
@@ -348,4 +349,30 @@ export function listPostVariants(db: Db, postId: string): PublishVariantRecord[]
     );
   }
   return layers;
+}
+
+/**
+ * The provider accounts a person explicitly chose for one post's channels (C77).
+ *
+ * Ordered by channel and then account id, so two reads of an unchanged post produce the same list.
+ * The plan hash covers these ids, and an order that wandered would invalidate a confirmation
+ * nobody had touched.
+ *
+ * Here rather than in the service because it is a read: `read.ts` is the half everything outside
+ * Signal consumes and it must not reach into the write module to answer a question.
+ */
+export function listPostPublishTargets(db: Db, postId: string): PublishTargetSelection[] {
+  return db
+    .prepare(
+      `SELECT channel, provider_account_id FROM signal_post_publish_targets
+       WHERE post_id=? ORDER BY channel, provider_account_id`,
+    )
+    .all(postId)
+    .map((row) => {
+      const record = row as { channel: string; provider_account_id: number };
+      return {
+        channel: record.channel as SignalChannel,
+        providerAccountId: record.provider_account_id,
+      };
+    });
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   parsePostBridgeUploadReservation,
   postBridgeMediaEvidence,
+  postBridgeAccountConfigurations,
   postBridgePlatformConfigurations,
   postBridgePostBody,
   postBridgeUploadReservationBody,
@@ -145,5 +146,76 @@ describe('Post Bridge media wire shapes', () => {
       mediaUrls: ['https://cdn.test/legacy.jpg', 'https://storage.test/object'],
       mediaIds: ['provider-media-1', 'provider-media-2'],
     });
+  });
+});
+
+describe('account_configurations on the wire (C77)', () => {
+  const base = {
+    caption: 'The post’s own words',
+    mediaUrls: [],
+    scheduledInstant: '2027-08-25T14:00:00.000Z',
+    timezone: 'America/New_York',
+    targets: [
+      { accountId: 85300, platform: 'facebook' },
+      { accountId: 85301, platform: 'facebook' },
+    ],
+  } as unknown as PublishRequest;
+
+  it('is absent entirely when no account is tailored', () => {
+    expect(postBridgeAccountConfigurations(base)).toBeUndefined();
+    expect(postBridgePostBody(base, undefined, undefined)).not.toHaveProperty(
+      'account_configurations',
+    );
+  });
+
+  it('emits a list of objects each carrying account_id, the encoding §14 verified', () => {
+    const request = {
+      ...base,
+      accountConfigurations: [
+        { accountId: 85300, caption: 'For the studio' },
+        { accountId: 85301, caption: 'For the gallery' },
+      ],
+    } as unknown as PublishRequest;
+    // A list, not a map keyed by id. The probe accepted this shape on the first attempt and read
+    // it back unchanged after create and after PATCH.
+    expect(postBridgeAccountConfigurations(request)).toEqual([
+      { account_id: 85300, caption: 'For the studio' },
+      { account_id: 85301, caption: 'For the gallery' },
+    ]);
+  });
+
+  it('carries only the account id and caption, never a title or first comment', () => {
+    const request = {
+      ...base,
+      accountConfigurations: [{ accountId: 85300, caption: 'Only this' }],
+    } as unknown as PublishRequest;
+    const [entry] = postBridgeAccountConfigurations(request) ?? [];
+    // Those fields are platform-level on this provider. Inventing an account-level key for one is
+    // exactly what the card puts out of scope.
+    expect(Object.keys(entry ?? {}).sort()).toEqual(['account_id', 'caption']);
+  });
+
+  it('omits the caption key for an account that carries none', () => {
+    const request = {
+      ...base,
+      accountConfigurations: [{ accountId: 85300 }],
+    } as unknown as PublishRequest;
+    expect(postBridgeAccountConfigurations(request)).toEqual([{ account_id: 85300 }]);
+  });
+
+  it('rides in the body beside platform_configurations, not instead of it', () => {
+    const body = postBridgePostBody(base, { facebook: { first_comment: 'tags' } }, [
+      { account_id: 85300, caption: 'For the studio' },
+    ]) as Record<string, unknown>;
+    expect(body.platform_configurations).toEqual({ facebook: { first_comment: 'tags' } });
+    expect(body.account_configurations).toEqual([{ account_id: 85300, caption: 'For the studio' }]);
+    // Both accounts still go in social_accounts: account_configurations tailors, it does not select.
+    expect(body.social_accounts).toEqual([85300, 85301]);
+  });
+
+  it('leaves a request that predates C77 serialising exactly as it did', () => {
+    const before = postBridgePostBody(base, undefined);
+    const after = postBridgePostBody(base, undefined, undefined);
+    expect(JSON.stringify(after)).toBe(JSON.stringify(before));
   });
 });

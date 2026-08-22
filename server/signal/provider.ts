@@ -1,5 +1,6 @@
 import type { SignalPost } from '../../shared/signal.ts';
 import type { PublishVariantRecord } from '../../shared/publish-variants.ts';
+import type { PublishTargetSelection } from '../../shared/publish.ts';
 
 /**
  * The one way anything outside Signal reads its schedule.
@@ -37,6 +38,14 @@ export interface SignalProvider {
    * no overrides at all, which is the ordinary case and resolves to the post's own content.
    */
   listVariants(postId: string): Promise<PublishVariantRecord[]>;
+  /**
+   * The provider accounts a person explicitly chose for each of one post's channels (C77).
+   *
+   * An empty array is the ordinary case and is **not** a choice to send nowhere: it means nobody
+   * has selected, so every channel resolves the way §3.1 has always resolved it. Read-only, like
+   * everything on this interface — choosing a target is a Signal write and lives in its service.
+   */
+  listPublishTargets(postId: string): Promise<PublishTargetSelection[]>;
 }
 
 export interface SignalPostRange {
@@ -69,6 +78,9 @@ export class UnavailableSignalProvider implements SignalProvider {
     throw new Error(this.reason);
   }
   async listVariants(): Promise<PublishVariantRecord[]> {
+    throw new Error(this.reason);
+  }
+  async listPublishTargets(): Promise<PublishTargetSelection[]> {
     throw new Error(this.reason);
   }
 }

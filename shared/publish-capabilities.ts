@@ -316,7 +316,13 @@ export const PUBLISH_CAPABILITIES: Record<PublishPlatform, PublishPlatformCapabi
       ),
     },
     platformContentOverride: true,
-    accountContentOverride: false,
+    // True for Facebook alone, and only since C73's live probe verified it: `account_configurations`
+    // was accepted for two Facebook accounts in one request, its encoding established, and the
+    // per-account caption read back after create and after `PATCH`
+    // (`docs/post-bridge-api-surface.md` §14, question 1). Every other platform stays false because
+    // no other platform had two accounts to ask the question with -- unverified is not the same as
+    // unsupported, and only a dated §14 result moves one of them.
+    accountContentOverride: true,
     firstComment: NO_FIELD,
     title: NO_FIELD,
     description: NO_FIELD,

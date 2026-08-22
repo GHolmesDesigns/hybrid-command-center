@@ -30,6 +30,7 @@ export interface PublicationRow {
   sent_media: string | null;
   sent_configurations: string | null;
   sent_media_sources: string | null;
+  sent_account_configurations: string | null;
   sent_provider_media_ids: string | null;
   error: string | null;
   checked_at: string | null;
@@ -87,6 +88,13 @@ export const toPublication = (row: PublicationRow, targets: TargetRow[]): Signal
     : {}),
   ...(row.sent_provider_media_ids
     ? { sentProviderMediaIds: JSON.parse(row.sent_provider_media_ids) as string[] }
+    : {}),
+  ...(row.sent_account_configurations
+    ? {
+        sentAccountConfigurations: JSON.parse(row.sent_account_configurations) as NonNullable<
+          SignalPublication['sentAccountConfigurations']
+        >,
+      }
     : {}),
   ...(row.error ? { error: row.error } : {}),
   targets: targets.map(toTarget),

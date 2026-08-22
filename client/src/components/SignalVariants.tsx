@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ExternalLink, FileText, Play, RefreshCw } from 'lucide-react';
 import { SIGNAL_CHANNEL_LABEL, signalMediaKindFor, type SignalPost } from '../../../shared/signal';
 import { urlPostMedia, type SignalPostMedia } from '../../../shared/signal-media';
@@ -642,6 +642,100 @@ function PreviewMedia({ media, index }: { media: SignalPostMedia; index: number 
   );
 }
 
+/**
+ * Which accounts this channel publishes to, as an explicit choice (C77).
+ *
+ * Rendered from the accounts the preview was built from, which is the same list the save route
+ * validates against — so a box a person can tick is never one the save will refuse.
+ *
+ * **Nothing ticked is not "send nowhere".** It means no explicit choice exists and the channel
+ * resolves the way it always has, to one account, refusing zero or several. The legend says so,
+ * because an empty set of checkboxes otherwise reads as a decision the person did not make.
+ */
+function TargetChoice({
+  report,
+  accounts,
+  selected,
+  onToggle,
+  onSave,
+  dirty,
+  busy,
+}: {
+  report: PublishChannelReport;
+  accounts: NonNullable<PublishPreview['connectedAccounts']>;
+  selected: readonly number[];
+  onToggle: (accountId: number, next: boolean) => void;
+  onSave: () => void;
+  dirty: boolean;
+  busy: boolean;
+}) {
+  const onPlatform = accounts.filter((account) => account.platform === report.platform);
+  if (!report.platform || onPlatform.length === 0) return null;
+  return (
+    <fieldset className="signal-target-choice">
+      <legend>Accounts</legend>
+      <p className="signal-target-choice-hint">
+        {selected.length === 0
+          ? 'No account chosen, so this channel resolves to its single account as it always has.'
+          : `Publishing to ${selected.length} chosen account${selected.length === 1 ? '' : 's'}.`}
+      </p>
+      {onPlatform.map((account) => {
+        const checked = selected.includes(account.id);
+        return (
+          <label key={account.id} className="signal-target-choice-option">
+            <input
+              type="checkbox"
+              checked={checked}
+              disabled={busy}
+              onChange={(event) => onToggle(account.id, event.target.checked)}
+            />
+            <span>{account.handle || account.name}</span>
+          </label>
+        );
+      })}
+      <button type="button" className="secondary" disabled={!dirty || busy} onClick={onSave}>
+        Save accounts
+      </button>
+    </fieldset>
+  );
+}
+
+/**
+ * Every chosen account's own verdict, where more than the channel itself has one.
+ *
+ * One row per account rather than a merged sentence, because two accounts fail for two reasons and
+ * "Facebook is blocked" cannot say which of them a person has to fix. Absent entirely where nobody
+ * selected, which is the same distinction the report itself draws.
+ */
+function TargetVerdicts({ report }: { report: PublishChannelReport }) {
+  if (!report.targets?.length) return null;
+  return (
+    <ul className="signal-target-verdicts">
+      {report.targets.map((entry) => (
+        <li key={entry.accountId} className={`channel-${entry.status.toLowerCase()}`}>
+          <p>
+            <strong>{entry.handle || entry.accountId}</strong> ·{' '}
+            {PUBLISH_CHANNEL_STATUS_LABEL[entry.status]}
+          </p>
+          {entry.content && (
+            <p className="signal-target-verdict-caption">{entry.content.caption}</p>
+          )}
+          {entry.refusals.map((refusal) => (
+            <p key={refusal} className="signal-refusal">
+              {refusal}
+            </p>
+          ))}
+          {entry.warnings.map((warning) => (
+            <p key={warning} className="signal-warning">
+              {warning}
+            </p>
+          ))}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** A channel's tab label: the account it resolved to, or the channel alone when none did. */
 const tabLabel = (report: PublishChannelReport) =>
   `${SIGNAL_CHANNEL_LABEL[report.channel] ?? report.channel}${report.handle ? ` → ${report.handle}` : ''}`;
@@ -665,6 +759,7 @@ function PreviewPanel({
   resolveDrive,
   accountDirty,
   busy,
+  targetChoice,
 }: {
   report: PublishChannelReport;
   preview: PublishPreview;
@@ -680,6 +775,7 @@ function PreviewPanel({
   resolveDrive: (link: string) => Promise<SignalPostMedia>;
   accountDirty: boolean;
   busy: boolean;
+  targetChoice: React.ReactNode;
 }) {
   const content = report.content;
   const capability = report.platform ? publishCapabilityFor(report.platform) : undefined;
@@ -694,6 +790,8 @@ function PreviewPanel({
       <p className="signal-preview-verdict">
         <strong>{tabLabel(report)}</strong> · {PUBLISH_CHANNEL_STATUS_LABEL[report.status]}
       </p>
+      {targetChoice}
+      <TargetVerdicts report={report} />
       {content && (
         <p className="signal-preview-mode">
           {PUBLISH_POST_KIND_LABEL[content.postKind]} · {DELIVERY_MODE_LABEL[content.deliveryMode]}
@@ -829,6 +927,7 @@ export function PublishPreviewTabs({
   layers,
   onChange,
   onSaveAccount,
+  onSaveTargets,
   onRecheckRole,
   resolveDrive,
   savedLayers,
@@ -839,6 +938,10 @@ export function PublishPreviewTabs({
   layers: Map<string, PublishVariantRecord>;
   onChange: (next: Map<string, PublishVariantRecord>) => void;
   onSaveAccount: () => void;
+  /** Persists the whole explicit target selection for the post, as a replacement. */
+  onSaveTargets: (
+    targets: { channel: string; providerAccountIds: number[] }[],
+  ) => void | Promise<void>;
   onRecheckRole: (
     platform: PublishPlatform,
     accountId: number | null,
@@ -853,6 +956,19 @@ export function PublishPreviewTabs({
   const [active, setActive] = useState(0);
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
   const reports = preview.channels;
+  // Seeded from the preview and edited locally until **Save accounts**, the same shape the account
+  // content layer already uses here: an unsaved tick is not a plan, and the plan hash is what the
+  // confirmation is taken against.
+  const savedSelection = useMemo(() => {
+    const map = new Map<string, number[]>();
+    for (const entry of preview.selectedTargets ?? [])
+      map.set(entry.channel, [...(map.get(entry.channel) ?? []), entry.providerAccountId]);
+    return map;
+  }, [preview.selectedTargets]);
+  const [selection, setSelection] = useState<Map<string, number[]>>(savedSelection);
+  useEffect(() => {
+    setSelection(savedSelection);
+  }, [savedSelection]);
 
   // A channel removed from the post between two previews must not leave the selection past the end.
   useEffect(() => {
@@ -913,6 +1029,39 @@ export function PublishPreviewTabs({
         className="signal-preview-panel"
       >
         <PreviewPanel
+          targetChoice={
+            preview.connectedAccounts ? (
+              <TargetChoice
+                report={selected}
+                accounts={preview.connectedAccounts}
+                selected={selection.get(selected.channel) ?? []}
+                busy={busy}
+                dirty={
+                  JSON.stringify([...(selection.get(selected.channel) ?? [])].sort()) !==
+                  JSON.stringify([...(savedSelection.get(selected.channel) ?? [])].sort())
+                }
+                onToggle={(accountId, next) => {
+                  const current = selection.get(selected.channel) ?? [];
+                  const copy = new Map(selection);
+                  copy.set(
+                    selected.channel,
+                    next
+                      ? [...current, accountId].sort((a, b) => a - b)
+                      : current.filter((id) => id !== accountId),
+                  );
+                  setSelection(copy);
+                }}
+                onSave={() => {
+                  void onSaveTargets(
+                    [...selection.entries()].map(([channel, providerAccountIds]) => ({
+                      channel,
+                      providerAccountIds,
+                    })),
+                  );
+                }}
+              />
+            ) : null
+          }
           report={selected}
           preview={preview}
           post={post}

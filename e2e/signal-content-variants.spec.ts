@@ -88,3 +88,96 @@ test('platform overrides reach the preview per target and publish through the mo
     { platform: 'twitter', accountId: null, caption: 'The short version, for X.' },
   ]);
 });
+
+/**
+ * Wave 12's milestone flow: two accounts on one platform, each receiving its own caption, in one
+ * provider request (C77).
+ *
+ * Facebook because it is the one platform C73's live probe verified `account_configurations` on
+ * (`docs/post-bridge-api-surface.md` §14, question 1). Two pages are connected and neither is
+ * implied: the post chooses both explicitly, which is what replaces §3.1's one-account rule.
+ *
+ * The same-platform policy rule is exercised on the way through — both pages start with the post's
+ * own caption, which is refused, and the run only reaches a submission once each has its own words.
+ */
+test('two chosen Facebook accounts each receive their own caption in one request', async ({
+  page,
+}) => {
+  const text = `Wave 12 accounts ${Date.now()}`;
+  const created = await page.request.post('/api/signal/posts', {
+    data: { text, channels: ['fb'], date: '2099-11-13', time: '10:00', status: 'SCHEDULED' },
+  });
+  expect(created.ok()).toBe(true);
+  const postId = (await created.json()).id as string;
+
+  await page.goto('/signal?month=2099-11');
+  const post = page
+    .getByRole('region', { name: '2099-11-13' })
+    .getByRole('button', { name: new RegExp(text.slice(0, 20)) });
+  await post.click();
+  const editor = page.getByRole('dialog');
+  await editor.getByRole('button', { name: 'Show preview' }).click();
+  const preview = editor.getByRole('region', { name: 'Publish confirmation' });
+
+  // Nothing chosen yet: the channel resolves to its single account exactly as it always has.
+  await expect(preview).toContainText('No account chosen');
+
+  // Choose both pages, and save. The plan hash covers the ids, so this re-previews.
+  const accounts = preview.getByRole('group', { name: 'Accounts' });
+  await accounts.getByRole('checkbox', { name: 'gholmesdesigns' }).check();
+  await accounts.getByRole('checkbox', { name: 'wildeyephoto' }).check();
+  await accounts.getByRole('button', { name: 'Save accounts' }).click();
+
+  // Both accounts are named, and neither is collapsed into a sentence about the platform.
+  await expect(preview).toContainText('gholmesdesigns');
+  await expect(preview).toContainText('wildeyephoto');
+
+  // Identical content to two accounts on one platform is refused before anything is sent.
+  await expect(preview).toContainText(/same caption and media/i);
+  await expect(preview.getByRole('button', { name: 'Confirm and submit' })).toBeDisabled();
+
+  // Give each page its own words through the account layer, one tab at a time.
+  const stored = await page.request.put(`/api/signal/posts/${postId}/variants`, {
+    data: {
+      variants: [
+        { platform: 'facebook', accountId: 902, caption: 'For the studio’s own page.' },
+        { platform: 'facebook', accountId: 906, caption: 'For the photography page.' },
+      ],
+    },
+  });
+  expect(stored.ok()).toBe(true);
+
+  // Reopen rather than re-click: **Show preview** is gone once a preview is on screen, which is
+  // the point of it — a plan is taken once and confirmed against its own hash.
+  await page.reload();
+  const reopened = page
+    .getByRole('region', { name: '2099-11-13' })
+    .getByRole('button', { name: new RegExp(text.slice(0, 20)) });
+  await reopened.click();
+  const second = page.getByRole('dialog');
+  await second.getByRole('button', { name: 'Show preview' }).click();
+  const settled = second.getByRole('region', { name: 'Publish confirmation' });
+  // The selection survived the reload, and the collision is gone now each page has its own words.
+  await expect(settled).toContainText('gholmesdesigns');
+  await expect(settled).toContainText('wildeyephoto');
+  await expect(settled).not.toContainText(/same caption and media/i);
+  await settled.getByRole('button', { name: 'Confirm and submit' }).click();
+  await expect(second.getByRole('region', { name: 'Delivery' })).toContainText(
+    'Accepted, not out yet',
+  );
+
+  // One request, both accounts, each with its own caption — the card's headline claim.
+  const publications = await (
+    await page.request.get(`/api/signal/posts/${postId}/publications`)
+  ).json();
+  expect(
+    publications[0].targets.map((target: { accountId: number }) => target.accountId).sort(),
+  ).toEqual([902, 906]);
+  expect(publications[0].sentAccountConfigurations).toMatchObject({
+    version: 1,
+    items: [
+      { accountId: 902, caption: 'For the studio’s own page.' },
+      { accountId: 906, caption: 'For the photography page.' },
+    ],
+  });
+});

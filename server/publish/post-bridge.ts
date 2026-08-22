@@ -14,6 +14,8 @@ import {
 import {
   parsePostBridgeUploadReservation,
   postBridgeMediaEvidence,
+  postBridgeAccountConfigurationEvidence,
+  postBridgeAccountConfigurations,
   postBridgePlatformConfigurations,
   postBridgePostBody,
   postBridgeUploadReservationBody,
@@ -127,9 +129,12 @@ export class PostBridgeProvider implements PublishProvider {
   }
   async submit(request: PublishRequest): Promise<PublishSubmission> {
     const platformConfigurations = postBridgePlatformConfigurations(request);
+    const accountConfigurations = postBridgeAccountConfigurations(request);
     const body = (await this.request('/posts', {
       method: 'POST',
-      body: JSON.stringify(postBridgePostBody(request, platformConfigurations)),
+      body: JSON.stringify(
+        postBridgePostBody(request, platformConfigurations, accountConfigurations),
+      ),
     })) as { id: string; status?: string };
     if (!body.id)
       throw new PublishProviderError('Post Bridge answered without a publication id.', true);
@@ -219,10 +224,14 @@ export class PostBridgeProvider implements PublishProvider {
       scheduled_at?: string | null;
       social_accounts?: number[];
       media?: unknown;
+      account_configurations?: unknown;
       is_draft?: boolean;
       updated_at?: string;
     };
     const media = postBridgeMediaEvidence(post.media);
+    const accountConfigurations = postBridgeAccountConfigurationEvidence(
+      post.account_configurations,
+    );
     return {
       providerPostId: String(post.id),
       state: PostBridgeProvider.recordState(post.status, post.is_draft === true),
@@ -231,6 +240,7 @@ export class PostBridgeProvider implements PublishProvider {
       mediaUrls: media.mediaUrls,
       ...(media.mediaIds ? { mediaIds: media.mediaIds } : {}),
       accountIds: (post.social_accounts ?? []).map(Number),
+      ...(accountConfigurations ? { accountConfigurations } : {}),
       ...(post.updated_at ? { updatedAt: post.updated_at } : {}),
     };
   }
@@ -247,9 +257,12 @@ export class PostBridgeProvider implements PublishProvider {
    */
   async update(providerPostId: string, request: PublishRequest): Promise<PublishSubmission> {
     const platformConfigurations = postBridgePlatformConfigurations(request);
+    const accountConfigurations = postBridgeAccountConfigurations(request);
     const body = (await this.request(`/posts/${encodeURIComponent(providerPostId)}`, {
       method: 'PATCH',
-      body: JSON.stringify(postBridgePostBody(request, platformConfigurations)),
+      body: JSON.stringify(
+        postBridgePostBody(request, platformConfigurations, accountConfigurations),
+      ),
     })) as { id?: string; status?: string };
     return {
       providerPostId: body.id ? String(body.id) : providerPostId,

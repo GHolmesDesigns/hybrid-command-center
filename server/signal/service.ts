@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { Db } from '../db.ts';
 import {
   SIGNAL_CHANNELS,
+  SIGNAL_CHANNEL_LABEL,
   SIGNAL_CTAS,
   SIGNAL_DATE_PATTERN,
   SIGNAL_DEFAULT_TIME,
@@ -11,6 +12,7 @@ import {
   isSignalDate,
   signalSlotOccupied,
   suggestNextOpenSignalSlot,
+  type SignalChannel,
   type SignalPost,
   type SignalSlot,
 } from '../../shared/signal.ts';
@@ -26,6 +28,7 @@ import {
   type SignalVariantRoleMedia,
 } from './rows.ts';
 import { campaignsByPost, signalPostCampaignNames, writePostCampaigns } from './campaigns.ts';
+import { listPostPublishTargets } from './rows.ts';
 import {
   signalMediaFingerprint,
   signalPostMediaIssue,
@@ -49,7 +52,9 @@ import {
   PUBLISH_POST_KIND_LABEL,
   publishCapabilityFor,
   publishKindSupported,
+  publishPlatformFor,
 } from '../../shared/publish-capabilities.ts';
+import { PUBLISH_TARGET_SELECTION_MAX, type PublishTargetSelection } from '../../shared/publish.ts';
 import {
   normalizePublishVariant,
   publishVariantFieldSupported,
@@ -1075,4 +1080,126 @@ export function applyPostSlot(db: Db, postId: string, input: SignalSlotInput): S
   // The write core rather than `updatePost`: a slot names no media, so there is nothing to resolve
   // and no reason for this to become a call that could contact Drive.
   return writePost(db, postId, { date: input.date, time: input.time }, undefined);
+}
+
+/**
+ * A selection the provider's current account list does not support (C77).
+ *
+ * Separate from `SignalVariantError` because it is a different kind of wrongness: a variant error
+ * is a value the contract does not allow, and this is a value that was allowed when the preview was
+ * taken and is not allowed now. Both answer 400; only this one is worth re-reading the account list
+ * over.
+ */
+export class SignalPublishTargetError extends Error {}
+
+/** One channel's explicit account choices, as the preview sends them back. */
+const publishTargetInput = z.object({
+  channel: z.enum(SIGNAL_CHANNELS),
+  providerAccountIds: z
+    .array(z.number().int().positive('A provider account id is a positive number.'))
+    .max(PUBLISH_TARGET_SELECTION_MAX),
+});
+
+/**
+ * The whole selection for a post: a replacement, not a patch.
+ *
+ * The same shape `PUT /api/signal/posts/:id/variants` takes, and for the same reason — the preview
+ * shows every channel's targets at once, so a partial write would let one channel's selection
+ * survive a request that was reported as having failed.
+ */
+export const signalPublishTargetsInput = z.object({
+  targets: z.array(publishTargetInput).max(SIGNAL_CHANNELS.length).default([]),
+});
+export type SignalPublishTargetsInput = z.output<typeof signalPublishTargetsInput>;
+
+/**
+ * Every explicit selection a post carries, ordered by channel and then account id.
+ *
+ * The order is deliberate and not the insertion order: the plan hash covers these ids, so a list
+ * that came back in a different order after an unrelated write would invalidate a confirmation
+ * nobody had touched.
+ */
+export function getPostPublishTargets(db: Db, postId: string): PublishTargetSelection[] {
+  return listPostPublishTargets(db, postId);
+}
+
+/**
+ * Replaces a post's explicit target selection, refusing anything the provider list does not carry.
+ *
+ * Three refusals, and they are three different facts rather than one "invalid account" sentence:
+ * an id the provider does not list at all is disconnected or was never there; an id it lists under
+ * another platform is a real account chosen for the wrong channel; and a channel the provider
+ * cannot reach has no account to choose. Naming which one happened is the difference between a
+ * person reconnecting an account and a person hunting for a typo.
+ *
+ * **The provider list is passed in, never fetched here.** It is the same list the preview was built
+ * from, so a selection is validated against what the user was actually shown; refetching would let
+ * this route accept an account that appeared between the preview and the save, which is exactly the
+ * staleness the confirmation hash exists to catch.
+ *
+ * Writes no `integration_events` row: choosing a target is Signal editing its own local data, and
+ * the log is for what an *integration* did (`AGENTS.md`).
+ */
+export function replacePostPublishTargets(
+  db: Db,
+  postId: string,
+  input: SignalPublishTargetsInput,
+  connected: readonly { id: number; platform: string }[],
+  now: () => Date = () => new Date(),
+): PublishTargetSelection[] {
+  const post = getPost(db, postId);
+  if (!post) throw new SignalPostNotFoundError(`No Signal post ${postId}.`);
+
+  const byId = new Map(connected.map((target) => [target.id, target]));
+  const rows: { channel: SignalChannel; providerAccountId: number }[] = [];
+  const seenChannels = new Set<string>();
+
+  for (const entry of input.targets) {
+    if (seenChannels.has(entry.channel))
+      throw new SignalPublishTargetError(
+        `${SIGNAL_CHANNEL_LABEL[entry.channel] ?? entry.channel} was given two target lists at once.`,
+      );
+    seenChannels.add(entry.channel);
+    const label = SIGNAL_CHANNEL_LABEL[entry.channel] ?? entry.channel;
+    const platform = publishPlatformFor(entry.channel);
+    if (entry.providerAccountIds.length && (platform === null || platform === undefined))
+      throw new SignalPublishTargetError(
+        `${label} is not reachable through this provider, so it has no account to choose.`,
+      );
+    const seenAccounts = new Set<number>();
+    for (const id of entry.providerAccountIds) {
+      // A repeat is the same choice rather than an error the user can act on, and the unique index
+      // would refuse the second insert anyway. Collapse it here so the write stays idempotent.
+      if (seenAccounts.has(id)) continue;
+      seenAccounts.add(id);
+      const target = byId.get(id);
+      if (!target)
+        throw new SignalPublishTargetError(
+          `Account ${id} is not in the connected list this preview was built from. Reconnect it in Post Bridge, or take a new preview.`,
+        );
+      if (target.platform !== platform)
+        throw new SignalPublishTargetError(
+          `Account ${id} is a ${target.platform} account and ${label} publishes to ${String(platform)}. Choose an account on the right platform.`,
+        );
+      rows.push({ channel: entry.channel, providerAccountId: id });
+    }
+  }
+
+  // Every refusal above happens before this, so the delete and the inserts are the whole
+  // transaction and a rejected selection leaves the stored one exactly as it was.
+  const timestamp = now().toISOString();
+  db.exec('BEGIN');
+  try {
+    db.prepare('DELETE FROM signal_post_publish_targets WHERE post_id=?').run(postId);
+    const insert = db.prepare(
+      `INSERT INTO signal_post_publish_targets(post_id, channel, provider_account_id, created_at)
+       VALUES(?,?,?,?)`,
+    );
+    for (const row of rows) insert.run(postId, row.channel, row.providerAccountId, timestamp);
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+  return getPostPublishTargets(db, postId);
 }

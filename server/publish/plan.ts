@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { samePlatformPolicyRefusal } from '../../shared/publish-same-platform.ts';
 import {
   signalMediaKind,
   signalMediaKindFor,
@@ -28,6 +29,7 @@ import {
   publishVariantFieldSupported,
   publishVariantLayers,
   resolvePublishContent,
+  PUBLISH_ACCOUNT_DELIVERABLE_FIELDS,
   PUBLISH_VARIANT_FIELDS,
   PUBLISH_VARIANT_FIELD_LABEL,
   PUBLISH_VARIANT_MEDIA_FIELD,
@@ -44,10 +46,17 @@ import {
 import type {
   PublishChannelContent,
   PublishChannelReport,
+  PublishChannelStatus,
+  PublishTargetSelections,
   PublishPreview,
 } from '../../shared/publish.ts';
 import { deliveryModeForCapability, publishPreviewRefusals } from '../../shared/publish.ts';
-import type { PublishPlatformConfiguration, PublishRequest, PublishTarget } from './provider.ts';
+import type {
+  PublishAccountConfiguration,
+  PublishPlatformConfiguration,
+  PublishRequest,
+  PublishTarget,
+} from './provider.ts';
 
 const partsInZone = (instant: Date, zone: string) => {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -342,6 +351,75 @@ function resolveTarget(
 }
 
 /**
+ * The same resolution, as the list every later stage reads.
+ *
+ * Today it holds one account or none, because `resolveTarget` above is still the only thing that
+ * decides — this is the seam and not the change. C77's next piece replaces what fills the list with
+ * a person's explicit selection, and everything downstream already handles a list by then, so the
+ * behaviour change lands in one place instead of being threaded through the planner in the same
+ * commit that adds the feature.
+ */
+function resolveChannelTargets(
+  platform: string,
+  label: string,
+  connected: PublishTarget[],
+  selected: readonly number[],
+): { targets: PublishTarget[]; refusal?: string; explicit: boolean } {
+  // No selection is not a selection of nothing. It means nobody has chosen, so §3.1's rule still
+  // decides and the channel plans exactly as it did before this card.
+  if (!selected.length) {
+    const { target, refusal } = resolveTarget(platform, label, connected);
+    return { targets: target ? [target] : [], ...(refusal ? { refusal } : {}), explicit: false };
+  }
+  // An explicit selection replaces the rule rather than filtering its result: the whole point is
+  // that a person said which accounts, so "resolved to several" is no longer a refusal and
+  // G.Holmes Designs is no longer implied. What an id must still be is connected and on this
+  // platform, because a selection saved yesterday can name an account disconnected since.
+  const targets: PublishTarget[] = [];
+  const missing: number[] = [];
+  for (const id of selected) {
+    const target = connected.find((entry) => entry.id === id && entry.platform === platform);
+    if (target) targets.push(target);
+    else missing.push(id);
+  }
+  const refusal = missing.length
+    ? `${label} was told to publish to ${missing.length === 1 ? 'an account' : 'accounts'} ${missing.join(', ')}, which this provider no longer lists for it. Choose its accounts again.`
+    : undefined;
+  return { targets, ...(refusal ? { refusal } : {}), explicit: true };
+}
+
+/**
+ * One account's resolved content and its own verdict.
+ *
+ * Per target rather than per channel, which is the distinction the whole card turns on: two
+ * accounts on one platform can resolve different content and refuse for different reasons, and a
+ * sentence about "the platform" cannot say which of them it meant. Nothing collapses these into a
+ * platform-level answer here; `reportForChannel` decides how to present them.
+ */
+interface PublishTargetResolution {
+  target?: PublishTarget;
+  content: PublishChannelContent;
+  refusals: string[];
+  warnings: string[];
+}
+
+function resolutionForTarget(
+  base: PublishPlanBase,
+  capability: PublishPlatformCapability,
+  variants: readonly PublishVariantRecord[],
+  target: PublishTarget | undefined,
+): PublishTargetResolution {
+  const { content, warnings } = resolveForTarget(base, capability, variants, target?.id);
+  const preflight = preflightPlatform({ capability, content, media: base.media });
+  return {
+    ...(target ? { target } : {}),
+    content,
+    refusals: [...preflight.refusals],
+    warnings: [...warnings, ...preflight.warnings],
+  };
+}
+
+/**
  * One channel's resolved content, and what resolving it cost.
  *
  * A media selection is intersected with the post's own media, in the selection's order. A post can
@@ -376,6 +454,19 @@ function resolveForTarget(
     warnings.push(
       `${capability.label} carries one set of content per platform from this provider, so this account's ${fromAccount.map((field) => PUBLISH_VARIANT_FIELD_LABEL[field].toLowerCase()).join(' and ')} is sent as the platform's. That is unambiguous only because ${capability.label} resolved to a single account.`,
     );
+  // A platform that carries per-account content still does not carry every field that way. C73
+  // verified a per-account caption and per-account media and nothing else, so an account layer
+  // setting a title, a first comment, a post shape, or a role travels as its platform's — and the
+  // preview says which fields those were rather than letting them look account-level.
+  if (capability.accountContentOverride) {
+    const platformLevel = fromAccount.filter(
+      (field) => !PUBLISH_ACCOUNT_DELIVERABLE_FIELDS.includes(field),
+    );
+    if (platformLevel.length > 0)
+      warnings.push(
+        `This provider carries a caption and media per account, but not ${platformLevel.map((field) => PUBLISH_VARIANT_FIELD_LABEL[field].toLowerCase()).join(' or ')}, so this account's ${platformLevel.length === 1 ? 'value' : 'values'} for ${platformLevel.length === 1 ? 'it' : 'those'} is sent as ${capability.label}'s and reaches every account on it.`,
+      );
+  }
   const content: PublishChannelContent = {
     ...resolved,
     // The effective caption from here on: what the limit is measured against and what is sent.
@@ -398,6 +489,7 @@ function reportForChannel(
   base: PublishPlanBase,
   connected: PublishTarget[],
   variants: readonly PublishVariantRecord[],
+  selected: readonly number[] = [],
 ): PublishChannelReport {
   const channelLabel = SIGNAL_CHANNEL_LABEL[channel] ?? channel;
   const platform = publishPlatformFor(channel);
@@ -426,23 +518,78 @@ function reportForChannel(
       ],
       warnings: [],
     };
-  const { target, refusal } = resolveTarget(capability.platform, capability.label, connected);
-  const { content, warnings } = resolveForTarget(base, capability, variants, target?.id);
-  const preflight = preflightPlatform({ capability, content, media: base.media });
-  const refusals = [...preflight.refusals];
+  const { targets, refusal, explicit } = resolveChannelTargets(
+    capability.platform,
+    capability.label,
+    connected,
+    selected,
+  );
+  // One resolution per account the channel resolved to, and one anyway when it resolved to none —
+  // a channel whose account did not resolve still reports its platform-layer content, because the
+  // refusal is about the connection and the user should still see what would have gone.
+  //
+  // The list is one entry long today. It is built as a list so that the piece which teaches this
+  // planner about an explicit selection changes what fills it rather than how it is read.
+  const resolutions = targets.length
+    ? targets.map((target) => resolutionForTarget(base, capability, variants, target))
+    : [resolutionForTarget(base, capability, variants, undefined)];
+  const primary = resolutions[0] as PublishTargetResolution;
+  // The channel-level fields describe the first target, so a reader written before per-account
+  // reports existed still sees something true rather than nothing.
+  const refusals = [...primary.refusals];
   if (refusal) refusals.push(refusal);
+  // Every selected account's own verdict, and only where somebody selected. A channel resolving
+  // by §3.1's rule carries no list, which is what keeps its report byte-identical to before.
+  const targetReports = explicit
+    ? resolutions
+        .filter((resolution) => resolution.target)
+        .map((resolution) => {
+          const target = resolution.target as PublishTarget;
+          return {
+            accountId: target.id,
+            handle: target.handle || target.name,
+            content: resolution.content,
+            status: (resolution.refusals.length ? 'BLOCKED' : 'READY') as PublishChannelStatus,
+            refusals: resolution.refusals,
+            warnings: resolution.warnings,
+          };
+        })
+    : undefined;
+  // A channel is blocked when any of its accounts is: sending to some of the accounts a person
+  // chose and quietly dropping the rest is the one outcome nobody asked for.
+  const anyTargetBlocked = (targetReports ?? []).some((entry) => entry.status === 'BLOCKED');
+  // The same-platform rule, applied here because only this scope knows every account one platform
+  // is about to receive. C73 verified the API will *not* refuse identical content itself
+  // (`docs/post-bridge-api-surface.md` §14, question 1, "verified with policy constraint"), so a
+  // provider that accepts the request is not a platform that permits the posts.
+  const duplicate =
+    targetReports && targetReports.length > 1
+      ? samePlatformPolicyRefusal(
+          capability.label,
+          targetReports.map((entry) => ({
+            accountId: entry.accountId,
+            handle: entry.handle,
+            caption: entry.content?.caption ?? '',
+            mediaUrls: entry.content?.mediaUrls ?? [],
+          })),
+        )
+      : undefined;
+  if (duplicate) refusals.push(duplicate);
   return {
     channel,
     platform: capability.platform,
-    kind: content.postKind,
+    kind: primary.content.postKind,
     // The resolved kind, not the post's: a placement override changes what the shape is and can
     // change how it is delivered, so the route is read after the layers resolved.
-    mode: content.deliveryMode,
-    status: refusals.length ? 'BLOCKED' : 'READY',
-    ...(target ? { accountId: target.id, handle: target.handle || target.name } : {}),
-    content,
+    mode: primary.content.deliveryMode,
+    status: refusals.length || anyTargetBlocked ? 'BLOCKED' : 'READY',
+    ...(primary.target
+      ? { accountId: primary.target.id, handle: primary.target.handle || primary.target.name }
+      : {}),
+    content: primary.content,
+    ...(targetReports ? { targets: targetReports } : {}),
     refusals,
-    warnings: [...warnings, ...preflight.warnings],
+    warnings: primary.warnings,
   };
 }
 
@@ -455,6 +602,47 @@ function reportForChannel(
  * submission's own caption or adds a field, which is what keeps an untailored post sending exactly
  * the request it sent before any of this existed.
  */
+/**
+ * The per-account content the provider is given, one entry per selected account that differs.
+ *
+ * Only for a platform whose `accountContentOverride` is true, which is the one platform C73's
+ * evidence covers. Only where the account's caption actually differs from the submission's own,
+ * for the same reason `platformConfigurationsFor` is selective: an untailored account adds no key
+ * and the request stays the one it would have been.
+ *
+ * The caption compared is the **effective** one — the disclosure sentence already appended — so
+ * what is hashed, previewed, measured against the limit, and sent are all the same string.
+ */
+function accountConfigurationsFor(
+  reports: PublishChannelReport[],
+  baseCaption: string,
+  perAccountMedia: readonly { accountId: number; mediaUrls: string[] }[] = [],
+): PublishAccountConfiguration[] {
+  const ownMediaAccounts = new Set(perAccountMedia.map((entry) => entry.accountId));
+  const configurations: PublishAccountConfiguration[] = [];
+  for (const report of reports) {
+    if (report.status !== 'READY' || !report.platform || !report.targets) continue;
+    const capability = publishCapabilityFor(report.platform);
+    if (!capability?.accountContentOverride) continue;
+    for (const entry of report.targets) {
+      if (entry.status !== 'READY' || !entry.content) continue;
+      const ownCaption = entry.content.caption !== baseCaption;
+      const ownMedia = ownMediaAccounts.has(entry.accountId);
+      if (!ownCaption && !ownMedia) continue;
+      configurations.push({
+        accountId: entry.accountId,
+        ...(ownCaption ? { caption: entry.content.caption } : {}),
+        // The ids do not exist yet. They are produced by uploading immediately before the request,
+        // so the plan records only *that this account has its own media*; the publish service
+        // fills the ids in. A plan never carries a provider media id — it is not a durable
+        // reference and it is recreated on every submit, update, and restore-and-resubmit.
+        ...(ownMedia ? { mediaIds: [] } : {}),
+      });
+    }
+  }
+  return configurations;
+}
+
 function platformConfigurationsFor(
   reports: PublishChannelReport[],
   baseCaption: string,
@@ -476,6 +664,55 @@ function platformConfigurationsFor(
     if (Object.keys(configuration).length > 1) configurations.push(configuration);
   }
   return configurations;
+}
+
+/**
+ * The accounts that chose media of their own, and the refusals that shape makes possible.
+ *
+ * **Only an all-Drive post can do this.** The provider takes one media array for the submission and
+ * a list of media ids per account, and a Drive file becomes an id only by being uploaded
+ * immediately before the request (C75). A public URL never becomes an id, so an account override
+ * naming one has nowhere to go — and the card is explicit that it must **refuse** rather than be
+ * dropped or quietly replaced with the platform's media, which is exactly what would otherwise
+ * happen: `agreedMedia` reads the channel's primary target and would never see the difference.
+ *
+ * Mixing is refused for the same reason C75 refuses it at the submission level. A post whose own
+ * media is public URLs cannot give one account Drive files, because the request carries `media`
+ * **or** `media_urls` and never both.
+ */
+function accountMediaFor(
+  reports: PublishChannelReport[],
+  postMedia: readonly SignalPostMedia[],
+): {
+  perAccount: { accountId: number; mediaUrls: string[]; items: SignalPostMedia[] }[];
+  refusals: string[];
+} {
+  const perAccount: { accountId: number; mediaUrls: string[]; items: SignalPostMedia[] }[] = [];
+  const refusals: string[] = [];
+  const descriptorFor = (url: string) =>
+    postMedia.find((item) => item.url === url) ?? ({ source: 'URL', url } as SignalPostMedia);
+  for (const report of reports) {
+    if (!report.platform || !report.targets) continue;
+    const capability = publishCapabilityFor(report.platform);
+    if (!capability?.accountContentOverride) continue;
+    // The channel's own media is the first target's, which is what the submission would carry.
+    const channelMedia = JSON.stringify(report.content?.mediaUrls ?? []);
+    for (const entry of report.targets) {
+      if (!entry.content) continue;
+      const own = entry.content.mediaUrls;
+      if (JSON.stringify(own) === channelMedia) continue;
+      const items = own.map(descriptorFor);
+      const publicUrls = items.filter((item) => item.source !== 'DRIVE');
+      if (publicUrls.length) {
+        refusals.push(
+          `${entry.handle || entry.accountId} was given ${publicUrls.length === 1 ? 'a public address' : 'public addresses'} of its own on ${capability.label} (${publicUrls.map((item) => item.url).join(', ')}). This provider only carries media per account as files uploaded from Drive, so that selection cannot be sent — and it is not dropped or replaced with the platform's. Choose Drive files for it, or give it the same media as the rest of the channel.`,
+        );
+        continue;
+      }
+      perAccount.push({ accountId: entry.accountId, mediaUrls: own, items });
+    }
+  }
+  return { perAccount, refusals };
 }
 
 /**
@@ -529,7 +766,12 @@ export function buildPublishPlan(
   zone: string,
   now = new Date(),
   variants: readonly PublishVariantRecord[] = [],
-): PublishPreview & { request?: PublishRequest; mediaSources?: SignalPostMedia[] } {
+  selections: PublishTargetSelections = [],
+): PublishPreview & {
+  request?: PublishRequest;
+  mediaSources?: SignalPostMedia[];
+  accountMediaSources?: { accountId: number; items: SignalPostMedia[] }[];
+} {
   const refusals: string[] = [];
   const warnings: string[] = [];
   const caption = post.text.trim();
@@ -556,18 +798,45 @@ export function buildPublishPlan(
     media: post.media,
     postKind: publishPostKindFor(post.format),
   };
+  // Grouped once rather than filtered per channel, and kept in the order the service read them —
+  // the ids ride into the plan hash through `targets`, so an order that wandered between two reads
+  // of an unchanged post would invalidate a confirmation nobody had touched.
+  const selectedByChannel = new Map<string, number[]>();
+  for (const selection of selections)
+    selectedByChannel.set(selection.channel, [
+      ...(selectedByChannel.get(selection.channel) ?? []),
+      selection.providerAccountId,
+    ]);
   const channels = post.channels.map((channel) =>
-    reportForChannel(channel, base, connected, variants),
+    reportForChannel(channel, base, connected, variants, selectedByChannel.get(channel) ?? []),
   );
-  const targets: PublishPreview['targets'] = channels
-    .filter((report) => report.status === 'READY' && report.platform && report.accountId)
-    .map((report) => ({
-      channel: report.channel,
-      platform: report.platform as string,
-      accountId: report.accountId as number,
-      handle: report.handle as string,
-      mode: report.mode,
-    }));
+  // One entry per account that will actually be sent to. A channel with an explicit selection
+  // contributes each of its ready accounts; a channel without one contributes the single account
+  // §3.1 resolved, exactly as it always did.
+  const targets: PublishPreview['targets'] = channels.flatMap((report) => {
+    if (report.status !== 'READY' || !report.platform) return [];
+    if (report.targets)
+      return report.targets
+        .filter((entry) => entry.status === 'READY')
+        .map((entry) => ({
+          channel: report.channel,
+          platform: report.platform as string,
+          accountId: entry.accountId,
+          handle: entry.handle,
+          mode: report.mode,
+        }));
+    return report.accountId
+      ? [
+          {
+            channel: report.channel,
+            platform: report.platform as string,
+            accountId: report.accountId,
+            handle: report.handle as string,
+            mode: report.mode,
+          },
+        ]
+      : [];
+  });
   // Plan-level only when nothing resolved at all. A channel that resolved and is blocked has
   // already said why, and repeating it here as "nothing resolved" would contradict its own report.
   if (channels.every((report) => report.accountId === undefined))
@@ -598,7 +867,21 @@ export function buildPublishPlan(
   const totalDriveBytes = driveMedia.reduce((total, item) => total + (item.sizeBytes ?? 0), 0);
   if (totalDriveBytes > SIGNAL_DRIVE_TOTAL_MAX_BYTES)
     refusals.push('The selected Drive files exceed Post Bridge’s 500 MB total upload limit.');
+  const accountMedia = accountMediaFor(channels, post.media);
+  refusals.push(...accountMedia.refusals);
+  // Per-account media only exists as provider ids, so the whole post has to be Drive-sourced. A
+  // URL post that gave one account its own files would need `media` and `media_urls` in one
+  // request, which C75 refuses at the submission level for exactly this reason.
+  if (accountMedia.perAccount.length && urlMedia.length)
+    refusals.push(
+      `This post's own media is ${urlMedia.length === 1 ? 'a public address' : 'public addresses'}, and per-account media is only sent as files uploaded from Drive. Give the post Drive files, or give every account the same media.`,
+    );
   const platformConfigurations = platformConfigurationsFor(channels, caption);
+  const accountConfigurations = accountConfigurationsFor(
+    channels,
+    caption,
+    accountMedia.perAccount,
+  );
 
   const stable = {
     postId: post.id,
@@ -624,6 +907,20 @@ export function buildPublishPlan(
     timezone: zone,
     targets,
     platformConfigurations,
+    // Conditional for the same reason `accountContent` above is: an untouched post's hash must be
+    // the number it has always been, and an empty array is not the same as an absent key.
+    ...(accountConfigurations.length ? { accountConfigurations } : {}),
+    // The per-account files as whole descriptors, for the reason the submission's media is hashed
+    // that way: a Drive viewer link does not change when the bytes behind it do, so a hash over
+    // urls alone would call a plan current after the thing it planned to send had been swapped.
+    ...(accountMedia.perAccount.length
+      ? {
+          accountMedia: accountMedia.perAccount.map((entry) => ({
+            accountId: entry.accountId,
+            media: entry.items.map((item) => signalMediaFingerprint(item)),
+          })),
+        }
+      : {}),
     /**
      * Every resolved media role, as a fingerprint, keyed by the channel it belongs to.
      *
@@ -632,6 +929,29 @@ export function buildPublishPlan(
      * viewer link does not change when the bytes behind it do. This is what makes a role edit, and a
      * recheck that finds a new version, refuse a confirmation taken before it.
      */
+    /**
+     * What each explicitly selected account resolved to, present only where somebody selected.
+     *
+     * Conditional on purpose. `targets` above already carries the chosen ids, so this adds the
+     * *content* those ids resolved to — editing one account's caption has to refuse a confirmation
+     * taken before the edit. Omitting the key entirely when nothing is selected is what keeps an
+     * untouched post's hash the number it has always been.
+     */
+    ...(selections.length
+      ? {
+          accountContent: channels.flatMap((report) =>
+            (report.targets ?? []).map((entry) => ({
+              channel: report.channel,
+              accountId: entry.accountId,
+              caption: entry.content?.caption,
+              mediaUrls: entry.content?.mediaUrls,
+              postKind: entry.content?.postKind,
+              title: entry.content?.title,
+              firstComment: entry.content?.firstComment,
+            })),
+          ),
+        }
+      : {}),
     roleMedia: channels.flatMap((report) =>
       PUBLISH_VARIANT_MEDIA_ROLES.flatMap((role) => {
         const media = report.content?.[PUBLISH_VARIANT_MEDIA_FIELD[role]];
@@ -650,9 +970,24 @@ export function buildPublishPlan(
     timezone: zone,
     targets,
     channels,
+    connectedAccounts: connected.map((account) => ({
+      id: account.id,
+      platform: account.platform,
+      handle: account.handle,
+      name: account.name,
+    })),
+    ...(selections.length ? { selectedTargets: [...selections] } : {}),
     warnings,
     refusals,
     mediaSources,
+    ...(accountMedia.perAccount.length
+      ? {
+          accountMediaSources: accountMedia.perAccount.map((entry) => ({
+            accountId: entry.accountId,
+            items: entry.items,
+          })),
+        }
+      : {}),
   };
   if (scheduledInstant && publishPreviewRefusals(preview).length === 0)
     preview.request = {
@@ -664,6 +999,7 @@ export function buildPublishPlan(
         accountId: target.accountId,
         platform: target.platform,
       })),
+      ...(accountConfigurations.length ? { accountConfigurations } : {}),
       // Omitted rather than empty, so the provider adapter sends no key at all for an untailored
       // post — the artifact's own rule for `platform_configurations`.
       ...(platformConfigurations.length ? { platformConfigurations } : {}),

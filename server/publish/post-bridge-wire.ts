@@ -82,13 +82,39 @@ export function postBridgePlatformConfigurations(request: PublishRequest) {
   return entries.length ? Object.fromEntries(entries) : undefined;
 }
 
-export function postBridgePostBody(request: PublishRequest, platformConfigurations?: unknown) {
+/**
+ * `account_configurations`, in the encoding C73 verified.
+ *
+ * **A list of objects each carrying `account_id`**, not a map keyed by id — the probe accepted that
+ * shape on the first attempt and read it back unchanged after create and after `PATCH`
+ * (`docs/post-bridge-api-surface.md` §14, question 1). The alternative encoding was never
+ * accepted by anything, so it is not offered here.
+ *
+ * Only `caption` travels beside the id. A title, a first comment, a placement, and a media role are
+ * platform-level on this provider and are emitted by `postBridgePlatformConfigurations` above; the
+ * preview says so per account rather than this function silently dropping them.
+ */
+export function postBridgeAccountConfigurations(request: PublishRequest) {
+  const entries = (request.accountConfigurations ?? []).map((configuration) => ({
+    account_id: configuration.accountId,
+    ...(configuration.caption !== undefined ? { caption: configuration.caption } : {}),
+    ...(configuration.mediaIds ? { media: configuration.mediaIds } : {}),
+  }));
+  return entries.length ? entries : undefined;
+}
+
+export function postBridgePostBody(
+  request: PublishRequest,
+  platformConfigurations?: unknown,
+  accountConfigurations?: unknown,
+) {
   return {
     caption: request.caption,
     ...('mediaIds' in request ? { media: request.mediaIds } : { media_urls: request.mediaUrls }),
     scheduled_at: request.scheduledInstant,
     social_accounts: request.targets.map((target) => target.accountId),
     ...(platformConfigurations ? { platform_configurations: platformConfigurations } : {}),
+    ...(accountConfigurations ? { account_configurations: accountConfigurations } : {}),
   };
 }
 
@@ -113,4 +139,27 @@ export function postBridgeMediaEvidence(media: unknown): {
       mediaIds.push((item as { id: string }).id);
   }
   return { mediaUrls, ...(mediaIds.length ? { mediaIds } : {}) };
+}
+
+/**
+ * What the provider reports per account, read back off a post record (C77).
+ *
+ * `undefined` where the field is absent or null, which is **not reported** rather than *nothing*.
+ * A row with no per-account content and a provider that stopped returning the field are different
+ * facts, and only one of them is a difference worth showing anybody.
+ */
+export function postBridgeAccountConfigurationEvidence(
+  value: unknown,
+): { accountId: number; caption?: string }[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.flatMap((item) => {
+    const record = item as { account_id?: unknown; caption?: unknown };
+    if (typeof record?.account_id !== 'number') return [];
+    return [
+      {
+        accountId: record.account_id,
+        ...(typeof record.caption === 'string' ? { caption: record.caption } : {}),
+      },
+    ];
+  });
 }

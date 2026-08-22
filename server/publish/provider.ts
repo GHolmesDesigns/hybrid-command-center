@@ -12,10 +12,11 @@ export interface PublishTarget {
 /**
  * One platform's tailored content, as the provider takes it.
  *
- * Per platform and not per account, which is the provider's own shape: `platform_configurations` is
- * keyed by platform, so an account override arrives as its platform's configuration and the plan
- * refuses rather than guessing when two accounts on one platform disagree
- * (`shared/publish-capabilities.ts`, `accountContentOverride`).
+ * Per platform, and **no longer the only level** — see `PublishAccountConfiguration` below. This
+ * one stays keyed by platform and carries the fields that are platform-level on the wire whatever
+ * else is true: a title, a first comment, and a placement. Where a platform's
+ * `accountContentOverride` is false, an account override still arrives here as its platform's
+ * configuration, which is unambiguous exactly while that platform resolves to one account.
  *
  * A configuration is emitted only where something differs from the submission's own caption, so a
  * post with no overrides sends exactly the request it sent before this existed.
@@ -34,6 +35,35 @@ export interface PublishPlatformConfiguration {
   story?: true;
 }
 
+/**
+ * One account's tailored content, as the provider takes it (C77).
+ *
+ * C73's live probe verified this level and its exact encoding — a **list of objects each carrying
+ * `account_id`**, read back after create and again after `PATCH`
+ * (`docs/post-bridge-api-surface.md` §14, question 1). It is emitted only for a platform whose
+ * `accountContentOverride` is true, which today means the one platform that evidence covers.
+ *
+ * **Two fields, because two fields are what the probe verified.** `caption` and per-account media
+ * ids are named by the vendor's `AccountConfigurationDto` and were exercised live. A title, a first
+ * comment, a post shape, a placement, and a media role are **not** account-level on this provider:
+ * they stay in `PublishPlatformConfiguration` and the preview warns, per account, that an override
+ * of one of them travels as the platform's. Adding a field here takes a dated §14 result, exactly
+ * as flipping a capability does.
+ */
+export interface PublishAccountConfiguration {
+  accountId: number;
+  /** Present when this account's effective caption differs from the request's own. */
+  caption?: string;
+  /**
+   * Provider media ids for this account alone, present only where it selected its own media.
+   *
+   * Ids and never URLs, for the reason the whole request is a discriminated union: per-account
+   * media exists only for an all-Drive post, uploaded immediately before the request through the
+   * C75 path. A public-URL account override refuses at preview rather than arriving here.
+   */
+  mediaIds?: string[];
+}
+
 interface PublishRequestBase {
   caption: string;
   scheduledInstant: string;
@@ -41,6 +71,11 @@ interface PublishRequestBase {
   targets: { accountId: number; platform: string }[];
   /** Omitted entirely when no platform is tailored. */
   platformConfigurations?: PublishPlatformConfiguration[];
+  /**
+   * Omitted entirely when no account is tailored, so a post that predates C77 serialises exactly
+   * the request it always did.
+   */
+  accountConfigurations?: PublishAccountConfiguration[];
 }
 
 /**

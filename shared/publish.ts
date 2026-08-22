@@ -70,6 +70,63 @@ export interface PublishChannelContent extends PublishResolvedContent {
   deliveryMode: DeliveryMode;
 }
 
+/**
+ * How many accounts one channel's explicit selection may name.
+ *
+ * A bound on input rather than a statement about the provider: nothing here knows how many pages a
+ * person can connect, and the number exists so a malformed request cannot ask this app to plan an
+ * unbounded number of targets. Raise it when a real account list needs more.
+ */
+export const PUBLISH_TARGET_SELECTION_MAX = 10;
+
+/**
+ * One provider account a person explicitly chose to publish a Signal channel to (C77).
+ *
+ * A **selection**, not a provider record. It carries the channel and the account id and nothing
+ * the provider owns: a handle or a name stored beside them would be a second copy of something
+ * Post Bridge can rename underneath this app, and every screen that shows an account reads the
+ * provider's own list instead.
+ *
+ * **An empty set for a channel is not a choice to send nowhere.** It means no explicit selection
+ * exists, and the channel resolves the way it always has — one account, refusing zero or several
+ * (`docs/publishing-integration.md` §3.1). That is what keeps this additive: a post nobody has
+ * touched plans and submits byte for byte as it did before the table existed.
+ */
+export interface PublishTargetSelection {
+  channel: SignalChannel;
+  providerAccountId: number;
+}
+
+/**
+ * Every explicit selection a post carries, grouped the way the preview shows it.
+ *
+ * Ordered by channel and then by account id, so two reads of an unchanged post produce the same
+ * list — the plan hash covers these ids, and an order that wandered would invalidate a
+ * confirmation nobody had touched.
+ */
+export type PublishTargetSelections = readonly PublishTargetSelection[];
+
+/**
+ * One selected account's own verdict inside a channel (C77).
+ *
+ * Present only where a person made an explicit selection. A channel resolving the way §3.1 has
+ * always resolved it — one account, refusing zero or several — carries no `targets` list at all,
+ * which is what keeps an untouched post planning byte for byte as it did before this existed.
+ *
+ * Every account gets its own refusals and its own warnings, and they are never merged into a
+ * platform-level sentence: two accounts can fail for two different reasons, and "Facebook is
+ * blocked" cannot say which of them a person has to fix.
+ */
+export interface PublishChannelTargetReport {
+  accountId: number;
+  handle: string;
+  /** This account's resolved content, absent only where the account itself did not resolve. */
+  content?: PublishChannelContent;
+  status: PublishChannelStatus;
+  refusals: string[];
+  warnings: string[];
+}
+
 export interface PublishChannelReport {
   channel: SignalChannel;
   /** `null` where no provider platform exists for the channel. */
@@ -92,6 +149,16 @@ export interface PublishChannelReport {
    * to tailor and an empty object would read as "tailored to nothing".
    */
   content?: PublishChannelContent;
+  /**
+   * Every explicitly selected account, in the order the selection is stored.
+   *
+   * **Absent, not empty, when nobody selected anything.** That distinction is the additive
+   * guarantee: a post with no selection serializes exactly the report it always did, and the
+   * channel-level `accountId`, `handle`, and `content` above remain the whole answer. Where the
+   * list is present it names every account, and the channel-level fields describe the first of
+   * them so that a reader which predates this list still sees something true.
+   */
+  targets?: PublishChannelTargetReport[];
   refusals: string[];
   warnings: string[];
 }
@@ -106,6 +173,16 @@ export interface PublishPreview {
   targets: PublishTargetPreview[];
   /** One entry per channel on the post, in the post's channel order. */
   channels: PublishChannelReport[];
+  /**
+   * Every account the provider listed when this preview was built (C77).
+   *
+   * The composer offers exactly this list, and `PUT /api/signal/posts/:id/publish-targets`
+   * validates against exactly this list, so a person can never tick something the save will refuse.
+   * Absent where the provider could not be read at all, which is different from an empty list.
+   */
+  connectedAccounts?: { id: number; platform: string; handle: string; name: string }[];
+  /** The explicit selection this preview planned with, so the composer can show what is ticked. */
+  selectedTargets?: PublishTargetSelection[];
   /** Reasons that belong to the whole plan rather than to any one channel. */
   warnings: string[];
   /** Refusals that belong to the whole plan. A channel's own refusals live on its report. */
@@ -155,6 +232,19 @@ export interface SignalPublication {
   };
   /** Exact ephemeral provider ids used for this attempt, absent on URL-only and legacy rows. */
   sentProviderMediaIds?: string[];
+  /**
+   * What each account was handed, versioned separately from `sentConfigurations` (C77).
+   *
+   * **Absent is unknown.** A publication written before this existed, and one that tailored no
+   * account at all, both arrive with nothing here — and they are different facts. Reconciliation
+   * treats the absence as "cannot say" and reports no account-content drift, rather than reading it
+   * as "nothing was tailored" and telling the user their plan has diverged from a record that never
+   * described accounts in the first place.
+   */
+  sentAccountConfigurations?: {
+    version: 1;
+    items: { accountId: number; caption?: string; mediaIds?: string[] }[];
+  };
   error?: string;
   /** One row per provider account, in the order the plan resolved them. */
   targets: SignalPublicationTarget[];
@@ -500,6 +590,15 @@ export interface ProviderPostRecord {
   /** Uploaded-media identities where the provider still exposes them. */
   mediaIds?: string[];
   accountIds: number[];
+  /**
+   * What the provider says each account was given, where it reports it at all (C77).
+   *
+   * **Absent is "not reported", never "nothing".** §14's listed rows carry
+   * `account_configurations: null` for posts that have none, and a provider that stops returning
+   * the field would otherwise read as every account having been reset. Reconciliation says it
+   * cannot compare rather than inventing a difference.
+   */
+  accountConfigurations?: { accountId: number; caption?: string }[];
   /** The provider's own last-modified stamp, where it gives one. Part of the staleness token. */
   updatedAt?: string;
 }
@@ -550,7 +649,13 @@ export const PROVIDER_ACTION_DESCRIPTION: Record<ProviderAction, string> = {
  * caption edit and a reschedule are different requests carrying different risk, and someone who
  * moved a post by a day should not be offered a button that also rewrites its text.
  */
-export const PROVIDER_DIFF_FIELDS = ['caption', 'schedule', 'media', 'accounts'] as const;
+export const PROVIDER_DIFF_FIELDS = [
+  'caption',
+  'schedule',
+  'media',
+  'accounts',
+  'accountContent',
+] as const;
 export type ProviderDiffField = (typeof PROVIDER_DIFF_FIELDS)[number];
 
 export const PROVIDER_DIFF_FIELD_LABEL: Record<ProviderDiffField, string> = {
@@ -558,6 +663,7 @@ export const PROVIDER_DIFF_FIELD_LABEL: Record<ProviderDiffField, string> = {
   schedule: 'Scheduled for',
   media: 'Media',
   accounts: 'Accounts',
+  accountContent: 'Per-account content',
 };
 
 /** Which action carries which field. `accounts` rides with content, as one `PATCH` body does. */
@@ -565,6 +671,7 @@ export const PROVIDER_DIFF_FIELD_ACTION: Record<ProviderDiffField, ProviderActio
   caption: 'UPDATE_CONTENT',
   media: 'UPDATE_CONTENT',
   accounts: 'UPDATE_CONTENT',
+  accountContent: 'UPDATE_CONTENT',
   schedule: 'UPDATE_SCHEDULE',
 };
 
@@ -592,9 +699,11 @@ export function publicationDriftFields(
   publication: Pick<
     SignalPublication,
     'sentCaption' | 'sentMedia' | 'scheduledInstant' | 'targets'
-  >,
+  > &
+    Partial<Pick<SignalPublication, 'sentAccountConfigurations'>>,
   plan: Pick<PublishPreview, 'caption' | 'scheduledInstant' | 'targets'> & {
     mediaUrls: readonly string[];
+    accountConfigurations?: readonly { accountId: number; caption?: string; mediaIds?: string[] }[];
   },
 ): ProviderDiffField[] {
   const fields: ProviderDiffField[] = [];
@@ -611,6 +720,22 @@ export function publicationDriftFields(
   const sent = publication.targets.map((target) => target.accountId).sort((a, b) => a - b);
   const planned = plan.targets.map((target) => target.accountId).sort((a, b) => a - b);
   if (JSON.stringify(sent) !== JSON.stringify(planned)) fields.push('accounts');
+  // Only where the snapshot says what each account was handed. A migrated row carries nothing here
+  // and **unknown is not a difference** — reporting one would send someone to reconcile against a
+  // record that never described accounts. Compared sorted, because the provider promises no order
+  // and an ordering difference is not something anybody should be asked to fix.
+  if (publication.sentAccountConfigurations) {
+    const key = (
+      entries: readonly { accountId: number; caption?: string; mediaIds?: string[] }[],
+    ) =>
+      JSON.stringify(
+        [...entries]
+          .sort((a, b) => a.accountId - b.accountId)
+          .map((entry) => [entry.accountId, entry.caption ?? null, entry.mediaIds ?? null]),
+      );
+    if (key(publication.sentAccountConfigurations.items) !== key(plan.accountConfigurations ?? []))
+      fields.push('accountContent');
+  }
   return fields;
 }
 

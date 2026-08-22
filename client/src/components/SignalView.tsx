@@ -716,6 +716,27 @@ function Editor({
     if (await saveVariants()) await previewPublish();
   };
 
+  /**
+   * Persists the whole explicit target selection, then re-previews.
+   *
+   * Re-previewing is not a nicety: the plan hash covers the chosen ids and what each resolved to,
+   * so a selection saved against an open confirmation has to produce a new preview before anything
+   * can be confirmed. Saving and leaving the old hash on screen would offer a button that the
+   * server would then refuse.
+   */
+  const saveTargets = async (targets: { channel: string; providerAccountIds: number[] }[]) => {
+    setBusy(true);
+    setError('');
+    try {
+      await send(`/signal/posts/${post.id}/publish-targets`, 'PUT', { targets });
+      await previewPublish();
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'Could not save the accounts.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const confirmPublish = async () => {
     if (!publishPreview || publishPreviewRefusals(publishPreview).length) return;
     setBusy(true);
@@ -1602,6 +1623,7 @@ function Editor({
                 savedLayers={savedLayers}
                 onChange={setLayers}
                 onSaveAccount={() => void saveAccountVariant()}
+                onSaveTargets={saveTargets}
                 onRecheckRole={recheckRoleMedia}
                 resolveDrive={resolveRoleDrive}
                 busy={busy}

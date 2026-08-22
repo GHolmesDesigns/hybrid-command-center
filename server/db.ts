@@ -220,6 +220,27 @@ CREATE TABLE IF NOT EXISTS signal_post_variant_media (
   updated_at TEXT NOT NULL,
   CHECK(account_id IS NULL OR account_id > 0)
 );
+-- Which provider accounts a person explicitly chose for one Signal channel (C77).
+--
+-- This is a **choice**, not a copy of a provider account record: the row holds the id the user
+-- picked and nothing the provider owns, because a name or a handle cached here would be a second
+-- source of truth that goes stale the moment the account is renamed. Every display of an account
+-- reads the provider's own list; this table only remembers which of them were ticked.
+--
+-- **No rows means unchanged.** A post with no row for a channel resolves exactly as it did before
+-- this table existed -- server/publish/plan.ts finds the channel's single account and refuses zero
+-- or several -- so the table is additive in behaviour as well as in schema, and an existing
+-- database arrives with it empty and publishes identically.
+--
+-- Uniqueness is one row per (post, channel, account): selecting the same account twice for one
+-- channel is the same selection, and the index makes a repeated write idempotent rather than
+-- something the service has to remember to guard.
+CREATE TABLE IF NOT EXISTS signal_post_publish_targets (
+  post_id TEXT NOT NULL REFERENCES signal_posts(id) ON DELETE CASCADE,
+  channel TEXT NOT NULL,
+  provider_account_id INTEGER NOT NULL CHECK(provider_account_id > 0),
+  created_at TEXT NOT NULL
+);
 -- Delivery, which is a different fact from the planning status on signal_posts. checked_at is
 -- the last reconciliation of either kind and check_attempts is the automatic budget alone, so a
 -- manual refresh can update what the planner shows without spending a scheduled check.
@@ -243,6 +264,15 @@ CREATE TABLE IF NOT EXISTS signal_publications (
   -- Versioned source evidence and the ephemeral provider ids used for this exact attempt. NULL on
   -- legacy and URL-only rows; neither column stores bytes or a reusable provider reference.
   sent_media_sources TEXT, sent_provider_media_ids TEXT,
+  -- What each account was handed, as its own versioned snapshot rather than a new meaning for
+  -- sent_configurations (C77). The legacy column is the JSON platform_configurations and stays
+  -- exactly that: a row written before this existed must keep reading the way it always did, and
+  -- overloading it would make every old row ambiguous rather than merely silent about accounts.
+  --
+  -- NULL is **unknown**, not "no accounts were tailored". A migrated row and a row that genuinely
+  -- sent nothing per account are different facts, and only one of them can be compared against a
+  -- plan -- so reconciliation reports no account drift at all where this is NULL.
+  sent_account_configurations TEXT,
   checked_at TEXT, check_attempts INTEGER NOT NULL DEFAULT 0,
   -- What the last provider check concluded, and what the row held before it. Written by a check
   -- and by nothing else: every other state write leaves them alone, which is deliberate, because
@@ -359,6 +389,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_signal_post_variants_layer
 -- One row per role per layer, over the coalesced key for the same reason the layer index is.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_signal_post_variant_media_role
   ON signal_post_variant_media(post_id, platform, COALESCE(account_id, -1), role);
+-- One selection per account per channel. account_id is NOT NULL here, unlike the variant layers,
+-- so an ordinary unique index is the whole rule.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_signal_post_publish_targets_choice
+  ON signal_post_publish_targets(post_id, channel, provider_account_id);
+CREATE INDEX IF NOT EXISTS idx_signal_post_publish_targets_post
+  ON signal_post_publish_targets(post_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_signal_publications_live ON signal_publications(post_id)
   WHERE state IN ('SUBMITTING','SUBMITTED','UNCONFIRMED');
 CREATE INDEX IF NOT EXISTS idx_signal_publications_post ON signal_publications(post_id);

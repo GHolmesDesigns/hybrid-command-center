@@ -121,6 +121,32 @@ function diffFor(
         remote: renderList(remote.map(String)),
       };
     }
+    case 'accountContent': {
+      const describe = (entries: readonly { accountId: number; caption?: string }[]) =>
+        renderList(
+          [...entries]
+            .sort((a, b) => a.accountId - b.accountId)
+            .map((entry) => `${entry.accountId}: ${entry.caption ?? 'unchanged'}`),
+        );
+      const local = request.accountConfigurations ?? [];
+      // Absent means the provider did not report it, which is not the same as reporting none. A
+      // comparison against something nobody returned would manufacture a difference, so this says
+      // it cannot compare and reports no change.
+      if (!record.accountConfigurations)
+        return {
+          field,
+          changed: false,
+          local: describe(local),
+          remote: 'Not reported by the provider',
+        };
+      const remote = record.accountConfigurations;
+      return {
+        field,
+        changed: describe(local) !== describe(remote),
+        local: describe(local),
+        remote: describe(remote),
+      };
+    }
   }
 }
 
