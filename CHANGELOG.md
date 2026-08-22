@@ -8,6 +8,37 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [4.7.1] - 2026-08-22
+
+### Notes
+
+- **Nothing in the application changed here.** This corrects what the publisher's research notes
+  claim about eight open questions, and names the constraint behind them.
+- **The publisher will not hold every account at once.** TikTok and YouTube cannot be connected at
+  the same time as the five accounts this studio posts from — connecting them on 22 August dropped
+  Facebook, Instagram, LinkedIn, Threads, and Bluesky from the list. So TikTok and YouTube post
+  through Buffer, and that is a standing arrangement rather than a passing one. The notes now say
+  so, with the day's account readings as the evidence.
+- **Three of the eight questions cannot be answered from here at all.** They need TikTok or YouTube
+  connected to the publisher that measures them, and the cap will not release the slot. Running the
+  owner-only test command again would answer none of them, whatever arguments it were given. The
+  notes now say that plainly, and say what the trade would cost: those three answers in exchange for
+  the five accounts the studio actually posts from, which is no trade at all.
+- **The other five were recorded as unanswerable and are not.** An Instagram account *is* connected,
+  and Instagram is one of the platforms the publisher measures, so those five are ordinary pending
+  work — waiting on a post that goes out and gets counted, not on a connection. The earlier draft of
+  this correction swept all eight together; the notes now separate them and say what each half is
+  waiting for.
+- **Figures, media roles, and disclosure toggles are the work this touches.** The cards depending on
+  those answers now each say which half they are in, so a card that can proceed is not held back and
+  a card that cannot is not planned around a test run that would not help.
+- **The match-quality work already shipped is unaffected**, because it was deliberately built not to
+  depend on the answer.
+
+### Breaking changes
+
+None.
+
 ## [4.7.0] - 2026-08-22
 
 ### Added

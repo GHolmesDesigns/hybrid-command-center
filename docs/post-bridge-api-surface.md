@@ -438,6 +438,95 @@ reads *verified* because the session verified what it saw; across the two sessio
 either answer — an encoding that silently fails to filter returns a superset, and a snapshot
 replacement would carry that straight into the database.
 
+### Not askable from this workspace, as of 22 August 2026
+
+Eight claims above read **still unverified** with evidence naming what the run did not have — no
+TikTok account, no video, no analytics rows. Read plainly, that says a run with better arguments
+settles them. For three of them it does not, and the reason is not the one the evidence gives.
+
+**The cause is a provider account cap.** Post Bridge will not hold TikTok and YouTube at the same
+time as the five accounts this studio publishes on. Observed on 22 August 2026: `GET
+/v1/social-accounts` read seven accounts — Facebook ×3, Instagram, LinkedIn, Threads, Bluesky — and
+after TikTok and YouTube were connected it read four, with Facebook (G.Holmes Designs), Instagram,
+LinkedIn, Threads, and Bluesky all dropped. TikTok and YouTube therefore publish through the owner's
+**Buffer** account (owner, 22 August 2026), and that is a standing constraint rather than a current
+arrangement.
+
+Post Bridge measures exactly `tiktok`, `youtube`, and `instagram` — the enum on its own
+`POST /v1/analytics/sync`, which §7 already takes as the definition of the measured set. With the cap
+holding two of the three elsewhere, **Instagram is the only measured platform Post Bridge will ever
+see from here.**
+
+**The read that settles the rest has been run.** Whether *any* account on a measured platform is
+connected is not something a probe run's silence establishes — both dated runs named none, which is
+consistent with none being connected and is not proof of it. `GET /v1/social-accounts` answers it
+outright: it reads, it writes nothing, it needs no `--live` probe, and this app already calls it as
+`listTargets`. Run on 22 August 2026, it returned a connected **Instagram** account. The
+measured-platform precondition was met, not missing; the probe simply never named it, and naming is a
+probe argument rather than a fact about the workspace.
+
+That splits the eight rather than settling them all one way.
+
+**Askable — waiting on content, not on the workspace.** These need a post that actually publishes
+from the connected Instagram account and that the provider has counted. A probe run cannot
+manufacture one: it refuses any instant less than 48 hours out and deletes every post it created in a
+`finally`, so by construction it never publishes anything. They are waiting on real content that goes
+out and stays up.
+
+| Claim | Needs |
+| --- | --- |
+| Q5 — `timeframe` semantics | Instagram connected, and a post published from it the provider has counted |
+| Q5 — response grain is one row per delivery | the same |
+| Q5 — how a row maps to a social account | the same |
+| Q5 — the values `match_confidence` takes | the same |
+| Q3 — Instagram `cover_image` role | Instagram connected, and `--video` |
+
+**Not askable while the cap holds.** These need a Post Bridge slot the cap will not release.
+
+| Claim | Needs |
+| --- | --- |
+| Q3 — YouTube `thumbnail` role | a connected **Post Bridge** YouTube account, and `--video` |
+| Q6 — YouTube `contains_synthetic_media` | the same |
+| Q6 — TikTok `disclose_branded_content` / `disclose_your_brand` | a connected **Post Bridge** TikTok account |
+
+**What the cap costs, stated plainly.** Publishing TikTok and YouTube through Post Bridge would
+settle those three — and only by evicting the five accounts this studio publishes on, which is not a
+trade available to anyone. The route those channels actually have is Wave 15, which gives them a
+Buffer path; Buffer is not an `AnalyticsProvider` and this record does not make it one, so these three
+claims stay unanswered **by construction rather than by scheduling**. Nothing short of the cap moving
+changes that.
+
+**Why this is a section and not a fifth state.** `scripts/probe-post-bridge/report.ts` generates the
+preamble, the fixtures, the teardown, and every claim table, and a dated run replaces all of it
+wholesale. A fifth state hand-written into a row would be regenerated back to *still unverified* by
+the next run, silently. The four states also describe what a run *observed*, and this is a fact about
+which accounts a provider will hold at once — not a kind of observation. So it lives here, beside the
+other hand-written sections, and **it must be carried forward when the matrix is regenerated**,
+exactly as the correction and the dispositions above it are.
+
+**What this does not touch.** Four other rows read *still unverified* for reasons of their own and
+none of them is this one:
+
+- **The LinkedIn PDF document role** was verified on 20 August and simply went unasked on the 22nd.
+  The precondition for reasking it exists and is written up two sections above.
+- **The shape of a provider-UI post** needs a post a person made in Post Bridge's own interface and
+  its id passed as `--provider-ui-post`. That is a human step, not a connected account.
+- **The 24-hour unattached media expiry** cannot close in one session by construction; it needs a
+  dated follow-up read of inventoried asset ids.
+- **The headers a `429` carries** stay out of reach by design, because the probe never creates load
+  to discover a limit.
+
+**Effect on the dependent cards.** C80 is **not** blocked by a workspace fact: every row it waits on
+is askable through the connected Instagram account once a post publishes and the provider syncs it.
+C81 **splits** — Instagram `cover_image` is askable, while YouTube `contains_synthetic_media` and the
+TikTok toggles are not while the cap holds, so that card cannot be wholly satisfied from Post Bridge
+and should say which half it is shipping. C82 records *not askable here* as a resolution for three
+rows with the cap as their ground, and records `duration`, `cover_image_url`, and `video_description`
+as read and unused, which needs no evidence from any of these rows. C79 (#222, shipped as 4.7.0) is
+unaffected either way: it stores a shape rather than an enum, defaults nothing, and cannot render an
+unrecognised value as a documented one — which is exactly the right build against a row that had no
+observed values.
+
 ### Disposition, 22 August 2026 — what C78 (#221) was built on, and what it was not
 
 Question 4 leaves C78 two things it may not assume, and neither row above moves: the shape of a post
