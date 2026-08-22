@@ -18,7 +18,11 @@ import {
 } from '../../shared/publish-analytics.ts';
 import { publishPlatformFor } from '../../shared/publish-capabilities.ts';
 import type { SignalChannel } from '../../shared/signal.ts';
-import type { AnalyticsProvider, ProviderAnalyticsRecord } from './analytics-provider.ts';
+import type {
+  AnalyticsProvider,
+  ProviderAnalyticsList,
+  ProviderAnalyticsRecord,
+} from './analytics-provider.ts';
 import { PublishProviderError } from './provider.ts';
 import { recordSyncHealth } from './sync-health.ts';
 
@@ -118,6 +122,9 @@ interface MetricRow {
   share_url: string | null;
   provider_synced_at: string | null;
   synced_at: string;
+  /** NULL on a row written before C79, and NULL where the provider sent nothing readable. */
+  match_confidence: string | null;
+  platform_post_id: string | null;
 }
 
 interface DayRow {
@@ -249,6 +256,11 @@ export class PublishAnalyticsService {
           row.syncedAt = metric.synced_at;
           if (metric.provider_synced_at) row.providerSyncedAt = metric.provider_synced_at;
           if (metric.share_url) row.shareUrl = metric.share_url;
+          // Provenance, carried only where the provider actually gave it. Assigned rather than
+          // defaulted for the same reason `totals` is: a NULL column is the provider having said
+          // nothing, and a panel that showed `Exact` for it would be putting words in its mouth.
+          if (metric.match_confidence) row.matchConfidence = metric.match_confidence;
+          if (metric.platform_post_id) row.platformPostId = metric.platform_post_id;
         }
         return row;
       }),
@@ -294,13 +306,14 @@ export class PublishAnalyticsService {
     if (!stored.refresh.allowed) return stored;
 
     const resultIds = [...new Set(measurable.map((target) => target.resultId as string))];
-    let records: ProviderAnalyticsRecord[];
+    let listed: ProviderAnalyticsList;
     try {
       await this.provider.sync();
-      records = await this.provider.list(resultIds);
+      listed = await this.provider.list(resultIds);
     } catch (error) {
       return this.refused(stored, error as Error);
     }
+    const records = listed.records;
 
     /**
      * Daily snapshots, read per record and allowed to fail on their own.
@@ -333,13 +346,15 @@ export class PublishAnalyticsService {
       const metric = this.db.prepare(
         `INSERT INTO signal_post_metrics(
            publication_id,provider_account_id,post_result_id,analytics_id,platform,
-           views,likes,comments,shares,share_url,provider_synced_at,synced_at
-         ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+           views,likes,comments,shares,share_url,provider_synced_at,synced_at,
+           match_confidence,platform_post_id
+         ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
          ON CONFLICT(publication_id,provider_account_id) DO UPDATE SET
            post_result_id=excluded.post_result_id, analytics_id=excluded.analytics_id,
            platform=excluded.platform, views=excluded.views, likes=excluded.likes,
            comments=excluded.comments, shares=excluded.shares, share_url=excluded.share_url,
-           provider_synced_at=excluded.provider_synced_at, synced_at=excluded.synced_at`,
+           provider_synced_at=excluded.provider_synced_at, synced_at=excluded.synced_at,
+           match_confidence=excluded.match_confidence, platform_post_id=excluded.platform_post_id`,
       );
       // A day is inserted or replaced, never cleared first. A provider that returns a shorter
       // history than last time has not withdrawn the days it left out.
@@ -366,6 +381,10 @@ export class PublishAnalyticsService {
           record.shareUrl ?? null,
           record.lastSyncedAt ?? null,
           timestamp,
+          // Null rather than an empty string where the provider said nothing, so the column reads
+          // as absent and the panel shows nothing at all rather than a blank provenance line.
+          record.matchConfidence ?? null,
+          record.platformPostId ?? null,
         );
         for (const snapshot of daysByResult.get(record.postResultId) ?? [])
           day.run(
@@ -388,10 +407,16 @@ export class PublishAnalyticsService {
         // operation: a post that went out an hour ago has no figures yet. `PARTIAL` is reserved for
         // an operation that asked about deliveries and stored fewer than it asked about.
         outcome: written.length === measurable.length ? 'SUCCESS' : 'PARTIAL',
-        summary:
+        // The parser's own warnings ride on the summary, which is where they belong: they are this
+        // app's record of a provenance field it refused, and the outcome is still whatever the
+        // figures themselves were. A refused field is not a failed refresh — the four counts landed —
+        // so it does not change `SUCCESS` into anything, and it is never silent either.
+        summary: [
           written.length === measurable.length
             ? `Read figures for ${written.length} ${written.length === 1 ? 'delivery' : 'deliveries'}.`
             : `Read figures for ${written.length} of ${measurable.length} deliveries; the provider had none for the rest yet.`,
+          ...listed.warnings,
+        ].join(' '),
         entities: [{ type: 'signalPost', id: postId, label: caption }],
       });
     });

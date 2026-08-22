@@ -225,6 +225,48 @@ describe('Signal figures', () => {
     expect(within(history).getByText((1210).toLocaleString())).toBeInTheDocument();
   });
 
+  it('says how the provider matched the record, and that it does not qualify the counts', async () => {
+    seedPost();
+    testState.postMetricsPayload = summary({
+      targets: [target({ matchConfidence: 'exact', platformPostId: 'tt-7788' })],
+    });
+    await openPost('A measured campaign post');
+
+    const figures = await panel();
+    expect(figures).toHaveTextContent('Provider match: Exact');
+    expect(figures).toHaveTextContent('Platform post: tt-7788');
+    // The whole point of the card, on the screen: this is provenance, not a hedge on the numbers.
+    expect(figures).toHaveTextContent('does not qualify or discount the counts');
+    // The identifier is text. The only link here is the address the provider itself gave.
+    expect(within(figures).queryByRole('link', { name: /tt-7788/ })).toBeNull();
+  });
+
+  it('shows a value it has no words for as the provider’s own, never as Exact', async () => {
+    seedPost();
+    testState.postMetricsPayload = summary({
+      targets: [target({ matchConfidence: 'probable_match-2' })],
+    });
+    await openPost('A measured campaign post');
+
+    const figures = await panel();
+    expect(figures).toHaveTextContent('Provider value: probable_match-2');
+    expect(figures).not.toHaveTextContent('Provider match: Exact');
+    expect(figures).not.toHaveTextContent('Provider match: High');
+  });
+
+  it('shows nothing at all where the provider said nothing about the match', async () => {
+    seedPost();
+    testState.postMetricsPayload = summary();
+    await openPost('A measured campaign post');
+
+    const figures = await panel();
+    // The figures are there, and the provenance line is simply absent rather than blank or defaulted.
+    expect(within(figures).getAllByText((4210).toLocaleString()).length).toBeGreaterThan(0);
+    expect(figures).not.toHaveTextContent('Provider match');
+    expect(figures).not.toHaveTextContent('Platform post');
+    expect(figures.querySelector('.signal-metric-match')).toBeNull();
+  });
+
   it('renders nothing for a post with no deliveries at all', async () => {
     testState.signalPostsPayload = [
       signalPost('measured', 'A planned campaign post', '2026-09-13', { channels: ['tt'] }),
