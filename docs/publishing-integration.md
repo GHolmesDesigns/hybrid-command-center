@@ -300,15 +300,24 @@ own media is public refuses to give any account files at all, because the reques
 also in the submission's own media — sharing one ephemeral id across two levels would make the
 evidence lie about what was sent where.
 
-**Identical content to two accounts on one platform refuses before it is sent.** The probe recorded
-question 1 as *verified with policy constraint*: the API accepted materially different captions and
-raised nothing of its own, and the vendor's support material restricts same-platform content anyway
-(`shared/publish-same-platform.ts`). An API that accepts a request is not a platform that permits the
-post. The refusal names the accounts that collided and offers the two honest fixes — write each its
-own content, or send to one of them — and recommends no filename or metadata trick. **Only
-*identical* is enforced**: the vendor's threshold for "insufficiently distinct" is not recorded in
-§14, and inventing a similarity ratio would be this app making up a rule and attributing it to the
-provider. Capture that wording and the rule tightens with nothing else moving.
+**Identical content to two accounts on one platform refuses before it is sent, and this app owns
+that rule.** The probe recorded question 1 as *verified*: the API accepts materially different
+captions to two same-platform accounts and states no restriction whatever. Nothing downstream will
+refuse a duplicate, so this app does — because two of one platform's audiences reading the same post
+is what those platforms suppress, and the accounts it reflects on are the user's. It is argued as a
+judgement in `shared/publish-same-platform.ts` and **not attributed to the provider**: earlier
+wording here and in §14 cited a vendor support-page restriction that was never recorded anywhere,
+and the correction note at the end of §14 says what happened. The refusal names the accounts that
+collided and offers the two honest fixes — write each its own content, or send to one of them — and
+recommends no filename or metadata trick.
+
+**Only *identical* refuses; near-identical warns and the person decides.** Where two accounts get
+captions that match once capitalization, spacing, punctuation, and emoji are set aside, and the same
+media, the channel carries a warning that names them and asks whether it was deliberate — the
+confirm button stays live. The test is categorical rather than a similarity ratio, which this app has
+no honest threshold for: "different enough" is a judgement about who reads both pages. Media is
+compared exactly in both halves, so two accounts given the same words with different pictures are a
+real difference and neither refuse nor warn.
 
 **A synthetic-media disclosure is written into the caption**, because
 `syntheticMediaDisclosure` is `IN_CAPTION` on every platform the contract answers for. The

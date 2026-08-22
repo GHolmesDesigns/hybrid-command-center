@@ -673,6 +673,26 @@ Because Wave C holds only this card, the milestone currently has no `e2e/` spec 
 one-spec-per-milestone rule while its only card is blocked; folding #220 into a later implementation
 milestone once it unblocks is the cheaper fix, and is the second thing for the owner to decide.
 
+#### Gate re-run, build, and close — 2026-08-21 and 2026-08-22
+
+The two sections above are kept as they were written, because a record of a decision taken on the
+evidence of the day is worth more than a record edited to look prescient. What overtook them:
+
+- **The gate went positive on 2026-08-21.** A re-run named two Facebook accounts and landed all four
+  question 1 claims positive, and the card was built across eight reviewed pieces and shipped as
+  4.6.0.
+- **The same-platform rule is this app's judgement, not the provider's, and now says so.** The
+  evidence sentence this card was written from — that the vendor's support material restricts
+  same-platform content — cited nothing, and the owner confirms it was an inference. The refusal
+  stays; the attribution is gone. §14's correction note of 2026-08-22 has the detail, and
+  near-identical content now warns rather than passing unremarked.
+- **Two acceptance criteria closed partial, deliberately.** "Insufficiently distinct" is a warning
+  rather than a refusal, because no threshold can be quoted from anyone; and Facebook is the only
+  platform carrying per-account captions, because it is the only one the probe could ask about.
+- **#220 is closed as resolved on 2026-08-22, on the owner's instruction.** The disposition proposed
+  above — stay open and blocked — was written when the gate was inconclusive and is spent. LinkedIn
+  remains askable rather than asked; §14's LinkedIn note holds the precondition and the command.
+
 ---
 
 ### C78 — Posts in Post Bridge that this app did not make

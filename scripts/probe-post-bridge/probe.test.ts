@@ -321,7 +321,10 @@ describe('a complete run against a provider that answers everything', () => {
       .filter((claim) => claim.state === 'still-unverified')
       .map((claim) => claim.id);
     expect(unresolved).toEqual(['media-expiry-lifecycle', 'rate-limit-headers']);
-    expect(state(result, 'same-platform-duplicate-policy')).toBe('verified-with-policy-constraint');
+    // `verified` and not `verified-with-policy-constraint`: this provider accepts the post and
+    // states nothing, and a run records no constraint nobody stated. See the account_configurations
+    // block above, and §14's correction of 22 August.
+    expect(state(result, 'same-platform-duplicate-policy')).toBe('verified');
     expect(
       result.claims.filter((claim) => claim.state === 'negative').map((claim) => claim.id),
     ).toEqual([]);
@@ -410,12 +413,14 @@ describe('a complete run against a provider that answers everything', () => {
     expect(evidence(result, 'analytics-timeframe-meaning')).toContain('which rows are included');
   });
 
-  it('says a positive API answer does not erase the vendor’s same-platform policy', async () => {
+  it('records what the provider said about same-platform content, which was nothing', async () => {
     const { result } = await run();
-    expect(evidence(result, 'same-platform-duplicate-policy')).toContain(
-      'does not erase the vendor',
-    );
-    expect(evidence(result, 'same-platform-duplicate-policy')).toContain('preflight');
+    expect(evidence(result, 'same-platform-duplicate-policy')).toContain('stated no restriction');
+    // This test used to assert the opposite — that the evidence said a positive API answer "does
+    // not erase the vendor's" support-page restriction. That restriction was never recorded
+    // anywhere, so the assertion was pinning an invention in place. §14's correction of
+    // 22 August 2026 has the full account.
+    expect(evidence(result, 'same-platform-duplicate-policy')).not.toMatch(/vendor|support page/i);
   });
 });
 
@@ -540,6 +545,19 @@ describe('account_configurations', () => {
     expect(state(result, 'account-configurations-accepted')).toBe('negative');
     expect(state(result, 'account-configuration-encoding')).toBe('negative');
     expect(state(result, 'account-configuration-fields-persist')).toBe('still-unverified');
+  });
+
+  it('records an accepted same-platform post as verified, claiming no policy on the provider’s behalf', async () => {
+    const { result } = await run({});
+    expect(state(result, 'same-platform-duplicate-policy')).toBe('verified');
+    expect(evidence(result, 'same-platform-duplicate-policy')).toContain(
+      'raised no duplicate-content refusal',
+    );
+    // A constraint belongs in the matrix only where the provider states one. This branch saw the
+    // provider state nothing, and the sentence that used to appear here asserted a vendor
+    // support-page restriction no run ever read (§14, correction of 22 August).
+    for (const attribution of [/support page/i, /support material/i, /vendor/i])
+      expect(evidence(result, 'same-platform-duplicate-policy')).not.toMatch(attribution);
   });
 
   it('records the vendor’s duplicate-content refusal as a policy constraint', async () => {
