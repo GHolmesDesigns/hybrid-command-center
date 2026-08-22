@@ -264,35 +264,31 @@ refusals rather than guesses:
   resolves to one account — which §3.1's rule already guarantees by refusing zero or several — and
   the preview says so on the target it applies to rather than leaving the user to infer it.
 
-**The gate that would change that is closed, and C77 (#220) records why.** The live probe
-(`docs/post-bridge-api-surface.md` §14, question 1) left all four `account_configurations` claims
-**still unverified**: whether `POST /v1/posts` stores a different caption for each of two accounts on
-one platform, which encoding the field takes, whether the per-account values read back through
-`GET /v1/posts/{id}` after create and again after `PATCH`, and what the provider does — and in whose
-terms — about two accounts on one platform carrying materially different captions. The reason is a
-precondition rather than a provider answer: the run named no platform with two accounts, so
-`scripts/probe-post-bridge/config.ts` declined to ask question 1 at all. A question nobody put is not
-a negative, and it is not permission either.
+**C77's gate opened on 21 August 2026, and the paragraph above is now a description of what is
+built rather than of what is possible.** The 20 August probe could not ask question 1 — no platform
+had two connected accounts — so all four `account_configurations` claims stayed *still unverified*
+and the card was recorded as blocked. A second run
+(`docs/post-bridge-api-surface.md` §15) named two owner-controlled Facebook pages and asked it.
+All four claims came back positive: `POST /v1/posts` accepted `account_configurations` for two
+accounts on one platform, the encoding is **a list of objects each carrying `account_id`**, the
+per-account `caption` survived create and `PATCH` and read back as `array(2)` of
+`{account_id, caption}`, and the same-platform question came back **verified with policy
+constraint** — the API raised no duplicate-content refusal, which does not erase the vendor's
+support-page restriction.
 
-**So C77's gate is inconclusive, not negative, and the card makes no runtime change.** Its own scope
-separates the two outcomes and this is the second one: will-not-build needs the provider to have
-refused, and nothing here refused. Everything the card would have built stays unbuilt, and everything
-it would have replaced stays exactly as this section already describes it — `accountContentOverride`
-false on every platform, pinned for all of them by `shared/publish-capabilities.test.ts`; §3.1's
-one-account resolution in `resolveTarget`; no `signal_post_publish_targets` table and so no explicit
-target selection; no `accountConfigurations` on the provider-neutral request or in the Post Bridge
-request builder; no `sent_account_configurations` snapshot beside the legacy one; and the per-account
-warning above still the sentence a stored account layer produces. A capability flag is not the only
-thing standing between this app and per-account captions, which is the whole reason the card was
-written as a build rather than a flip.
+**Nothing about this app changed when the gate opened.** `accountContentOverride` is still false on
+every platform, `resolveTarget` still refuses zero or several accounts, there is still no
+`signal_post_publish_targets` table, and an account layer still arrives as its platform's
+configuration with the warning above. That is the correct state: C77's scope flips the flag **only
+for the positively verified platform/account matrix**, and flipping it means building the explicit
+target selection, the per-target planning shape, the preflight rule, and the snapshot — not editing
+a boolean. Facebook is now the one verified platform; every other platform keeps today's
+single-account refusal because no evidence names it.
 
-**What would reopen it is a dated §14 result and nothing less.** C73 is re-run under its existing
-safety rules with two explicitly approved accounts on one platform named by `--account`, so that
-question 1 is actually asked, and all four claims land positive. A positive API response alone is
-still not enough: §14 records four states rather than two, and a `verified with policy constraint` on
-the same-platform claim is what C77's preflight refusal would be written from, in the provider's own
-terms. Until then #220 stays open and blocked, and this record is C77's resolution for the purpose of
-C82's dependency — blocked on new evidence, not declined.
+**The one thing the evidence does not grant is silence about policy.** *Verified with policy
+constraint* is a positive result that carries a refusal with it: C77 states the vendor's
+same-platform rule in the provider's own terms at preflight rather than waiting for the API to
+enforce something it demonstrably does not enforce. An accepted request is not a permitted post.
 
 **A synthetic-media disclosure is written into the caption**, because
 `syntheticMediaDisclosure` is `IN_CAPTION` on every platform the contract answers for. The
@@ -386,16 +382,18 @@ document, and not exercised by C73 either, which deleted every asset it made exp
 let one expire (§14, question 2). Nothing may depend on its timing until a dated follow-up read of
 inventoried asset ids records it.
 
-**Everything else the surface note found is still unverified, and C73 having run did not change
-that.** The probe went out on 2026-08-20 and its dated result matrix is
-`docs/post-bridge-api-surface.md` §14. It settled the upload contract, the MIME enum, the deletion
-half of the media lifecycle, the posts list and its pagination, and the Facebook story path. It left
-`account_configurations`, the media-role fields (YouTube `thumbnail`, Instagram `cover_image`), the
-analytics filters and `match_confidence`, and the platform disclosure fields where it found them —
-vocabulary in an OpenAPI document rather than verified behavior. **The fail-closed values in
-`shared/publish-capabilities.ts` remain authoritative** — `accountContentOverride` included — until a
-dated §14 result verifies each one. A field appearing in a spec is not permission to flip a
-capability, and neither is a probe run that never reached the question (§3.3, §3.4).
+**Most of what the surface note found is still unverified, and two probe runs have now narrowed
+which parts.** `docs/post-bridge-api-surface.md` §14 holds the newest dated matrix — the 21 August
+run — and each run replaces that section wholesale, with a note beneath it recording what an earlier
+run established that a later one did not ask. Between them they settled the upload contract, the
+MIME enum, the deletion half of the media lifecycle, the posts list and its pagination, the Facebook
+story path, the LinkedIn PDF document post, and — on 21 August — `account_configurations` and the
+same-platform policy (§3.3). Still unverified: the media-role fields (YouTube `thumbnail`, Instagram
+`cover_image`), the analytics filters and `match_confidence`, the platform disclosure fields, and
+the 24-hour media expiry. **The fail-closed values in `shared/publish-capabilities.ts` remain
+authoritative** until the card that spends each verified result lands — `accountContentOverride`
+included, which is still false everywhere because C77 has not built. A field appearing in a spec is
+not permission to flip a capability, and neither is a verified field nobody has built behind yet.
 
 ### 3.4 Media roles: a cover image and a thumbnail
 
@@ -456,8 +454,9 @@ preview, roles included.
 provider media id in, so no role asset is created — which is also why there is no role snapshot on a
 publication to reconcile: uploading bytes to fill a field nobody will read would be the worst of both
 answers. The verified media role is a different shape entirely: **a LinkedIn PDF document post**,
-which is the ordinary C75 media path plus the `document_title` this app has always collected. §14
-verified that pairing live, and `e2e/signal-variant-media.spec.ts` plus
+which is the ordinary C75 media path plus the `document_title` this app has always collected. The
+20 August probe run verified that pairing live — the 21 August run named no LinkedIn account, so
+§14's current table does not restate it and the note beneath the table carries it — and `e2e/signal-variant-media.spec.ts` plus
 `post-bridge-wire.test.ts` walk it from the Drive link to the vendor's own field name.
 
 ### 3.1 The Facebook account rule
