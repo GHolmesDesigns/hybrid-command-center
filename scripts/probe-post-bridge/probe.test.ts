@@ -631,9 +631,9 @@ describe('pagination it cannot follow', () => {
     expect(state(result, 'posts-list-pagination')).toBe('still-unverified');
     expect(evidence(result, 'posts-list-pagination')).toContain('did not advance past offset 0');
     // One page per inventory read — the baseline and the teardown proof — and neither loops.
-    expect(sent.filter((request) => request.url.includes('/posts?limit=100&offset=0'))).toHaveLength(
-      2,
-    );
+    expect(
+      sent.filter((request) => request.url.includes('/posts?limit=100&offset=0')),
+    ).toHaveLength(2);
   });
 });
 
