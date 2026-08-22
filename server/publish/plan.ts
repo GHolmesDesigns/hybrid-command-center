@@ -61,8 +61,27 @@ import type {
   PublishTarget,
 } from './provider.ts';
 
-const partsInZone = (instant: Date, zone: string) => {
-  const parts = new Intl.DateTimeFormat('en-CA', {
+/**
+ * One formatter per zone, because building one is what the conversion below actually spent its
+ * time on.
+ *
+ * `publishInstantFor` reads the wall clock 1681 times per call — once a minute across the whole
+ * plus-or-minus-fourteen-hour range of possible offsets — and it used to construct a fresh
+ * `Intl.DateTimeFormat` for every one of those reads. Constructing one is orders of magnitude
+ * dearer than formatting with it: a conversion measured 90 ms that way against 6 ms reusing a
+ * single instance, and a preview converts once per channel while a submit converts again, so one
+ * publish spent most of a second inside a date conversion (#245). An `Intl.DateTimeFormat` is
+ * immutable and keeps no per-call state, so one instance per zone is safe to share, and the set of
+ * IANA zone names is finite so the map is bounded by it.
+ *
+ * Building the entry is also what rejects a zone that does not exist, which is why the conversion
+ * asks for its formatter before it scans rather than trusting the caller.
+ */
+const zoneFormatters = new Map<string, Intl.DateTimeFormat>();
+const zoneFormatter = (zone: string) => {
+  const cached = zoneFormatters.get(zone);
+  if (cached) return cached;
+  const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone: zone,
     year: 'numeric',
     month: '2-digit',
@@ -70,7 +89,13 @@ const partsInZone = (instant: Date, zone: string) => {
     hour: '2-digit',
     minute: '2-digit',
     hourCycle: 'h23',
-  }).formatToParts(instant);
+  });
+  zoneFormatters.set(zone, formatter);
+  return formatter;
+};
+
+const partsInZone = (instant: Date, zone: string) => {
+  const parts = zoneFormatter(zone).formatToParts(instant);
   const value = (type: Intl.DateTimeFormatPartTypes) =>
     parts.find((part) => part.type === type)?.value ?? '';
   return `${value('year')}-${value('month')}-${value('day')} ${value('hour')}:${value('minute')}`;
@@ -78,8 +103,8 @@ const partsInZone = (instant: Date, zone: string) => {
 
 /** Converts a configured-zone wall time, refusing gaps and choosing the first repeated instant. */
 export function publishInstantFor(date: string, time: string, zone: string): string {
-  // Constructing the formatter validates the IANA zone before the scan.
-  new Intl.DateTimeFormat('en', { timeZone: zone }).format();
+  // Building the zone's formatter validates the IANA zone before the scan.
+  zoneFormatter(zone);
   const wanted = `${date} ${time}`;
   const center = Date.parse(`${date}T${time}:00Z`);
   const matches: Date[] = [];
