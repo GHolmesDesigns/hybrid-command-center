@@ -4,6 +4,9 @@ import {
   analyticsPlatformSupported,
   analyticsRefreshGate,
   postMetricAvailability,
+  postMetricAvailabilityDetail,
+  postMetricAvailabilityLabel,
+  postMetricsSyncable,
   postMetricDayDeltas,
   postMetricsMeasurable,
   ANALYTICS_BACKOFF_CAP_SECONDS,
@@ -91,6 +94,29 @@ describe('what can be said about one delivery', () => {
     expect(postMetricAvailability({ platform: 'tiktok', resultId: 'result-1', stored: true })).toBe(
       'AVAILABLE',
     );
+  });
+
+  it('treats a failed delivery as nothing to measure rather than awaiting figures', () => {
+    expect(
+      postMetricAvailability({
+        platform: 'instagram',
+        resultId: 'result-ig',
+        stored: false,
+        outcome: 'FAILURE',
+      }),
+    ).toBe('NOT_AVAILABLE');
+    expect(postMetricAvailabilityLabel('NOT_AVAILABLE', 'FAILURE')).toBe('Nothing to measure');
+    expect(postMetricAvailabilityDetail('NOT_AVAILABLE', 'FAILURE')).toMatch(/did not go out/);
+    expect(
+      postMetricsSyncable(
+        target({
+          platform: 'instagram',
+          availability: 'NOT_AVAILABLE',
+          outcome: 'FAILURE',
+          resultId: 'result-ig',
+        }),
+      ),
+    ).toBe(false);
   });
 
   it('uses the publishing contract’s own sentence for a channel this provider does not reach', () => {

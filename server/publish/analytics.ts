@@ -7,6 +7,8 @@ import {
   analyticsPlatformSupported,
   analyticsRefreshGate,
   postMetricAvailability,
+  postMetricsSyncable,
+  POST_METRIC_FAILED_DELIVERY_DETAIL,
   ANALYTICS_BACKOFF_MAX_ATTEMPTS,
   type AnalyticsRefreshState,
   type AnalyticsSyncRecord,
@@ -100,6 +102,7 @@ interface TargetRow {
   channel: string;
   handle: string;
   post_result_id: string | null;
+  outcome: 'SUCCESS' | 'FAILURE' | null;
 }
 
 interface MetricRow {
@@ -168,7 +171,7 @@ export class PublishAnalyticsService {
   read(postId: string): PostMetricsSummary {
     const targets = this.db
       .prepare(
-        `SELECT t.publication_id, t.provider_account_id, t.channel, t.handle, t.post_result_id
+        `SELECT t.publication_id, t.provider_account_id, t.channel, t.handle, t.post_result_id, t.outcome
            FROM signal_publication_targets t
            JOIN signal_publications p ON p.id = t.publication_id
           WHERE p.post_id = ?
@@ -217,6 +220,9 @@ export class PublishAnalyticsService {
           platform,
           ...(target.post_result_id ? { resultId: target.post_result_id } : {}),
           stored: Boolean(metric),
+          ...(target.outcome === 'SUCCESS' || target.outcome === 'FAILURE'
+            ? { outcome: target.outcome }
+            : {}),
         });
         const row: PostTargetMetrics = {
           publicationId: target.publication_id,
@@ -226,6 +232,9 @@ export class PublishAnalyticsService {
           handle: target.handle,
           availability,
           ...(target.post_result_id ? { resultId: target.post_result_id } : {}),
+          ...(target.outcome === 'SUCCESS' || target.outcome === 'FAILURE'
+            ? { outcome: target.outcome }
+            : {}),
           days: days.get(key) ?? [],
         };
         // Totals only where a reading is stored, so an absent figure can never be rendered as a
@@ -269,15 +278,18 @@ export class PublishAnalyticsService {
     const stored = this.read(postId);
     if (!this.provider.available)
       return this.declined(stored, 'Analytics needs POST_BRIDGE_API_KEY.');
-    const measurable = stored.targets.filter(
-      (target) => analyticsPlatformSupported(target.platform) && target.resultId,
-    );
+    const measurable = stored.targets.filter((target) => postMetricsSyncable(target));
     if (!measurable.length)
       return this.declined(
         stored,
-        stored.targets.some((target) => analyticsPlatformSupported(target.platform))
+        stored.targets.some((target) => target.availability === 'AWAITING_RESULT')
           ? 'No delivery here has a provider result identity yet. Refresh the delivery first, then ask for figures.'
-          : 'None of this post’s channels is one this provider reports figures for.',
+          : stored.targets.some(
+                (target) =>
+                  analyticsPlatformSupported(target.platform) && target.outcome === 'FAILURE',
+              )
+            ? POST_METRIC_FAILED_DELIVERY_DETAIL
+            : 'None of this post’s channels is one this provider reports figures for.',
       );
     if (!stored.refresh.allowed) return stored;
 

@@ -41,7 +41,11 @@ import {
   type SignalSlot,
   type SignalStatus,
 } from '../../../shared/signal';
-import { urlPostMedia, type SignalPostMedia } from '../../../shared/signal-media';
+import {
+  urlPostMedia,
+  signalPostMediaIssue,
+  type SignalPostMedia,
+} from '../../../shared/signal-media';
 import { formatFileSize } from '../../../shared/drive';
 import {
   CALENDAR_VIEWS,
@@ -1025,6 +1029,11 @@ function Editor({
       if (new URL(value).protocol !== 'https:') throw new Error();
     } catch {
       setError('Media URLs must be valid https addresses.');
+      return;
+    }
+    const issue = signalPostMediaIssue(urlPostMedia(value));
+    if (issue) {
+      setError(issue);
       return;
     }
     setDraft((current) => ({ ...current, media: [...current.media, urlPostMedia(value)] }));

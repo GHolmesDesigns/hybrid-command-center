@@ -117,7 +117,8 @@ export function postMetricDayDeltas(days: readonly PostMetricDay[]): PostMetricD
  *   yet. Ordinary for a post that has just gone out.
  * - `AWAITING_RESULT` — the delivery has no provider result identity yet, so there is nothing to
  *   ask about. Refreshing the delivery is what fixes it.
- * - `NOT_AVAILABLE` — nobody measures this channel through this provider. Never a zero.
+ * - `NOT_AVAILABLE` — nobody measures this channel through this provider, or the delivery did not
+ *   go out. Never a zero, and never *not yet* for a post that never published.
  */
 export const POST_METRIC_AVAILABILITIES = [
   'AVAILABLE',
@@ -151,13 +152,37 @@ export const POST_METRIC_AVAILABILITY_DETAIL: Record<PostMetricAvailability, str
     'This provider reports figures for TikTok, YouTube, and Instagram only. Nothing is counted here, which is different from a count of zero.',
 };
 
+/** Shown when `NOT_AVAILABLE` is because the delivery did not go out, not because the channel is unmeasured. */
+export const POST_METRIC_FAILED_DELIVERY_LABEL = 'Nothing to measure';
+export const POST_METRIC_FAILED_DELIVERY_DETAIL =
+  'This delivery did not go out, so the platform has nothing to count for it. That is different from a post that went out and is still waiting.';
+
+/** The words one delivery's figures state is shown as, including a failed delivery on a measured platform. */
+export const postMetricAvailabilityLabel = (
+  availability: PostMetricAvailability,
+  outcome?: 'SUCCESS' | 'FAILURE',
+): string =>
+  availability === 'NOT_AVAILABLE' && outcome === 'FAILURE'
+    ? POST_METRIC_FAILED_DELIVERY_LABEL
+    : POST_METRIC_AVAILABILITY_LABEL[availability];
+
+/** The explanation one delivery's figures state carries, including a failed delivery on a measured platform. */
+export const postMetricAvailabilityDetail = (
+  availability: PostMetricAvailability,
+  outcome?: 'SUCCESS' | 'FAILURE',
+): string =>
+  availability === 'NOT_AVAILABLE' && outcome === 'FAILURE'
+    ? POST_METRIC_FAILED_DELIVERY_DETAIL
+    : POST_METRIC_AVAILABILITY_DETAIL[availability];
+
 /**
  * Which state one delivery is in.
  *
  * The order is the order of the questions: an unmeasured platform is unmeasured whatever else is
- * true of it, and a delivery with no result identity cannot be asked about even where the platform
- * is measured. Getting that order wrong would show *no figures yet* against a channel nobody will
- * ever have figures for.
+ * true of it, a delivery that did not go out has nothing to measure even on a measured platform,
+ * and a delivery with no result identity cannot be asked about even where the platform is measured.
+ * Getting that order wrong would show *no figures yet* against a channel nobody will ever have
+ * figures for, or against a post that never published.
  */
 export function postMetricAvailability(input: {
   platform: PublishPlatform | null;
@@ -165,8 +190,11 @@ export function postMetricAvailability(input: {
   resultId?: string;
   /** Whether a reading is stored for this delivery. */
   stored: boolean;
+  /** Whether the delivery went out. A failure has nothing to measure even with a result identity. */
+  outcome?: 'SUCCESS' | 'FAILURE';
 }): PostMetricAvailability {
   if (!analyticsPlatformSupported(input.platform)) return 'NOT_AVAILABLE';
+  if (input.outcome === 'FAILURE') return 'NOT_AVAILABLE';
   if (!input.resultId) return 'AWAITING_RESULT';
   return input.stored ? 'AVAILABLE' : 'AWAITING_SYNC';
 }
@@ -192,7 +220,13 @@ export interface PostTargetMetrics {
   syncedAt?: string;
   /** The platform's own address for the measured content, where the provider gave one. */
   shareUrl?: string;
+  /** Whether the delivery went out. Present where the publication target recorded an outcome. */
+  outcome?: 'SUCCESS' | 'FAILURE';
 }
+
+/** Whether a refresh should ask the provider about this delivery's figures. */
+export const postMetricsSyncable = (target: PostTargetMetrics): boolean =>
+  target.availability === 'AWAITING_SYNC' || target.availability === 'AVAILABLE';
 
 /**
  * Whether a refresh may run now, and what to say when it may not.

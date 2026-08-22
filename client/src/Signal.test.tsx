@@ -256,6 +256,24 @@ describe('Signal planner', () => {
     expect(screen.queryByLabelText('Media URL 1')).not.toBeInTheDocument();
   });
 
+  it('refuses a Drive share link in the public media field before save', async () => {
+    testState.signalPostsPayload = [signalPost('drive-url', 'Drive link here', null)];
+    await openSignal();
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Drive link here' }));
+    fireEvent.change(screen.getByLabelText('Add media URL'), {
+      target: {
+        value:
+          'https://drive.google.com/file/d/1OUDJgha1n6kkDezljf4U52b7rvDBiuAj/view?usp=drive_link',
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add media' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'drive.google.com is not public media. Add it with Add a Drive file by link instead.',
+    );
+    expect(screen.queryByLabelText('Media URL 1')).not.toBeInTheDocument();
+  });
+
   it('adds, edits and removes a secure media reference before save', async () => {
     testState.signalPostsPayload = [signalPost('media-edit', 'Edit media here', null)];
     await openSignal();
