@@ -12,6 +12,7 @@ import { PublishProviderError } from './provider.ts';
 import { PublishService } from './service.ts';
 import { readSyncHealth } from './sync-health.ts';
 import {
+  analyticsMatchPhrase,
   ANALYTICS_BACKOFF_MAX_ATTEMPTS,
   ANALYTICS_PLATFORMS,
   type PostMetricsSummary,
@@ -569,5 +570,126 @@ describe('the figures routes', () => {
     expect(refused.body.targets[0].totals.views).toBe(4210);
     expect(refused.body.refresh.allowed).toBe(false);
     expect(refused.body.refresh.retryAfterSeconds).toBe(30);
+  });
+});
+
+/**
+ * C79: what the provider said about how it matched a record, stored beside the figures.
+ *
+ * Provenance rather than accuracy, and the tests are written against that distinction: a value
+ * round-trips as the provider's own token, a record without one carries nothing at all, and no shape
+ * of input turns into a value this build has words for.
+ */
+describe('the provenance a figure carries', () => {
+  const metricRow = (publicationId: string, accountId: number) =>
+    db
+      .prepare(
+        `SELECT match_confidence, platform_post_id FROM signal_post_metrics
+          WHERE publication_id=? AND provider_account_id=?`,
+      )
+      .get(publicationId, accountId) as
+      { match_confidence: string | null; platform_post_id: string | null } | undefined;
+
+  it('persists a match value and a platform identifier, and round-trips them on read', async () => {
+    const post = seedSignalPost(db, { channels: ['tt'] });
+    seedDelivery(post.id, [{ channel: 'tt', accountId: 1, resultId: 'result-tt' }]);
+    const provider = loadedProvider();
+    (provider.records[0] as { matchConfidence?: string }).matchConfidence = 'exact';
+    (provider.records[0] as { platformPostId?: string }).platformPostId = 'tt-7788';
+
+    const analytics = service(provider);
+    const refreshed = await analytics.refresh(post.id);
+    expect(targetFor(refreshed, 'tt')).toMatchObject({
+      matchConfidence: 'exact',
+      platformPostId: 'tt-7788',
+    });
+    // Stored, not merely returned: a second read makes no provider call at all.
+    expect(targetFor(analytics.read(post.id), 'tt')).toMatchObject({
+      matchConfidence: 'exact',
+      platformPostId: 'tt-7788',
+    });
+    expect(metricRow(`publication-${post.id}`, 1)).toEqual({
+      match_confidence: 'exact',
+      platform_post_id: 'tt-7788',
+    });
+  });
+
+  it('keeps a value this build has no words for, without turning it into one it has', async () => {
+    const post = seedSignalPost(db, { channels: ['tt'] });
+    seedDelivery(post.id, [{ channel: 'tt', accountId: 1, resultId: 'result-tt' }]);
+    const provider = loadedProvider();
+    (provider.records[0] as { matchConfidence?: string }).matchConfidence = 'probable_match-2';
+
+    const target = targetFor(await service(provider).refresh(post.id), 'tt');
+    expect(target?.matchConfidence).toBe('probable_match-2');
+    expect(analyticsMatchPhrase(target?.matchConfidence as string)).toEqual({
+      known: false,
+      text: 'Provider match — Provider value: probable_match-2',
+    });
+  });
+
+  it('shows nothing for a record that arrived without either, rather than a default', async () => {
+    const post = seedSignalPost(db, { channels: ['tt'] });
+    seedDelivery(post.id, [{ channel: 'tt', accountId: 1, resultId: 'result-tt' }]);
+
+    const target = targetFor(await service(loadedProvider()).refresh(post.id), 'tt');
+    // Measured — the four counts are there — and still carrying no provenance at all.
+    expect(target?.totals?.views).toBe(4210);
+    expect(target).not.toHaveProperty('matchConfidence');
+    expect(target).not.toHaveProperty('platformPostId');
+    expect(metricRow(`publication-${post.id}`, 1)).toEqual({
+      match_confidence: null,
+      platform_post_id: null,
+    });
+  });
+
+  it('records what the parser refused, without failing the refresh that got the counts', async () => {
+    const post = seedSignalPost(db, { channels: ['tt'] });
+    seedDelivery(post.id, [{ channel: 'tt', accountId: 1, resultId: 'result-tt' }]);
+    const provider = loadedProvider();
+    provider.listWarnings = ['Ignored the match value on the figures record for result-tt: nope.'];
+
+    const refreshed = await service(provider).refresh(post.id);
+    expect(targetFor(refreshed, 'tt')?.totals?.views).toBe(4210);
+    const events = listIntegrationEvents(db, {});
+    expect(events[0]?.outcome).toBe('SUCCESS');
+    expect(events[0]?.summary).toContain('Read figures for 1 delivery.');
+    expect(events[0]?.summary).toContain('Ignored the match value');
+  });
+
+  it('leaves a figure stored before these columns existed exactly as it was', async () => {
+    const post = seedSignalPost(db, { channels: ['tt'] });
+    seedDelivery(post.id, [{ channel: 'tt', accountId: 1, resultId: 'result-tt' }]);
+    // A row as a release before C79 wrote it: every provenance column absent from the statement, so
+    // the migration's nullable columns are what the read sees.
+    db.prepare(
+      `INSERT INTO signal_post_metrics(
+         publication_id,provider_account_id,post_result_id,analytics_id,platform,
+         views,likes,comments,shares,synced_at
+       ) VALUES(?,1,'result-tt','analytics-tt','tiktok',99,9,1,0,'2026-08-18T10:00:00.000Z')`,
+    ).run(`publication-${post.id}`);
+
+    const target = targetFor(service(new MockAnalyticsProvider()).read(post.id), 'tt');
+    expect(target?.availability).toBe('AVAILABLE');
+    expect(target?.totals).toEqual({ views: 99, likes: 9, comments: 1, shares: 0 });
+    expect(target).not.toHaveProperty('matchConfidence');
+    expect(target).not.toHaveProperty('platformPostId');
+  });
+
+  it('replaces provenance on the next refresh rather than accumulating it', async () => {
+    const post = seedSignalPost(db, { channels: ['tt'] });
+    seedDelivery(post.id, [{ channel: 'tt', accountId: 1, resultId: 'result-tt' }]);
+    const provider = loadedProvider();
+    (provider.records[0] as { matchConfidence?: string }).matchConfidence = 'high';
+    const analytics = service(provider);
+    await analytics.refresh(post.id);
+    expect(targetFor(analytics.read(post.id), 'tt')?.matchConfidence).toBe('high');
+
+    // The provider stops sending it. The stored value is the provider's claim, so it goes with the
+    // claim rather than lingering as the last thing it happened to say.
+    delete (provider.records[0] as { matchConfidence?: string }).matchConfidence;
+    await analytics.refresh(post.id);
+    expect(targetFor(analytics.read(post.id), 'tt')).not.toHaveProperty('matchConfidence');
+    expect(metricRow(`publication-${post.id}`, 1)?.match_confidence).toBe(null);
   });
 });

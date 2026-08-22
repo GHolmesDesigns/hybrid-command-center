@@ -174,6 +174,15 @@ is provenance for a figure, and a natural fit for a §16.3 state that already re
 it cannot stand behind. Also unread: `duration`, `platform_created_at`, `cover_image_url`,
 `video_description`, `platform_post_id`.
 
+**Two of them are read now.** C79 (#222) stores `match_confidence` and `platform_post_id` on
+`signal_post_metrics` as nullable provenance and shows them beside the counts as **Provider match**
+and the platform's own identifier. Neither is a claim about the numbers, and the panel says so in a
+sentence. §14's analytics table still records the live match values as unverified, so the parser
+enforces the shape `[a-z0-9_-]{1,40}` rather than an enum, defaults nothing, and renders an
+unrecognised token as **Provider value: …** — see the disposition at the end of this document.
+`duration`, `platform_created_at`, `cover_image_url`, and `video_description` are still unread; C82
+records them as read and unused.
+
 ## 8. Platform configuration fields never sent
 
 The adapter emits four: `caption`, `first_comment`, `title`/`document_title`, and
@@ -233,7 +242,8 @@ source of truth where the README puts it, and gives an agent the same refusals a
    and per-account media. Design around the 24-hour/on-publish deletion.
 3. **§6 `GET /v1/posts`** — cheap, fits §7.2 as it stands, and the safety net for §9. **Done:**
    C78 (#221).
-4. **§7 analytics filters** — new panels from endpoints already wired.
+4. **§7 analytics filters** — new panels from endpoints already wired. **Partly done:** C79 (#222)
+   reads the two provenance fields; the `platform` and `timeframe` filters stay with C80.
 5. **§8 platform fields** — incremental. Google Business CTA and the TikTok disclosures first.
 
 ## 12. Constraints to carry into any of it
@@ -522,3 +532,33 @@ explicit path that cannot rely on it* — and the explicit path is this:
 
 What a future run settling either claim would unblock is a filtered read and anything that acts on an
 orphan. Neither is built here.
+
+### Disposition, 22 August 2026 — what C79 (#222) was built on, and what it was not
+
+Question 5 leaves C79 the one claim its own field is named after: **the actual values
+`match_confidence` takes, and whether a record can arrive without one, are still unverified.** The
+row above stands as written — this run found no analytics rows, so nothing was observed, and the
+next dated run is what changes it. C79 ships anyway, under the exception this section already states
+— a claim blocks dependent work *unless that work has an explicit path that cannot rely on it* — and
+the explicit path is that the card is built to not need the answer:
+
+- **It stores a shape, not an enum.** `match_confidence` is kept when it matches `[a-z0-9_-]{1,40}`
+  and dropped with a logged warning otherwise, so the set of values the provider actually uses is a
+  question the parser never has to answer. Nothing is trimmed, lower-cased, or coerced on the way in,
+  which is the only way an unverified value could end up matching a documented one.
+- **It defaults nothing.** Whether a record can arrive without a match value is exactly what is
+  unverified, so both columns are nullable and a record without one shows no provenance line at all.
+  The app never has to have been right about which case is ordinary.
+- **A value it has no words for stays the provider's own.** `exact` and `high` are read from OpenAPI
+  and get labels; anything else renders as **Provider value: `token`** with its own icon. An
+  unverified future value cannot appear as `Exact` — there is no path through
+  `analyticsMatchPhrase` that hands an unrecognised token a documented label, and a unit test asserts
+  it against the near-miss spellings.
+- **It changes no request.** The figures request is the one C68 already sent: repeated
+  `post_result_id` and an explicit `limit`, with no `platform` and no `timeframe`. Those two are
+  C80's and stay blocked on their own unverified rows.
+
+What a future run settling the claim would unblock is words of this app's own for whatever values
+turn out to exist, and the ability to say a record *must* carry one. Neither is built here. When it
+is settled, `ANALYTICS_MATCH_CONFIDENCE_LABEL` in `shared/publish-analytics.ts` is the one place a
+verified value gets a label.

@@ -27,13 +27,17 @@ import {
   postBridgeInventoryPath,
   postBridgeRecordState,
 } from './post-bridge-inventory-wire.ts';
+import {
+  parsePostBridgeAnalyticsList,
+  postBridgeAnalyticsPath,
+} from './post-bridge-analytics-wire.ts';
 import type { ProviderInventoryPage, ProviderInventoryProvider } from './inventory-provider.ts';
 import { PROVIDER_INVENTORY_PAGE_SIZE } from '../../shared/provider-inventory.ts';
 import { ANALYTICS_PLATFORMS, type AnalyticsPlatform } from '../../shared/publish-analytics.ts';
 import type {
   AnalyticsProvider,
   ProviderAnalyticsDay,
-  ProviderAnalyticsRecord,
+  ProviderAnalyticsList,
 } from './analytics-provider.ts';
 
 /**
@@ -295,44 +299,16 @@ export class PostBridgeAnalyticsProvider implements AnalyticsProvider {
   /**
    * `GET /v1/analytics`, filtered by result id.
    *
-   * `post_result_id` is a repeatable query parameter with OR semantics, so one request covers every
-   * delivery on a post. `limit` is sent explicitly because the endpoint defaults to ten, and a post
-   * that reached more accounts than that would silently come back short.
+   * Transport only. The path and the reading of a row are `post-bridge-analytics-wire.ts`, where a
+   * fixture can drive them: C79 gave this response two fields the app has to decide about — a match
+   * value it will store only in one shape, and a platform identifier it will never turn into a link —
+   * and a decision made inside this class is one no test can reach.
    */
-  async list(postResultIds: readonly string[]): Promise<ProviderAnalyticsRecord[]> {
-    if (!postResultIds.length) return [];
-    const query = postResultIds
-      .map((id) => `post_result_id=${encodeURIComponent(id)}`)
-      .concat(`limit=${Math.max(postResultIds.length, 10)}`)
-      .join('&');
-    const body = (await this.api.request(`/analytics?${query}`)) as {
-      data?: {
-        id: string;
-        post_result_id: string;
-        platform: string;
-        view_count?: number;
-        like_count?: number;
-        comment_count?: number;
-        share_count?: number;
-        last_synced_at?: string;
-        share_url?: unknown;
-      }[];
-    };
-    return (body.data ?? []).map((row) => ({
-      analyticsId: String(row.id),
-      postResultId: String(row.post_result_id),
-      platform: row.platform,
-      // The vendor types every count as a number and every optional string as an untyped object, so
-      // the counts are coerced and the strings are checked. A missing count is zero *from the
-      // provider*, which is a different thing from this app inventing one: the record exists, so it
-      // has been measured.
-      views: Number(row.view_count ?? 0),
-      likes: Number(row.like_count ?? 0),
-      comments: Number(row.comment_count ?? 0),
-      shares: Number(row.share_count ?? 0),
-      ...(row.last_synced_at ? { lastSyncedAt: row.last_synced_at } : {}),
-      ...(typeof row.share_url === 'string' && row.share_url ? { shareUrl: row.share_url } : {}),
-    }));
+  async list(postResultIds: readonly string[]): Promise<ProviderAnalyticsList> {
+    if (!postResultIds.length) return { records: [], warnings: [] };
+    return parsePostBridgeAnalyticsList(
+      await this.api.request(postBridgeAnalyticsPath(postResultIds)),
+    );
   }
 
   /**

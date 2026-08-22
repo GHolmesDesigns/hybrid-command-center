@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   analyticsBackoffSeconds,
+  analyticsMatchPhrase,
+  analyticsMatchStorable,
   analyticsPlatformSupported,
   analyticsRefreshGate,
   postMetricAvailability,
@@ -11,6 +13,10 @@ import {
   postMetricsMeasurable,
   ANALYTICS_BACKOFF_CAP_SECONDS,
   ANALYTICS_BACKOFF_MAX_ATTEMPTS,
+  ANALYTICS_MATCH_CONFIDENCE_LABEL,
+  ANALYTICS_MATCH_CONFIDENCES,
+  ANALYTICS_MATCH_DETAIL,
+  ANALYTICS_MATCH_HEADING,
   ANALYTICS_METRIC_LABEL,
   ANALYTICS_METRICS,
   ANALYTICS_PLATFORMS,
@@ -241,5 +247,46 @@ describe('the refresh gate', () => {
     expect(gate.allowed).toBe(true);
     expect(gate.exhausted).toBe(true);
     expect(gate.reason).toContain('refused the last');
+  });
+});
+
+describe('how the provider says it matched a record', () => {
+  it('gives the two documented values words of their own', () => {
+    for (const value of ANALYTICS_MATCH_CONFIDENCES) {
+      const phrase = analyticsMatchPhrase(value);
+      expect(phrase.known).toBe(true);
+      expect(phrase.text).toBe(
+        `${ANALYTICS_MATCH_HEADING}: ${ANALYTICS_MATCH_CONFIDENCE_LABEL[value]}`,
+      );
+      expect(phrase.text).not.toContain('Provider value');
+    }
+  });
+
+  it('keeps an unknown value as the provider’s own, and never lends it a documented label', () => {
+    const phrase = analyticsMatchPhrase('probable_match-2');
+    expect(phrase.known).toBe(false);
+    expect(phrase.text).toBe(`${ANALYTICS_MATCH_HEADING} — Provider value: probable_match-2`);
+    for (const label of Object.values(ANALYTICS_MATCH_CONFIDENCE_LABEL))
+      expect(phrase.text).not.toContain(label);
+  });
+
+  it('says what a match value is not, wherever one is shown', () => {
+    expect(ANALYTICS_MATCH_DETAIL).toContain('does not qualify or discount the counts');
+  });
+
+  it('stores a short lower-case token and nothing else', () => {
+    for (const value of [...ANALYTICS_MATCH_CONFIDENCES, 'a', 'probable_match-2', 'x'.repeat(40)])
+      expect(analyticsMatchStorable(value)).toBe(true);
+    for (const value of [
+      '',
+      'Exact',
+      'EXACT',
+      'exact match',
+      'exact!',
+      'exact\n',
+      'x'.repeat(41),
+      '{"nested":"object"}',
+    ])
+      expect(analyticsMatchStorable(value)).toBe(false);
   });
 });

@@ -86,6 +86,11 @@ analytics.records = [
     shares: 61,
     lastSyncedAt: '2099-09-15T11:00:00.000Z',
     shareUrl: 'https://tiktok.example/video/e2e',
+    // C79's provenance, so the browser proves the panel says how the provider matched the record
+    // and not how accurate its counts are. Both fields are the provider's own and neither is a
+    // default: a record without them is covered against fixtures rather than here.
+    matchConfidence: 'exact',
+    platformPostId: 'tt-e2e-7788',
   },
 ];
 analytics.daysByRecord = {

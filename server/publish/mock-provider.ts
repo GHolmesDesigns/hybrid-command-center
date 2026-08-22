@@ -168,6 +168,13 @@ export class MockAnalyticsProvider implements AnalyticsProvider {
   syncFailure?: Error;
   /** Raised by `list` alone, so a sync that got through can still fail to answer. */
   listFailure?: Error;
+  /**
+   * What the parser would not store, as a real provider read would hand it back.
+   *
+   * Set by a test that needs to prove a refused provenance value reaches the integration log; the
+   * refusal rule itself is `post-bridge-analytics-wire.ts` and is covered against fixtures there.
+   */
+  listWarnings: string[] = [];
   /** Raised by `days` alone, so a total can arrive while its history does not. */
   daysFailure?: Error;
   async sync() {
@@ -178,7 +185,10 @@ export class MockAnalyticsProvider implements AnalyticsProvider {
   async list(postResultIds: readonly string[]) {
     this.lists.push([...postResultIds]);
     if (this.listFailure) throw this.listFailure;
-    return this.records.filter((record) => postResultIds.includes(record.postResultId));
+    return {
+      records: this.records.filter((record) => postResultIds.includes(record.postResultId)),
+      warnings: [...this.listWarnings],
+    };
   }
   async days(analyticsId: string) {
     this.dayReads.push(analyticsId);

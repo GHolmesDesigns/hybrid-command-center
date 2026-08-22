@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
-import { BarChart3, MinusCircle, RefreshCw } from 'lucide-react';
+import { BadgeCheck, BarChart3, Hash, HelpCircle, MinusCircle, RefreshCw } from 'lucide-react';
 import { api, send } from '../api';
 import {
+  analyticsMatchPhrase,
   postMetricDayDeltas,
   postMetricAvailabilityDetail,
   postMetricAvailabilityLabel,
   postMetricsMeasurable,
+  ANALYTICS_MATCH_DETAIL,
   ANALYTICS_METRIC_LABEL,
   ANALYTICS_METRICS,
+  ANALYTICS_PLATFORM_POST_HEADING,
   type PostMetricsSummary,
   type PostTargetMetrics,
 } from '../../../shared/publish-analytics';
@@ -92,6 +95,48 @@ function Days({ target }: { target: PostTargetMetrics }) {
   );
 }
 
+/**
+ * How the provider says it matched this record, and the platform's own identifier for what it
+ * measured.
+ *
+ * **Provenance, not a hedge on the numbers.** The vendor's field is called `match_confidence`, and
+ * read quickly that sounds like a margin of error on the four counts above. It is not: it is the
+ * provider saying how sure it is that this record is *about* this piece of platform content. So the
+ * words are `Provider match`, the sentence underneath says what it is not, and the counts are left
+ * to stand on their own.
+ *
+ * Rendered only where the provider actually said something. A record that arrived without either
+ * field shows nothing at all rather than a default — an empty provenance line reads as a claim, and
+ * there is none to make. A value this build has words for gets them; anything else is shown as the
+ * provider's own token behind `Provider value:`, with its own icon, so an unfamiliar value is
+ * legible as unfamiliar rather than dressed up as `Exact`.
+ *
+ * The identifier is text and never a link. `shareUrl` above is the address the provider gave, and
+ * assembling one per platform out of an id would be this app inventing a URL nobody supplied.
+ */
+function Provenance({ target }: { target: PostTargetMetrics }) {
+  if (!target.matchConfidence && !target.platformPostId) return null;
+  const phrase = target.matchConfidence ? analyticsMatchPhrase(target.matchConfidence) : undefined;
+  // Two icons rather than two colours: the difference between a value this build knows and one it
+  // does not survives greyscale, and neither reading is a status worth colouring.
+  const MatchIcon = phrase?.known ? BadgeCheck : HelpCircle;
+  return (
+    <p className="signal-metric-match">
+      {phrase && (
+        <span className="signal-metric-match-value">
+          <MatchIcon aria-hidden="true" /> {phrase.text}
+        </span>
+      )}
+      {target.platformPostId && (
+        <span className="signal-metric-match-id">
+          <Hash aria-hidden="true" /> {ANALYTICS_PLATFORM_POST_HEADING}: {target.platformPostId}
+        </span>
+      )}
+      {phrase && <span className="signal-metric-match-detail">{ANALYTICS_MATCH_DETAIL}</span>}
+    </p>
+  );
+}
+
 /** One delivery's figures, or the reason it has none. */
 function TargetFigures({ target }: { target: PostTargetMetrics }) {
   const platformLabel = target.platform
@@ -128,6 +173,7 @@ function TargetFigures({ target }: { target: PostTargetMetrics }) {
               </>
             )}
           </p>
+          <Provenance target={target} />
         </>
       ) : (
         <p className="signal-metric-unavailable">

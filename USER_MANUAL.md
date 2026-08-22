@@ -722,6 +722,15 @@ Three things can be true instead of a number, and the panel says which:
 - **No figures yet.** The platform is one this provider measures and it has nothing for this post so
   far. A post usually needs a day before anything is counted.
 
+Where a delivery has figures, the panel may also say **Provider match** below them, with the
+platform's own **Platform post** identifier beside it. That is provenance, not a caveat: it is the
+provider saying how confident it is that this record is *about* this piece of content on the
+platform, and it neither qualifies nor discounts the counts above it, which are the platform's own.
+Where the provider used a word the app does not have its own label for, it is shown as
+**Provider value:** followed by the provider's word rather than translated into one of the app's. A
+delivery the provider said nothing about shows no match line at all — an absent claim is left absent
+rather than filled in with a default.
+
 Where there is more than one day of history, **days of history** opens the daily table. It shows what
 each day *added* rather than the running total, so a second day that gained nothing reads as nothing
 gained. The date is the provider's own label for the day.

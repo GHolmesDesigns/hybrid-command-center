@@ -220,6 +220,22 @@ export interface PostTargetMetrics {
   syncedAt?: string;
   /** The platform's own address for the measured content, where the provider gave one. */
   shareUrl?: string;
+  /**
+   * How the provider says it matched this record to the platform's content, as its own token.
+   *
+   * Absent where the provider sent nothing, or sent something this build will not store — never
+   * defaulted, and never normalised into a value it recognises. `analyticsMatchPhrase` is what turns
+   * it into words.
+   */
+  matchConfidence?: string;
+  /**
+   * The platform's own identifier for the measured content, where the provider supplied one.
+   *
+   * Shown as text and never turned into a link: an identifier is not an address, and assembling one
+   * per platform would be this app inventing a URL the provider never gave. `shareUrl` above is the
+   * provider's own link and stays the only thing that is one.
+   */
+  platformPostId?: string;
   /** Whether the delivery went out. Present where the publication target recorded an outcome. */
   outcome?: 'SUCCESS' | 'FAILURE';
 }
@@ -348,3 +364,74 @@ export interface PostMetricsSummary {
 /** Whether any delivery on this post could ever carry figures. */
 export const postMetricsMeasurable = (summary: PostMetricsSummary): boolean =>
   summary.targets.some((target) => target.availability !== 'NOT_AVAILABLE');
+
+/**
+ * How the provider says it matched a record to the content on the platform.
+ *
+ * **Provenance, not accuracy.** The vendor's field is `match_confidence`, and the name is the trap:
+ * it describes the provider's confidence that this analytics row is *about* this piece of platform
+ * content, and says nothing about how accurate the four counts are. Showing it as "confidence in the
+ * figure" would put a hedge on numbers the platform itself reported, which is a claim nobody made.
+ * Every label and sentence below is written for the first reading, and
+ * `ANALYTICS_MATCH_DETAIL` is rendered beside the value wherever it appears so the distinction is on
+ * the screen rather than in this comment.
+ *
+ * **The values are documented and not verified.** `docs/post-bridge-api-surface.md` §7 reads `exact`
+ * and `high` out of the vendor's OpenAPI document, and §14's analytics table records the live values
+ * as *still unverified* — the probe found no analytics rows to observe. So this build has words of
+ * its own for those two and no default for anything: a record that arrives without a match value
+ * carries none, and a value this build has never seen is kept as the provider's own token and
+ * labelled as one. What must never happen is an unknown value borrowing `Exact`'s label, which is
+ * why the two are one function rather than a lookup with a fallback at each call site.
+ */
+export const ANALYTICS_MATCH_CONFIDENCES = ['exact', 'high'] as const;
+export type AnalyticsMatchConfidence = (typeof ANALYTICS_MATCH_CONFIDENCES)[number];
+
+/** The words this build has for the two documented values, and for nothing else. */
+export const ANALYTICS_MATCH_CONFIDENCE_LABEL: Record<AnalyticsMatchConfidence, string> = {
+  exact: 'Exact',
+  high: 'High',
+};
+
+/**
+ * The shape a match value has to have to be kept at all: `[a-z0-9_-]{1,40}`.
+ *
+ * A bound rather than an enum, because the enum is unverified and a provider adding a value is
+ * ordinary. What the bound buys is that anything stored is a short, lower-case token — safe to put on
+ * a screen as itself, impossible to mistake for a sentence, and small enough that no response body
+ * can arrive through this field. Anything else is dropped with a warning rather than trimmed or
+ * lower-cased into shape: normalising an unrecognised value is how it would end up matching a known
+ * one.
+ */
+const ANALYTICS_MATCH_TOKEN = /^[a-z0-9_-]{1,40}$/;
+export const analyticsMatchStorable = (value: string): boolean => ANALYTICS_MATCH_TOKEN.test(value);
+
+/** The heading the match value is shown under, and the sentence that says what it is not. */
+export const ANALYTICS_MATCH_HEADING = 'Provider match';
+export const ANALYTICS_MATCH_DETAIL =
+  'Match quality is how the provider says it matched this record to the content on the platform. It does not qualify or discount the counts above — those are the platform’s own.';
+
+/** The label for the platform's own identifier, which is shown as text and never as a link. */
+export const ANALYTICS_PLATFORM_POST_HEADING = 'Platform post';
+
+/**
+ * The whole phrase one match value is shown as, and whether this build had words for it.
+ *
+ * One function returning both, because the two answers have to move together. `known` is what the
+ * panel picks an icon from, and `text` already carries the right words for the case: a documented
+ * value reads *Provider match: Exact*, and anything else reads *Provider match — Provider value:
+ * `token`*, which says exactly as much as this build knows. There is no path through here that
+ * hands an unrecognised token a documented label.
+ */
+export interface AnalyticsMatchPhrase {
+  /** True only for a value `ANALYTICS_MATCH_CONFIDENCE_LABEL` has its own words for. */
+  known: boolean;
+  text: string;
+}
+
+export function analyticsMatchPhrase(value: string): AnalyticsMatchPhrase {
+  const label = (ANALYTICS_MATCH_CONFIDENCE_LABEL as Record<string, string | undefined>)[value];
+  return label
+    ? { known: true, text: `${ANALYTICS_MATCH_HEADING}: ${label}` }
+    : { known: false, text: `${ANALYTICS_MATCH_HEADING} — Provider value: ${value}` };
+}
