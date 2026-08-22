@@ -13,17 +13,25 @@ The version a card ships as is decided at merge time — see the bump rule in `A
 ### Notes
 
 - **Nothing in the application changed here.** This corrects what the publisher's research notes
-  claim about eight open questions.
-- **Eight questions were recorded as "not verified yet" when the truth is "cannot be asked from
-  here".** They all need an account on a platform the publisher measures — TikTok, YouTube, or
-  Instagram — and none is connected to it: TikTok and YouTube are posted from Buffer. Running the
+  claim about eight open questions, and names the constraint behind them.
+- **The publisher will not hold every account at once.** TikTok and YouTube cannot be connected at
+  the same time as the five accounts this studio posts from — connecting them on 22 August dropped
+  Facebook, Instagram, LinkedIn, Threads, and Bluesky from the list. So TikTok and YouTube post
+  through Buffer, and that is a standing arrangement rather than a passing one. The notes now say
+  so, with the day's account readings as the evidence.
+- **Three of the eight questions cannot be answered from here at all.** They need TikTok or YouTube
+  connected to the publisher that measures them, and the cap will not release the slot. Running the
   owner-only test command again would answer none of them, whatever arguments it were given. The
-  notes now say so, name the four questions that are unaffected and why, and record what would make
-  the eight askable: an account connected on one of those three platforms, and for the figures
-  questions, a post published from it that the platform has actually counted.
-- **Figures, media roles, and disclosure toggles are the work this holds up.** The cards that depend
-  on those answers now say on their own page that they are waiting on a connected account rather
-  than on a scheduled test run, so nobody plans one expecting it to help.
+  notes now say that plainly, and say what the trade would cost: those three answers in exchange for
+  the five accounts the studio actually posts from, which is no trade at all.
+- **The other five were recorded as unanswerable and are not.** An Instagram account *is* connected,
+  and Instagram is one of the platforms the publisher measures, so those five are ordinary pending
+  work — waiting on a post that goes out and gets counted, not on a connection. The earlier draft of
+  this correction swept all eight together; the notes now separate them and say what each half is
+  waiting for.
+- **Figures, media roles, and disclosure toggles are the work this touches.** The cards depending on
+  those answers now each say which half they are in, so a card that can proceed is not held back and
+  a card that cannot is not planned around a test run that would not help.
 - **The match-quality work already shipped is unaffected**, because it was deliberately built not to
   depend on the answer.
 
