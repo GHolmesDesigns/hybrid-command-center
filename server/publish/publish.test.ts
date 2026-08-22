@@ -109,6 +109,47 @@ describe('publishing time conversion', () => {
       '2026-11-01T05:30:00.000Z',
     );
   });
+
+  /**
+   * The conversion caches one `Intl.DateTimeFormat` per zone (#245), so the thing worth proving is
+   * that a cached formatter only ever answers for the zone it was built for. Every wall time here
+   * is the same, which is what makes a leak visible: a zone reading another's offset would return
+   * another zone's instant rather than fail. The list runs twice, so the second pass reads
+   * formatters the first pass built, and it mixes a whole-hour offset, a half-hour one, a
+   * no-offset zone, and both hemispheres' summer.
+   */
+  it('converts each zone by its own offset, on a cached formatter as on a fresh one', () => {
+    const expected = [
+      ['UTC', '2026-06-01T09:00:00.000Z'],
+      ['Asia/Kolkata', '2026-06-01T03:30:00.000Z'],
+      ['Australia/Sydney', '2026-05-31T23:00:00.000Z'],
+      ['America/New_York', '2026-06-01T13:00:00.000Z'],
+      ['Europe/London', '2026-06-01T08:00:00.000Z'],
+    ] as const;
+    for (const pass of [1, 2])
+      for (const [zone, instant] of expected)
+        expect(publishInstantFor('2026-06-01', '09:00', zone), `pass ${pass}, ${zone}`).toBe(
+          instant,
+        );
+  });
+
+  /**
+   * The gap and the repeated hour again in a southern-hemisphere zone, where the transitions run
+   * the other way round: Sydney loses 02:00–03:00 on 4 October 2026 and repeats 02:00–03:00 on
+   * 5 April, so the first of the two 02:30s is the one still on daylight time.
+   */
+  it('refuses a gap and takes the earlier repeated instant south of the equator too', () => {
+    expect(() => publishInstantFor('2026-10-04', '02:30', 'Australia/Sydney')).toThrow(
+      /does not exist/,
+    );
+    expect(publishInstantFor('2026-04-05', '02:30', 'Australia/Sydney')).toBe(
+      '2026-04-04T15:30:00.000Z',
+    );
+  });
+
+  it('refuses a zone that does not exist rather than scanning for it', () => {
+    expect(() => publishInstantFor('2026-06-01', '09:00', 'Mars/Olympus_Mons')).toThrow(RangeError);
+  });
 });
 
 describe('provider boundary', () => {
