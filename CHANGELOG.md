@@ -8,6 +8,63 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [4.6.0] - 2026-08-21
+
+### Added
+
+- **One post can now go to two accounts on the same platform, each with its own wording.** Open the
+  publishing preview and every channel shows the accounts connected for it, with a box beside each
+  one. Tick the accounts this post should reach, press **Save accounts**, and the preview reloads
+  showing what each of them would receive. Until now a channel resolved to exactly one account and
+  refused if it found none or several, which is still what happens when you tick nothing.
+- **Each chosen account gets its own verdict.** The preview lists them one by one — the caption that
+  account would receive, and any reason it cannot be sent to — instead of one sentence about the
+  platform. Two accounts can fail for two different reasons, and being told "Facebook is blocked"
+  does not tell you which page to go and fix.
+- **A caption written for one account is now actually sent to that account**, on Facebook. Every
+  other platform still sends one set of content per platform, because that is the only place the
+  publisher's behaviour has been verified — not a guess about the others.
+- **An account can be given its own images**, as long as they are Drive files and the whole post
+  uses Drive files. Each account's files are sent fresh with the post.
+
+### Changed
+
+- **Sending the same words to two accounts on one platform is refused before anything goes out.**
+  The publisher itself will accept it without complaint — that was tested against the live API — but
+  its own guidance restricts it, and the account that would pay for the difference is yours. The
+  refusal names the two pages that clashed and offers the two real fixes: write each one its own
+  content, or send to one of them. It will not suggest renaming a file or nudging some punctuation
+  to slip past a check, because that changes nothing about what the two audiences actually see.
+- **A page you tick is a page you meant.** Choosing accounts explicitly replaces the older rule that
+  picked `G.Holmes Designs` on Facebook and refused anything ambiguous, so a page that rule would
+  never have chosen is now reachable by naming it. A post where you tick nothing behaves exactly as
+  it always has.
+- **A channel with one unusable account sends to none of them.** If a page you chose has been
+  disconnected since, the whole channel stops and says which page — rather than quietly going out to
+  the ones that still work.
+- **Choosing accounts, or editing what one of them receives, makes an open confirmation stale.** The
+  preview has to be taken again before you can send, the same way editing a caption already worked.
+
+### Notes
+
+- **Only Facebook carries per-account content**, because Facebook was the only platform with two
+  accounts connected when the publisher's API was tested. It is not a statement that other platforms
+  cannot; it is that nobody has been able to ask them yet. Connect a second account somewhere else
+  and the question can be put again.
+- Titles, first comments, post shapes, and cover images stay per platform even on Facebook. Setting
+  one against a single account now says plainly that its value reaches every account on that
+  platform.
+- An account given a public web address for its own images is refused rather than quietly falling
+  back to the post's images. Per-account images work only with Drive files.
+- Records of past sends written before this release do not say what each account received, and are
+  left saying nothing rather than being read as "nothing was tailored" — the two are different, and
+  only one of them can honestly be compared against what you have now.
+
+### Breaking changes
+
+None. A post where you choose no accounts plans, previews, and sends exactly as it did before,
+including the confirmation fingerprint it is checked against.
+
 ## [4.5.5] - 2026-08-21
 
 ### Notes
