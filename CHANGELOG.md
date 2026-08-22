@@ -8,6 +8,23 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [4.7.2] - 2026-08-22
+
+### Changed
+
+- The quality gates run once per commit instead of twice. A commit pushed to a card branch with an
+  open pull request used to trigger the whole gate on the push and again on the pull request,
+  testing the same tree twice; the push trigger is now limited to `main`. What is checked is
+  unchanged — every pull request still gates the merge result on Linux and Windows, and every merge
+  to `main` still gates itself — and a superseded commit is now cancelled by its successor without a
+  second trigger racing it.
+
+### Breaking changes
+
+- None. Nothing in the running application changed; this is a contributor workflow change. One
+  consequence is worth knowing: a branch pushed before its pull request exists no longer runs a
+  gate, so open the draft pull request with the first push, as `AGENTS.md` already asks.
+
 ## [4.7.1] - 2026-08-22
 
 ### Notes
