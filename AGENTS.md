@@ -124,6 +124,13 @@
   figure of zero, and a refresh that the provider refuses or that fails leaves the last known good
   values exactly where they were — every provider read completes before any write. `refresh` is
   reached only by a person pressing something: there is no timer on this path.
+  What the provider says about *which content* a record matched — `match_confidence` and
+  `platform_post_id` — is stored beside the four numbers as provenance and never as a hedge on them:
+  nullable, never defaulted, shown under **Provider match** with a sentence saying it does not
+  qualify the counts. A match value is kept only in the shape `[a-z0-9_-]{1,40}` and is never trimmed
+  or lower-cased into one this build has words for; anything else is dropped and warned about on the
+  log row. Giving a verified value a label of its own means one entry in
+  `ANALYTICS_MATCH_CONFIDENCE_LABEL` and a dated §14 result, not a fallback at a call site.
 - Segmenting figures by campaign adds exactly one derivation and says so:
   `shared/signal-campaign-analytics.ts` **adds** the provider's own per-delivery figures over a named
   set of deliveries, and sums per-day gains that `postMetricDayDeltas` has already subtracted. No

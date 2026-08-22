@@ -820,6 +820,18 @@ the provider said.
 `npm run format:check`, `npm run build`, and `npm run db:migrate` against a
 real-database copy.
 
+#### Disposition, 22 August 2026 — built as #222, on a shape rule rather than the enum
+
+`docs/post-bridge-api-surface.md` §14 leaves question 5 with the one claim this card is named after:
+the values `match_confidence` actually takes, and whether a record can arrive without one, are
+**still unverified** — the run found no analytics rows to observe. That disposition stands, and this
+card was built anyway under §14's own exception — a claim blocks dependent work unless that work has
+an explicit path that cannot rely on it. That path, and what it leaves unbuilt, is recorded in
+`post-bridge-api-surface.md` §14 under *Disposition, 22 August 2026 — what C79 (#222) was built on*:
+the parser enforces `[a-z0-9_-]{1,40}` rather than an enum, both columns are nullable and nothing is
+defaulted, an unrecognised token renders as **Provider value: …** and can never wear `Exact`'s
+label, and the figures request is unchanged.
+
 ---
 
 ### C80 — Provider-filtered analytics over a verified window and known delivery set

@@ -315,6 +315,15 @@ CREATE TABLE IF NOT EXISTS signal_publication_targets (
 -- app stored it. Both are kept because they answer different questions -- how old the platform's
 -- reading is, and how old this app's copy of it is -- and one of them being fresh does not make the
 -- other one fresh.
+--
+-- match_confidence and platform_post_id are the provider's provenance for the figures, added by C79
+-- and nullable on purpose. They say how the provider matched this record to the platform's content
+-- and what the platform's own id for that content is; they say nothing about how accurate the four
+-- counts are, and neither column has a default. A row written before they existed stays NULL, which
+-- reads as "the provider said nothing" -- the same answer a fresh row gets when the provider sends
+-- nothing, and the only honest one while docs/post-bridge-api-surface.md §14 records the live match
+-- values as unverified. match_confidence holds a short lower-case token or nothing at all; the shape
+-- rule is analyticsMatchStorable in shared/publish-analytics.ts and it is enforced on the way in.
 CREATE TABLE IF NOT EXISTS signal_post_metrics (
   publication_id TEXT NOT NULL REFERENCES signal_publications(id) ON DELETE CASCADE,
   provider_account_id INTEGER NOT NULL,
@@ -322,6 +331,7 @@ CREATE TABLE IF NOT EXISTS signal_post_metrics (
   views INTEGER NOT NULL DEFAULT 0, likes INTEGER NOT NULL DEFAULT 0,
   comments INTEGER NOT NULL DEFAULT 0, shares INTEGER NOT NULL DEFAULT 0,
   share_url TEXT, provider_synced_at TEXT, synced_at TEXT NOT NULL,
+  match_confidence TEXT, platform_post_id TEXT,
   PRIMARY KEY(publication_id, provider_account_id)
 );
 -- One row per day the provider snapshotted, carrying the cumulative totals as of that date. The

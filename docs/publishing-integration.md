@@ -1250,6 +1250,7 @@ CREATE TABLE IF NOT EXISTS signal_post_metrics (           -- current totals, on
   views INTEGER NOT NULL DEFAULT 0, likes INTEGER NOT NULL DEFAULT 0,
   comments INTEGER NOT NULL DEFAULT 0, shares INTEGER NOT NULL DEFAULT 0,
   share_url TEXT, provider_synced_at TEXT, synced_at TEXT NOT NULL,
+  match_confidence TEXT, platform_post_id TEXT,        -- provenance, added by C79; never defaulted
   PRIMARY KEY(publication_id, provider_account_id)
 );
 CREATE TABLE IF NOT EXISTS signal_post_metric_days (       -- normalized cumulative snapshots
@@ -1278,6 +1279,33 @@ between an honest sentence and a wrong one:
 3. `AWAITING_SYNC` — measured, asked about, and the provider has nothing yet.
 4. `AVAILABLE` — the provider's four numbers, with its own `last_synced_at` beside them.
 
+**And never a default, which is the same rule applied to provenance.** C79 (#222) stores the two
+fields `AnalyticsDto` carries beside the counts — `match_confidence` and `platform_post_id` — as
+nullable columns on `signal_post_metrics`. Both are the provider's claim about *which content a
+record is about*, and neither is a claim about the counts:
+
+- **The name is the trap.** `match_confidence` reads like a margin of error on the four numbers. It
+  is the provider's confidence that this analytics row matches this piece of platform content. The
+  panel therefore says **Provider match: Exact**, never *Confidence: Exact*, and prints one sentence
+  beside it saying that match quality does not qualify or discount the counts.
+- **The values are documented and unverified.** §7 of `post-bridge-api-surface.md` reads `exact` and
+  `high` out of OpenAPI, and §14's analytics table records the live values as *still unverified* —
+  the probe found no analytics rows to observe. So the parser enforces a **shape**, not an enum:
+  `[a-z0-9_-]{1,40}` is stored as the provider's own token, a value this build has words for gets
+  them, and anything else is rendered as **Provider value: …** with its own icon. Nothing is trimmed,
+  lower-cased, or coerced on the way in, because normalising an unrecognised value is exactly how one
+  would end up wearing `Exact`'s label.
+- **Absent is absent.** A record arriving without either field stores NULL and the panel shows no
+  provenance line at all, which is the `totals` rule one field over: an absent claim is left absent
+  rather than filled in. A row written before C79 is NULL for the same reason and reads identically.
+- **A refused field is not a failed refresh.** A value in a shape this app will not store is dropped,
+  the four counts are still written, and the parser's bounded warning is recorded on the
+  `signal.analytics-sync` log row. The parser is `server/publish/post-bridge-analytics-wire.ts`, pure
+  and covered, beside the inventory's for the same reason.
+- **The identifier is text, never a link.** `share_url` is the address the provider gave and stays
+  the only link on the row; assembling a URL per platform out of an id would be this app inventing an
+  address nobody supplied.
+
 ### 16.4 The boundaries
 
 - **A separate interface.** `AnalyticsProvider` (`server/publish/analytics-provider.ts`) has
@@ -1303,7 +1331,8 @@ between an honest sentence and a wrong one:
 ### 16.5 What this section does not decide
 
 Automatic analytics refresh of any kind; anything derived from a figure — engagement rates,
-per-follower ratios, campaign roll-ups, comparisons between posts; `platform_post_id`,
-`match_confidence`, `video_description`, and `duration`, which are read past rather than stored; the
-`timeframe` and `platform` filters on `GET /v1/analytics`; and any write to `signal_posts` from this
-path, which stays impossible rather than merely unimplemented.
+per-follower ratios, campaign roll-ups, comparisons between posts; `video_description` and
+`duration`, which are read past rather than stored — `platform_post_id` and `match_confidence` were
+too, until C79 stored them as provenance in §16.3; the `timeframe` and `platform` filters on
+`GET /v1/analytics`; and any write to `signal_posts` from this path, which stays impossible rather
+than merely unimplemented.
