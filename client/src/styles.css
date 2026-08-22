@@ -4746,6 +4746,40 @@ button.tag-chip.toggle.active {
   font-size: 11px;
   line-height: 1.4;
 }
+/* Provenance: how the provider matched the record, and the platform's own id for what it measured.
+   Deliberately uncoloured. Every other state in this panel earns a colour because it says something
+   about whether there is a figure at all; match quality says nothing about the figures, and giving
+   it a green or an amber would be exactly the "confidence in the number" reading the words below it
+   spend a sentence refusing. The two icons carry the known/unknown difference instead, so it
+   survives greyscale. */
+.signal-metric-match {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.signal-metric-match-value,
+.signal-metric-match-id {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.signal-metric-match-value svg,
+.signal-metric-match-id svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+/* An identifier can be long and has no spaces to break on, so it wraps inside the row rather than
+   widening the editor pane. */
+.signal-metric-match-id {
+  overflow-wrap: anywhere;
+}
+.signal-metric-match-detail {
+  font-size: 10px;
+}
 .signal-metrics-synced {
   margin: 0;
   color: var(--muted);

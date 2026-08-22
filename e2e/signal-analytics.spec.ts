@@ -75,6 +75,16 @@ test('figures arrive only when asked, and an unmeasured channel says so rather t
   await expect(tiktok).toContainText((4210).toLocaleString('en-US'));
   await expect(tiktok).toContainText((318).toLocaleString('en-US'));
   await expect(figures).toContainText('Last synchronised');
+  // C79: the provenance beside the counts says how the provider matched the record to the content
+  // on the platform, and says in the same breath that it is not a caveat on the counts themselves.
+  await expect(tiktok).toContainText('Provider match: Exact');
+  await expect(tiktok).toContainText('Platform post: tt-e2e-7788');
+  await expect(tiktok).toContainText('does not qualify or discount the counts');
+  // The identifier is text. The provider's own address is the one link on the row.
+  await expect(tiktok.getByRole('link')).toHaveAttribute(
+    'href',
+    'https://tiktok.example/video/e2e',
+  );
   // X still has no figure at all after a refresh that reached the provider, which is the claim: this
   // provider does not measure it, and that is not a zero.
   await expect(x).toContainText('Not available from this provider');

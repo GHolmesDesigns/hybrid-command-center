@@ -174,6 +174,15 @@ is provenance for a figure, and a natural fit for a §16.3 state that already re
 it cannot stand behind. Also unread: `duration`, `platform_created_at`, `cover_image_url`,
 `video_description`, `platform_post_id`.
 
+**Two of them are read now.** C79 (#222) stores `match_confidence` and `platform_post_id` on
+`signal_post_metrics` as nullable provenance and shows them beside the counts as **Provider match**
+and the platform's own identifier. Neither is a claim about the numbers, and the panel says so in a
+sentence. §14's analytics table still records the live match values as unverified, so the parser
+enforces the shape `[a-z0-9_-]{1,40}` rather than an enum, defaults nothing, and renders an
+unrecognised token as **Provider value: …** — see the disposition at the end of this document.
+`duration`, `platform_created_at`, `cover_image_url`, and `video_description` are still unread; C82
+records them as read and unused.
+
 ## 8. Platform configuration fields never sent
 
 The adapter emits four: `caption`, `first_comment`, `title`/`document_title`, and
@@ -233,7 +242,8 @@ source of truth where the README puts it, and gives an agent the same refusals a
    and per-account media. Design around the 24-hour/on-publish deletion.
 3. **§6 `GET /v1/posts`** — cheap, fits §7.2 as it stands, and the safety net for §9. **Done:**
    C78 (#221).
-4. **§7 analytics filters** — new panels from endpoints already wired.
+4. **§7 analytics filters** — new panels from endpoints already wired. **Partly done:** C79 (#222)
+   reads the two provenance fields; the `platform` and `timeframe` filters stay with C80.
 5. **§8 platform fields** — incremental. Google Business CTA and the TikTok disclosures first.
 
 ## 12. Constraints to carry into any of it
@@ -428,6 +438,95 @@ reads *verified* because the session verified what it saw; across the two sessio
 either answer — an encoding that silently fails to filter returns a superset, and a snapshot
 replacement would carry that straight into the database.
 
+### Not askable from this workspace, as of 22 August 2026
+
+Eight claims above read **still unverified** with evidence naming what the run did not have — no
+TikTok account, no video, no analytics rows. Read plainly, that says a run with better arguments
+settles them. For three of them it does not, and the reason is not the one the evidence gives.
+
+**The cause is a provider account cap.** Post Bridge will not hold TikTok and YouTube at the same
+time as the five accounts this studio publishes on. Observed on 22 August 2026: `GET
+/v1/social-accounts` read seven accounts — Facebook ×3, Instagram, LinkedIn, Threads, Bluesky — and
+after TikTok and YouTube were connected it read four, with Facebook (G.Holmes Designs), Instagram,
+LinkedIn, Threads, and Bluesky all dropped. TikTok and YouTube therefore publish through the owner's
+**Buffer** account (owner, 22 August 2026), and that is a standing constraint rather than a current
+arrangement.
+
+Post Bridge measures exactly `tiktok`, `youtube`, and `instagram` — the enum on its own
+`POST /v1/analytics/sync`, which §7 already takes as the definition of the measured set. With the cap
+holding two of the three elsewhere, **Instagram is the only measured platform Post Bridge will ever
+see from here.**
+
+**The read that settles the rest has been run.** Whether *any* account on a measured platform is
+connected is not something a probe run's silence establishes — both dated runs named none, which is
+consistent with none being connected and is not proof of it. `GET /v1/social-accounts` answers it
+outright: it reads, it writes nothing, it needs no `--live` probe, and this app already calls it as
+`listTargets`. Run on 22 August 2026, it returned a connected **Instagram** account. The
+measured-platform precondition was met, not missing; the probe simply never named it, and naming is a
+probe argument rather than a fact about the workspace.
+
+That splits the eight rather than settling them all one way.
+
+**Askable — waiting on content, not on the workspace.** These need a post that actually publishes
+from the connected Instagram account and that the provider has counted. A probe run cannot
+manufacture one: it refuses any instant less than 48 hours out and deletes every post it created in a
+`finally`, so by construction it never publishes anything. They are waiting on real content that goes
+out and stays up.
+
+| Claim | Needs |
+| --- | --- |
+| Q5 — `timeframe` semantics | Instagram connected, and a post published from it the provider has counted |
+| Q5 — response grain is one row per delivery | the same |
+| Q5 — how a row maps to a social account | the same |
+| Q5 — the values `match_confidence` takes | the same |
+| Q3 — Instagram `cover_image` role | Instagram connected, and `--video` |
+
+**Not askable while the cap holds.** These need a Post Bridge slot the cap will not release.
+
+| Claim | Needs |
+| --- | --- |
+| Q3 — YouTube `thumbnail` role | a connected **Post Bridge** YouTube account, and `--video` |
+| Q6 — YouTube `contains_synthetic_media` | the same |
+| Q6 — TikTok `disclose_branded_content` / `disclose_your_brand` | a connected **Post Bridge** TikTok account |
+
+**What the cap costs, stated plainly.** Publishing TikTok and YouTube through Post Bridge would
+settle those three — and only by evicting the five accounts this studio publishes on, which is not a
+trade available to anyone. The route those channels actually have is Wave 15, which gives them a
+Buffer path; Buffer is not an `AnalyticsProvider` and this record does not make it one, so these three
+claims stay unanswered **by construction rather than by scheduling**. Nothing short of the cap moving
+changes that.
+
+**Why this is a section and not a fifth state.** `scripts/probe-post-bridge/report.ts` generates the
+preamble, the fixtures, the teardown, and every claim table, and a dated run replaces all of it
+wholesale. A fifth state hand-written into a row would be regenerated back to *still unverified* by
+the next run, silently. The four states also describe what a run *observed*, and this is a fact about
+which accounts a provider will hold at once — not a kind of observation. So it lives here, beside the
+other hand-written sections, and **it must be carried forward when the matrix is regenerated**,
+exactly as the correction and the dispositions above it are.
+
+**What this does not touch.** Four other rows read *still unverified* for reasons of their own and
+none of them is this one:
+
+- **The LinkedIn PDF document role** was verified on 20 August and simply went unasked on the 22nd.
+  The precondition for reasking it exists and is written up two sections above.
+- **The shape of a provider-UI post** needs a post a person made in Post Bridge's own interface and
+  its id passed as `--provider-ui-post`. That is a human step, not a connected account.
+- **The 24-hour unattached media expiry** cannot close in one session by construction; it needs a
+  dated follow-up read of inventoried asset ids.
+- **The headers a `429` carries** stay out of reach by design, because the probe never creates load
+  to discover a limit.
+
+**Effect on the dependent cards.** C80 is **not** blocked by a workspace fact: every row it waits on
+is askable through the connected Instagram account once a post publishes and the provider syncs it.
+C81 **splits** — Instagram `cover_image` is askable, while YouTube `contains_synthetic_media` and the
+TikTok toggles are not while the cap holds, so that card cannot be wholly satisfied from Post Bridge
+and should say which half it is shipping. C82 records *not askable here* as a resolution for three
+rows with the cap as their ground, and records `duration`, `cover_image_url`, and `video_description`
+as read and unused, which needs no evidence from any of these rows. C79 (#222, shipped as 4.7.0) is
+unaffected either way: it stores a shape rather than an enum, defaults nothing, and cannot render an
+unrecognised value as a documented one — which is exactly the right build against a row that had no
+observed values.
+
 ### Disposition, 22 August 2026 — what C78 (#221) was built on, and what it was not
 
 Question 4 leaves C78 two things it may not assume, and neither row above moves: the shape of a post
@@ -452,3 +551,33 @@ explicit path that cannot rely on it* — and the explicit path is this:
 
 What a future run settling either claim would unblock is a filtered read and anything that acts on an
 orphan. Neither is built here.
+
+### Disposition, 22 August 2026 — what C79 (#222) was built on, and what it was not
+
+Question 5 leaves C79 the one claim its own field is named after: **the actual values
+`match_confidence` takes, and whether a record can arrive without one, are still unverified.** The
+row above stands as written — this run found no analytics rows, so nothing was observed, and the
+next dated run is what changes it. C79 ships anyway, under the exception this section already states
+— a claim blocks dependent work *unless that work has an explicit path that cannot rely on it* — and
+the explicit path is that the card is built to not need the answer:
+
+- **It stores a shape, not an enum.** `match_confidence` is kept when it matches `[a-z0-9_-]{1,40}`
+  and dropped with a logged warning otherwise, so the set of values the provider actually uses is a
+  question the parser never has to answer. Nothing is trimmed, lower-cased, or coerced on the way in,
+  which is the only way an unverified value could end up matching a documented one.
+- **It defaults nothing.** Whether a record can arrive without a match value is exactly what is
+  unverified, so both columns are nullable and a record without one shows no provenance line at all.
+  The app never has to have been right about which case is ordinary.
+- **A value it has no words for stays the provider's own.** `exact` and `high` are read from OpenAPI
+  and get labels; anything else renders as **Provider value: `token`** with its own icon. An
+  unverified future value cannot appear as `Exact` — there is no path through
+  `analyticsMatchPhrase` that hands an unrecognised token a documented label, and a unit test asserts
+  it against the near-miss spellings.
+- **It changes no request.** The figures request is the one C68 already sent: repeated
+  `post_result_id` and an explicit `limit`, with no `platform` and no `timeframe`. Those two are
+  C80's and stay blocked on their own unverified rows.
+
+What a future run settling the claim would unblock is words of this app's own for whatever values
+turn out to exist, and the ability to say a record *must* carry one. Neither is built here. When it
+is settled, `ANALYTICS_MATCH_CONFIDENCE_LABEL` in `shared/publish-analytics.ts` is the one place a
+verified value gets a label.

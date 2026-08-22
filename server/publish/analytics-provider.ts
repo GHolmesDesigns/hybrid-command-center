@@ -42,8 +42,14 @@ export interface AnalyticsProvider {
    * one row per account per post, which is exactly the grain `signal_publication_targets` keeps. A
    * result the provider has no figures for is simply absent from the answer; it is not an error and
    * it is not a zero.
+   *
+   * The answer carries `warnings` beside the records because a row can be readable and still contain
+   * a field this app refuses to store. Dropping such a field silently would make the app's own
+   * blind spot invisible; failing the whole refresh over it would throw away four counts the
+   * platform did report. So the record comes back without the field and the reason comes back beside
+   * it, and the service writes the reason to the integration log.
    */
-  list(postResultIds: readonly string[]): Promise<ProviderAnalyticsRecord[]>;
+  list(postResultIds: readonly string[]): Promise<ProviderAnalyticsList>;
   /**
    * The daily snapshots behind one record, oldest first, or an empty array where the provider keeps
    * none. Cumulative totals per day — the provider's `snapshots`, not its `deltas`.
@@ -72,6 +78,29 @@ export interface ProviderAnalyticsRecord {
   lastSyncedAt?: string;
   /** The platform's address for the measured content, where the provider supplies one. */
   shareUrl?: string;
+  /**
+   * How the provider says it matched this record to the platform's content, as its own token.
+   *
+   * Absent where the provider sent nothing and absent where it sent a shape this app will not store.
+   * Never defaulted: `docs/post-bridge-api-surface.md` §14 records the live values as unverified, so
+   * the only honest answer for a record without one is nothing at all.
+   */
+  matchConfidence?: string;
+  /** The platform's own identifier for the measured content, where the provider supplied one. */
+  platformPostId?: string;
+}
+
+/**
+ * What one `list` call answered: the records, and what it would not store.
+ *
+ * `warnings` is a list of already-bounded sentences, not a response body. A parser produces one when
+ * a provenance field arrives in a shape this app refuses — a match value that is not a short
+ * lower-case token, a platform identifier that is not text — and the sentence names the row and the
+ * shape without echoing anything unbounded back into the integration log.
+ */
+export interface ProviderAnalyticsList {
+  records: ProviderAnalyticsRecord[];
+  warnings: string[];
 }
 
 export interface ProviderAnalyticsDay {
@@ -101,7 +130,7 @@ export class UnavailableAnalyticsProvider implements AnalyticsProvider {
   async sync(): Promise<{ platforms: readonly AnalyticsPlatform[] }> {
     return this.fail();
   }
-  async list(_postResultIds: readonly string[]): Promise<ProviderAnalyticsRecord[]> {
+  async list(_postResultIds: readonly string[]): Promise<ProviderAnalyticsList> {
     void _postResultIds;
     return this.fail();
   }

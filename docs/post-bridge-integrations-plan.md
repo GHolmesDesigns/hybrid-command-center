@@ -820,6 +820,18 @@ the provider said.
 `npm run format:check`, `npm run build`, and `npm run db:migrate` against a
 real-database copy.
 
+#### Disposition, 22 August 2026 — built as #222, on a shape rule rather than the enum
+
+`docs/post-bridge-api-surface.md` §14 leaves question 5 with the one claim this card is named after:
+the values `match_confidence` actually takes, and whether a record can arrive without one, are
+**still unverified** — the run found no analytics rows to observe. That disposition stands, and this
+card was built anyway under §14's own exception — a claim blocks dependent work unless that work has
+an explicit path that cannot rely on it. That path, and what it leaves unbuilt, is recorded in
+`post-bridge-api-surface.md` §14 under *Disposition, 22 August 2026 — what C79 (#222) was built on*:
+the parser enforces `[a-z0-9_-]{1,40}` rather than an enum, both columns are nullable and nothing is
+defaulted, an unrecognised token renders as **Provider value: …** and can never wear `Exact`'s
+label, and the figures request is unchanged.
+
 ---
 
 ### C80 — Provider-filtered analytics over a verified window and known delivery set
@@ -827,6 +839,16 @@ real-database copy.
 **Type / branch:** `feat/<issue>-analytics-timeframe`
 **Size:** XL · **Labels:** `tier-3-schema` `size-xl`
 **Depends on:** C73. **Blocked unless C73 verifies response grain and timeframe semantics.**
+
+**Not blocked by a workspace fact after all (22 August 2026).** The earlier note here said no account
+on a measured platform was connected. `GET /v1/social-accounts`, run that day, returned a connected
+**Instagram** account, and Instagram is one of the three platforms Post Bridge measures. Every claim
+this card waits on — timeframe semantics, response grain, account mapping — is therefore askable in
+the ordinary way. What it still waits on is content: analytics rows exist only after a post has
+published from that account and the provider has counted it, and a probe run cannot manufacture one,
+because it refuses any instant under 48 hours out and deletes what it creates in a `finally`.
+Recorded in `post-bridge-api-surface.md` §14 under *Not askable from this workspace*, in the askable
+half.
 
 #### Problem
 
@@ -905,6 +927,15 @@ real-database copy.
 **Size:** L · **Labels:** `enhancement` `size-l`
 **Depends on:** C73.
 
+**This card splits under the provider account cap (22 August 2026).** Instagram `cover_image` is
+askable: Instagram is connected to Post Bridge and the row needs only that account and `--video`.
+YouTube `contains_synthetic_media` and the TikTok disclosure toggles are not, and not because a run
+has yet to be scheduled — Post Bridge will not hold TikTok and YouTube at the same time as the five
+accounts this studio publishes on, so those two platforms publish through Buffer and no probe run with
+any arguments can reach them. This card cannot be wholly satisfied from Post Bridge, and should say
+which half it is shipping rather than wait for a slot the cap will not release. Recorded in
+`post-bridge-api-surface.md` §14 under *Not askable from this workspace*.
+
 #### Problem
 
 `signal_post_variants.disclose_synthetic_media` never reaches a provider field, and OpenAPI names
@@ -969,6 +1000,17 @@ against its explicitly approved account; none for negative or inconclusive field
 **Size:** S · **Labels:** `docs` `size-s`
 **Depends on:** every preceding card having a recorded resolution—merged, negative, or
 will-not-build. A negative C73 result does not block documentation of that result.
+
+**A recorded resolution may be *not askable here* — for three rows (22 August 2026).** YouTube
+`thumbnail`, YouTube `contains_synthetic_media`, and the TikTok disclosure toggles are not waiting on
+a run. A provider account cap keeps TikTok and YouTube off Post Bridge whenever the five accounts this
+studio publishes on are connected, so those platforms publish through Buffer, which is not an
+`AnalyticsProvider`. That is a recorded resolution in this card's sense — the ground is named and the
+precondition is written down — and it is not a negative result, which would be the provider having
+answered. The other five rows the earlier note swept in are askable through the connected Instagram
+account and belong in this card as ordinary pending work.
+`post-bridge-api-surface.md` §14 under *Not askable from this workspace* is what this card cites
+rather than restates.
 
 #### Problem
 
