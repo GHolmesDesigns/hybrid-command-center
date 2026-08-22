@@ -31,7 +31,7 @@ import { type SignalChannel, type SignalFormat } from './signal.ts';
  * and not a field here.
  */
 
-/** Every platform this contract answers for. Post Bridge reaches all ten; Signal plans for seven. */
+/** Every platform this contract answers for. Post Bridge reaches all ten; Signal plans for eight. */
 export const PUBLISH_PLATFORMS = [
   'twitter',
   'facebook',
@@ -68,17 +68,18 @@ export const PUBLISH_PLATFORM_LABEL: Record<PublishPlatform, string> = {
  * provider** from a channel the contract simply fails to cover, which refuses instead
  * (`docs/publishing-integration.md` §10).
  *
- * Post Bridge also reaches `pinterest`, `threads`, and `google_business`. Signal has no channel for
- * them and none is invented — a channel exists because content is planned for it.
+ * Post Bridge also reaches `pinterest` and `google_business`. Signal has no channel for them and
+ * none is invented — a channel exists because content is planned for it.
  */
 export const SIGNAL_CHANNEL_PLATFORM: Record<SignalChannel, PublishPlatform | null> = {
   blog: null,
-  ig: 'instagram',
-  x: 'twitter',
   bsky: 'bluesky',
-  li: 'linkedin',
   fb: 'facebook',
+  ig: 'instagram',
+  li: 'linkedin',
+  th: 'threads',
   tt: 'tiktok',
+  x: 'twitter',
   yt: 'youtube',
 };
 

@@ -108,7 +108,7 @@ describe('next open Signal slot', () => {
 describe('Signal channel treatments', () => {
   /** The two backgrounds a chip is ever laid on: a planner tile and the tile under the cursor. */
   const PAPER = { paper: '#ffffff', hover: '#f7f8f5' };
-  /** The eight and the neutral, since an unrecognised value is held to the same bar as a known one. */
+  /** The nine and the neutral, since an unrecognised value is held to the same bar as a known one. */
   const EVERY = [
     ...SIGNAL_CHANNELS.map((channel) => [channel, SIGNAL_CHANNEL_TREATMENT[channel]] as const),
     ['(neutral)', SIGNAL_CHANNEL_NEUTRAL] as const,
@@ -141,7 +141,7 @@ describe('Signal channel treatments', () => {
       expect([name, border]).toEqual([name, mixHex(text, surface, 0.22)]);
   });
 
-  it('keeps the eight apart from each other and the neutral apart from all of them', () => {
+  it('keeps the nine apart from each other and the neutral apart from all of them', () => {
     const fills = EVERY.map(([, treatment]) => treatment.surface);
     expect(new Set(fills).size).toBe(EVERY.length);
     const inks = EVERY.map(([, treatment]) => treatment.text);
@@ -172,7 +172,7 @@ describe('Signal channel presentation', () => {
       });
   });
 
-  it('never repeats an initial, so the eight survive greyscale', () => {
+  it('never repeats an initial, so the nine survive greyscale', () => {
     const initials = SIGNAL_CHANNELS.map((channel) => SIGNAL_CHANNEL_INITIAL[channel]);
     expect(new Set(initials).size).toBe(SIGNAL_CHANNELS.length);
     expect(initials.every((initial) => initial.length > 0)).toBe(true);

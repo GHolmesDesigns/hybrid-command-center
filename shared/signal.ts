@@ -34,7 +34,7 @@ import { signalMediaKindForMime, type SignalPostMedia } from './signal-media.ts'
  */
 
 /** The channels a post can go out on. Fixed vocabulary, not user-managed. */
-export const SIGNAL_CHANNELS = ['blog', 'ig', 'x', 'bsky', 'li', 'fb', 'tt', 'yt'] as const;
+export const SIGNAL_CHANNELS = ['blog', 'bsky', 'fb', 'ig', 'li', 'th', 'tt', 'x', 'yt'] as const;
 export type SignalChannel = (typeof SIGNAL_CHANNELS)[number];
 
 /** Media kind inferred from a public URL's extension. No network request is made. */
@@ -161,12 +161,13 @@ export function signalMediaKindFor(
 
 export const SIGNAL_CHANNEL_LABEL: Record<SignalChannel, string> = {
   blog: 'Blog',
-  ig: 'Instagram',
-  x: 'X',
   bsky: 'Bluesky',
-  li: 'LinkedIn',
   fb: 'Facebook',
+  ig: 'Instagram',
+  li: 'LinkedIn',
+  th: 'Threads',
   tt: 'TikTok',
+  x: 'X',
   yt: 'YouTube',
 };
 
@@ -176,12 +177,13 @@ export const SIGNAL_CHANNEL_LABEL: Record<SignalChannel, string> = {
  */
 export const SIGNAL_CHANNEL_INITIAL: Record<SignalChannel, string> = {
   blog: 'Bl',
-  ig: 'IG',
-  x: 'X',
   bsky: 'BS',
-  li: 'in',
   fb: 'f',
+  ig: 'IG',
+  li: 'in',
+  th: 'TH',
   tt: 'TT',
+  x: 'X',
   yt: 'YT',
 };
 
@@ -223,23 +225,24 @@ const treatment = (text: string, surface: string): SignalChannelTreatment => ({
  * no externally hosted asset for a channel.
  *
  * Hue is the fast cue and never the only one — `SIGNAL_CHANNEL_INITIAL` rides on top of every
- * chip and `SIGNAL_CHANNEL_LABEL` is what a screen reader is handed, so the eight stay apart
+ * chip and `SIGNAL_CHANNEL_LABEL` is what a screen reader is handed, so the nine stay apart
  * in greyscale, with colours turned off, and read aloud.
  */
 export const SIGNAL_CHANNEL_TREATMENT: Record<SignalChannel, SignalChannelTreatment> = {
   blog: treatment('#8a5711', '#faead0'),
-  ig: treatment('#a3306b', '#fbe3ef'),
-  x: treatment('#3b3f52', '#e6e8ef'),
   bsky: treatment('#1a6a86', '#dbeef5'),
-  li: treatment('#2f4b93', '#e2e8f8'),
   fb: treatment('#5b479f', '#e9e4f8'),
+  ig: treatment('#a3306b', '#fbe3ef'),
+  li: treatment('#2f4b93', '#e2e8f8'),
+  th: treatment('#4a3560', '#f0eaf8'),
   tt: treatment('#0f6f6c', '#d9eeed'),
+  x: treatment('#3b3f52', '#e6e8ef'),
   yt: treatment('#b03a35', '#fbe0dd'),
 };
 
 /**
  * What an unrecognised value is painted in: the one neutral in the set, held to the same
- * contrast bar as the eight. A stored channel is validated against `SIGNAL_CHANNELS` before it
+ * contrast bar as the nine. A stored channel is validated against `SIGNAL_CHANNELS` before it
  * reaches a view, so this is the treatment nothing should need — which is exactly why it has to
  * be legible rather than absent, since a chip with no colours at all is an invisible chip.
  */
