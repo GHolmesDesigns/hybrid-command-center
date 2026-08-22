@@ -33,8 +33,9 @@ Nothing in this app is reachable off loopback by design, and the server enforces
 - **Files** — read-only browsing of a project's Drive folder and its provisioned subfolders: paginated listing, type/size/modified for every item, and "Open in Drive" on every row. It uploads, downloads, moves, renames, and deletes nothing, and every Drive failure mode has its own state and next step
 - **Integration activity** — an append-only record of what each integration changed, when, and how it ended, naming the affected clients, projects, and tasks by id, bounded to the most recent 200 rows, credential-scrubbed, and shown on the Import page beside the receipt it belongs to
 - **Signal Campaign** — the authoritative store and operable planner for content: month grid, unscheduled queue, quick idea capture, and a full editor for content, channels, ordered media references — public URLs and version-bound Drive files — date, time, format, status, campaigns, and CTA, with duplicate-to-queue, next-open-slot suggestion, and confirmed deletion
-- **Queue health** — an in-app summary above the planner deriving six alerts from your own posts and deliveries: a failed or partly delivered post, a manual finish waiting on you, a scheduled slot approaching with nothing submitted, a provider answer that moved at the last check, a channel with nothing planned inside a configurable window, and a provider synchronisation that is rate-limited or behind. Each line links to the post it is about, and acknowledging one changes no planning or delivery state. In-app only — no email, SMS, or push service
+- **Queue health** — an in-app summary above the planner deriving seven alerts from your own posts, deliveries, and the last inventory read: a failed or partly delivered post, a manual finish waiting on you, a scheduled slot approaching with nothing submitted, a provider answer that moved at the last check, a channel with nothing planned inside a configurable window, a provider synchronisation that is rate-limited or behind, and posts at the provider that this app did not send. Each line links to the post it is about, and acknowledging one changes no planning or delivery state. In-app only — no email, SMS, or push service
 - **Figures** — the platforms’ own counts for a post that went out: provider-reported views, likes, comments, and shares per delivery, with the daily snapshots behind them shown as per-day gains, the time of the last synchronisation, and a refresh that runs only when you press it. A channel this provider does not measure says **Not available from this provider** rather than showing a zero, a rate-limited provider is waited out rather than hammered, and a refresh that fails leaves the last known good figures on screen
+- **Provider inventory** — a read-only panel below the planner listing what Post Bridge is holding, marking each row as sent from here or not: its state, when it goes out, which accounts it names, and a link out where the provider supplies one. It refreshes only when you press it, reads every page before it stores anything, and replaces the whole inventory in one step or replaces nothing and says why. It cannot adopt, edit, reschedule, or withdraw a post the app did not send — the point is that such a post stops being invisible before it collides with a slot the planner shows as empty
 - **Signal campaigns** — a shared vocabulary labelling Signal posts the way categories label projects: a post carries as many as it needs, two spellings of one name are one campaign, renaming one reaches every post in a single write, and deleting one detaches it without deleting a post. Managed in Settings or typed straight into a post
 - **Campaign figures** — the platforms' own counts added up per campaign, below the planner: totals, a compact daily trend, and filters for campaign, channel, account, and date range, with several campaigns read as *or*. Every group says how many of its deliveries are measured beside its total, a group with nothing measured says so rather than showing zeros, unclassified posts stay visible under **No campaign**, and the panel contacts no provider — it reads the figures a post's own refresh already stored
 - **Calendar** — a read-only month agenda putting Signal's scheduled content beside task due dates, kept as two headed groups rather than one merged list of "events", with empty days dropped. It writes nothing, and a schedule it cannot read degrades the page to task due dates alone with the reason shown
@@ -486,9 +487,11 @@ it and never writes.
   editing a task. The log is for what an *integration* did.
 - **Queue health is derived, never stored.** A failed delivery, a slot about to pass unfilled, a
   manual finish waiting on somebody, a provider answer that moved, a channel with nothing planned,
-  and a synchronisation that is behind are all conclusions about rows that already exist —
-  `shared/queue-health.ts` reaches them from posts, publications, and one record of the last
-  provider synchronisation, and the summary is recomputed on every read so it cannot go stale.
+  a synchronisation that is behind, and a post at the provider that this app did not send are all
+  conclusions about rows that already exist —
+  `shared/queue-health.ts` reaches them from posts, publications, one record of the last
+  provider synchronisation, and the stored provider inventory, and the summary is recomputed on
+  every read so it cannot go stale.
   Acknowledging one writes a single row to `signal_alert_acks` and touches nothing it reports; the
   row carries the fingerprint of the facts that were seen, so a situation that changes comes back as
   a live alert. No email, SMS, or push service is involved — the summary lives in the app.
@@ -499,6 +502,18 @@ it and never writes.
   publication, or delivery row — so a figure can never rewrite a plan or a delivery answer. A
   channel outside TikTok, YouTube, and Instagram has no figure at all rather than a figure of zero,
   and a failed refresh keeps the last values instead of replacing them.
+- **The provider inventory is one snapshot generation, replaced whole or not at all.** A refresh
+  reads every page of `GET /v1/posts` before the first row is written — `providerInventoryNextPage`
+  is the verified pagination contract, shared with the probe that verified it, and a repeated offset,
+  an unreadable page, or a safety bound stops the walk. A complete read then replaces
+  `signal_provider_posts` in one transaction: ids the provider no longer lists are deleted, the rest
+  are upserted, every row carries the same `snapshot_at`, and one `SUCCESS` event is written. A read
+  that could not be finished replaces nothing, leaves the whole prior generation in place, and writes
+  one `FAILURE` event — so there is no mixed-generation inventory and no row that alerts for ever
+  merely because it disappeared. `ProviderInventoryProvider` can only list, and nothing on that path
+  can adopt, edit, reschedule, or withdraw one of the provider's posts. It refreshes only when a
+  person presses something; the alert is derived from the stored rows, so `deriveQueueHealth` still
+  makes no network call.
 - **Campaigns are a normalized join, and the free-text column they replaced is frozen.** A campaign
   is a row in `signal_campaigns` attached through `signal_post_campaigns`, exactly as tags label
   tasks and categories label projects — so a post can belong to several (the campaign *and* the week
@@ -727,7 +742,7 @@ Schedule `db:backup` the same way if you want unattended snapshots — same comm
 
 **Files:** `/files` has shipped read-only — `DriveProvider.listFiles` plus `server/drive/browse.ts` and the `GET /api/projects/:id/files` boundary. Extending it means adding upload/download/move/rename/search methods to the provider and a write path beside `browse.ts`, which stays read-only; a mutation belongs in its own module with its own confirmation flow. Continue storing only Drive IDs and metadata locally. UI components should never import `googleapis`.
 
-**Publishing:** the first Post Bridge implementation follows [`docs/publishing-integration.md`](docs/publishing-integration.md). It previews and confirms one scheduled Signal post, preflights its channels and ordered media, records delivery per publication, and blocks ambiguous retries. A post the provider already holds can then be updated, rescheduled, withdrawn, or resubmitted — each from a no-write comparison the user confirms, never as a side effect of a Signal edit, and never against a post the provider has already published (§7.2). `blog` remains outside every provider. Figures are read back against the provider’s own result identity per delivery, captured by reconciliation, through a service beside the publisher rather than inside it (§16).
+**Publishing:** the first Post Bridge implementation follows [`docs/publishing-integration.md`](docs/publishing-integration.md). It previews and confirms one scheduled Signal post, preflights its channels and ordered media, records delivery per publication, and blocks ambiguous retries. A post the provider already holds can then be updated, rescheduled, withdrawn, or resubmitted — each from a no-write comparison the user confirms, never as a side effect of a Signal edit, and never against a post the provider has already published (§7.2). `blog` remains outside every provider. Figures are read back against the provider’s own result identity per delivery, captured by reconciliation, through a service beside the publisher rather than inside it (§16). What the provider is holding is read the same way — a third interface that can only list, one snapshot generation replaced whole or not at all, and nothing that can act on a post this app did not send ([`docs/post-bridge-api-surface.md`](docs/post-bridge-api-surface.md) §6).
 
 **Cloud hosting:** recommended, awaiting sign-off, unbuilt. [`docs/cloud-hosting.md`](docs/cloud-hosting.md) names a private single-instance remote deploy for one operator, SQLite on the host as authoritative, password-session authentication before any non-loopback bind, production Drive redirect URIs, and a C10 backup/restore cutover. Read it before opening an Infra 2 implementation card. Its §5.1 bind gate is the one part now enforced in `server/config.ts`, which refuses a non-loopback `HOST` outright; an implementation card widens that check to the full checklist — password hash, session secret, `https:` `APP_ORIGIN`, TLS acknowledgement — rather than removing it.
 

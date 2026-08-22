@@ -98,12 +98,21 @@ import {
 import type { DriveProvider } from './drive/provider.ts';
 import type { PublishProvider } from './publish/provider.ts';
 import { UnavailablePublishProvider } from './publish/provider.ts';
-import { PostBridgeAnalyticsProvider, PostBridgeProvider } from './publish/post-bridge.ts';
+import {
+  PostBridgeAnalyticsProvider,
+  PostBridgeInventoryProvider,
+  PostBridgeProvider,
+} from './publish/post-bridge.ts';
 import { PublishAnalyticsService } from './publish/analytics.ts';
 import {
   UnavailableAnalyticsProvider,
   type AnalyticsProvider,
 } from './publish/analytics-provider.ts';
+import { ProviderInventoryService } from './publish/inventory.ts';
+import {
+  UnavailableProviderInventoryProvider,
+  type ProviderInventoryProvider,
+} from './publish/inventory-provider.ts';
 import { PublishRequestError, PublishService } from './publish/service.ts';
 import { PROVIDER_ACTIONS } from '../shared/publish.ts';
 import {
@@ -231,6 +240,12 @@ export type AppOptions = {
    * wants to rehearse a rate-limited synchronisation sets only this one.
    */
   analytics?: AnalyticsProvider;
+  /**
+   * Test-only inventory provider, separate again for the same reason: what the orphan panel is handed
+   * can list the provider's posts and cannot submit, update, cancel, or measure anything. A suite
+   * rehearsing a multi-page walk or a page failure sets only this one.
+   */
+  inventory?: ProviderInventoryProvider;
   /** Fixed configured zone for publishing tests and deployments. */
   publishTimezone?: string;
   /**
@@ -509,6 +524,16 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       (publishConfigured()
         ? new PostBridgeAnalyticsProvider(config.publish.apiKey)
         : new UnavailableAnalyticsProvider()),
+    clock,
+  );
+  // Beside both of them, holding a provider that can only list. Nothing on this path can reach a
+  // post, a publication, a target, or a figure.
+  const inventory = new ProviderInventoryService(
+    db,
+    options.inventory ??
+      (publishConfigured()
+        ? new PostBridgeInventoryProvider(config.publish.apiKey)
+        : new UnavailableProviderInventoryProvider()),
     clock,
   );
   app.use(
@@ -1526,6 +1551,36 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   app.delete('/api/signal/health/alerts/:id/acknowledge', (req, res, next) => {
     try {
       res.json(restoreQueueAlert(db, req.params.id, clock()));
+    } catch (error) {
+      next(error);
+    }
+  });
+  /**
+   * What else is in Post Bridge, as the last refresh stored it.
+   *
+   * A local read: no provider call on any path, so opening the planner spends no provider request
+   * and cannot be the thing that discovers an orphan. The rows are whatever somebody's own press of
+   * **Refresh inventory** last read.
+   */
+  app.get('/api/signal/provider-inventory', (_req, res, next) => {
+    try {
+      res.json(inventory.read());
+    } catch (error) {
+      next(error);
+    }
+  });
+  /**
+   * One person-pressed refresh: read every page, then replace the generation or replace nothing.
+   *
+   * The only route that lists the provider's posts, and it runs only because somebody pressed
+   * something — there is no timer on this path. A failed read is not a `4xx`: it answers with the
+   * inventory that is still stored and the reason the refresh replaced none of it, because a panel
+   * showing nothing where it should be showing last week's rows would hide the orphan rather than
+   * report a failure.
+   */
+  app.post('/api/signal/provider-inventory/refresh', async (_req, res, next) => {
+    try {
+      res.json(await inventory.refresh());
     } catch (error) {
       next(error);
     }

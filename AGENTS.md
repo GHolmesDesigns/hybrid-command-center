@@ -135,7 +135,22 @@
   opening a campaign view can never spend a synchronisation. Its date range asks *which posts*, not
   *which days* — a post scheduled inside it brings its whole measured history, and an undated post is
   in no range at all.
-- Queue health is derived, never stored. `shared/queue-health.ts` concludes every alert from rows that already exist — posts, publications, targets, and the record of the last provider synchronisation — and `server/signal/queue-health.ts` only gathers them, so there is no alerts table to fall out of step with what it reports. Acknowledging writes one row to `signal_alert_acks` and nothing else: it must never touch a post, a publication, a target, or a planning status, and it writes no `integration_events` row. The acknowledgement carries the fingerprint of the facts it was shown, so a situation that moves on comes back as a live alert rather than staying dismissed. Adding an alert kind means a rule in the shared module and a fixture test beside it, never a check inside a component.
+- **What the provider is holding is a snapshot, replaced whole or not at all.**
+  `server/publish/inventory.ts` reads `GET /v1/posts` through a fourth provider interface —
+  `ProviderInventoryProvider`, which can only list, beside `PublishProvider` and `AnalyticsProvider`
+  for the same reason `browse.ts` sits beside `service.ts`. Every page is read before the first
+  statement runs: a repeated offset, an unreadable page, an unverified next-page token, or a
+  page/row safety bound fails the refresh, and a failed refresh replaces nothing and leaves the whole
+  prior generation in place. A complete read replaces `signal_provider_posts` in one transaction —
+  ids the provider no longer lists deleted, the rest upserted, one `snapshot_at` across the
+  generation — so there is no mixed-generation inventory. The outcome is `SUCCESS` or `FAILURE` and
+  never `PARTIAL`, because the write is one transaction after every read. `refresh` is reached only by
+  a person pressing something, and the pagination rule itself is `shared/provider-inventory.ts`,
+  shared with the probe that verified it — one rule, not two copies. Nothing on this path can adopt,
+  import, edit, reschedule, or withdraw a provider post: those are declined in §0.3 of
+  `docs/post-bridge-integrations-plan.md` and no method exists for them. A row stores a bounded
+  caption excerpt and never a raw response.
+- Queue health is derived, never stored. `shared/queue-health.ts` concludes every alert from rows that already exist — posts, publications, targets, the record of the last provider synchronisation, and the stored provider inventory — and `server/signal/queue-health.ts` only gathers them, so there is no alerts table to fall out of step with what it reports. Acknowledging writes one row to `signal_alert_acks` and nothing else: it must never touch a post, a publication, a target, or a planning status, and it writes no `integration_events` row. The acknowledgement carries the fingerprint of the facts it was shown, so a situation that moves on comes back as a live alert rather than staying dismissed. Adding an alert kind means a rule in the shared module and a fixture test beside it, never a check inside a component.
 - Pair visual status colors with text or icons and preserve visible keyboard focus.
 - Prefer small service/provider boundaries over generic abstractions.
 

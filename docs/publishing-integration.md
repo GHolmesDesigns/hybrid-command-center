@@ -1175,6 +1175,17 @@ note; this implementation does not depend on the vendor's documented cleanup tim
 it yet"; C68 (#195) gave it one, and §16 is the record. What stays undecided there is named in §16
 rather than here.
 
+**One narrow piece of planner UI has moved off it too.** "The planner UI beyond the confirmed submit
+flow and publication state" now admits one read-only panel: **what the provider is holding**,
+including posts this app did not send. C78 (#221) built it, and
+[`post-bridge-api-surface.md`](post-bridge-api-surface.md) §6 and §14 are the record — the design is
+one provider interface that can only list (`ProviderInventoryProvider`), a walk that reads every page
+before a single row is written, one snapshot generation replaced in one transaction or not at all, and
+a `WATCH` alert derived from the stored rows. What stays undecided is everything that would *act* on
+one of those posts: adoption, linking, import, cancelling, and updating are declined in §0.3 of
+[`post-bridge-integrations-plan.md`](post-bridge-integrations-plan.md), and no automatic refresh
+exists on that path.
+
 ## 15. Acceptance
 
 - [x] One provider and one interface shape, not a menu — §1, §2, §4.
@@ -1192,6 +1203,9 @@ rather than here.
       on-demand preview per target account that the server fetches nothing for — §3.3, C62 (#189).
 - [x] Provider result identity captured per delivery, and figures read through a service that has no
       way to publish, reschedule, or cancel anything — §16, C68 (#195).
+- [x] What the provider is holding read on request through an interface that can only list, stored as
+      one snapshot generation replaced whole or not at all, and surfaced as a derived alert that no
+      page load can spend a provider request on — §14, C78 (#221).
 
 ---
 
