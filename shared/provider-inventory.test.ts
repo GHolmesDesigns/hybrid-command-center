@@ -123,7 +123,7 @@ describe('the fingerprint an acknowledgement is taken against', () => {
       post({ providerPostId: 'b', state: 'SCHEDULED' }),
     ]);
     expect(one).toBe(other);
-    expect(one).toBe('a:DRAFT|b:SCHEDULED');
+    expect(one).toBe('post-bridge:a:DRAFT|post-bridge:b:SCHEDULED');
   });
 
   it('changes when an orphan is published, and when another one appears', () => {

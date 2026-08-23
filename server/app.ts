@@ -104,6 +104,7 @@ import {
   PostBridgeAnalyticsWindowProvider,
   PostBridgeProvider,
 } from './publish/post-bridge.ts';
+import { resolveProviderAccounts } from './publish/accounts.ts';
 import { PublishAnalyticsService } from './publish/analytics.ts';
 import {
   UnavailableAnalyticsProvider,
@@ -1831,7 +1832,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
           db,
           req.params.id,
           signalPublishTargetsInput.parse(req.body),
-          await publishProvider.listTargets(),
+          resolveProviderAccounts(db, await publishProvider.listTargets(), clock),
           clock,
         ),
       );

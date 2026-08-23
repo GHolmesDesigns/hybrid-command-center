@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
-import { createDb, type Db } from '../db.ts';
+import { backfillProviderAccounts, createDb, type Db } from '../db.ts';
 import { createApp } from '../app.ts';
 import { listIntegrationEvents } from '../integration-log.ts';
 import { readQueueHealth } from '../signal/queue-health.ts';
@@ -90,6 +90,7 @@ function seedPublication(
        publication_id,channel,provider_account_id,handle,mode,outcome
      ) VALUES(?,?,?,?,'AUTOMATIC','SUCCESS')`,
   ).run(id, options.channel ?? 'x', options.accountId ?? 901, options.handle ?? '@studio');
+  backfillProviderAccounts(db);
   return post;
 }
 
@@ -101,7 +102,10 @@ const events = () =>
 const storedIds = () =>
   (
     db
-      .prepare('SELECT provider_post_id FROM signal_provider_posts ORDER BY provider_post_id')
+      .prepare(
+        `SELECT provider_post_id FROM signal_provider_inventory_posts
+          WHERE provider='post-bridge' ORDER BY provider_post_id`,
+      )
       .all() as { provider_post_id: string }[]
   ).map((row) => row.provider_post_id);
 
@@ -273,15 +277,20 @@ describe('replacing one generation with another', () => {
       ]),
     ).refresh();
     expect(readProviderInventoryEntries(db)[0]).toEqual({
+      provider: 'post-bridge',
       providerPostId: 'remote-7',
       state: 'SCHEDULED',
       scheduledInstant: null,
       captionExcerpt: 'Scheduled straight in Post Bridge',
-      accountIds: [901, 902],
+      accountIds: [],
+      accountRefs: ['901', '902'],
       providerUrl: 'https://p.example/remote-7',
       snapshotAt: NOW.toISOString(),
       orphan: true,
-      accounts: [{ accountId: 901 }, { accountId: 902 }],
+      accounts: [
+        { provider: 'post-bridge', accountRef: '901' },
+        { provider: 'post-bridge', accountRef: '902' },
+      ],
     });
   });
 
@@ -289,8 +298,14 @@ describe('replacing one generation with another', () => {
     seedPublication('remote-1', { accountId: 901, handle: '@studio', channel: 'ig' });
     await service(holding([listed({ providerPostId: 'other', accountIds: [901, 999] })])).refresh();
     expect(readProviderInventoryEntries(db)[0]?.accounts).toEqual([
-      { accountId: 901, handle: '@studio', channel: 'ig' },
-      { accountId: 999 },
+      {
+        accountId: 901,
+        provider: 'post-bridge',
+        accountRef: '901',
+        handle: '@studio',
+        channel: 'ig',
+      },
+      { provider: 'post-bridge', accountRef: '999' },
     ]);
   });
 });
@@ -430,7 +445,9 @@ describe('reading the stored inventory', () => {
 
   it('reads a stored state this build does not know as the fail-closed one', async () => {
     await service(holding([listed()])).refresh();
-    db.prepare("UPDATE signal_provider_posts SET state='INVENTED', account_ids='oops'").run();
+    db.prepare(
+      "UPDATE signal_provider_inventory_posts SET state='INVENTED', account_refs='oops'",
+    ).run();
     expect(readProviderInventoryEntries(db)[0]).toMatchObject({
       state: 'PROCESSING',
       accountIds: [],

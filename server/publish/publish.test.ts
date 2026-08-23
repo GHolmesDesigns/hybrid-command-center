@@ -1019,7 +1019,15 @@ describe('planning status and delivery stay apart end to end', () => {
     const preview = await service.preview(post.id);
     // The preview knows the route before anything is sent, per channel and per target.
     expect(preview.targets).toEqual([
-      { channel: 'x', platform: 'twitter', accountId: 1, handle: '@gholmes', mode: 'AUTOMATIC' },
+      {
+        channel: 'x',
+        platform: 'twitter',
+        accountId: 1,
+        provider: 'post-bridge',
+        accountRef: '1',
+        handle: '@gholmes',
+        mode: 'AUTOMATIC',
+      },
     ]);
     expect(reportFor(preview, 'blog').mode).toBe('UNSUPPORTED');
 
@@ -1029,6 +1037,8 @@ describe('planning status and delivery stay apart end to end', () => {
         channel: 'x',
         platform: 'twitter',
         accountId: 1,
+        provider: 'post-bridge',
+        accountRef: '1',
         handle: '@gholmes',
         mode: 'AUTOMATIC',
       },
@@ -2283,5 +2293,42 @@ describe('a publication migrated from before the media snapshot', () => {
       preview.reconcileHash,
     );
     expect(updated.sentMedia).toEqual(['https://cdn.example.com/a.jpg']);
+  });
+});
+
+describe('provider-qualified delivery identity', () => {
+  const serviceAt = (provider: MockPublishProvider, instant: string) =>
+    new PublishService(
+      db,
+      new LocalSignalProvider(db),
+      provider,
+      'America/New_York',
+      () => new Date(instant),
+    );
+
+  it('changes the reconcile hash when a target remote post id moves', async () => {
+    const post = add({ channels: ['x'] });
+    const provider = new MockPublishProvider(targets);
+    const service = serviceAt(provider, '2026-01-01T00:00:00.000Z');
+    const plan = await service.preview(post.id);
+    const publication = await service.submit(post.id, plan.planHash);
+    const before = await service.providerPreview(publication.id);
+    db.prepare(
+      `UPDATE signal_publication_targets SET remote_post_id='buffer-post:opaque'
+        WHERE publication_id=? AND provider_account_id=1`,
+    ).run(publication.id);
+    const after = await service.providerPreview(publication.id);
+    expect(after.reconcileHash).not.toBe(before.reconcileHash);
+  });
+
+  it('never checks a Buffer publication through the Post Bridge adapter', async () => {
+    const post = add({ channels: ['x'] });
+    const provider = new MockPublishProvider(targets);
+    const service = serviceAt(provider, '2026-01-01T00:00:00.000Z');
+    const plan = await service.preview(post.id);
+    const publication = await service.submit(post.id, plan.planHash);
+    db.prepare("UPDATE signal_publications SET provider='buffer' WHERE id=?").run(publication.id);
+    await expect(service.reconcile(publication.id)).rejects.toThrow(/cannot be queried through/);
+    expect(provider.checks).toEqual([]);
   });
 });

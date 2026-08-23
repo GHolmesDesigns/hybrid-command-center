@@ -203,6 +203,8 @@ export function postMetricAvailability(input: {
 export interface PostTargetMetrics {
   publicationId: string;
   accountId: number;
+  provider?: string;
+  accountRef?: string;
   channel: SignalChannel;
   platform: PublishPlatform | null;
   /** The handle as the publication snapshotted it, so a row stays readable after a rename. */
@@ -242,7 +244,8 @@ export interface PostTargetMetrics {
 
 /** Whether a refresh should ask the provider about this delivery's figures. */
 export const postMetricsSyncable = (target: PostTargetMetrics): boolean =>
-  target.availability === 'AWAITING_SYNC' || target.availability === 'AVAILABLE';
+  (target.provider ?? 'post-bridge') === 'post-bridge' &&
+  (target.availability === 'AWAITING_SYNC' || target.availability === 'AVAILABLE');
 
 /**
  * Whether a refresh may run now, and what to say when it may not.

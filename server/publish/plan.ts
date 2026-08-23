@@ -378,6 +378,9 @@ function resolveTarget(
   };
 }
 
+const targetProvider = (target: PublishTarget): string => target.provider ?? 'post-bridge';
+const targetAccountRef = (target: PublishTarget): string => target.accountRef ?? String(target.id);
+
 /**
  * The same resolution, as the list every later stage reads.
  *
@@ -575,6 +578,8 @@ function reportForChannel(
           const target = resolution.target as PublishTarget;
           return {
             accountId: target.id,
+            provider: targetProvider(target),
+            accountRef: targetAccountRef(target),
             handle: target.handle || target.name,
             content: resolution.content,
             status: (resolution.refusals.length ? 'BLOCKED' : 'READY') as PublishChannelStatus,
@@ -616,7 +621,12 @@ function reportForChannel(
     mode: primary.content.deliveryMode,
     status: refusals.length || anyTargetBlocked ? 'BLOCKED' : 'READY',
     ...(primary.target
-      ? { accountId: primary.target.id, handle: primary.target.handle || primary.target.name }
+      ? {
+          accountId: primary.target.id,
+          provider: targetProvider(primary.target),
+          accountRef: targetAccountRef(primary.target),
+          handle: primary.target.handle || primary.target.name,
+        }
       : {}),
     content: primary.content,
     ...(targetReports ? { targets: targetReports } : {}),
@@ -858,6 +868,8 @@ export function buildPublishPlan(
           channel: report.channel,
           platform: report.platform as string,
           accountId: entry.accountId,
+          provider: entry.provider,
+          accountRef: entry.accountRef,
           handle: entry.handle,
           mode: report.mode,
         }));
@@ -867,6 +879,8 @@ export function buildPublishPlan(
             channel: report.channel,
             platform: report.platform as string,
             accountId: report.accountId,
+            provider: report.provider as string,
+            accountRef: report.accountRef as string,
             handle: report.handle as string,
             mode: report.mode,
           },
@@ -1008,6 +1022,8 @@ export function buildPublishPlan(
     channels,
     connectedAccounts: connected.map((account) => ({
       id: account.id,
+      provider: targetProvider(account),
+      accountRef: targetAccountRef(account),
       platform: account.platform,
       handle: account.handle,
       name: account.name,
@@ -1033,6 +1049,8 @@ export function buildPublishPlan(
       timezone: zone,
       targets: targets.map((target) => ({
         accountId: target.accountId,
+        provider: target.provider,
+        accountRef: target.accountRef,
         platform: target.platform,
       })),
       ...(accountConfigurations.length ? { accountConfigurations } : {}),

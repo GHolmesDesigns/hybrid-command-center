@@ -102,7 +102,8 @@ export function readAnalyticsWindowDeliveries(
               t.post_result_id
          FROM signal_publication_targets t
          JOIN signal_publications p ON p.id = t.publication_id
-        WHERE t.post_result_id IS NOT NULL AND t.post_result_id <> ''
+        WHERE p.provider='post-bridge'
+          AND t.post_result_id IS NOT NULL AND t.post_result_id <> ''
         ORDER BY p.created_at ASC, p.id, t.provider_account_id`,
     )
     .all() as unknown as {

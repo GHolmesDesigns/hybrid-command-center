@@ -53,16 +53,25 @@ export interface TargetRow {
   manual_completed_at: string | null;
   /** The provider's `post-results` row id. NULL until a check has reported one. */
   post_result_id: string | null;
+  remote_post_id: string | null;
+  account_provider?: string | null;
+  provider_account_ref?: string | null;
 }
 
-export const toTarget = (row: TargetRow): SignalPublicationTarget => ({
+export const toTarget = (
+  row: TargetRow,
+  publicationProvider = 'post-bridge',
+): SignalPublicationTarget => ({
   channel: row.channel as SignalChannel,
   platform: publishPlatformFor(row.channel) ?? null,
   accountId: row.provider_account_id,
+  provider: row.account_provider ?? publicationProvider,
+  accountRef: row.provider_account_ref ?? String(row.provider_account_id),
   handle: row.handle,
   mode: row.mode as DeliveryMode,
   ...(row.outcome ? { outcome: row.outcome } : {}),
   ...(row.post_result_id ? { resultId: row.post_result_id } : {}),
+  ...(row.remote_post_id ? { remotePostId: row.remote_post_id } : {}),
   ...(row.permalink ? { permalink: row.permalink } : {}),
   ...(row.error ? { error: row.error } : {}),
   ...(row.manual_completed_at ? { manualCompletedAt: row.manual_completed_at } : {}),
@@ -97,7 +106,7 @@ export const toPublication = (row: PublicationRow, targets: TargetRow[]): Signal
       }
     : {}),
   ...(row.error ? { error: row.error } : {}),
-  targets: targets.map(toTarget),
+  targets: targets.map((target) => toTarget(target, row.provider)),
   ...(row.checked_at ? { checkedAt: row.checked_at } : {}),
   ...(row.checked_state ? { checkedState: row.checked_state } : {}),
   ...(row.prior_state ? { priorState: row.prior_state } : {}),
