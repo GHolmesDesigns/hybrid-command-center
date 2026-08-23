@@ -40,10 +40,11 @@ same interface and the old implementation is deleted in the same branch.
 The working artifact reaches Post Bridge through a claude.ai MCP connector. That transport is a
 constraint of an artifact running inside claude.ai, not a reusable application boundary. This
 local Node server can and will use `POST_BRIDGE_API_KEY` against `api.post-bridge.com/v1` directly,
-so the original transport decision stands. A separate local Buffer Bridge is also in use for three
-channels Post Bridge cannot reach for this account; it remains a separate tool, with no overlapping
-accounts, and
-does not turn this app into a multi-provider publisher (section 2).
+so the original transport decision stands. Buffer is now the explicit route for this studio's
+TikTok and YouTube channels because Post Bridge's account cap cannot hold those two beside the five
+accounts used by the active campaign. That is an account-cap constraint, not a platform-capability
+gap: Post Bridge supports both services. Section 2 records the non-overlapping route before any
+second adapter is built.
 
 Four things follow, and the rest of this document is those four things in detail:
 
@@ -113,13 +114,100 @@ unrecoverable ones (in the GraphQL `errors` array), which is a better error cont
 `400 | 500`. If publishing ever needs to be dependable at volume rather than deliberate at low
 volume, that gap matters.
 
-The 2026-08-13 artifact review confirmed that the second trigger below has already fired for the
-broader publishing setup: a separate local **Buffer Bridge** publishes three channels Post Bridge
-cannot reach for this account, and no account overlaps Post Bridge. That fact does **not** reopen
-this app's provider
-choice. The bridge stays one local tool and its transport and credentials stay outside this
-implementation. It does mean this record no longer claims Post Bridge is the only publishing path
-in use.
+The provider account read on **22 August 2026** changed the answer for this app. Post Bridge listed
+seven accounts before TikTok and YouTube were connected — Facebook ×3, Instagram, LinkedIn,
+Threads, and Bluesky — and only four afterwards, with five active-campaign accounts displaced. It
+cannot hold TikTok and YouTube beside the five accounts this studio publishes on. Buffer is
+therefore the only available route for those two channels while the cap holds. The cost of avoiding
+a second provider would be evicting five active routes to gain two, which is not an available trade.
+
+The count is **two, not three**: TikTok and YouTube. Buffer's own `Service` enum, read 23 August
+2026, includes `tiktok`, `youtube`, `bluesky`, and `threads`; Post Bridge also supports all four.
+The old claim that a Buffer Bridge covered TikTok, Bluesky, and Threads because Post Bridge could
+not reach them confused a past account arrangement with provider capability and omitted YouTube.
+[`social-media-publisher-artifact.md`](social-media-publisher-artifact.md) §10 is corrected in the
+same card.
+
+### 2.1 The Buffer route and dated GraphQL contract
+
+**Contract read 23 August 2026 from Buffer's official [GraphQL guides](https://developers.buffer.com/guides/graphql-intro.html),
+[generated reference](https://developers.buffer.com/reference.html),
+[service enum](https://developers.buffer.com/types/Service.html), and
+[rate-limit guide](https://developers.buffer.com/guides/api-limits.html).** All operations use
+`POST https://api.buffer.com` with a bearer credential. These are documentation claims until the
+owner-run probe below records a live result; absence or ambiguity stays fail-closed.
+
+| Concern | Published Buffer shape | Decision here |
+| --- | --- | --- |
+| Account and organizations | `account { id organizations { id name } }` | Resolve the approved organization explicitly; never use the first one |
+| Channels | `channels(input: { organizationId }) { id name service }` | A target stores an explicit provider and provider channel id; the service must match |
+| One post | Every `Post` belongs to one `channelId` | One Signal post targeting TikTok and YouTube becomes two remote posts and two remote ids |
+| Create | `createPost(input: CreatePostInput!)`; custom time is `mode: customScheduled`, `dueAt` UTC, `schedulingType: automatic` | One mutation per explicitly selected Buffer channel |
+| Read | `post(input: { id })`; `posts(first, after, input)` returns `edges.node` plus `pageInfo.hasNextPage` and opaque `endCursor` | Read every page and refuse repeated, absent, or over-bound cursors |
+| Status | `draft`, `error`, `needs_approval`, `scheduled`, `sending`, `sent` | Preserve the provider value; no guessed equivalence to Post Bridge states |
+| Edit | `editPost(input: EditPostInput!)`; omitted scheduling fields preserve the schedule | A Buffer post stays Buffer-owned through its lifecycle |
+| Delete | `deletePost(input: { id })`; success returns the deleted id | A delete response is not cleanup proof; require absence from a complete paginated read |
+| Recoverable mutation errors | Mutation unions include `PostActionSuccess` and types implementing `MutationError { message }` | Always request `__typename` and the catch-all mutation message; unknown types refuse |
+| System errors | GraphQL `errors[]`, with `extensions.code` such as `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `UNEXPECTED`, and `RATE_LIMIT_EXCEEDED` | A system error is not a partial success and is never retried as another provider |
+| Limits | Every response carries three structured `RateLimit` / `RateLimit-Policy` windows; 429 carries `Retry-After` and `RATE_LIMIT_EXCEEDED` | Record headers already received; never provoke a limit. Respect the named window and retry delay in the later adapter |
+
+**The routing rule is explicit and durable.** Signal remains the only authoritative schedule. Each
+delivery target names exactly one provider and provider account/channel id. TikTok and YouTube use
+Buffer while the account-cap decision above holds; existing Facebook, Instagram, LinkedIn,
+Threads, and Bluesky targets use Post Bridge. There is no automatic failover, retry-through to the
+other provider, dual submission, first-matching account, or credential-presence routing. A Post
+Bridge publication remains Post Bridge for create, read, update, reconcile, and delete; a Buffer
+publication does the same on Buffer. Changing a route requires a new confirmed delivery, never an
+in-place provider swap.
+
+**Media does not cross the provider boundary.** Buffer exposes no upload endpoint. `AssetInput`
+accepts image, video, document, or link objects whose media already has a stable, direct, public
+HTTPS URL. A Google Drive viewer/share URL is a page rather than media. Drive bytes cannot borrow
+Post Bridge's signed upload path, and this app will not proxy or host them. A Buffer target whose
+media is not already public therefore refuses before any mutation.
+
+**Credential contract.** `BUFFER_API_KEY` is the canonical server-only setting. For one release,
+`BUFFER_KEY` is accepted only when the canonical setting is absent; when both exist,
+`BUFFER_API_KEY` wins. Neither name nor value reaches the browser or an integration log. Presence
+configures a possible provider client; it is never permission to publish and never selects a route.
+
+**Owner-run probe.** `npm run probe:buffer` plans by default and contacts nothing. Live mode also
+requires `--live`, `--yes`, `--channels-approved`, the exact account and organization and explicit
+`tiktok:<id>` / `youtube:<id>` channel ids, an unused label, a zoned instant at least 48 hours away,
+and the label typed back. It verifies the account and channel set before a write, creates one
+disposable scheduled text post per named channel, reads each by id, edits and reads it again, and
+deletes only ids it created in `finally`. Cleanup is independently proved by a complete
+cursor-paginated read. A hard 50-request budget includes cleanup, with 12 calls reserved for it;
+there is no retry and no deliberate 429. The transcript and credential are never committed.
+
+Every dated live matrix uses only **verified**, **negative**, and **still unverified**. A natural
+typed error or rate-limit response may add evidence, but the probe never manufactures one. The
+account owner must approve the exact channel ids and disposable fixtures before a run; a different
+account/channel set, ambiguous write, or unproved cleanup stops the run and leaves later cards
+fail-closed.
+
+### 2.2 Buffer result matrix — 23 August 2026
+
+No live write was authorized or run for this card. “Verified” below names the evidence source; it
+does not silently turn a published schema into observed live behavior.
+
+| Claim | Result | Evidence and disposition |
+| --- | --- | --- |
+| The credential can read this account and its routed channels | **verified** | Owner read on 22 August 2026 accepted the credential and listed one TikTok and one YouTube channel. Exact ids remain owner-held and uncommitted. |
+| Buffer's service vocabulary includes TikTok, YouTube, Bluesky, and Threads | **verified** | Official `Service` enum read 23 August 2026. The current two-channel split is therefore an account-cap decision, not a support gap. |
+| Account → organizations → channels → posts is the identity hierarchy | **verified** | Official data-model and generated GraphQL reference read 23 August 2026. Later code must still validate every live response. |
+| One `createPost` mutation creates one post for one `channelId` | **verified** | Official `CreatePostInput` and data-model contract. Live per-channel id/readback remains a separate row below. |
+| The approved TikTok and YouTube channels accept disposable custom-scheduled posts and return distinct ids | **still unverified** | Requires the owner-approved live probe. No write was made. C84–C87 remain fail-closed on observed behavior. |
+| By-id read preserves channel, text, due time, and status after create | **still unverified** | The query shape is documented; an independent live readback was not run. |
+| `editPost` preserves the id and applies text without clearing an omitted schedule | **still unverified** | The omission rule is documented; live create/edit/readback was not run. |
+| `deletePost` returns the deleted id and a complete paginated read proves absence | **still unverified** | The mutation and cursor contract are documented; cleanup was not exercised. Later cards cannot claim deletion proof from the mutation alone. |
+| Typed mutation errors and system `errors[]` carry the documented shapes | **verified** | Official error guide and union reference read 23 August 2026; injected fixtures cover both parsers. Natural account-specific error values remain unobserved. |
+| A natural 429 carries usable `RateLimit` / `RateLimit-Policy` and `Retry-After` values | **still unverified** | The headers are documented. The probe never provokes load; it records them only if they arrive naturally. |
+| Buffer has no media upload path and accepts hosted asset URLs | **verified** | Official asset/create contract and roadmap read 23 August 2026. A Drive viewer URL remains invalid by architecture even before a provider call. |
+| Direct public HTTPS TikTok/YouTube media is fetched and delivered as documented | **still unverified** | This card's safe probe is text-only. Media fixtures and delivery belong to the later confirmed adapter card. |
+
+**Negative results:** none — because no live mutation was run. An unattempted claim is **still
+unverified**, never negative and never permission to build.
 
 **Revisit this app's decision when any of these becomes true**, and not before:
 
@@ -1167,8 +1255,10 @@ written in the same transaction as the publication-state change it describes.
 
 Named so an implementation card does not assume otherwise: media **storage**; the planner
 UI beyond the confirmed submit flow and publication state; multi-workspace or per-client API keys;
-publishing anything that is not a Signal post; Buffer Bridge transport or credentials; and any
-second provider inside this app.
+and publishing anything that is not a Signal post. Section 2.1 now settles Buffer's explicit route,
+contract, credential names, and owner-run probe. The production Buffer adapter, provider-neutral
+schema, and runtime publishing remain later Wave 15 cards; this card deliberately adds none of
+them.
 
 **Media upload has moved off that list, in one direction only.** §3.3 now records the boundary: the
 confirmed publishing path may stream user-selected Drive files to the provider through

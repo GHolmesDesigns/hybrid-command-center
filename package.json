@@ -24,6 +24,7 @@
     "db:migrate": "node --experimental-strip-types server/scripts/migrate.ts",
     "db:seed": "node --experimental-strip-types server/scripts/seed.ts",
     "probe:post-bridge": "node --experimental-strip-types scripts/probe-post-bridge.ts",
+    "probe:buffer": "node --experimental-strip-types scripts/probe-buffer.ts",
     "signal:import": "node --experimental-strip-types server/scripts/import-signal-archive.ts",
     "db:backup": "node --experimental-strip-types server/scripts/backup.ts",
     "db:restore": "node --experimental-strip-types server/scripts/restore.ts",

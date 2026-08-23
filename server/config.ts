@@ -121,6 +121,9 @@ const environment = z.object({
     .min(ENCRYPTION_KEY_MIN_LENGTH, `must be at least ${ENCRYPTION_KEY_MIN_LENGTH} characters`)
     .optional(),
   POST_BRIDGE_API_KEY: z.string().optional(),
+  BUFFER_API_KEY: z.string().optional(),
+  // One-release migration alias. The canonical value always wins when both are present.
+  BUFFER_KEY: z.string().optional(),
   PUBLISH_TIMEZONE: z
     .string()
     .optional()
@@ -150,6 +153,8 @@ const parsed = environment.safeParse({
   GOOGLE_REDIRECT_URI: read('GOOGLE_REDIRECT_URI') ?? ENVIRONMENT_DEFAULTS.GOOGLE_REDIRECT_URI,
   GOOGLE_TOKEN_ENCRYPTION_KEY: read('GOOGLE_TOKEN_ENCRYPTION_KEY'),
   POST_BRIDGE_API_KEY: read('POST_BRIDGE_API_KEY'),
+  BUFFER_API_KEY: read('BUFFER_API_KEY'),
+  BUFFER_KEY: read('BUFFER_KEY'),
   PUBLISH_TIMEZONE: read('PUBLISH_TIMEZONE'),
   LOG_LEVEL: read('LOG_LEVEL')?.toLowerCase() ?? ENVIRONMENT_DEFAULTS.LOG_LEVEL,
 });
@@ -186,6 +191,9 @@ export const config = {
   publish: {
     apiKey: env.POST_BRIDGE_API_KEY ?? '',
     timezone: env.PUBLISH_TIMEZONE ?? '',
+  },
+  buffer: {
+    apiKey: env.BUFFER_API_KEY ?? env.BUFFER_KEY ?? '',
   },
 };
 
