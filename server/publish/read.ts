@@ -14,7 +14,12 @@ import { toPublication, type PublicationRow, type TargetRow } from './rows.ts';
 /** One publication's target rows, in the order the plan resolved them. */
 export const targetRowsFor = (db: Db, publicationId: string): TargetRow[] =>
   db
-    .prepare('SELECT * FROM signal_publication_targets WHERE publication_id=? ORDER BY rowid')
+    .prepare(
+      `SELECT t.*, a.provider AS account_provider, a.provider_account_ref
+         FROM signal_publication_targets t
+         LEFT JOIN signal_provider_accounts a ON a.id=t.provider_account_id
+        WHERE t.publication_id=? ORDER BY t.rowid`,
+    )
     .all(publicationId) as unknown as TargetRow[];
 
 /**

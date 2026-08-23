@@ -221,11 +221,27 @@ CREATE TABLE IF NOT EXISTS signal_post_variant_media (
   CHECK(account_id IS NULL OR account_id > 0)
 );
 -- Which provider accounts a person explicitly chose for one Signal channel (C77).
+-- Provider-owned account ids are opaque. The integer below is this database's surrogate and the
+-- provider plus provider_account_ref pair is the durable identity. Existing Post Bridge numeric
+-- ids are preserved as surrogates by backfillProviderAccounts, so every historical join keeps the
+-- same value while Buffer ids can remain arbitrary text.
+CREATE TABLE IF NOT EXISTS signal_provider_accounts (
+  id INTEGER PRIMARY KEY,
+  provider TEXT NOT NULL,
+  provider_account_ref TEXT NOT NULL,
+  platform TEXT NOT NULL,
+  display_name TEXT NOT NULL DEFAULT '',
+  handle TEXT NOT NULL DEFAULT '',
+  resolved_at TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(provider, provider_account_ref)
+);
+
 --
--- This is a **choice**, not a copy of a provider account record: the row holds the id the user
--- picked and nothing the provider owns, because a name or a handle cached here would be a second
--- source of truth that goes stale the moment the account is renamed. Every display of an account
--- reads the provider's own list; this table only remembers which of them were ticked.
+-- This is a **choice**, not a copy of a provider account record: the row holds the local surrogate
+-- for the provider-qualified identity the user picked. Current display metadata lives on
+-- signal_provider_accounts and can refresh without changing this relationship.
 --
 -- **No rows means unchanged.** A post with no row for a channel resolves exactly as it did before
 -- this table existed -- server/publish/plan.ts finds the channel's single account and refuses zero
@@ -294,7 +310,7 @@ CREATE TABLE IF NOT EXISTS signal_publication_targets (
   publication_id TEXT NOT NULL REFERENCES signal_publications(id) ON DELETE CASCADE,
   channel TEXT NOT NULL, provider_account_id INTEGER NOT NULL, outcome TEXT, permalink TEXT, error TEXT,
   handle TEXT NOT NULL DEFAULT '', mode TEXT NOT NULL DEFAULT 'AUTOMATIC', manual_completed_at TEXT,
-  post_result_id TEXT,
+  post_result_id TEXT, remote_post_id TEXT,
   PRIMARY KEY(publication_id, provider_account_id)
 );
 -- Current totals per delivery, and the daily snapshots behind them.
@@ -360,8 +376,9 @@ CREATE TABLE IF NOT EXISTS signal_post_metric_days (
 CREATE TABLE IF NOT EXISTS signal_alert_acks (
   alert_id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, acknowledged_at TEXT NOT NULL
 );
--- What Post Bridge is holding, including the posts this app did not make: one generation of a
--- snapshot, replaced whole by a person's own press of Refresh inventory and by nothing else.
+-- Legacy Post Bridge inventory. It stays frozen after its additive migration into
+-- signal_provider_inventory_posts; current inventory reads and writes use the provider-qualified
+-- replacement below.
 --
 -- provider_post_id is the primary key because it is the provider's stable identity for a post --
 -- C73 verified that every listed row carries an id and that a deleted post is absent from a later
@@ -393,6 +410,21 @@ CREATE TABLE IF NOT EXISTS signal_provider_posts (
   account_ids TEXT NOT NULL DEFAULT '[]',
   provider_url TEXT,
   snapshot_at TEXT NOT NULL
+);
+-- Provider-qualified replacement for signal_provider_posts. The legacy table stays in the schema
+-- because migrations are additive; backfillProviderInventory moves its rows here idempotently and
+-- every current read/write uses this table. A Buffer post id may therefore equal a Post Bridge post
+-- id without either row shadowing the other.
+CREATE TABLE IF NOT EXISTS signal_provider_inventory_posts (
+  provider TEXT NOT NULL,
+  provider_post_id TEXT NOT NULL,
+  state TEXT NOT NULL,
+  scheduled_instant TEXT,
+  caption_excerpt TEXT NOT NULL,
+  account_refs TEXT NOT NULL DEFAULT '[]',
+  provider_url TEXT,
+  snapshot_at TEXT NOT NULL,
+  PRIMARY KEY(provider, provider_post_id)
 );
 -- What the provider reports for one platform over one of its own windows: a second, cheaper
 -- question than the per-delivery figures, stored separately because it answers something different.
@@ -480,6 +512,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_signal_post_publish_targets_choice
   ON signal_post_publish_targets(post_id, channel, provider_account_id);
 CREATE INDEX IF NOT EXISTS idx_signal_post_publish_targets_post
   ON signal_post_publish_targets(post_id);
+CREATE INDEX IF NOT EXISTS idx_signal_provider_accounts_platform
+  ON signal_provider_accounts(provider, platform, id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_signal_publications_live ON signal_publications(post_id)
   WHERE state IN ('SUBMITTING','SUBMITTED','UNCONFIRMED');
 CREATE INDEX IF NOT EXISTS idx_signal_publications_post ON signal_publications(post_id);
@@ -498,6 +532,8 @@ CREATE INDEX IF NOT EXISTS idx_signal_publication_targets_result
 -- lookups, so this is the only other access path there is.
 CREATE INDEX IF NOT EXISTS idx_signal_provider_posts_scheduled
   ON signal_provider_posts(scheduled_instant);
+CREATE INDEX IF NOT EXISTS idx_signal_provider_inventory_scheduled
+  ON signal_provider_inventory_posts(provider, scheduled_instant);
 `;
 
 /**
@@ -557,6 +593,20 @@ END;`,
 export const triggerSchema = `${mediaSourceTriggers('signal_post_media')}${mediaSourceTriggers(
   'signal_post_variant_media',
 )}
+`;
+
+const providerAccountTriggers = `
+CREATE TRIGGER IF NOT EXISTS signal_provider_accounts_delete_restrict
+BEFORE DELETE ON signal_provider_accounts FOR EACH ROW WHEN
+  EXISTS (SELECT 1 FROM signal_post_publish_targets WHERE provider_account_id=OLD.id)
+  OR EXISTS (SELECT 1 FROM signal_publication_targets WHERE provider_account_id=OLD.id)
+  OR EXISTS (SELECT 1 FROM signal_post_metrics WHERE provider_account_id=OLD.id)
+  OR EXISTS (SELECT 1 FROM signal_post_metric_days WHERE provider_account_id=OLD.id)
+  OR EXISTS (SELECT 1 FROM signal_post_variants WHERE account_id=OLD.id)
+  OR EXISTS (SELECT 1 FROM signal_post_variant_media WHERE account_id=OLD.id)
+BEGIN
+  SELECT RAISE(ABORT, 'signal_provider_accounts: referenced account history cannot be deleted.');
+END;
 `;
 
 const schema = `${tableSchema}${indexSchema}`;
@@ -879,6 +929,178 @@ export function backfillSignalVariantRoleMedia(db: Db): number {
   });
 }
 
+const LEGACY_PROVIDER = 'post-bridge';
+const MIGRATED_AT = '1970-01-01T00:00:00.000Z';
+
+/** Provider platform for a legacy Signal channel, without importing shared code into the schema. */
+const legacyPlatformFor = (channel: string): string =>
+  ({
+    fb: 'facebook',
+    ig: 'instagram',
+    in: 'linkedin',
+    tt: 'tiktok',
+    yt: 'youtube',
+    th: 'threads',
+    x: 'twitter',
+    bs: 'bluesky',
+  })[channel] ?? channel;
+
+/**
+ * Gives every legacy numeric account a provider-qualified identity without moving any join key.
+ *
+ * The transaction inserts each Post Bridge row at its historical numeric id. A conflicting partial
+ * migration is refused rather than guessed at, so startup cannot expose a database where one
+ * surrogate means two providers. Running again verifies the same rows and writes nothing.
+ */
+export function backfillProviderAccounts(db: Db): number {
+  const referenced = db
+    .prepare(
+      `SELECT provider_account_id AS id FROM signal_post_publish_targets
+       UNION SELECT provider_account_id FROM signal_publication_targets
+       UNION SELECT provider_account_id FROM signal_post_metrics
+       UNION SELECT provider_account_id FROM signal_post_metric_days
+       UNION SELECT account_id FROM signal_post_variants WHERE account_id IS NOT NULL
+       UNION SELECT account_id FROM signal_post_variant_media WHERE account_id IS NOT NULL
+       ORDER BY id`,
+    )
+    .all() as { id: number }[];
+  const ids = new Set(referenced.map((row) => row.id));
+  for (const row of db.prepare('SELECT account_ids FROM signal_provider_posts').all() as {
+    account_ids: string;
+  }[]) {
+    try {
+      const values: unknown = JSON.parse(row.account_ids);
+      if (Array.isArray(values))
+        for (const value of values)
+          if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) ids.add(value);
+    } catch {
+      // A malformed legacy inventory is still copied as an empty account list by the inventory
+      // migration. It must not make a valid delivery migration guess at an identity.
+    }
+  }
+  if (!ids.size) return 0;
+
+  return transaction(db, () => {
+    const byId = db.prepare(
+      'SELECT provider, provider_account_ref FROM signal_provider_accounts WHERE id=?',
+    );
+    const byIdentity = db.prepare(
+      'SELECT id FROM signal_provider_accounts WHERE provider=? AND provider_account_ref=?',
+    );
+    const latestDelivery = db.prepare(
+      `SELECT t.channel, t.handle, p.updated_at
+         FROM signal_publication_targets t
+         JOIN signal_publications p ON p.id=t.publication_id
+        WHERE t.provider_account_id=?
+        ORDER BY p.updated_at DESC, p.id DESC LIMIT 1`,
+    );
+    const planned = db.prepare(
+      `SELECT channel, created_at FROM signal_post_publish_targets
+        WHERE provider_account_id=? ORDER BY created_at DESC, post_id DESC LIMIT 1`,
+    );
+    const variant = db.prepare(
+      `SELECT platform, updated_at FROM signal_post_variants
+        WHERE account_id=? ORDER BY updated_at DESC, post_id DESC LIMIT 1`,
+    );
+    const insert = db.prepare(
+      `INSERT INTO signal_provider_accounts(
+         id,provider,provider_account_ref,platform,display_name,handle,
+         resolved_at,created_at,updated_at
+       ) VALUES(?,?,?,?,?,?,?,?,?)`,
+    );
+    let added = 0;
+    for (const id of [...ids].sort((left, right) => left - right)) {
+      if (!Number.isSafeInteger(id) || id <= 0)
+        throw new Error(`Cannot migrate provider account surrogate ${String(id)}.`);
+      const ref = String(id);
+      const existing = byId.get(id) as
+        { provider: string; provider_account_ref: string } | undefined;
+      if (existing) {
+        if (existing.provider !== LEGACY_PROVIDER || existing.provider_account_ref !== ref)
+          throw new Error(`Provider account surrogate ${id} already names another identity.`);
+        continue;
+      }
+      const duplicate = byIdentity.get(LEGACY_PROVIDER, ref) as { id: number } | undefined;
+      if (duplicate)
+        throw new Error(
+          `Post Bridge account ${ref} already uses surrogate ${duplicate.id}, not legacy id ${id}.`,
+        );
+      const delivery = latestDelivery.get(id) as
+        { channel: string; handle: string; updated_at: string } | undefined;
+      const choice = planned.get(id) as { channel: string; created_at: string } | undefined;
+      const layer = variant.get(id) as { platform: string; updated_at: string } | undefined;
+      const platform = delivery
+        ? legacyPlatformFor(delivery.channel)
+        : choice
+          ? legacyPlatformFor(choice.channel)
+          : (layer?.platform ?? 'unknown');
+      const timestamp =
+        delivery?.updated_at ?? choice?.created_at ?? layer?.updated_at ?? MIGRATED_AT;
+      insert.run(
+        id,
+        LEGACY_PROVIDER,
+        ref,
+        platform,
+        delivery?.handle ?? '',
+        delivery?.handle ?? '',
+        timestamp,
+        timestamp,
+        timestamp,
+      );
+      added += 1;
+    }
+    return added;
+  });
+}
+
+/** Moves the legacy Post Bridge inventory into the provider-qualified table, idempotently. */
+export function backfillProviderInventory(db: Db): number {
+  const legacy = db.prepare('SELECT * FROM signal_provider_posts').all() as {
+    provider_post_id: string;
+    state: string;
+    scheduled_instant: string | null;
+    caption_excerpt: string;
+    account_ids: string;
+    provider_url: string | null;
+    snapshot_at: string;
+  }[];
+  if (!legacy.length) return 0;
+  return transaction(db, () => {
+    const insert = db.prepare(
+      `INSERT OR IGNORE INTO signal_provider_inventory_posts(
+         provider,provider_post_id,state,scheduled_instant,caption_excerpt,
+         account_refs,provider_url,snapshot_at
+       ) VALUES(?,?,?,?,?,?,?,?)`,
+    );
+    let added = 0;
+    for (const row of legacy) {
+      let refs: string[] = [];
+      try {
+        const values: unknown = JSON.parse(row.account_ids);
+        if (Array.isArray(values))
+          refs = values.flatMap((value) =>
+            typeof value === 'string' || typeof value === 'number' ? [String(value)] : [],
+          );
+      } catch {
+        refs = [];
+      }
+      added += Number(
+        insert.run(
+          LEGACY_PROVIDER,
+          row.provider_post_id,
+          row.state,
+          row.scheduled_instant,
+          row.caption_excerpt,
+          JSON.stringify(refs),
+          row.provider_url,
+          row.snapshot_at,
+        ).changes,
+      );
+    }
+    return added;
+  });
+}
+
 export function createDb(
   filename = config.databasePath,
   onMigration?: (statements: readonly string[]) => void,
@@ -893,8 +1115,11 @@ export function createDb(
   const applied = applyAdditiveMigrations(db);
   backfillProjectActivity(db);
   backfillSignalCampaigns(db);
+  backfillProviderAccounts(db);
+  backfillProviderInventory(db);
   db.exec(indexSchema);
   db.exec(triggerSchema);
+  db.exec(providerAccountTriggers);
   // After the index and the triggers, and deliberately: the role rows it writes go through the
   // same uniqueness and the same cross-field rule every later write does, so the migration cannot
   // put a row in that an ordinary INSERT would have been refused.

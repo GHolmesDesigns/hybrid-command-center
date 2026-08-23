@@ -41,6 +41,7 @@ import {
   type DriveMediaProvider,
 } from '../drive/media.ts';
 import type { SignalPostMedia } from '../../shared/signal-media.ts';
+import { resolveProviderAccounts } from './accounts.ts';
 
 export class PublishRequestError extends Error {
   readonly status: 400 | 404 | 409;
@@ -58,6 +59,7 @@ export class PublishService {
   private readonly timezone: string;
   private readonly clock: () => Date;
   private readonly driveMedia: DriveMediaProvider;
+  private readonly providerId: string;
   constructor(
     db: Db,
     signal: SignalProvider,
@@ -65,6 +67,7 @@ export class PublishService {
     timezone: string,
     clock: () => Date = () => new Date(),
     driveMedia: DriveMediaProvider = new DisconnectedDriveMediaProvider(),
+    providerId = 'post-bridge',
   ) {
     this.db = db;
     this.signal = signal;
@@ -72,6 +75,15 @@ export class PublishService {
     this.timezone = timezone;
     this.clock = clock;
     this.driveMedia = driveMedia;
+    this.providerId = providerId;
+  }
+
+  private assertProviderRoute(provider: string): void {
+    if (provider !== this.providerId)
+      throw new PublishRequestError(
+        `This publication belongs to ${provider}; it cannot be queried through ${this.providerId}.`,
+        409,
+      );
   }
 
   async preview(
@@ -111,7 +123,9 @@ export class PublishService {
     // write, which is what keeps the publisher unable to change a schedule it is planning from.
     return buildPublishPlan(
       post,
-      await this.provider.listTargets(),
+      resolveProviderAccounts(this.db, await this.provider.listTargets(), this.clock).filter(
+        (target) => target.provider === this.providerId,
+      ),
       this.timezone,
       this.clock(),
       await this.signal.listVariants(postId),
@@ -242,11 +256,12 @@ export class PublishService {
           .prepare(
             `INSERT INTO signal_publications(
           id,post_id,state,provider,provider_post_id,idempotency_key,scheduled_instant,timezone,sent_caption,sent_channels,sent_media,sent_configurations,sent_account_configurations,sent_media_sources,sent_provider_media_ids,error,created_at,updated_at
-        ) VALUES(?,?, 'SUBMITTING','post-bridge',NULL,?,?,?,?,?,?,?,?,?,?,NULL,?,?)`,
+        ) VALUES(?,?, 'SUBMITTING',?,NULL,?,?,?,?,?,?,?,?,?,?,NULL,?,?)`,
           )
           .run(
             publicationId,
             postId,
+            plan.targets[0]?.provider ?? this.providerId,
             crypto.randomUUID(),
             request.scheduledInstant,
             request.timezone,
@@ -403,7 +418,8 @@ export class PublishService {
     this.db
       .prepare(
         `UPDATE signal_publication_targets
-            SET outcome=?,permalink=?,error=?,post_result_id=COALESCE(?, post_result_id)
+            SET outcome=?,permalink=?,error=?,post_result_id=COALESCE(?, post_result_id),
+                remote_post_id=COALESCE(?, remote_post_id)
           WHERE publication_id=? AND provider_account_id=?`,
       )
       .run(
@@ -411,6 +427,7 @@ export class PublishService {
         target.permalink ?? null,
         target.error ? redactSecrets(target.error) : null,
         target.resultId ?? null,
+        target.remotePostId ?? null,
         publicationId,
         target.accountId,
       );
@@ -497,6 +514,7 @@ export class PublishService {
     if (automatic && !reconcileSchedule(current, this.clock()).due) return current;
 
     const providerPostId = current.providerPostId;
+    this.assertProviderRoute(current.provider);
     const result = await this.checked(() => this.provider.check(providerPostId));
     const attempts = current.checkAttempts + (automatic ? 1 : 0);
     // The bound, expressed where it happens: an automatic schedule that runs out while the
@@ -631,7 +649,7 @@ export class PublishService {
         scheduledInstant = undefined;
       }
     }
-    const sameTargets = targets.map(toTarget);
+    const sameTargets = targets.map((target) => toTarget(target, row.provider));
     const drift = publicationDriftFields(
       {
         sentCaption: row.sent_caption,
@@ -649,6 +667,8 @@ export class PublishService {
           channel: target.channel,
           platform: target.platform ?? target.channel,
           accountId: target.accountId,
+          provider: target.provider,
+          accountRef: target.accountRef,
           handle: target.handle,
           mode: target.mode,
         })),
@@ -677,6 +697,7 @@ export class PublishService {
     if (!publication.providerPostId || !publicationTracksProvider(publication.state))
       return buildProviderReconcile({ publication, plan });
     try {
+      this.assertProviderRoute(publication.provider);
       return buildProviderReconcile({
         publication,
         plan,
@@ -742,6 +763,7 @@ export class PublishService {
     },
   ): Promise<SignalPublication> {
     const providerPostId = publication.providerPostId as string;
+    this.assertProviderRoute(publication.provider);
     const what = action === 'UPDATE_SCHEDULE' ? 'schedule' : 'content';
     try {
       const result = await this.provider.update(providerPostId, outgoing);
@@ -863,6 +885,7 @@ export class PublishService {
     const publication = this.get(publicationId) as SignalPublication;
     const record = preview.record as ProviderPostRecord;
     const providerPostId = publication.providerPostId as string;
+    this.assertProviderRoute(publication.provider);
 
     if (action === 'CANCEL') {
       await this.provider.cancel(providerPostId);
@@ -979,6 +1002,7 @@ export class PublishService {
         'This post has a live publication whose provider id is unknown. Resolve it before deleting the post.',
         409,
       );
+    this.assertProviderRoute(row.provider);
     await this.provider.cancel(row.provider_post_id);
     transaction(this.db, () => {
       this.db

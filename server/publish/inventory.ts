@@ -35,9 +35,10 @@ import { readSyncHealth, recordSyncHealth } from './sync-health.ts';
  * ## Read-only, in the strong sense
  *
  * The provider it holds can list and nothing else (`inventory-provider.ts`), so nothing on this path
- * can submit, update, cancel, or adopt a post. Locally it writes `signal_provider_posts`, its own
- * settings row, and one `integration_events` row per attempt — never a post, a publication, a
- * target, or a planning status. Adoption, linking, and importing an orphan are declined in §0.3 of
+ * can submit, update, cancel, or adopt a post. Locally it writes
+ * `signal_provider_inventory_posts`, its own provider-qualified settings row, and one
+ * `integration_events` row per attempt — never a post, a publication, a target, or a planning
+ * status. Adoption, linking, and importing an orphan are declined in §0.3 of
  * `docs/post-bridge-integrations-plan.md`, and there is nothing here that could do one.
  *
  * ## Only when a person presses something
@@ -62,6 +63,8 @@ import { readSyncHealth, recordSyncHealth } from './sync-health.ts';
  * already-redacted sentence.
  */
 export const PROVIDER_INVENTORY_KEY = 'signal_provider_inventory';
+const inventoryKey = (provider: string) =>
+  provider === 'post-bridge' ? PROVIDER_INVENTORY_KEY : `${PROVIDER_INVENTORY_KEY}:${provider}`;
 
 interface StoredInventoryRecord {
   lastRefreshAt?: string;
@@ -69,8 +72,11 @@ interface StoredInventoryRecord {
 }
 
 /** The stored record, or nothing. A row this build cannot parse is treated as absent. */
-export function readProviderInventoryRecord(db: Db): StoredInventoryRecord {
-  const raw = getSetting(db, PROVIDER_INVENTORY_KEY);
+export function readProviderInventoryRecord(
+  db: Db,
+  provider = 'post-bridge',
+): StoredInventoryRecord {
+  const raw = getSetting(db, inventoryKey(provider));
   if (!raw) return {};
   try {
     const stored = JSON.parse(raw) as StoredInventoryRecord;
@@ -83,10 +89,14 @@ export function readProviderInventoryRecord(db: Db): StoredInventoryRecord {
   }
 }
 
-const writeProviderInventoryRecord = (db: Db, record: StoredInventoryRecord): void => {
+const writeProviderInventoryRecord = (
+  db: Db,
+  record: StoredInventoryRecord,
+  provider = 'post-bridge',
+): void => {
   setSetting(
     db,
-    PROVIDER_INVENTORY_KEY,
+    inventoryKey(provider),
     JSON.stringify({
       ...(record.lastRefreshAt ? { lastRefreshAt: record.lastRefreshAt } : {}),
       ...(record.reason ? { reason: record.reason } : {}),
@@ -106,12 +116,19 @@ export class ProviderInventoryService {
   private readonly db: Db;
   private readonly provider: ProviderInventoryProvider;
   private readonly clock: () => Date;
+  private readonly providerId: string;
   // Declared and assigned rather than constructor parameter properties: the server runs under
   // `node --experimental-strip-types` (`AGENTS.md` §Conventions).
-  constructor(db: Db, provider: ProviderInventoryProvider, clock: () => Date = () => new Date()) {
+  constructor(
+    db: Db,
+    provider: ProviderInventoryProvider,
+    clock: () => Date = () => new Date(),
+    providerId = 'post-bridge',
+  ) {
     this.db = db;
     this.provider = provider;
     this.clock = clock;
+    this.providerId = providerId;
   }
 
   /**
@@ -121,8 +138,8 @@ export class ProviderInventoryService {
    * without a page load ever spending a provider request.
    */
   read(): ProviderInventorySnapshot {
-    const entries = readProviderInventoryEntries(this.db);
-    const record = readProviderInventoryRecord(this.db);
+    const entries = readProviderInventoryEntries(this.db, this.providerId);
+    const record = readProviderInventoryRecord(this.db, this.providerId);
     return {
       available: this.provider.available,
       entries,
@@ -215,34 +232,44 @@ export class ProviderInventoryService {
    */
   private replace(posts: ProviderInventoryPost[]): ProviderInventorySnapshot {
     const snapshotAt = this.clock().toISOString();
-    const orphans = providerInventoryOrphans(posts, knownProviderPostIds(this.db)).length;
+    const qualified = posts.map((post) => ({ ...post, provider: this.providerId }));
+    const orphans = providerInventoryOrphans(
+      qualified,
+      knownProviderPostIds(this.db, this.providerId).map((providerPostId) => ({
+        provider: this.providerId,
+        providerPostId,
+      })),
+    ).length;
     transaction(this.db, () => {
-      const listed = new Set(posts.map((post) => post.providerPostId));
-      const remove = this.db.prepare('DELETE FROM signal_provider_posts WHERE provider_post_id=?');
+      const listed = new Set(qualified.map((post) => post.providerPostId));
+      const remove = this.db.prepare(
+        'DELETE FROM signal_provider_inventory_posts WHERE provider=? AND provider_post_id=?',
+      );
       for (const row of this.db
-        .prepare('SELECT provider_post_id FROM signal_provider_posts')
-        .all() as { provider_post_id: string }[])
-        if (!listed.has(row.provider_post_id)) remove.run(row.provider_post_id);
+        .prepare('SELECT provider_post_id FROM signal_provider_inventory_posts WHERE provider=?')
+        .all(this.providerId) as { provider_post_id: string }[])
+        if (!listed.has(row.provider_post_id)) remove.run(this.providerId, row.provider_post_id);
       const upsert = this.db.prepare(
-        `INSERT INTO signal_provider_posts(
-           provider_post_id,state,scheduled_instant,caption_excerpt,account_ids,provider_url,snapshot_at
-         ) VALUES(?,?,?,?,?,?,?)
-         ON CONFLICT(provider_post_id) DO UPDATE SET
+        `INSERT INTO signal_provider_inventory_posts(
+           provider,provider_post_id,state,scheduled_instant,caption_excerpt,account_refs,provider_url,snapshot_at
+         ) VALUES(?,?,?,?,?,?,?,?)
+         ON CONFLICT(provider,provider_post_id) DO UPDATE SET
            state=excluded.state, scheduled_instant=excluded.scheduled_instant,
-           caption_excerpt=excluded.caption_excerpt, account_ids=excluded.account_ids,
+           caption_excerpt=excluded.caption_excerpt, account_refs=excluded.account_refs,
            provider_url=excluded.provider_url, snapshot_at=excluded.snapshot_at`,
       );
-      for (const post of posts)
+      for (const post of qualified)
         upsert.run(
+          this.providerId,
           post.providerPostId,
           post.state,
           post.scheduledInstant,
           post.captionExcerpt,
-          JSON.stringify(post.accountIds),
+          JSON.stringify(post.accountRefs ?? post.accountIds.map(String)),
           post.providerUrl ?? null,
           snapshotAt,
         );
-      writeProviderInventoryRecord(this.db, { lastRefreshAt: snapshotAt });
+      writeProviderInventoryRecord(this.db, { lastRefreshAt: snapshotAt }, this.providerId);
       recordIntegrationEvent(this.db, {
         source: 'signal-campaign',
         operation: 'signal.provider-inventory-refresh',
@@ -265,12 +292,16 @@ export class ProviderInventoryService {
     const rateLimited = error instanceof PublishProviderError && error.rateLimited;
     const message = redactSecrets(error.message);
     const reason = `The provider inventory could not be read, so nothing was replaced: ${message}`;
-    const stored = readProviderInventoryRecord(this.db);
+    const stored = readProviderInventoryRecord(this.db, this.providerId);
     transaction(this.db, () => {
-      writeProviderInventoryRecord(this.db, {
-        ...(stored.lastRefreshAt ? { lastRefreshAt: stored.lastRefreshAt } : {}),
-        reason,
-      });
+      writeProviderInventoryRecord(
+        this.db,
+        {
+          ...(stored.lastRefreshAt ? { lastRefreshAt: stored.lastRefreshAt } : {}),
+          reason,
+        },
+        this.providerId,
+      );
       if (rateLimited) {
         const seconds =
           (error as PublishProviderError).retryAfterSeconds ?? PUBLISH_RATE_LIMIT_FALLBACK_SECONDS;

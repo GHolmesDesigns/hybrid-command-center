@@ -346,6 +346,12 @@ export function buildProviderReconcile(input: ProviderReconcileInput): ProviderR
     reconcileHash: planHash({
       publicationId: publication.id,
       publicationState: publication.state,
+      publicationProvider: publication.provider,
+      publicationTargets: publication.targets.map((target) => ({
+        provider: target.provider ?? publication.provider,
+        accountRef: target.accountRef ?? String(target.accountId),
+        remotePostId: target.remotePostId ?? null,
+      })),
       planHash: plan.planHash,
       record,
     }),

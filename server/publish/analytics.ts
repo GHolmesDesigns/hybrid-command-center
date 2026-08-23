@@ -107,6 +107,8 @@ interface TargetRow {
   handle: string;
   post_result_id: string | null;
   outcome: 'SUCCESS' | 'FAILURE' | null;
+  provider: string;
+  provider_account_ref: string | null;
 }
 
 interface MetricRow {
@@ -178,9 +180,11 @@ export class PublishAnalyticsService {
   read(postId: string): PostMetricsSummary {
     const targets = this.db
       .prepare(
-        `SELECT t.publication_id, t.provider_account_id, t.channel, t.handle, t.post_result_id, t.outcome
+        `SELECT t.publication_id, t.provider_account_id, t.channel, t.handle, t.post_result_id, t.outcome,
+                p.provider, a.provider_account_ref
            FROM signal_publication_targets t
            JOIN signal_publications p ON p.id = t.publication_id
+           LEFT JOIN signal_provider_accounts a ON a.id=t.provider_account_id
           WHERE p.post_id = ?
           ORDER BY p.created_at DESC, p.id, t.rowid`,
       )
@@ -234,6 +238,8 @@ export class PublishAnalyticsService {
         const row: PostTargetMetrics = {
           publicationId: target.publication_id,
           accountId: target.provider_account_id,
+          provider: target.provider,
+          accountRef: target.provider_account_ref ?? String(target.provider_account_id),
           channel: target.channel as SignalChannel,
           platform,
           handle: target.handle,

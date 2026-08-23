@@ -115,8 +115,18 @@ describe('an explicit selection', () => {
     );
     expect(preview.targets.map((target) => target.accountId)).toEqual([FB_GHD, FB_WILD]);
     expect(preview.request?.targets).toEqual([
-      { accountId: FB_GHD, platform: 'facebook' },
-      { accountId: FB_WILD, platform: 'facebook' },
+      {
+        accountId: FB_GHD,
+        provider: 'post-bridge',
+        accountRef: String(FB_GHD),
+        platform: 'facebook',
+      },
+      {
+        accountId: FB_WILD,
+        provider: 'post-bridge',
+        accountRef: String(FB_WILD),
+        platform: 'facebook',
+      },
     ]);
   });
 
@@ -170,6 +180,41 @@ describe('a stale selection', () => {
 });
 
 describe('the plan hash', () => {
+  it('changes when the same local surrogate moves to another provider identity', () => {
+    const post = seed(['fb']);
+    const postBridge = plan(
+      post,
+      [],
+      [],
+      [
+        {
+          id: FB_GHD,
+          provider: 'post-bridge',
+          accountRef: '85300',
+          platform: 'facebook',
+          handle: 'gholmesdesigns',
+          name: 'G.Holmes Designs',
+        },
+      ],
+    );
+    const buffer = plan(
+      post,
+      [],
+      [],
+      [
+        {
+          id: FB_GHD,
+          provider: 'buffer',
+          accountRef: 'opaque-channel',
+          platform: 'facebook',
+          handle: 'gholmesdesigns',
+          name: 'G.Holmes Designs',
+        },
+      ],
+    );
+    expect(buffer.planHash).not.toBe(postBridge.planHash);
+  });
+
   it('changes when a target is added', () => {
     const post = seed(['fb']);
     const one = plan(post, [{ channel: 'fb', providerAccountId: FB_GHD }]).planHash;

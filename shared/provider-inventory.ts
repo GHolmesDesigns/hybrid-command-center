@@ -73,6 +73,8 @@ export function providerInventoryCaptionExcerpt(caption: string): string {
  * described one cannot disagree about what "scheduled" means.
  */
 export interface ProviderInventoryPost {
+  /** Provider route; legacy fixtures without it are Post Bridge. */
+  provider?: string;
   providerPostId: string;
   state: ProviderPostState;
   /** Null is the provider holding no instant for it, which is its "post immediately". */
@@ -80,6 +82,8 @@ export interface ProviderInventoryPost {
   /** Bounded by `providerInventoryCaptionExcerpt`. Never the whole caption. */
   captionExcerpt: string;
   accountIds: number[];
+  /** Opaque provider-owned account references, never coerced to numbers. */
+  accountRefs?: string[];
   /**
    * The provider's own address for this post, where it supplies one.
    *
@@ -97,7 +101,9 @@ export interface ProviderInventoryPost {
  * it has not, the id stands alone rather than being guessed at.
  */
 export interface ProviderInventoryAccount {
-  accountId: number;
+  accountId?: number;
+  provider?: string;
+  accountRef?: string;
   handle?: string;
   channel?: SignalChannel;
 }
@@ -185,12 +191,21 @@ export function providerInventoryNextPage(meta: unknown): ProviderInventoryNext 
  * The ids it is asked about must be *every* publication's, not a recent window's. A post this app
  * sent last year is still one it sent.
  */
-export function providerInventoryOrphans<T extends { providerPostId: string }>(
+const inventoryIdentity = (value: { provider?: string; providerPostId: string }): string =>
+  `${value.provider ?? 'post-bridge'}\u0000${value.providerPostId}`;
+
+export function providerInventoryOrphans<T extends { provider?: string; providerPostId: string }>(
   posts: readonly T[],
-  knownProviderPostIds: readonly string[],
+  knownProviderPostIds: readonly (string | { provider?: string; providerPostId: string })[],
 ): T[] {
-  const known = new Set(knownProviderPostIds);
-  return posts.filter((post) => !known.has(post.providerPostId));
+  const known = new Set(
+    knownProviderPostIds.map((value) =>
+      typeof value === 'string'
+        ? inventoryIdentity({ providerPostId: value })
+        : inventoryIdentity(value),
+    ),
+  );
+  return posts.filter((post) => !known.has(inventoryIdentity(post)));
 }
 
 /**
@@ -202,10 +217,10 @@ export function providerInventoryOrphans<T extends { providerPostId: string }>(
  * of the three goes out.
  */
 export function providerInventoryFingerprint(
-  posts: readonly { providerPostId: string; state: ProviderPostState }[],
+  posts: readonly { provider?: string; providerPostId: string; state: ProviderPostState }[],
 ): string {
   return posts
-    .map((post) => `${post.providerPostId}:${post.state}`)
+    .map((post) => `${post.provider ?? 'post-bridge'}:${post.providerPostId}:${post.state}`)
     .sort()
     .join('|');
 }

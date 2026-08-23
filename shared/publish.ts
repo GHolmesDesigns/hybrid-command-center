@@ -23,6 +23,8 @@ export interface PublishTargetPreview {
   channel: SignalChannel;
   platform: string;
   accountId: number;
+  provider?: string;
+  accountRef?: string;
   handle: string;
   /** The route this delivery will take, decided before anything is sent. */
   mode: DeliveryMode;
@@ -119,6 +121,8 @@ export type PublishTargetSelections = readonly PublishTargetSelection[];
  */
 export interface PublishChannelTargetReport {
   accountId: number;
+  provider?: string;
+  accountRef?: string;
   handle: string;
   /** This account's resolved content, absent only where the account itself did not resolve. */
   content?: PublishChannelContent;
@@ -142,6 +146,8 @@ export interface PublishChannelReport {
   status: PublishChannelStatus;
   /** The resolved provider account, present only once one was resolved. */
   accountId?: number;
+  provider?: string;
+  accountRef?: string;
   handle?: string;
   /**
    * The resolved content for this target. Absent only where no platform exists to resolve for —
@@ -180,7 +186,14 @@ export interface PublishPreview {
    * validates against exactly this list, so a person can never tick something the save will refuse.
    * Absent where the provider could not be read at all, which is different from an empty list.
    */
-  connectedAccounts?: { id: number; platform: string; handle: string; name: string }[];
+  connectedAccounts?: {
+    id: number;
+    provider?: string;
+    accountRef?: string;
+    platform: string;
+    handle: string;
+    name: string;
+  }[];
   /** The explicit selection this preview planned with, so the composer can show what is ticked. */
   selectedTargets?: PublishTargetSelection[];
   /** Reasons that belong to the whole plan rather than to any one channel. */
@@ -497,6 +510,9 @@ export interface SignalPublicationTarget {
   channel: SignalChannel;
   platform: PublishPlatform | null;
   accountId: number;
+  /** Provider-qualified identity as it stood when this target was resolved. */
+  provider?: string;
+  accountRef?: string;
   /** The handle as it was at submit time, snapshotted like the caption and the channel set. */
   handle: string;
   mode: DeliveryMode;
@@ -511,6 +527,8 @@ export interface SignalPublicationTarget {
    * submission, which is a state the figures panel reports by name rather than as a zero.
    */
   resultId?: string;
+  /** Provider post identity for this one target. Buffer has one of these per channel. */
+  remotePostId?: string;
   permalink?: string;
   error?: string;
   /** When a person recorded that they finished this delivery where it had to be finished. */
@@ -717,8 +735,10 @@ export function publicationDriftFields(
     JSON.stringify(publication.sentMedia) !== JSON.stringify([...plan.mediaUrls])
   )
     fields.push('media');
-  const sent = publication.targets.map((target) => target.accountId).sort((a, b) => a - b);
-  const planned = plan.targets.map((target) => target.accountId).sort((a, b) => a - b);
+  const identity = (target: { accountId: number; provider?: string; accountRef?: string }) =>
+    `${target.provider ?? 'post-bridge'}\u0000${target.accountRef ?? String(target.accountId)}`;
+  const sent = publication.targets.map(identity).sort();
+  const planned = plan.targets.map(identity).sort();
   if (JSON.stringify(sent) !== JSON.stringify(planned)) fields.push('accounts');
   // Only where the snapshot says what each account was handed. A migrated row carries nothing here
   // and **unknown is not a difference** — reporting one would send someone to reconcile against a

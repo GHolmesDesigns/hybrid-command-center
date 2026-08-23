@@ -3,7 +3,12 @@ import type { ProviderPostRecord } from '../../shared/publish.ts';
 export type { ProviderPostRecord };
 
 export interface PublishTarget {
+  /** Local numeric surrogate used by SQLite joins. Never derived from an opaque provider id. */
   id: number;
+  /** Durable provider route. Legacy callers omit it and resolve as Post Bridge. */
+  provider?: string;
+  /** Provider-owned account identity, kept byte-for-byte. Legacy callers use String(id). */
+  accountRef?: string;
   platform: string;
   handle: string;
   name: string;
@@ -68,7 +73,7 @@ interface PublishRequestBase {
   caption: string;
   scheduledInstant: string;
   timezone: string;
-  targets: { accountId: number; platform: string }[];
+  targets: { accountId: number; provider?: string; accountRef?: string; platform: string }[];
   /** Omitted entirely when no platform is tailored. */
   platformConfigurations?: PublishPlatformConfiguration[];
   /**
@@ -105,6 +110,8 @@ export interface PublishSubmission {
   state: 'SUBMITTED' | 'CONFIRMED' | 'PARTIAL' | 'FAILED';
   targets?: {
     accountId: number;
+    /** One-provider-per-target post identity; absent for Post Bridge's group submission. */
+    remotePostId?: string;
     outcome: 'SUCCESS' | 'FAILURE';
     /**
      * The provider's own identity for this one delivery — the `post-results` row id, which is
