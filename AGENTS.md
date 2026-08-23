@@ -41,6 +41,21 @@
   behaviour. **Owner-run only, and never in CI**: it is a write against real social accounts. Its
   request budget is a hard 50 including cleanup. What it establishes goes in §14 of
   `docs/post-bridge-api-surface.md` as a dated result matrix — the transcript is never committed.
+- `npm run probe:buffer`: the Buffer GraphQL contract probe, `scripts/probe-buffer.ts`. It plans by
+  default and contacts nothing. Live mode is owner-run only and never CI: it requires
+  `BUFFER_API_KEY` (or the one-release `BUFFER_KEY` fallback), `--live`, `--yes`,
+  `--channels-approved`, exact account and organization ids, and every connected routed channel as
+  `--channel tiktok:<id>` / `--channel youtube:<id>`. `--target <service>:<id>` may narrow the write
+  subset but must name one of those approved connected channels. It also needs a zoned instant at
+  least 48 hours away, an unused label, and the label typed back. An owner-approved public fixture is
+  passed explicitly as
+  `--media <service>:<image|video>:<https-url>`; the URL must be credential-free, query-free HTTPS
+  and is bound only to that approved service. The same fixture is sent on create and edit; live
+  TikTok evidence shows that omitting it from edit is refused rather than preserved. It creates one
+  disposable scheduled post per approved target, reads and edits each, and deletes only those ids in
+  `finally`; a complete paginated read must prove absence. Its
+  hard 50-request budget reserves 12 calls for cleanup. The credential and transcript are never
+  committed.
 - `npm test`: unit/integration tests with mock Drive
 - `npm run test:coverage`: the same suite with coverage and its thresholds. CI runs this rather
   than `npm test`, so a drop below any project's threshold fails the build. The thresholds are

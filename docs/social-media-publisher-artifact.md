@@ -318,22 +318,22 @@ strongest available evidence that the decision record's ambiguity rule is right.
 Post Bridge is not the only route content leaves by, which `publishing-integration.md` does not
 account for.
 
-A separate local tool, the **Buffer Bridge**, publishes the three channels Post Bridge cannot reach
-for this account. It lives at `C:\Users\garni\Documents\ClaudeCode\buffer-bridge` (confirmed present:
+A separate local tool, the **Buffer Bridge**, was recorded here as publishing three channels Post
+Bridge could not reach. The 23 August 2026 contract reconciliation corrected that claim: both
+providers support those services, and the current non-overlapping route is **two channels — TikTok
+and YouTube — because of Post Bridge's account cap**. The bridge lives at
+`C:\Users\garni\Documents\ClaudeCode\buffer-bridge` (confirmed present:
 `bridge.mjs`, `README.md`) and runs as `node bridge.mjs <command>`.
 
 | Channel | Account | Media | Caption max | Posts per day |
 | --- | --- | --- | ---: | ---: |
 | TikTok | `gholmes.designs` | required | 2,200 | 25 |
-| Bluesky | `GHolmesDesigns` | optional | 300 | 100 |
-| Threads | `gholmesdesigns` | optional | 500 | 250 |
+| YouTube | owner-approved Buffer channel id | required video | provider contract | provider contract |
 
 Facts that matter to any card touching publishing:
 
-- **The two tools do not overlap.** No account appears in both, so the channel decides the tool.
-- **Bluesky's 300 characters is the tightest limit anywhere in this setup** — tighter than X's 280
-  in practice, because an Instagram-length caption fails it. The bridge refuses rather than letting
-  Buffer truncate.
+- **The routes do not overlap.** A target names Buffer or Post Bridge explicitly; no credential,
+  account order, failure, or first match selects the provider.
 - It follows the same safety rules: drafts are the default, live modes require typing `LIVE`,
   `--dry-run` shows what would be sent, and an interrupted send reports `unknown` and is never
   repeated automatically.
@@ -393,9 +393,10 @@ have to be resolved before an implementation card is opened — not during it.
 3. **The queue.** The record rules `use_queue` out (§5.4), on the grounds that it would move
    scheduling authority to Post Bridge. The artifact ships it as one of four modes. The record's
    reasoning holds; note only that the capability is real and the user has been using it.
-4. **Buffer.** The record chose Post Bridge over Buffer (§2). In practice **both are in use**, split
-   by channel, with no overlap. The record's "revisit when Signal grows a channel Post Bridge does
-   not reach" trigger has already fired — for `tt` and `bsky`, today.
+4. **Buffer.** The record chose Post Bridge over Buffer (§2). The 23 August 2026 reconciliation
+   replaces this artifact's old TikTok/Bluesky/Threads claim: Buffer is the explicit route for
+   TikTok and YouTube because Post Bridge's account cap cannot retain those two beside the five
+   active-campaign accounts. This is an account-cap split, not a platform-support split.
 5. **Timezone.** The record requires `PUBLISH_TIMEZONE`, an explicit IANA zone, refusing to publish
    if unset, and refuses the DST spring-forward gap (§5.2, §5.3). The artifact converts with
    `new Date(state.when).toISOString()` from a `datetime-local` input — the **browser's** zone,

@@ -201,6 +201,26 @@ describe('Drive credentials', () => {
   });
 });
 
+describe('Buffer credential migration', () => {
+  it('uses BUFFER_API_KEY as the canonical server-only setting', async () => {
+    setEnv('BUFFER_API_KEY', 'canonical-buffer-key');
+    setEnv('BUFFER_KEY', undefined);
+    expect((await loadConfig()).buffer.apiKey).toBe('canonical-buffer-key');
+  });
+
+  it('accepts BUFFER_KEY only when the canonical setting is absent', async () => {
+    setEnv('BUFFER_API_KEY', undefined);
+    setEnv('BUFFER_KEY', 'one-release-alias');
+    expect((await loadConfig()).buffer.apiKey).toBe('one-release-alias');
+  });
+
+  it('never lets the migration alias override the canonical setting', async () => {
+    setEnv('BUFFER_API_KEY', 'canonical-buffer-key');
+    setEnv('BUFFER_KEY', 'ignored-alias');
+    expect((await loadConfig()).buffer.apiKey).toBe('canonical-buffer-key');
+  });
+});
+
 describe('.env.example', () => {
   /** `KEY=value` pairs as the file writes them, comments and blank lines dropped. */
   const documented = () => {
