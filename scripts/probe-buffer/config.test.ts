@@ -53,6 +53,22 @@ describe('Buffer probe guards', () => {
     expect(outcome.config?.apiKey).toBe('alias');
   });
 
+  it('binds one explicit public media fixture to its approved service', () => {
+    const outcome = parseBufferProbeArgs(
+      [...base, '--media', 'tiktok:image:https://static.example.com/probe.png'],
+      {},
+      now,
+    );
+    expect(outcome.refusals).toEqual([]);
+    expect(outcome.config?.media).toEqual([
+      {
+        service: 'tiktok',
+        kind: 'image',
+        url: 'https://static.example.com/probe.png',
+      },
+    ]);
+  });
+
   it('refuses a schedule inside the 48-hour safety margin', () => {
     const args = base.map((value) =>
       value === '2026-08-26T12:00:00Z' ? '2026-08-24T11:59:00Z' : value,
@@ -110,5 +126,32 @@ describe('Buffer probe guards', () => {
     const outcome = parseBufferProbeArgs(['stray', '--account'], {}, now);
     expect(outcome.refusals).toContain('Unrecognised argument: stray.');
     expect(outcome.refusals).toContain('Unrecognised argument: --account (no value).');
+  });
+
+  it('refuses ambiguous, unsafe, duplicate, or unrouted media fixtures', () => {
+    const outcome = parseBufferProbeArgs(
+      [
+        ...base.filter(
+          (value, index) =>
+            !(value === '--channel' && base[index + 1] === 'youtube:yt_1') &&
+            value !== 'youtube:yt_1',
+        ),
+        '--media',
+        'tiktok:image:http://static.example.com/probe.png',
+        '--media',
+        'tiktok:video:https://static.example.com/probe.mp4',
+        '--media',
+        'tiktok:image:https://static.example.com/second.png',
+        '--media',
+        'youtube:image:https://static.example.com/probe.png',
+        '--media',
+        'tiktok:image:https://static.example.com/probe.png?token=secret',
+      ],
+      {},
+      now,
+    );
+    expect(outcome.refusals.join('\n')).toMatch(/credential-free, query-free HTTPS/);
+    expect(outcome.refusals.join('\n')).toMatch(/duplicates the tiktok fixture/);
+    expect(outcome.refusals.join('\n')).toMatch(/youtube, which is not an approved --channel/);
   });
 });

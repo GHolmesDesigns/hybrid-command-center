@@ -9,6 +9,12 @@ export interface BufferProbeChannel {
   id: string;
 }
 
+export interface BufferProbeMediaFixture {
+  service: (typeof BUFFER_PROBE_SERVICES)[number];
+  kind: 'image' | 'video';
+  url: string;
+}
+
 export interface BufferProbeConfig {
   mode: 'plan' | 'live';
   apiKey: string;
@@ -18,6 +24,7 @@ export interface BufferProbeConfig {
   scheduledAt: string;
   probeLabel: string;
   channels: readonly BufferProbeChannel[];
+  media: readonly BufferProbeMediaFixture[];
 }
 
 export interface BufferProbeGuardOutcome {
@@ -32,6 +39,7 @@ const OPTIONS = new Set([
   'scheduled-at',
   'probe-label',
   'channel',
+  'media',
   'base-url',
 ]);
 const LABEL = /^[a-z0-9][a-z0-9-]{6,46}[a-z0-9]$/;
@@ -40,12 +48,14 @@ const ID = /^[A-Za-z0-9_-]{1,200}$/;
 export const BUFFER_PROBE_USAGE = `Usage
   Plan only; contacts nothing:
     npm run probe:buffer -- --account <id> --organization <id> --scheduled-at <instant> \\
-      --probe-label <label> --channel tiktok:<id> --channel youtube:<id>
+      --probe-label <label> --channel tiktok:<id> --channel youtube:<id> \
+      [--media tiktok:image:<public-https-url>]
 
   Owner-run live probe:
     BUFFER_API_KEY=… npm run probe:buffer -- --live --yes --channels-approved \\
       --account <id> --organization <id> --scheduled-at <instant> --probe-label <label> \\
-      --channel tiktok:<id> --channel youtube:<id>
+      --channel tiktok:<id> --channel youtube:<id> \
+      [--media tiktok:image:<public-https-url>]
 
 The key is read from BUFFER_API_KEY. BUFFER_KEY is a one-release fallback only when the canonical
 setting is absent. Neither key is accepted on the command line.`;
@@ -111,6 +121,24 @@ function parseChannel(value: string): BufferProbeChannel | string {
   return { service: service as BufferProbeChannel['service'], id };
 }
 
+function parseMedia(value: string): BufferProbeMediaFixture | string {
+  const match = /^(tiktok|youtube):(image|video):(.+)$/.exec(value);
+  if (!match) return `--media ${value} is not <service>:<image|video>:<public HTTPS URL>.`;
+  const [, service, kind, rawUrl] = match;
+  try {
+    const url = new URL(rawUrl);
+    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash)
+      return `--media ${service}:${kind}:… must be a credential-free, query-free HTTPS file URL.`;
+    return {
+      service: service as BufferProbeMediaFixture['service'],
+      kind: kind as BufferProbeMediaFixture['kind'],
+      url: url.toString(),
+    };
+  } catch {
+    return `--media ${service}:${kind}:… must carry an absolute HTTPS file URL.`;
+  }
+}
+
 export function parseBufferProbeArgs(
   argv: readonly string[],
   env: Record<string, string | undefined>,
@@ -165,6 +193,19 @@ export function parseBufferProbeArgs(
   if (!channels.length)
     refusals.push('Pass at least one explicit --channel <service>:<channel id>.');
 
+  const media: BufferProbeMediaFixture[] = [];
+  for (const value of options.get('media') ?? []) {
+    const parsed = parseMedia(value);
+    if (typeof parsed === 'string') refusals.push(parsed);
+    else if (media.some((fixture) => fixture.service === parsed.service))
+      refusals.push(`--media duplicates the ${parsed.service} fixture.`);
+    else media.push(parsed);
+  }
+  for (const fixture of media) {
+    if (!channels.some((channel) => channel.service === fixture.service))
+      refusals.push(`--media names ${fixture.service}, which is not an approved --channel.`);
+  }
+
   const baseUrls = options.get('base-url') ?? [];
   if (baseUrls.length > 1) refusals.push('Pass --base-url at most once.');
   const baseUrl = baseUrls[0] ?? BUFFER_PROBE_BASE_URL;
@@ -205,6 +246,7 @@ export function parseBufferProbeArgs(
       scheduledAt,
       probeLabel,
       channels,
+      media,
     },
   };
 }

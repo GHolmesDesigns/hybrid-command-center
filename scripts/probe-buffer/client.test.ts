@@ -36,31 +36,45 @@ describe('Buffer GraphQL probe client', () => {
 
   it('reads create success and spends one request', async () => {
     const budget = new RequestBudget(10, 2);
+    let requestBody = '';
     const client = new BufferProbeClient({
       apiKey: 'key',
       baseUrl: 'https://api.buffer.com',
       budget,
-      transport: response({
-        data: {
-          createPost: {
-            __typename: 'PostActionSuccess',
-            post: {
-              id: 'post_1',
-              text: 'probe',
-              status: 'scheduled',
-              dueAt: '2026-08-26T12:00:00Z',
-              channelId: 'channel_1',
+      transport: async (request) => {
+        requestBody = request.body;
+        return {
+          status: 200,
+          headers: {},
+          body: {
+            data: {
+              createPost: {
+                __typename: 'PostActionSuccess',
+                post: {
+                  id: 'post_1',
+                  text: 'probe',
+                  status: 'scheduled',
+                  dueAt: '2026-08-26T12:00:00Z',
+                  channelId: 'channel_1',
+                },
+              },
             },
           },
-        },
-      }),
+        };
+      },
     });
     await expect(
-      client.create('channel_1', 'probe', '2026-08-26T12:00:00Z'),
+      client.create('channel_1', 'probe', '2026-08-26T12:00:00Z', {
+        kind: 'image',
+        url: 'https://static.example.com/probe.png',
+      }),
     ).resolves.toMatchObject({
       id: 'post_1',
       status: 'scheduled',
     });
+    expect(JSON.parse(requestBody).variables.input.assets).toEqual([
+      { image: { url: 'https://static.example.com/probe.png' } },
+    ]);
     expect(budget.used).toBe(1);
   });
 

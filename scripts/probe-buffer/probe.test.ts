@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BufferPage, BufferPost } from './client.ts';
+import type { BufferProbeAsset } from './client.ts';
 import type { BufferProbeConfig } from './config.ts';
 import { runBufferProbe, type BufferProbeApi } from './probe.ts';
 
@@ -15,6 +16,7 @@ const config: BufferProbeConfig = {
     { service: 'tiktok', id: 'tt_1' },
     { service: 'youtube', id: 'yt_1' },
   ],
+  media: [{ service: 'tiktok', kind: 'image', url: 'https://static.example.com/probe.png' }],
 };
 
 class FakeClient implements BufferProbeApi {
@@ -34,8 +36,8 @@ class FakeClient implements BufferProbeApi {
       { id: 'yt_1', name: 'YouTube', service: 'youtube' },
     ];
   }
-  async create(channelId: string, text: string, dueAt: string) {
-    this.calls.push(`create:${channelId}`);
+  async create(channelId: string, text: string, dueAt: string, asset?: BufferProbeAsset) {
+    this.calls.push(`create:${channelId}:${asset?.kind ?? 'text'}`);
     const post = {
       id: `post_${channelId}`,
       text,
@@ -94,6 +96,8 @@ describe('Buffer live probe', () => {
       ]),
     );
     expect(client.posts.size).toBe(0);
+    expect(client.calls).toContain('create:tt_1:image');
+    expect(client.calls).toContain('create:yt_1:text');
   });
 
   it('runs cleanup in finally when an edit fails', async () => {

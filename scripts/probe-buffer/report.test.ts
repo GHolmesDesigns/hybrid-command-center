@@ -12,9 +12,13 @@ describe('Buffer probe reports', () => {
       scheduledAt: '2026-08-26T12:00:00.000Z',
       probeLabel: 'hcc-buffer-0826',
       channels: [{ service: 'tiktok', id: 'tt_1' }],
+      media: [
+        { service: 'tiktok', kind: 'image', url: 'https://static.example.com/probe.png' },
+      ],
     });
     expect(plan).toContain('provider will not be contacted');
     expect(plan).toContain('tiktok:tt_1');
+    expect(plan).toContain('tiktok:image:https://static.example.com/probe.png');
     expect(plan).toContain('50 requests');
   });
 
@@ -49,6 +53,7 @@ describe('Buffer probe reports', () => {
       scheduledAt: '2026-08-26T12:00:00.000Z',
       probeLabel: 'hcc-buffer-0826',
       channels: [{ service: 'youtube', id: 'yt_1' }],
+      media: [],
     });
     expect(plan).toContain('will be created and deleted');
     expect(plan).not.toContain('never-rendered');

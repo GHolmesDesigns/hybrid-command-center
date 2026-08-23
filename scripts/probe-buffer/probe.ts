@@ -1,5 +1,5 @@
 import type { BufferProbeChannel, BufferProbeConfig } from './config.ts';
-import type { BufferPage, BufferPost, BufferProbeClient } from './client.ts';
+import type { BufferPage, BufferPost, BufferProbeAsset, BufferProbeClient } from './client.ts';
 
 export type BufferClaimState = 'verified' | 'negative' | 'still unverified';
 
@@ -22,7 +22,12 @@ export interface BufferProbeApi {
   readonly budget: { used: number; total: number };
   account(): Promise<Record<string, unknown>>;
   channels(organizationId: string): Promise<Record<string, unknown>[]>;
-  create(channelId: string, text: string, dueAt: string): Promise<BufferPost>;
+  create(
+    channelId: string,
+    text: string,
+    dueAt: string,
+    asset?: BufferProbeAsset,
+  ): Promise<BufferPost>;
   read(id: string, options?: { teardown?: boolean }): Promise<BufferPost>;
   edit(id: string, text: string): Promise<BufferPost>;
   delete(id: string): Promise<string>;
@@ -141,7 +146,9 @@ export async function runBufferProbe(input: {
 
     for (const channel of config.channels) {
       const initialText = `${config.probeLabel} disposable Buffer contract probe`;
-      const createdPost = await client.create(channel.id, initialText, config.scheduledAt);
+      const fixture = config.media.find((item) => item.service === channel.service);
+      const asset = fixture ? { kind: fixture.kind, url: fixture.url } : undefined;
+      const createdPost = await client.create(channel.id, initialText, config.scheduledAt, asset);
       created.push(createdPost.id);
       if (createdPost.channelId !== channel.id || createdPost.text !== initialText)
         throw new Error(

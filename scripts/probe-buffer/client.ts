@@ -42,6 +42,11 @@ export interface BufferPage {
   endCursor: string | null;
 }
 
+export interface BufferProbeAsset {
+  kind: 'image' | 'video';
+  url: string;
+}
+
 const POST_FIELDS = 'id text status dueAt channelId';
 
 function object(value: unknown, label: string): Record<string, unknown> {
@@ -148,7 +153,12 @@ export class BufferProbeClient {
     return data.channels.map((channel) => object(channel, 'Buffer channel'));
   }
 
-  async create(channelId: string, text: string, dueAt: string): Promise<BufferPost> {
+  async create(
+    channelId: string,
+    text: string,
+    dueAt: string,
+    asset?: BufferProbeAsset,
+  ): Promise<BufferPost> {
     const data = await this.request(
       `create disposable post for ${channelId}`,
       `mutation BufferProbeCreate($input: CreatePostInput!) { createPost(input: $input) { __typename ... on PostActionSuccess { post { ${POST_FIELDS} } } ... on MutationError { message } } }`,
@@ -159,7 +169,7 @@ export class BufferProbeClient {
           dueAt,
           schedulingType: 'automatic',
           mode: 'customScheduled',
-          assets: [],
+          assets: asset ? [{ [asset.kind]: { url: asset.url } }] : [],
         },
       },
     );

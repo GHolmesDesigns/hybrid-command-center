@@ -174,9 +174,12 @@ configures a possible provider client; it is never permission to publish and nev
 **Owner-run probe.** `npm run probe:buffer` plans by default and contacts nothing. Live mode also
 requires `--live`, `--yes`, `--channels-approved`, the exact account and organization and explicit
 `tiktok:<id>` / `youtube:<id>` channel ids, an unused label, a zoned instant at least 48 hours away,
-and the label typed back. It verifies the account and channel set before a write, creates one
-disposable scheduled text post per named channel, reads each by id, edits and reads it again, and
-deletes only ids it created in `finally`. Cleanup is independently proved by a complete
+and the label typed back. An optional owner-approved public fixture is explicit too:
+`--media <service>:<image|video>:<https-url>` accepts one credential-free, query-free HTTPS file URL
+per approved service and binds it only to that service's create. The probe verifies the account and
+channel set before a write, creates one disposable scheduled post per named channel, reads each by
+id, edits and reads it again, and deletes only ids it created in `finally`. Cleanup is independently
+proved by a complete
 cursor-paginated read. A hard 50-request budget includes cleanup, with 12 calls reserved for it;
 there is no retry and no deliberate 429. The transcript and credential are never committed.
 

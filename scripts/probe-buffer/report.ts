@@ -9,6 +9,7 @@ export function renderBufferPlan(config: BufferProbeConfig): string {
     `Scheduled at: ${config.scheduledAt}`,
     `Probe label: ${config.probeLabel}`,
     `Channels: ${config.channels.map((channel) => `${channel.service}:${channel.id}`).join(', ')}`,
+    `Media fixtures: ${config.media.length ? config.media.map((fixture) => `${fixture.service}:${fixture.kind}:${fixture.url}`).join(', ') : 'none (text-only)'}`,
     'Flow: verify account and exact channels; prove label unused in a complete read; create one post per channel; read; edit; read; delete in finally; prove absence in a complete read.',
     'Hard budget: 50 requests, with 12 reserved for cleanup. No automatic retry and no rate-limit provocation.',
   ].join('\n');
