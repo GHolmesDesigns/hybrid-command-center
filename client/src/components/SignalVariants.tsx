@@ -363,8 +363,8 @@ function VariantFields({
           </label>
           <span className="signal-variant-count" id={`${id}-disclosure-note`}>
             {capability.syntheticMediaDisclosure === 'IN_CAPTION'
-              ? `${capability.label} has no disclosure field, so this is written into the caption.`
-              : `${capability.label} carries a disclosure flag.`}
+              ? `${capability.label} has no verified provider disclosure control, so this is written into the caption. It does not by itself guarantee platform, advertising, or legal compliance.`
+              : `${capability.label} carries a verified provider disclosure control. Sending it does not by itself guarantee platform, advertising, or legal compliance.`}
           </span>
         </div>
       )}

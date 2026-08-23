@@ -1306,6 +1306,19 @@ describe('platform and account content variants', () => {
     expect(oneImage.request?.platformConfigurations).toEqual([
       { platform: 'instagram', story: true },
     ]);
+
+    // C73 verified the same generic story path against Facebook. Keep this fixture separate from
+    // Instagram's media-bound assertions: the regression it owns is that Facebook reaches the
+    // provider as a story without a Facebook-only production branch.
+    const facebookStory = plan(
+      add({ channels: ['fb'], mediaUrls: ['https://cdn.example.com/a.jpg'] }),
+      [{ platform: 'facebook', accountId: null, postKind: 'STORY' }],
+    );
+    expect(publishPreviewRefusals(facebookStory)).toEqual([]);
+    expect(reportFor(facebookStory, 'fb')).toMatchObject({ kind: 'STORY', status: 'READY' });
+    expect(facebookStory.request?.platformConfigurations).toEqual([
+      { platform: 'facebook', story: true },
+    ]);
   });
 
   it('writes a disclosure into the caption and counts it against the limit', () => {
