@@ -172,9 +172,12 @@ media is not already public therefore refuses before any mutation.
 configures a possible provider client; it is never permission to publish and never selects a route.
 
 **Owner-run probe.** `npm run probe:buffer` plans by default and contacts nothing. Live mode also
-requires `--live`, `--yes`, `--channels-approved`, the exact account and organization and explicit
-`tiktok:<id>` / `youtube:<id>` channel ids, an unused label, a zoned instant at least 48 hours away,
-and the label typed back. An optional owner-approved public fixture is explicit too:
+requires `--live`, `--yes`, `--channels-approved`, the exact account and organization and every
+connected routed channel as `--channel tiktok:<id>` / `--channel youtube:<id>`. An optional
+`--target <service>:<id>` narrows the write subset but must exactly match one of those approved
+connected channels; without it every approved channel is a target. The run also needs an unused
+label, a zoned instant at least 48 hours away, and the label typed back. An optional owner-approved
+public fixture is explicit too:
 `--media <service>:<image|video>:<https-url>` accepts one credential-free, query-free HTTPS file URL
 per approved service and binds it only to that service's create. The probe verifies the account and
 channel set before a write, creates one disposable scheduled post per named channel, reads each by

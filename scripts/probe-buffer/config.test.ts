@@ -22,6 +22,7 @@ describe('Buffer probe guards', () => {
     const outcome = parseBufferProbeArgs(base, {}, now);
     expect(outcome.refusals).toEqual([]);
     expect(outcome.config).toMatchObject({ mode: 'plan', apiKey: '' });
+    expect(outcome.config?.targets).toEqual(outcome.config?.channels);
   });
 
   it('requires every live acknowledgement and the environment credential', () => {
@@ -67,6 +68,13 @@ describe('Buffer probe guards', () => {
         url: 'https://static.example.com/probe.png',
       },
     ]);
+  });
+
+  it('keeps the exact connected set while narrowing the explicit write targets', () => {
+    const outcome = parseBufferProbeArgs([...base, '--target', 'tiktok:tt_1'], {}, now);
+    expect(outcome.refusals).toEqual([]);
+    expect(outcome.config?.channels).toHaveLength(2);
+    expect(outcome.config?.targets).toEqual([{ service: 'tiktok', id: 'tt_1' }]);
   });
 
   it('refuses a schedule inside the 48-hour safety margin', () => {
@@ -152,6 +160,13 @@ describe('Buffer probe guards', () => {
     );
     expect(outcome.refusals.join('\n')).toMatch(/credential-free, query-free HTTPS/);
     expect(outcome.refusals.join('\n')).toMatch(/duplicates the tiktok fixture/);
-    expect(outcome.refusals.join('\n')).toMatch(/youtube, which is not an approved --channel/);
+    expect(outcome.refusals.join('\n')).toMatch(/youtube, which is not an approved write --target/);
+  });
+
+  it('refuses a target outside the approved connected set', () => {
+    const outcome = parseBufferProbeArgs([...base, '--target', 'tiktok:different'], {}, now);
+    expect(outcome.refusals.join('\n')).toMatch(
+      /not present in the approved connected --channel set/,
+    );
   });
 });

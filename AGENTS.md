@@ -44,9 +44,11 @@
 - `npm run probe:buffer`: the Buffer GraphQL contract probe, `scripts/probe-buffer.ts`. It plans by
   default and contacts nothing. Live mode is owner-run only and never CI: it requires
   `BUFFER_API_KEY` (or the one-release `BUFFER_KEY` fallback), `--live`, `--yes`,
-  `--channels-approved`, exact account and organization ids, explicit `tiktok:<id>` and/or
-  `youtube:<id>` channels, a zoned instant at least 48 hours away, an unused label, and the label
-  typed back. An owner-approved public fixture is passed explicitly as
+  `--channels-approved`, exact account and organization ids, and every connected routed channel as
+  `--channel tiktok:<id>` / `--channel youtube:<id>`. `--target <service>:<id>` may narrow the write
+  subset but must name one of those approved connected channels. It also needs a zoned instant at
+  least 48 hours away, an unused label, and the label typed back. An owner-approved public fixture is
+  passed explicitly as
   `--media <service>:<image|video>:<https-url>`; the URL must be credential-free, query-free HTTPS
   and is bound only to that approved service. It creates one disposable scheduled post per approved
   channel, reads and edits each, and deletes only those ids in `finally`; a complete paginated read

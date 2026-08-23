@@ -16,6 +16,10 @@ const config: BufferProbeConfig = {
     { service: 'tiktok', id: 'tt_1' },
     { service: 'youtube', id: 'yt_1' },
   ],
+  targets: [
+    { service: 'tiktok', id: 'tt_1' },
+    { service: 'youtube', id: 'yt_1' },
+  ],
   media: [{ service: 'tiktok', kind: 'image', url: 'https://static.example.com/probe.png' }],
 };
 
@@ -98,6 +102,21 @@ describe('Buffer live probe', () => {
     expect(client.posts.size).toBe(0);
     expect(client.calls).toContain('create:tt_1:image');
     expect(client.calls).toContain('create:yt_1:text');
+  });
+
+  it('verifies the full connected set but writes only the explicit target subset', async () => {
+    const client = new FakeClient();
+    const result = await runBufferProbe({
+      client,
+      config: { ...config, targets: [{ service: 'tiktok', id: 'tt_1' }] },
+    });
+    expect(result).toMatchObject({
+      created: ['post_tt_1'],
+      deleted: ['post_tt_1'],
+      leftovers: [],
+    });
+    expect(client.calls).toContain('create:tt_1:image');
+    expect(client.calls.some((call) => call.startsWith('create:yt_1'))).toBe(false);
   });
 
   it('runs cleanup in finally when an edit fails', async () => {

@@ -24,6 +24,7 @@ export interface BufferProbeConfig {
   scheduledAt: string;
   probeLabel: string;
   channels: readonly BufferProbeChannel[];
+  targets: readonly BufferProbeChannel[];
   media: readonly BufferProbeMediaFixture[];
 }
 
@@ -39,6 +40,7 @@ const OPTIONS = new Set([
   'scheduled-at',
   'probe-label',
   'channel',
+  'target',
   'media',
   'base-url',
 ]);
@@ -49,12 +51,13 @@ export const BUFFER_PROBE_USAGE = `Usage
   Plan only; contacts nothing:
     npm run probe:buffer -- --account <id> --organization <id> --scheduled-at <instant> \\
       --probe-label <label> --channel tiktok:<id> --channel youtube:<id> \
+      [--target tiktok:<id>] \
       [--media tiktok:image:<public-https-url>]
 
   Owner-run live probe:
     BUFFER_API_KEY=… npm run probe:buffer -- --live --yes --channels-approved \\
       --account <id> --organization <id> --scheduled-at <instant> --probe-label <label> \\
-      --channel tiktok:<id> --channel youtube:<id> \
+      --channel tiktok:<id> --channel youtube:<id> [--target tiktok:<id>] \
       [--media tiktok:image:<public-https-url>]
 
 The key is read from BUFFER_API_KEY. BUFFER_KEY is a one-release fallback only when the canonical
@@ -193,6 +196,20 @@ export function parseBufferProbeArgs(
   if (!channels.length)
     refusals.push('Pass at least one explicit --channel <service>:<channel id>.');
 
+  const targets: BufferProbeChannel[] = [];
+  for (const value of options.get('target') ?? []) {
+    const parsed = parseChannel(value);
+    if (typeof parsed === 'string') refusals.push(parsed.replace('--channel', '--target'));
+    else if (targets.some((target) => target.id === parsed.id || target.service === parsed.service))
+      refusals.push(`--target ${value} duplicates an id or service.`);
+    else if (
+      !channels.some((channel) => channel.id === parsed.id && channel.service === parsed.service)
+    )
+      refusals.push(`--target ${value} is not present in the approved connected --channel set.`);
+    else targets.push(parsed);
+  }
+  if (!targets.length && !(options.get('target')?.length ?? 0)) targets.push(...channels);
+
   const media: BufferProbeMediaFixture[] = [];
   for (const value of options.get('media') ?? []) {
     const parsed = parseMedia(value);
@@ -202,8 +219,8 @@ export function parseBufferProbeArgs(
     else media.push(parsed);
   }
   for (const fixture of media) {
-    if (!channels.some((channel) => channel.service === fixture.service))
-      refusals.push(`--media names ${fixture.service}, which is not an approved --channel.`);
+    if (!targets.some((target) => target.service === fixture.service))
+      refusals.push(`--media names ${fixture.service}, which is not an approved write --target.`);
   }
 
   const baseUrls = options.get('base-url') ?? [];
@@ -246,6 +263,7 @@ export function parseBufferProbeArgs(
       scheduledAt,
       probeLabel,
       channels,
+      targets,
       media,
     },
   };

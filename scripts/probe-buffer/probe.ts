@@ -144,7 +144,7 @@ export async function runBufferProbe(input: {
     if (before.some((post) => post.text.includes(config.probeLabel)))
       throw new Error('The probe label is already present in the complete post inventory.');
 
-    for (const channel of config.channels) {
+    for (const channel of config.targets) {
       const initialText = `${config.probeLabel} disposable Buffer contract probe`;
       const fixture = config.media.find((item) => item.service === channel.service);
       const asset = fixture ? { kind: fixture.kind, url: fixture.url } : undefined;
@@ -169,10 +169,10 @@ export async function runBufferProbe(input: {
     claims[1] = {
       claim: 'Buffer creates one remote post per channel and preserves per-channel identity.',
       state:
-        created.length === config.channels.length && new Set(created).size === created.length
+        created.length === config.targets.length && new Set(created).size === created.length
           ? 'verified'
           : 'negative',
-      evidence: `${created.length} distinct post id(s) for ${config.channels.length} approved channel(s).`,
+      evidence: `${created.length} distinct post id(s) for ${config.targets.length} approved write target(s).`,
     };
     claims[2] = {
       claim: 'Scheduled posts can be read and edited through the documented GraphQL shapes.',
