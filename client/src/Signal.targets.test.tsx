@@ -106,8 +106,19 @@ const openPreview = async () => {
   await openSignal();
   fireEvent.click(screen.getByRole('button', { name: 'Edit A post for two pages' }));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Show preview' })).toBeEnabled());
+  const previewsBefore = requests.filter((entry) => entry.url.endsWith('/publish/preview')).length;
   fireEvent.click(screen.getByRole('button', { name: 'Show preview' }));
-  return within(await screen.findByRole('group', { name: 'Accounts' }));
+  const accounts = within(await screen.findByRole('group', { name: 'Accounts' }));
+  // The group appearing is not the panel having settled. Waiting only on it returns while the
+  // preview request is still in flight, and every assertion after that races the response — the
+  // ones reading initial state see a half-seeded panel, and the ones that click first used to have
+  // the click thrown away when the payload landed. Wait for the response instead.
+  await waitFor(() =>
+    expect(
+      requests.filter((entry) => entry.url.endsWith('/publish/preview')).length,
+    ).toBeGreaterThan(previewsBefore),
+  );
+  return accounts;
 };
 
 describe('choosing a channel’s accounts', () => {

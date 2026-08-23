@@ -13,6 +13,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { api, send } from '../api';
+import { useServerSeeded } from '../useServerSeeded';
 import type { Category, Project, Tag, Task } from '../../../shared/types';
 import {
   APP_VERSION,
@@ -62,7 +63,7 @@ export function SettingsView({
       rootFolderUrl?: string;
     } | null>(null),
     [root, setRoot] = useState(''),
-    [brandForm, setBrandForm] = useState<Branding>(branding),
+    [brandForm, setBrandForm, brandSaved] = useServerSeeded<Branding>(branding),
     [brandBusy, setBrandBusy] = useState(false),
     [driveError, setDriveError] = useState('');
   const load = useCallback(async () => {
@@ -78,9 +79,6 @@ export function SettingsView({
   useEffect(() => {
     void load().catch((error: unknown) => setDriveError((error as Error).message));
   }, [load]);
-  useEffect(() => {
-    setBrandForm(branding);
-  }, [branding]);
   const connect = async () => {
     try {
       const { url } = await api<{ url: string }>('/drive/oauth/start');
@@ -124,6 +122,9 @@ export function SettingsView({
     setBrandBusy(true);
     try {
       await send('/settings/branding', 'PUT', brandForm);
+      // The write is what the form now agrees with, so the next branding the app hands down may
+      // seed it again. Without this the panel would stay detached after its first edit.
+      brandSaved();
       await refresh();
       flash('Sidebar branding saved.');
     } catch (err) {

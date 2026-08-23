@@ -3,6 +3,7 @@ import { AlertTriangle, ExternalLink, FileText, Play, RefreshCw } from 'lucide-r
 import { SIGNAL_CHANNEL_LABEL, signalMediaKindFor, type SignalPost } from '../../../shared/signal';
 import { urlPostMedia, type SignalPostMedia } from '../../../shared/signal-media';
 import { formatFileSize } from '../../../shared/drive';
+import { useServerSeeded } from '../useServerSeeded';
 import {
   publishCapabilityFor,
   PUBLISH_POST_KIND_LABEL,
@@ -965,10 +966,8 @@ export function PublishPreviewTabs({
       map.set(entry.channel, [...(map.get(entry.channel) ?? []), entry.providerAccountId]);
     return map;
   }, [preview.selectedTargets]);
-  const [selection, setSelection] = useState<Map<string, number[]>>(savedSelection);
-  useEffect(() => {
-    setSelection(savedSelection);
-  }, [savedSelection]);
+  const [selection, setSelection, selectionSaved] =
+    useServerSeeded<Map<string, number[]>>(savedSelection);
 
   // A channel removed from the post between two previews must not leave the selection past the end.
   useEffect(() => {
@@ -1052,12 +1051,16 @@ export function PublishPreviewTabs({
                   setSelection(copy);
                 }}
                 onSave={() => {
-                  void onSaveTargets(
-                    [...selection.entries()].map(([channel, providerAccountIds]) => ({
-                      channel,
-                      providerAccountIds,
-                    })),
-                  );
+                  void Promise.resolve(
+                    onSaveTargets(
+                      [...selection.entries()].map(([channel, providerAccountIds]) => ({
+                        channel,
+                        providerAccountIds,
+                      })),
+                    ),
+                    // The saved selection is now what the next preview will carry, so hand authority
+                    // back. Held open, this panel would ignore every later preview it was given.
+                  ).then(selectionSaved);
                 }}
               />
             ) : null

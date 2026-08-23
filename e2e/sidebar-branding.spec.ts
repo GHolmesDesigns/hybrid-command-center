@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { gotoSettled } from './ready';
 
 const LOGO_URL = 'https://cdn.example.invalid/logo.svg';
 const LOGO_SVG =
@@ -28,7 +29,7 @@ test('sidebar colours and logo save, survive a reload, and refuse an unreadable 
   await page.route(LOGO_URL, (route) =>
     route.fulfill({ status: 200, contentType: 'image/svg+xml', body: LOGO_SVG }),
   );
-  await page.goto('/settings');
+  await gotoSettled(page, '/settings');
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
 
   // An unreadable pair is refused in words, not by colour alone, and never reaches the API.
@@ -74,7 +75,7 @@ test('sidebar colours and logo save, survive a reload, and refuse an unreadable 
   expect(rejected.status()).toBe(400);
   expect((await rejected.json()).error).toContain('4.5:1');
 
-  await page.goto('/settings');
+  await gotoSettled(page, '/settings');
   await page.getByRole('button', { name: 'Reset to defaults' }).click();
   // Reset only sets form state, and Save is enabled on either palette because both pass AA, so
   // there is no disabled interval to wait through. Saving before the reset reaches the form
