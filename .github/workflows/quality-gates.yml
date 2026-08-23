@@ -10,7 +10,7 @@ name: Quality gates
 # exception rather than the flow.
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
 
 permissions:
@@ -27,10 +27,17 @@ concurrency:
   # recorded result rather than being cancelled by the next one.
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
+# Gate shape: pay the small Ubuntu setup cost once before either browser job starts. Audit,
+# typecheck, lint, formatting, and the existing version rule are the cheap verdicts; if one fails,
+# both expensive jobs stop here. After they pass, Linux and Windows end-to-end work fans out in
+# parallel, so a coverage, build, or Linux browser failure does not hide the Windows-only hang
+# signal. Leaving both old jobs independent was rejected because Windows kept billing after a fast
+# failure had already decided the run. Making Windows need the whole Linux job was rejected because
+# it would defer every Windows-only finding until coverage, build, and Linux E2E were green.
 jobs:
-  quality-gates:
+  checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 8
 
     steps:
       # Actions are pinned to a commit SHA rather than a floating major tag: a tag is mutable
@@ -86,6 +93,24 @@ jobs:
           (github.event_name == 'pull_request' && github.event.pull_request.draft == false)
         run: npm run check:version-bump
 
+  quality-gates:
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
       # Coverage is measured on this run rather than in a job of its own — the same suite,
       # the same checkout, one flag. The thresholds in `vitest.config.ts` are per project and
       # were taken from what this suite actually covers, so a module losing its tests fails
@@ -119,9 +144,11 @@ jobs:
           retention-days: 7
 
   # Linux cannot catch the Windows-only hang where Playwright prints a passing
-  # summary and then never returns. This job is that check: the suite, on Windows,
-  # must exit on its own.
+  # summary and then never returns. This job is that check: after the shared fast
+  # verdict is green, the suite on Windows must exit on its own. It deliberately
+  # does not wait for the slow Linux job, so both platforms still report together.
   e2e-windows:
+    needs: checks
     runs-on: windows-latest
     timeout-minutes: 8
 
