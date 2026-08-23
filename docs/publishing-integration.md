@@ -184,7 +184,7 @@ What the contract answers for each platform:
 | First comments | `firstComment` | X only |
 | Titles and descriptions | `title`, `description` | YouTube's title is separate and capped at 100; LinkedIn's is a document title and applies only to a PDF |
 | Cover images and thumbnails | `coverImage`, `thumbnail` | Whether the provider will **carry** one. False everywhere: OpenAPI names Instagram's `cover_image` and YouTube's `thumbnail`, the live probe verified neither, and current support material says custom external YouTube thumbnails are unavailable. A role can still be *stored* where the provider names the field — §3.4 |
-| Synthetic-media disclosure | `syntheticMediaDisclosure` | `IN_CAPTION` everywhere: no provider flag exists, so a disclosure is written into the caption |
+| Synthetic-media disclosure | `syntheticMediaDisclosure` | `IN_CAPTION` everywhere: no provider control has positive live evidence here, so a disclosure is written into the caption. That sentence does not by itself guarantee platform, advertising, or legal compliance |
 | Provider drafts | `providerDraft` | False everywhere; submitting an existing Post Bridge draft is broken upstream (§4) |
 
 A submission's **shape** comes from the post's format, not from its media: `CAROUSEL`, `REEL`, and
@@ -324,14 +324,21 @@ real difference and neither refuse nor warn.
 `syntheticMediaDisclosure` is `IN_CAPTION` on every platform the contract answers for. The
 disclosure sentence is appended once, the preview shows the caption with it already in it, and the
 caption limit is measured against that text — a disclosure that pushes X past 280 has to refuse
-before the send rather than after. A platform recording `PROVIDER_FIELD` would carry the flag
-instead and nothing would be appended.
+before the send rather than after. The 21 August 2026 live matrix did not positively verify
+YouTube's `contains_synthetic_media` or TikTok's `disclose_branded_content` and
+`disclose_your_brand`, and the provider account cap makes those controls unaskable from this
+workspace while it keeps the five accounts the studio publishes on. They therefore remain absent
+from the API and composer rather than being inferred from OpenAPI. A future platform recording
+`PROVIDER_FIELD` would carry its verified control instead and nothing would be appended; sending a
+provider control would still not, by itself, guarantee platform, advertising, or legal compliance.
 
 **A placement is a shape, not a decoration.** An override sets the `PublishPostKind` the platform
 submits as, so a story meets a story's media bounds and warns that its caption reaches no reader.
 Only a story is sent as a provider `placement`: a reel is one video in the platform's ordinary post
 (§3.2), so choosing it changes what preflight accepts and sends no placement field, which is what
-the source records and all it records.
+the source records and all it records. C73 positively verified that the existing generic path sends
+Facebook stories as `placement: "story"`; the Facebook regression fixture proves that path without
+adding a Facebook-only feature.
 
 **The plan hash covers the overrides.** The tailored configurations and the media that would be sent
 are part of the hashed plan, so a layer edited between preview and confirm refuses the commit
@@ -412,16 +419,15 @@ document, and not exercised by C73 either, which deleted every asset it made exp
 let one expire (§14, question 2). Nothing may depend on its timing until a dated follow-up read of
 inventoried asset ids records it.
 
-**Everything else the surface note found is still unverified, and C73 having run did not change
-that.** The probe went out on 2026-08-20 and its dated result matrix is
-`docs/post-bridge-api-surface.md` §14. It settled the upload contract, the MIME enum, the deletion
-half of the media lifecycle, the posts list and its pagination, and the Facebook story path. It left
-`account_configurations`, the media-role fields (YouTube `thumbnail`, Instagram `cover_image`), the
-analytics filters and `match_confidence`, and the platform disclosure fields where it found them —
-vocabulary in an OpenAPI document rather than verified behavior. **The fail-closed values in
-`shared/publish-capabilities.ts` remain authoritative** — `accountContentOverride` included — until a
-dated §14 result verifies each one. A field appearing in a spec is not permission to flip a
-capability, and neither is a probe run that never reached the question (§3.3, §3.4).
+**Everything the surface note did not positively establish stays fail-closed.** The dated live
+matrix in `docs/post-bridge-api-surface.md` §14 settled the upload contract, the MIME enum, the
+deletion half of the media lifecycle, the posts list and its pagination, account configurations for
+Facebook, and the Facebook story path. It did not establish the YouTube or TikTok platform
+disclosure controls, the remaining unverified media roles, the analytics filters, or the actual
+`match_confidence` vocabulary. **The fail-closed values in `shared/publish-capabilities.ts` remain
+authoritative** until a dated §14 result verifies a field or a card records an explicit path that
+does not rely on it. A field appearing in a spec is not permission to flip a capability, and neither
+is a probe run that never reached the question (§3.3, §3.4).
 
 ### 3.4 Media roles: a cover image and a thumbnail
 

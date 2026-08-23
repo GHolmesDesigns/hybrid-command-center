@@ -91,6 +91,7 @@ describe('Post Bridge media wire shapes', () => {
           { platform: 'youtube', title: 'The talk', caption: 'Tailored' },
           { platform: 'twitter', firstComment: 'gholmesdesigns.com' },
           { platform: 'instagram', story: true },
+          { platform: 'facebook', story: true },
         ],
       } as PublishRequest),
     ).toEqual({
@@ -98,6 +99,7 @@ describe('Post Bridge media wire shapes', () => {
       youtube: { caption: 'Tailored', title: 'The talk' },
       twitter: { first_comment: 'gholmesdesigns.com' },
       instagram: { placement: 'story' },
+      facebook: { placement: 'story' },
     });
   });
 

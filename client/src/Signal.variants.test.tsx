@@ -127,6 +127,9 @@ describe('Signal content variants', () => {
     expect(youtube.getByLabelText('Add a Drive file as the YouTube thumbnail')).toBeInTheDocument();
     // And the control says what it does today rather than implying a delivery nobody has watched.
     expect(youtube.getByText(/has not verified that it is accepted/)).toBeInTheDocument();
+    expect(youtube.getByText(/has no verified provider disclosure control/)).toHaveTextContent(
+      'It does not by itself guarantee platform, advertising, or legal compliance.',
+    );
     expect(x.queryByText('Thumbnail')).not.toBeInTheDocument();
     expect(screen.queryByText('Cover image')).not.toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'Blog' })).not.toBeInTheDocument();
