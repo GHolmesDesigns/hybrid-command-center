@@ -201,10 +201,13 @@ set, disposable targets, scheduled instant, labels, and later the exact public T
 on 23 August 2026. The first guarded run spent four of its 50-request budget and stopped on
 TikTok's text-only create with no post created. A TikTok-only preflight then spent two reads and
 stopped before writes when the first guard version could not distinguish the connected set from the
-write subset. After that distinction was made explicit, the image-backed run spent eight requests:
-one TikTok post was created and read back, edit refused, and cleanup deleted it and proved complete
-absence. Created: 1; deleted: 1; leftovers: 0. “Verified” below names the evidence source; it does
-not silently turn a published schema into observed live behavior.
+write subset. After that distinction was made explicit, the first image-backed run spent eight
+requests: one TikTok post was created and read back, edit without an asset refused, and cleanup
+deleted it and proved complete absence. A fresh corrected run spent nine requests, created one
+TikTok post with the same approved image, resubmitted that image on edit, independently read the
+edited caption back, deleted the post, and proved complete absence. Created: 1; deleted: 1;
+leftovers: 0 in each write run. “Verified” below names the evidence source; it does not silently turn
+a published schema into observed live behavior.
 
 | Claim | Result | Evidence and disposition |
 | --- | --- | --- |
@@ -217,7 +220,7 @@ not silently turn a published schema into observed live behavior.
 | The approved YouTube channel accepts a disposable custom-scheduled post and returns a per-channel id | **still unverified** | The fail-closed run stopped at TikTok's first create, before reaching YouTube. It did not infer YouTube behavior or retry past the refusal. |
 | By-id read preserves channel, text, due time, and status after TikTok image create | **verified** | The image-backed live run reached edit only after an independent by-id read matched the created post's target and caption. |
 | `editPost` applies text while an omitted asset list preserves TikTok media | **negative** | The image-backed post's text-only edit returned `InvalidInputError`: `Invalid post: TikTok posts require at least one image or video.` For this channel the documented omission rule did not make the edit valid; the guarded probe must resend the same approved asset explicitly. |
-| `editPost` applies text when the approved TikTok asset is resubmitted | **still unverified** | The probe now resends the exact create fixture, but that corrected edit has not yet been owner-run under a fresh unused label. |
+| `editPost` applies text when the approved TikTok asset is resubmitted | **verified** | A fresh owner-approved run resubmitted the exact public PNG from create, and an independent by-id read matched the edited caption and TikTok target before cleanup. |
 | `deletePost` returns the deleted id and a complete paginated read proves absence | **verified** | Cleanup returned the one created TikTok id, and a complete cursor-paginated read found no created id. No remote leftover remains. |
 | Typed mutation errors and system `errors[]` carry the documented shapes | **verified** | Official error guide and union reference read 23 August 2026; injected fixtures cover both parsers. Live TikTok create and edit refusals also returned the documented `InvalidInputError` typed mutation shape. System-error behavior remains contract-and-fixture evidence rather than a provoked live refusal. |
 | A natural 429 carries usable `RateLimit` / `RateLimit-Policy` and `Retry-After` values | **still unverified** | The headers are documented. The probe never provokes load; it records them only if they arrive naturally. |
@@ -226,9 +229,10 @@ not silently turn a published schema into observed live behavior.
 
 **Negative results:** this account's approved TikTok channel refused a text-only create because a
 TikTok post requires an image or video. It accepted the exact public PNG on create and readback, but
-then refused an edit that omitted `assets` for the same reason. Cleanup is positively proved; edit
-with the asset explicitly resubmitted, YouTube, and publish-time delivery remain **still
-unverified**, never negative and never permission to build.
+then refused an edit that omitted `assets` for the same reason. A fresh run verified that edit
+succeeds when the exact approved asset is explicitly resubmitted. Cleanup is positively proved;
+YouTube and publish-time delivery remain **still unverified**, never negative and never permission
+to build.
 
 **Revisit this app's decision when any of these becomes true**, and not before:
 
