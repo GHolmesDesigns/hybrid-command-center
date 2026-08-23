@@ -7,6 +7,7 @@ import { handleE2eStopRequest } from './endpoints.ts';
 import { stopWhenTheRunEnds } from './shutdown.ts';
 import {
   MockAnalyticsProvider,
+  MockAnalyticsWindowProvider,
   MockProviderInventoryProvider,
   MockPublishProvider,
 } from '../server/publish/mock-provider.ts';
@@ -128,11 +129,61 @@ inventory.hold([
   },
 ]);
 
+/**
+ * What the provider reports over a window, for the one flow only a browser can prove: a person
+ * pressing **Refresh window**, a mapped account total, a row belonging to nothing here, and a second
+ * press that fails and leaves the first read exactly where it was.
+ *
+ * One complete page, because the walk itself — several pages, a repeated offset, an unreadable
+ * envelope, the safety bounds — is covered against fixtures in
+ * `server/publish/analytics-window.test.ts` where each can be arranged exactly.
+ *
+ * `e2e-result-tt` is the result identity `publish.checkResult` hands back, so the first row maps to a
+ * delivery this run created; the second names a result nothing here claims, which is what an unmapped
+ * row is. `failureAt = 2` makes the second press the failure case.
+ */
+const analyticsWindow = new MockAnalyticsWindowProvider();
+analyticsWindow.pages = [
+  {
+    rows: [
+      {
+        analyticsId: 'e2e-window-tt',
+        postResultId: 'e2e-result-tt',
+        platform: 'tiktok',
+        views: 4210,
+        likes: 318,
+        comments: 24,
+        shares: 61,
+        providerSyncedAt: '2099-09-15T11:00:00.000Z',
+        matchConfidence: 'exact',
+        platformPostId: 'tt-e2e-7788',
+      },
+      {
+        analyticsId: 'e2e-window-elsewhere',
+        postResultId: 'made-in-post-bridge',
+        platform: 'tiktok',
+        views: 9000,
+        likes: 12,
+        comments: 3,
+        shares: 4,
+      },
+    ],
+    next: { done: true },
+    warnings: [],
+  },
+];
+analyticsWindow.failureAt = 2;
+
 const app = createApp(db, {
   publishTimezone: 'America/New_York',
   publish,
   analytics,
   inventory,
+  analyticsWindow,
+  // The window the fixture may ask about. The app itself offers none — `ANALYTICS_WINDOW_EVIDENCE`
+  // records §14's unverified rows — so without this the refresh path could not be reached at all.
+  // A build a person uses never gets this option; see the option's own comment in `server/app.ts`.
+  analyticsWindows: ['30d'],
   driveMedia: () => driveMedia,
 });
 const server: Server = app.listen(config.port, config.host, () =>

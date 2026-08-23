@@ -32,6 +32,18 @@ import {
   postBridgeAnalyticsPath,
 } from './post-bridge-analytics-wire.ts';
 import type { ProviderInventoryPage, ProviderInventoryProvider } from './inventory-provider.ts';
+import type {
+  AnalyticsWindowProvider,
+  ProviderAnalyticsWindowPage,
+} from './analytics-window-provider.ts';
+import {
+  parsePostBridgeAnalyticsWindowPage,
+  postBridgeAnalyticsWindowPath,
+} from './post-bridge-analytics-window-wire.ts';
+import {
+  ANALYTICS_WINDOW_PAGE_SIZE,
+  type AnalyticsWindow,
+} from '../../shared/publish-analytics-window.ts';
 import { PROVIDER_INVENTORY_PAGE_SIZE } from '../../shared/provider-inventory.ts';
 import { ANALYTICS_PLATFORMS, type AnalyticsPlatform } from '../../shared/publish-analytics.ts';
 import type {
@@ -368,6 +380,48 @@ export class PostBridgeInventoryProvider implements ProviderInventoryProvider {
         // else is in there*, and a filter is a list of the states this app already expects. An orphan
         // in a state nobody thought to ask about is exactly the one worth seeing.
         postBridgeInventoryPath({ limit: PROVIDER_INVENTORY_PAGE_SIZE, offset }),
+      ),
+    );
+  }
+}
+
+/**
+ * The window half of Post Bridge: `GET /v1/analytics?platform=&timeframe=`, one page at a time.
+ *
+ * A fourth class in this file, satisfying a fifth interface, and the separation is the point
+ * (`analytics-window-provider.ts`): what the window panel is handed can list rows for a window and
+ * nothing else — no `sync`, no per-delivery `list`, no submit. It shares the one `PostBridgeApi`, so
+ * it shares one bearer token and one reading of a `429`, and nothing else.
+ *
+ * There is no walk in here. This asks for the page it was told to ask for and hands back what the page
+ * said, including the provider's own next-page answer verbatim through `providerInventoryNextPage`.
+ * Every rule about how far a walk may go, what a repeated offset means, and when a page is unreadable
+ * lives where a fixture can drive it — `AnalyticsWindowService` and
+ * `post-bridge-analytics-window-wire.ts` — because this file is the one automated tests may not run.
+ *
+ * **Nothing reaches this class today.** `AnalyticsWindowService` refuses a window that
+ * `ANALYTICS_WINDOW_EVIDENCE` has no dated §14 result for, and it carries none, so the service returns
+ * before constructing a request. It exists so the transport is in place the moment a result lands.
+ */
+export class PostBridgeAnalyticsWindowProvider implements AnalyticsWindowProvider {
+  readonly available = true;
+  private readonly api: PostBridgeApi;
+  constructor(apiKey: string, baseUrl = 'https://api.post-bridge.com/v1') {
+    this.api = new PostBridgeApi(apiKey, baseUrl);
+  }
+  async listWindow(request: {
+    platform: AnalyticsPlatform;
+    timeframe: AnalyticsWindow;
+    pageToken?: number;
+  }): Promise<ProviderAnalyticsWindowPage> {
+    return parsePostBridgeAnalyticsWindowPage(
+      await this.api.request(
+        postBridgeAnalyticsWindowPath({
+          platform: request.platform,
+          timeframe: request.timeframe,
+          limit: ANALYTICS_WINDOW_PAGE_SIZE,
+          offset: request.pageToken ?? 0,
+        }),
       ),
     );
   }

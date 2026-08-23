@@ -101,6 +101,7 @@ import { UnavailablePublishProvider } from './publish/provider.ts';
 import {
   PostBridgeAnalyticsProvider,
   PostBridgeInventoryProvider,
+  PostBridgeAnalyticsWindowProvider,
   PostBridgeProvider,
 } from './publish/post-bridge.ts';
 import { PublishAnalyticsService } from './publish/analytics.ts';
@@ -109,6 +110,12 @@ import {
   type AnalyticsProvider,
 } from './publish/analytics-provider.ts';
 import { ProviderInventoryService } from './publish/inventory.ts';
+import { AnalyticsWindowService, analyticsWindowQuery } from './publish/analytics-window.ts';
+import {
+  UnavailableAnalyticsWindowProvider,
+  type AnalyticsWindowProvider,
+} from './publish/analytics-window-provider.ts';
+import type { AnalyticsWindow } from '../shared/publish-analytics-window.ts';
 import {
   UnavailableProviderInventoryProvider,
   type ProviderInventoryProvider,
@@ -246,6 +253,23 @@ export type AppOptions = {
    * rehearsing a multi-page walk or a page failure sets only this one.
    */
   inventory?: ProviderInventoryProvider;
+  /**
+   * Test-only window provider, separate again for the same reason: what the window panel is handed can
+   * list provider rows for one platform and window, and cannot sync, submit, update, or cancel
+   * anything. A suite rehearsing a multi-page walk, an unmapped row, or a page failure sets only this
+   * one.
+   */
+  analyticsWindow?: AnalyticsWindowProvider;
+  /**
+   * Test-only set of analytics windows the app may offer and refresh.
+   *
+   * Production takes the §14 evidence table in `shared/publish-analytics-window.ts`, which verifies
+   * none — so no window is offered, and a refresh is refused before any provider call. A fixture and
+   * the end-to-end run supply one here because the walk, the atomic replacement, the unmapped count,
+   * and the failure path are unreachable otherwise. It widens nothing at runtime: no caller outside
+   * these options sets it, and the sentence a fixture window carries says it is a fixture.
+   */
+  analyticsWindows?: readonly AnalyticsWindow[];
   /** Fixed configured zone for publishing tests and deployments. */
   publishTimezone?: string;
   /**
@@ -535,6 +559,18 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         ? new PostBridgeInventoryProvider(config.publish.apiKey)
         : new UnavailableProviderInventoryProvider()),
     clock,
+  );
+  // A fifth provider beside the four above, holding something that can only list rows for one
+  // platform and window. It cannot reach `analytics/sync`, a post, a publication, a target, or the
+  // per-delivery figures — which is what lets a window panel be opened without spending anything.
+  const analyticsWindow = new AnalyticsWindowService(
+    db,
+    options.analyticsWindow ??
+      (publishConfigured()
+        ? new PostBridgeAnalyticsWindowProvider(config.publish.apiKey)
+        : new UnavailableAnalyticsWindowProvider()),
+    clock,
+    ...(options.analyticsWindows ? [options.analyticsWindows] : []),
   );
   app.use(
     helmet({
@@ -1646,6 +1682,43 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   app.get('/api/signal/analytics/campaigns', (req, res, next) => {
     try {
       res.json(readSignalCampaignAnalytics(db, signalCampaignAnalyticsQuery.parse(req.query)));
+    } catch (error) {
+      next(error);
+    }
+  });
+  /**
+   * What the provider reports for one platform over one of its own windows, as the last refresh
+   * stored it.
+   *
+   * A local read: **no provider call on any path, and in particular no `analytics/sync`**. Opening the
+   * panel, switching platform, and switching window all come through here, which is the card's own
+   * criterion — a window is a cheaper question than the per-delivery figures, and it would not be
+   * cheaper if looking at it spent a request.
+   */
+  app.get('/api/signal/analytics/window', (req, res, next) => {
+    try {
+      const { platform, timeframe } = analyticsWindowQuery.parse(req.query);
+      res.json(analyticsWindow.read(platform, timeframe));
+    } catch (error) {
+      next(error);
+    }
+  });
+  /**
+   * One person-pressed window refresh: read every page, then replace that platform and window or
+   * replace nothing.
+   *
+   * There is no timer on this path. A failed read is not a `4xx`: it answers with the snapshot that is
+   * still stored and the reason the refresh replaced none of it, because a panel showing nothing where
+   * it should be showing the last complete read would present a failure as an empty window.
+   *
+   * A window with no dated §14 result is refused here too, before any provider call, and the refusal
+   * comes back the same way — the stored snapshot and a sentence saying the window's meaning has not
+   * been observed.
+   */
+  app.post('/api/signal/analytics/window/refresh', async (req, res, next) => {
+    try {
+      const { platform, timeframe } = analyticsWindowQuery.parse(req.body);
+      res.json(await analyticsWindow.refresh(platform, timeframe));
     } catch (error) {
       next(error);
     }

@@ -48,6 +48,11 @@ import type {
   ProviderInventoryEntry,
   ProviderInventorySnapshot,
 } from '../../shared/provider-inventory';
+import type {
+  AnalyticsWindowGroup,
+  AnalyticsWindowSnapshot,
+} from '../../shared/publish-analytics-window';
+import { ANALYTICS_WINDOW_UNVERIFIED_DETAIL } from '../../shared/publish-analytics-window';
 
 export {
   DEFAULT_BRANDING,
@@ -288,6 +293,19 @@ export const testState = {
   providerInventoryError: null as string | null,
   /** Every inventory request, so a case can prove a page load contacted the provider or did not. */
   providerInventoryRequests: [] as string[],
+  /**
+   * The provider window the planner reads beside the inventory.
+   *
+   * Unset answers a window nobody has read yet, with no window offered — which is what a build a
+   * person uses actually shows, and therefore what every suite that is not about this panel should
+   * see.
+   */
+  analyticsWindowPayload: null as AnalyticsWindowSnapshot | null,
+  /** What a refresh answers, where a case wants it to differ from what was already on screen. */
+  analyticsWindowRefreshPayload: null as AnalyticsWindowSnapshot | null,
+  analyticsWindowError: null as string | null,
+  /** Every window request, so a case can prove a selection change spent nothing. */
+  analyticsWindowRequests: [] as string[],
 };
 
 /** A summary with nothing on it, which is what an untouched planner suite should be handed. */
@@ -304,6 +322,62 @@ export function clearQueueHealth(): QueueHealthSummary {
 export function emptyProviderInventory(): ProviderInventorySnapshot {
   return { available: true, entries: [], counts: { posts: 0, orphans: 0 } };
 }
+
+/**
+ * A window nobody has read, with no window offered.
+ *
+ * The honest default: `ANALYTICS_WINDOW_EVIDENCE` verifies nothing, so the real panel offers no
+ * window and explains why. A fixture that offered one would be testing a build nobody runs.
+ */
+export function emptyAnalyticsWindow(): AnalyticsWindowSnapshot {
+  return {
+    available: true,
+    windows: [],
+    platform: 'tiktok',
+    window: 'all',
+    verified: false,
+    meaning: ANALYTICS_WINDOW_UNVERIFIED_DETAIL,
+    groups: [],
+    unmapped: [],
+    counts: { rows: 0, mapped: 0, unmapped: 0 },
+  };
+}
+
+/** One account's window row, with only the fields a case cares about spelled out. */
+export const analyticsWindowGroup = (
+  overrides: Partial<AnalyticsWindowGroup> = {},
+): AnalyticsWindowGroup => ({
+  platform: 'instagram',
+  accountId: 901,
+  channel: 'ig',
+  handle: 'gholmesdesigns',
+  deliveries: 1,
+  measuredDeliveries: 1,
+  totals: { views: 100, likes: 10, comments: 2, shares: 1 },
+  ...overrides,
+});
+
+/** A window snapshot around a set of groups, with the counts its own rows imply. */
+export const analyticsWindowSnapshot = (
+  groups: AnalyticsWindowGroup[],
+  overrides: Partial<AnalyticsWindowSnapshot> = {},
+): AnalyticsWindowSnapshot => {
+  const unmapped = overrides.unmapped ?? [];
+  const mapped = groups.reduce((sum, group) => sum + group.measuredDeliveries, 0);
+  return {
+    available: true,
+    windows: [],
+    platform: 'instagram',
+    window: 'all',
+    verified: false,
+    meaning: ANALYTICS_WINDOW_UNVERIFIED_DETAIL,
+    groups,
+    unmapped,
+    counts: { rows: mapped + unmapped.length, mapped, unmapped: unmapped.length },
+    lastRefreshAt: '2026-09-14T12:00:00.000Z',
+    ...overrides,
+  };
+};
 
 /** One listed provider post, with only the fields a case cares about spelled out. */
 export const providerInventoryEntry = (
@@ -643,6 +717,18 @@ const respondTo = (url: string, init?: RequestInit) => {
    * up for it, so a suite can prove that mounting the panel is a read and only the button is a
    * refresh.
    */
+  if (url.includes('/api/signal/analytics/window') && method === 'GET') {
+    testState.analyticsWindowRequests.push('read');
+    return testState.analyticsWindowError
+      ? reply(503, { error: testState.analyticsWindowError })
+      : (testState.analyticsWindowPayload ?? emptyAnalyticsWindow());
+  }
+  if (url.endsWith('/api/signal/analytics/window/refresh') && method === 'POST') {
+    testState.analyticsWindowRequests.push('refresh');
+    if (testState.analyticsWindowRefreshPayload)
+      testState.analyticsWindowPayload = testState.analyticsWindowRefreshPayload;
+    return testState.analyticsWindowPayload ?? emptyAnalyticsWindow();
+  }
   if (url.endsWith('/api/signal/provider-inventory') && method === 'GET') {
     testState.providerInventoryRequests.push('read');
     return testState.providerInventoryError
@@ -1363,6 +1449,10 @@ beforeEach(() => {
   testState.providerInventoryRefreshPayload = null;
   testState.providerInventoryError = null;
   testState.providerInventoryRequests = [];
+  testState.analyticsWindowPayload = null;
+  testState.analyticsWindowRefreshPayload = null;
+  testState.analyticsWindowError = null;
+  testState.analyticsWindowRequests = [];
   requests.length = 0;
   vi.stubGlobal(
     'fetch',
