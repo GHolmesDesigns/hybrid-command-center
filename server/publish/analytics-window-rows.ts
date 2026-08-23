@@ -61,32 +61,12 @@ export function readAnalyticsWindowRows(
   }));
 }
 
-/**
- * When this platform's window was last replaced, or nothing where it never has been.
- *
- * Read off the rows rather than kept in a settings row, because every row of a generation carries the
- * same `refreshed_at` by construction — the replacement writes one instant across the lot. A settings
- * row would be a second copy of a fact the rows already hold, and the two would disagree the first
- * time a transaction rolled back.
- *
- * A generation that replaced the previous one with *no rows* is a real answer — the provider reported
- * nothing for this window — and it is indistinguishable from never having refreshed if the timestamp
- * lives only on rows. That is what `AnalyticsWindowService`'s own record is for; this answers only
- * about rows that exist.
- */
-export function readAnalyticsWindowRowsRefreshedAt(
-  db: Db,
-  platform: AnalyticsPlatform,
-  timeframe: AnalyticsWindow,
-): string | undefined {
-  const row = db
-    .prepare(
-      `SELECT refreshed_at FROM signal_analytics_window_metrics
-        WHERE platform=? AND timeframe=? LIMIT 1`,
-    )
-    .get(platform, timeframe) as { refreshed_at: string } | undefined;
-  return row?.refreshed_at;
-}
+// There is deliberately no reader here for "when was this window last replaced". Every row of a
+// generation carries the same `refreshed_at`, so one could be read off the rows — but a complete read
+// that returned *nothing* replaces the previous generation with no rows at all, and that answer would
+// then be indistinguishable from never having refreshed. `AnalyticsWindowService`'s own settings
+// record is the single answer to that question, and a second one derived from rows would disagree
+// with it in exactly the case that matters.
 
 /**
  * Every local delivery on this platform that carries a provider result identity.
@@ -104,9 +84,13 @@ export function readAnalyticsWindowRowsRefreshedAt(
  * `AWAITING_RESULT`.
  *
  * The channel is mapped to a platform through `publishPlatformFor`, the one shared rule, so a channel
- * and its platform cannot disagree here and in the capability table. The newest delivery's handle
- * wins for an account, because a row showing the name an account used to have is worse than showing
- * the current one.
+ * and its platform cannot disagree here and in the capability table.
+ *
+ * **Oldest first, and that ordering is load-bearing.** `summariseAnalyticsWindow` names each account
+ * after the *last* delivery it is given for that account, so that an account renamed since its first
+ * delivery is shown under the handle it uses now rather than the one it used then. `ORDER BY
+ * p.created_at ASC` is what makes the last one the newest; changing it silently changes the name on
+ * screen.
  */
 export function readAnalyticsWindowDeliveries(
   db: Db,

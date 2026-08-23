@@ -157,6 +157,24 @@ describe('grouping rows by the account their delivery belongs to', () => {
     });
   });
 
+  /**
+   * A handle is what the publication snapshotted, so an account renamed between two deliveries
+   * carries both names. The group shows the one it uses now, which is why the input is documented as
+   * oldest first and why `readAnalyticsWindowDeliveries` orders by `created_at` ascending.
+   */
+  it('names an account after its newest delivery rather than its first', () => {
+    const { groups } = summariseAnalyticsWindow({
+      platform: 'instagram',
+      window: '30d',
+      rows: [row({ postResultId: 'result-2' })],
+      deliveries: [
+        delivery({ handle: '@old-name', postResultId: 'result-1' }),
+        delivery({ publicationId: 'pub-2', handle: '@current-name', postResultId: 'result-2' }),
+      ],
+    });
+    expect(groups[0]).toMatchObject({ handle: '@current-name', deliveries: 2 });
+  });
+
   it('separates accounts and orders them by provider account id', () => {
     const { groups } = summariseAnalyticsWindow({
       platform: 'instagram',

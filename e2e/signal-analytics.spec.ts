@@ -124,11 +124,14 @@ test('figures arrive only when asked, and an unmeasured channel says so rather t
   await windowPanel.getByRole('button', { name: 'Refresh window' }).click();
   await expect(windowPanel).toContainText('Last complete read');
 
-  // The mapped account carries the provider's own counts, added over the deliveries it named.
+  // The mapped account carries the provider's own counts, added over the deliveries it named. These
+  // are the window fixture's numbers and not the per-delivery fixture's, which is what proves the
+  // panel read `signal_analytics_window_metrics` rather than the figures the Figures panel stored.
   const account = windowPanel.locator('.signal-window-group').filter({ hasText: 'Account 904' });
-  await expect(account).toContainText((4210).toLocaleString('en-US'));
-  await expect(account).toContainText((318).toLocaleString('en-US'));
+  await expect(account).toContainText((5117).toLocaleString('en-US'));
+  await expect(account).toContainText((402).toLocaleString('en-US'));
   await expect(account).toContainText('named in this window');
+  await expect(account).not.toContainText((4210).toLocaleString('en-US'));
 
   // A row the provider named that nothing here claims is counted, shown, and kept out of the account
   // totals above — which is the difference between a window and an account aggregate.
@@ -141,10 +144,12 @@ test('figures arrive only when asked, and an unmeasured channel says so rather t
   // A second press fails. The reason appears and the first read survives whole.
   await windowPanel.getByRole('button', { name: 'Refresh window' }).click();
   await expect(windowPanel).toContainText('nothing was replaced');
-  await expect(account).toContainText((4210).toLocaleString('en-US'));
+  await expect(account).toContainText((5117).toLocaleString('en-US'));
   await expect(unmapped).toContainText('made-in-post-bridge');
 
-  // The window path touched neither the post nor its per-delivery figures.
+  // The window path touched neither the post nor its per-delivery figures. The per-delivery totals
+  // are still the ones the Figures panel synchronised, untouched by a window read that stored
+  // different numbers for the same delivery — which is the two-stores rule, on screen.
   const afterWindow = await page.request.get(`/api/signal/posts/${postId}`);
   expect(await afterWindow.json()).toMatchObject({ status: 'SCHEDULED', date: '2099-09-15' });
   const metrics = await page.request.get(`/api/signal/posts/${postId}/metrics`);

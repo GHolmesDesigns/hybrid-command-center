@@ -317,7 +317,14 @@ export function summariseAnalyticsWindow(input: {
   platform: AnalyticsPlatform;
   window: AnalyticsWindow;
   rows: readonly AnalyticsWindowRow[];
-  /** Every local delivery on this platform carrying a provider result identity. */
+  /**
+   * Every local delivery on this platform carrying a provider result identity, **oldest first**.
+   *
+   * The order is part of the input rather than an accident of the query, because the last delivery
+   * decides the name an account is shown under — see `groupFor`. `readAnalyticsWindowDeliveries`
+   * produces exactly that order; a caller handing them over in another one gets a correct total
+   * under a handle the account may have stopped using.
+   */
   deliveries: readonly AnalyticsWindowDelivery[];
 }): {
   groups: AnalyticsWindowGroup[];
@@ -350,12 +357,17 @@ export function summariseAnalyticsWindow(input: {
     deliveries: AnalyticsWindowDelivery[],
   ): AnalyticsWindowGroup => {
     const own = rowsByAccount.get(accountId) ?? [];
-    const first = deliveries[0] as AnalyticsWindowDelivery;
+    // The *newest* delivery names the account, which is what the oldest-first input contract above is
+    // for. A handle is a snapshot the publication took, so an account renamed since its first
+    // delivery carries one stale row and one current one, and showing the name it used to have is
+    // worse than showing the one it has now. The channel comes off the same delivery for the same
+    // reason: whatever named this group should be one delivery's account, not two halves of two.
+    const latest = deliveries[deliveries.length - 1] as AnalyticsWindowDelivery;
     return {
       platform: input.platform,
       accountId,
-      channel: first.channel,
-      handle: first.handle,
+      channel: latest.channel,
+      handle: latest.handle,
       deliveries: deliveries.length,
       measuredDeliveries: own.length,
       ...(own.length

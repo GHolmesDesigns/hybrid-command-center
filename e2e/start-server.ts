@@ -141,6 +141,13 @@ inventory.hold([
  * `e2e-result-tt` is the result identity `publish.checkResult` hands back, so the first row maps to a
  * delivery this run created; the second names a result nothing here claims, which is what an unmapped
  * row is. `failureAt = 2` makes the second press the failure case.
+ *
+ * **Every count here differs from the per-delivery fixture above, deliberately.** The two stores
+ * answer different questions and are allowed to disagree, so a window figure that happened to equal a
+ * `signal_post_metrics` figure would let a leak between them pass the spec unnoticed — the window
+ * panel could be rendering per-delivery totals, or a window read could be writing into the per-post
+ * table, and the assertions would still be green. Distinct numbers make each panel prove which store
+ * it read.
  */
 const analyticsWindow = new MockAnalyticsWindowProvider();
 analyticsWindow.pages = [
@@ -150,10 +157,10 @@ analyticsWindow.pages = [
         analyticsId: 'e2e-window-tt',
         postResultId: 'e2e-result-tt',
         platform: 'tiktok',
-        views: 4210,
-        likes: 318,
-        comments: 24,
-        shares: 61,
+        views: 5117,
+        likes: 402,
+        comments: 31,
+        shares: 78,
         providerSyncedAt: '2099-09-15T11:00:00.000Z',
         matchConfidence: 'exact',
         platformPostId: 'tt-e2e-7788',
