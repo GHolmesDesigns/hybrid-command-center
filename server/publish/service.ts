@@ -42,6 +42,8 @@ import {
 } from '../drive/media.ts';
 import type { SignalPostMedia } from '../../shared/signal-media.ts';
 import { resolveProviderAccounts } from './accounts.ts';
+import { bufferConfigured } from '../config.ts';
+import type { PublishTarget } from './provider.ts';
 
 export class PublishRequestError extends Error {
   readonly status: 400 | 404 | 409;
@@ -88,8 +90,10 @@ export class PublishService {
 
   async preview(
     postId: string,
+    listedTargets?: readonly PublishTarget[],
   ): Promise<PublishPreview & { request?: PublishRequest; mediaSources?: SignalPostMedia[] }> {
-    if (!this.provider.available || !this.timezone)
+    const publishingConfigured = this.provider.available || bufferConfigured();
+    if (!publishingConfigured || !this.timezone)
       return {
         available: false,
         postId,
@@ -98,7 +102,11 @@ export class PublishService {
         targets: [],
         channels: [],
         warnings: [],
-        refusals: ['Publishing needs POST_BRIDGE_API_KEY and PUBLISH_TIMEZONE.'],
+        refusals: [
+          bufferConfigured()
+            ? 'Publishing needs PUBLISH_TIMEZONE.'
+            : 'Publishing needs POST_BRIDGE_API_KEY and PUBLISH_TIMEZONE.',
+        ],
       };
     const scheduled = this.db.prepare('SELECT date FROM signal_posts WHERE id=?').get(postId) as
       { date: string | null } | undefined;
@@ -123,9 +131,17 @@ export class PublishService {
     // write, which is what keeps the publisher unable to change a schedule it is planning from.
     return buildPublishPlan(
       post,
-      resolveProviderAccounts(this.db, await this.provider.listTargets(), this.clock).filter(
-        (target) => target.provider === this.providerId,
-      ),
+      listedTargets
+        ? [...listedTargets]
+        : resolveProviderAccounts(
+            this.db,
+            this.provider.available
+              ? (await this.provider.listTargets()).filter(
+                  (target) => (target.provider ?? 'post-bridge') === this.providerId,
+                )
+              : [],
+            this.clock,
+          ),
       this.timezone,
       this.clock(),
       await this.signal.listVariants(postId),

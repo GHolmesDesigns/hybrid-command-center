@@ -124,6 +124,8 @@ const environment = z.object({
   BUFFER_API_KEY: z.string().optional(),
   // One-release migration alias. The canonical value always wins when both are present.
   BUFFER_KEY: z.string().optional(),
+  // When the Buffer account has more than one organization, this names the one to read.
+  BUFFER_ORGANIZATION_ID: z.string().optional(),
   PUBLISH_TIMEZONE: z
     .string()
     .optional()
@@ -155,6 +157,7 @@ const parsed = environment.safeParse({
   POST_BRIDGE_API_KEY: read('POST_BRIDGE_API_KEY'),
   BUFFER_API_KEY: read('BUFFER_API_KEY'),
   BUFFER_KEY: read('BUFFER_KEY'),
+  BUFFER_ORGANIZATION_ID: read('BUFFER_ORGANIZATION_ID'),
   PUBLISH_TIMEZONE: read('PUBLISH_TIMEZONE'),
   LOG_LEVEL: read('LOG_LEVEL')?.toLowerCase() ?? ENVIRONMENT_DEFAULTS.LOG_LEVEL,
 });
@@ -194,8 +197,12 @@ export const config = {
   },
   buffer: {
     apiKey: env.BUFFER_API_KEY ?? env.BUFFER_KEY ?? '',
+    organizationId: env.BUFFER_ORGANIZATION_ID ?? '',
   },
 };
 
 /** Publishing is optional, but half-configuration never counts as available. */
 export const publishConfigured = () => Boolean(config.publish.apiKey && config.publish.timezone);
+
+/** Buffer read access is optional and independent of Post Bridge publishing. */
+export const bufferConfigured = () => Boolean(config.buffer.apiKey);

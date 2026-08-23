@@ -31,7 +31,12 @@ export default defineConfig({
       // Spawned directly rather than through `npm run`: each layer between Playwright and
       // node is one more process that can survive the kill and keep the port held.
       command: 'node --experimental-strip-types e2e/start-server.ts',
-      env: { PORT: API_PORT, DATABASE_PATH: './data/e2e.db', APP_ORIGIN: e2eWebOrigin },
+      env: {
+        PORT: API_PORT,
+        DATABASE_PATH: './data/e2e.db',
+        APP_ORIGIN: e2eWebOrigin,
+        BUFFER_API_KEY: 'e2e-buffer-key',
+      },
       url: `${e2eApiOrigin}/api/health`,
       reuseExistingServer: false,
       timeout: 120_000,

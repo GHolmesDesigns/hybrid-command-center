@@ -219,6 +219,17 @@ describe('Buffer credential migration', () => {
     setEnv('BUFFER_KEY', 'ignored-alias');
     expect((await loadConfig()).buffer.apiKey).toBe('canonical-buffer-key');
   });
+
+  it('reports bufferConfigured only when a key is present', async () => {
+    setEnv('BUFFER_API_KEY', 'buffer-key');
+    const { bufferConfigured } = await import('./config.ts');
+    expect(bufferConfigured()).toBe(true);
+    setEnv('BUFFER_API_KEY', undefined);
+    setEnv('BUFFER_KEY', undefined);
+    vi.resetModules();
+    const { bufferConfigured: withoutKey } = await import('./config.ts');
+    expect(withoutKey()).toBe(false);
+  });
 });
 
 describe('.env.example', () => {

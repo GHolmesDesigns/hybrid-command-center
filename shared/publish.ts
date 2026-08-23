@@ -193,6 +193,8 @@ export interface PublishPreview {
     platform: string;
     handle: string;
     name: string;
+    /** Named when the provider lists the account but it cannot be used right now. */
+    unavailable?: string;
   }[];
   /** The explicit selection this preview planned with, so the composer can show what is ticked. */
   selectedTargets?: PublishTargetSelection[];

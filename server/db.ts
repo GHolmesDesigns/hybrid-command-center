@@ -415,6 +415,18 @@ CREATE TABLE IF NOT EXISTS signal_provider_posts (
 -- because migrations are additive; backfillProviderInventory moves its rows here idempotently and
 -- every current read/write uses this table. A Buffer post id may therefore equal a Post Bridge post
 -- id without either row shadowing the other.
+CREATE TABLE IF NOT EXISTS signal_buffer_channels (
+  channel_id TEXT PRIMARY KEY,
+  service TEXT NOT NULL,
+  platform TEXT,
+  display_name TEXT NOT NULL DEFAULT '',
+  handle TEXT NOT NULL DEFAULT '',
+  is_disconnected INTEGER NOT NULL DEFAULT 0,
+  is_locked INTEGER NOT NULL DEFAULT 0,
+  is_queue_paused INTEGER NOT NULL DEFAULT 0,
+  unavailable TEXT,
+  snapshot_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS signal_provider_inventory_posts (
   provider TEXT NOT NULL,
   provider_post_id TEXT NOT NULL,

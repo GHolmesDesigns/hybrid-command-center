@@ -160,8 +160,9 @@ Required environment variables:
 | `GOOGLE_TOKEN_ENCRYPTION_KEY` | Local token-encryption secret; at least 32 characters |
 | `POST_BRIDGE_API_KEY` | Optional Post Bridge API key; server-side only |
 | `PUBLISH_TIMEZONE` | Required with publishing; an explicit IANA zone such as `America/New_York` |
-| `BUFFER_API_KEY` | Optional Buffer GraphQL API key; server-side only and currently used only by the owner-run probe |
+| `BUFFER_API_KEY` | Optional Buffer GraphQL API key; server-side only; refreshes TikTok and YouTube account metadata on publish preview |
 | `BUFFER_KEY` | One-release migration alias for `BUFFER_API_KEY`; ignored when the canonical setting is present |
+| `BUFFER_ORGANIZATION_ID` | Optional Buffer organization id when the account has more than one organization |
 | `LOG_LEVEL` | Structured API/Drive logging level: `fatal`, `error`, `warn`, `info` (default), `debug`, `trace`, or `silent`. An unrecognized value falls back to `info` |
 
 The environment is validated when the server starts, and every problem is reported at once,

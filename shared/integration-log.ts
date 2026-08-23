@@ -40,6 +40,10 @@ export const INTEGRATION_OPERATIONS = [
   // somebody else's records. A log reader asking 'what did this app do to my schedule' can see at a
   // glance that the answer here is nothing.
   'signal.provider-inventory-refresh',
+  // Reading Buffer channel metadata for publishing preview and target selection. Separate from
+  // inventory because it changes no post and asks a different question — which accounts may be
+  // chosen — and never runs on an ordinary Signal page load.
+  'signal.buffer-accounts-refresh',
   // Reading a provider-filtered window of figures. Separate from `signal.analytics-sync` because it
   // is a different question with a different failure: a sync asks the provider to refresh its own
   // copy for the deliveries this app named, and this asks which deliveries the provider itself would
@@ -126,6 +130,7 @@ export const INTEGRATION_OPERATION_LABEL: Record<IntegrationOperation, string> =
   'signal.provider-cancel': 'Signal provider cancel',
   'signal.analytics-sync': 'Signal analytics sync',
   'signal.provider-inventory-refresh': 'Signal provider inventory refresh',
+  'signal.buffer-accounts-refresh': 'Signal Buffer accounts refresh',
   'signal.analytics-window-refresh': 'Signal analytics window refresh',
 };
 
