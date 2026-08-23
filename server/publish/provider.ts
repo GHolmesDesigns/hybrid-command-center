@@ -12,6 +12,8 @@ export interface PublishTarget {
   platform: string;
   handle: string;
   name: string;
+  /** Present when the provider lists the account but it cannot be used right now. */
+  unavailable?: string;
 }
 
 /**

@@ -369,7 +369,14 @@ function resolveTarget(
             target.handle.toLowerCase().replace(/[^a-z0-9]/g, '') === 'gholmesdesigns',
         )
       : candidates;
-  if (resolved.length === 1) return { target: resolved[0] as PublishTarget };
+  if (resolved.length === 1) {
+    const target = resolved[0] as PublishTarget;
+    if (target.unavailable)
+      return {
+        refusal: `${label} is connected to ${target.name || target.handle}, which is ${target.unavailable.toLowerCase()}.`,
+      };
+    return { target };
+  }
   return {
     refusal:
       resolved.length === 0
@@ -413,9 +420,13 @@ function resolveChannelTargets(
     if (target) targets.push(target);
     else missing.push(id);
   }
+  const unavailable = targets.find((target) => target.unavailable);
+  const unavailableRefusal = unavailable
+    ? `${label} was told to publish to ${unavailable.name || unavailable.handle}, which is ${unavailable.unavailable?.toLowerCase()}.`
+    : undefined;
   const refusal = missing.length
     ? `${label} was told to publish to ${missing.length === 1 ? 'an account' : 'accounts'} ${missing.join(', ')}, which this provider no longer lists for it. Choose its accounts again.`
-    : undefined;
+    : unavailableRefusal;
   return { targets, ...(refusal ? { refusal } : {}), explicit: true };
 }
 
@@ -1027,6 +1038,7 @@ export function buildPublishPlan(
       platform: account.platform,
       handle: account.handle,
       name: account.name,
+      ...(account.unavailable ? { unavailable: account.unavailable } : {}),
     })),
     ...(selections.length ? { selectedTargets: [...selections] } : {}),
     warnings,

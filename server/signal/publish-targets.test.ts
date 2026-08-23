@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../app.ts';
 import { createDb, type Db } from '../db.ts';
-import { MockPublishProvider } from '../publish/mock-provider.ts';
+import { UnavailableBufferReadProvider } from '../publish/buffer/read-provider.ts';
 import { buildPublishPlan } from '../publish/plan.ts';
 import { seedSignalPost } from './test-fixture.ts';
 import {
@@ -14,6 +14,7 @@ import {
 } from './service.ts';
 import type { PublishTarget } from '../publish/provider.ts';
 import type { SignalPost } from '../../shared/signal.ts';
+import { MockPublishProvider } from '../publish/mock-provider.ts';
 
 /**
  * An **explicit** choice of which provider accounts a Signal channel publishes to (C77, first
@@ -45,7 +46,11 @@ beforeEach(() => {
   db = createDb(':memory:');
 });
 
-const app = () => createApp(db, { publish: new MockPublishProvider(CONNECTED) });
+const app = () =>
+  createApp(db, {
+    publish: new MockPublishProvider(CONNECTED),
+    bufferRead: new UnavailableBufferReadProvider(),
+  });
 
 const save = (postId: string, targets: unknown[], connected: PublishTarget[] = CONNECTED) =>
   replacePostPublishTargets(db, postId, signalPublishTargetsInput.parse({ targets }), connected);

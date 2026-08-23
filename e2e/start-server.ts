@@ -10,6 +10,7 @@ import {
   MockAnalyticsWindowProvider,
   MockProviderInventoryProvider,
   MockPublishProvider,
+  MockBufferReadProvider,
 } from '../server/publish/mock-provider.ts';
 import { MockDriveMediaProvider } from '../server/drive/mock-provider.ts';
 
@@ -187,6 +188,7 @@ const app = createApp(db, {
   analytics,
   inventory,
   analyticsWindow,
+  bufferRead: new MockBufferReadProvider(),
   // The window the fixture may ask about. The app itself offers none — `ANALYTICS_WINDOW_EVIDENCE`
   // records §14's unverified rows — so without this the refresh path could not be reached at all.
   // A build a person uses never gets this option; see the option's own comment in `server/app.ts`.

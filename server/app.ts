@@ -8,7 +8,7 @@ import { isValid, parseISO } from 'date-fns';
 import { z } from 'zod';
 import type { Db } from './db.ts';
 import { getDb, transaction } from './db.ts';
-import { config, publishConfigured } from './config.ts';
+import { config, publishConfigured, bufferConfigured } from './config.ts';
 import {
   getCategory,
   getTag,
@@ -104,7 +104,6 @@ import {
   PostBridgeAnalyticsWindowProvider,
   PostBridgeProvider,
 } from './publish/post-bridge.ts';
-import { resolveProviderAccounts } from './publish/accounts.ts';
 import { PublishAnalyticsService } from './publish/analytics.ts';
 import {
   UnavailableAnalyticsProvider,
@@ -122,6 +121,13 @@ import {
   type ProviderInventoryProvider,
 } from './publish/inventory-provider.ts';
 import { PublishRequestError, PublishService } from './publish/service.ts';
+import { BufferAccountsService } from './publish/buffer-accounts.ts';
+import { BufferReadClient } from './publish/buffer/client.ts';
+import {
+  UnavailableBufferReadProvider,
+  type BufferReadProvider,
+} from './publish/buffer/read-provider.ts';
+import { resolvePublishingTargets } from './publish/targets.ts';
 import { PROVIDER_ACTIONS } from '../shared/publish.ts';
 import {
   OAuthStateError,
@@ -254,6 +260,11 @@ export type AppOptions = {
    * rehearsing a multi-page walk or a page failure sets only this one.
    */
   inventory?: ProviderInventoryProvider;
+  /**
+   * Test-only Buffer read provider. Separate from `publish` because this path lists organizations,
+   * channels, and posts and cannot submit, edit, delete, upload, or measure anything.
+   */
+  bufferRead?: BufferReadProvider;
   /**
    * Test-only window provider, separate again for the same reason: what the window panel is handed can
    * list provider rows for one platform and window, and cannot sync, submit, update, or cancel
@@ -561,6 +572,12 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         : new UnavailableProviderInventoryProvider()),
     clock,
   );
+  const bufferRead =
+    options.bufferRead ??
+    (bufferConfigured()
+      ? new BufferReadClient(config.buffer.apiKey)
+      : new UnavailableBufferReadProvider());
+  const bufferAccounts = new BufferAccountsService(db, bufferRead, clock);
   // A fifth provider beside the four above, holding something that can only list rows for one
   // platform and window. It cannot reach `analytics/sync`, a post, a publication, a target, or the
   // per-delivery figures — which is what lets a window panel be opened without spending anything.
@@ -1623,6 +1640,28 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     }
   });
   /**
+   * Buffer channels as the last complete refresh stored them. A local read only — no Buffer request
+   * on any path, so an ordinary Signal page load spends nothing.
+   */
+  app.get('/api/signal/buffer-accounts', (_req, res, next) => {
+    try {
+      res.json(bufferAccounts.read());
+    } catch (error) {
+      next(error);
+    }
+  });
+  /**
+   * One person-pressed Buffer account refresh: read organizations and channels, then replace the
+   * generation or replace nothing.
+   */
+  app.post('/api/signal/buffer-accounts/refresh', async (_req, res, next) => {
+    try {
+      res.json(await bufferAccounts.refresh());
+    } catch (error) {
+      next(error);
+    }
+  });
+  /**
    * Signal campaigns: the shared vocabulary a post's content belongs to.
    *
    * The same shape task tags and project categories have, one module over, because it is the same
@@ -1832,7 +1871,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
           db,
           req.params.id,
           signalPublishTargetsInput.parse(req.body),
-          resolveProviderAccounts(db, await publishProvider.listTargets(), clock),
+          await resolvePublishingTargets(db, publishProvider, bufferAccounts, clock),
           clock,
         ),
       );
@@ -1900,7 +1939,8 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   });
   app.post('/api/signal/posts/:id/publish/preview', async (req, res, next) => {
     try {
-      res.json(await publisher.preview(req.params.id));
+      const listed = await resolvePublishingTargets(db, publishProvider, bufferAccounts, clock);
+      res.json(await publisher.preview(req.params.id, listed));
     } catch (error) {
       next(error);
     }

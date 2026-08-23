@@ -20,6 +20,7 @@ import type {
 import type { AnalyticsWindow, AnalyticsWindowRow } from '../../shared/publish-analytics-window.ts';
 import { ANALYTICS_PLATFORMS, type AnalyticsPlatform } from '../../shared/publish-analytics.ts';
 import type { ProviderInventoryPost } from '../../shared/provider-inventory.ts';
+import type { BufferChannel, BufferReadProvider } from './buffer/read-provider.ts';
 
 /**
  * The provider every automated test runs against. Nothing here contacts Post Bridge.
@@ -273,5 +274,39 @@ export class MockAnalyticsWindowProvider implements AnalyticsWindowProvider {
   /** One complete page: the rows the provider names for this window, and no next page. */
   hold(rows: AnalyticsWindowRow[], warnings: string[] = []): void {
     this.pages = [{ rows, next: { done: true }, warnings }];
+  }
+}
+
+/** Buffer read provider for automated tests. Nothing here contacts Buffer. */
+export class MockBufferReadProvider implements BufferReadProvider {
+  readonly available = true;
+  async account() {
+    return {
+      id: 'e2e-buffer-account',
+      organizations: [{ id: 'e2e-buffer-org', name: 'E2E Studio' }],
+    };
+  }
+  async channels(): Promise<BufferChannel[]> {
+    return [
+      {
+        id: 'e2e-buffer-tiktok',
+        name: '@e2e-tiktok',
+        service: 'tiktok',
+        isDisconnected: false,
+        isLocked: false,
+        isQueuePaused: false,
+      },
+      {
+        id: 'e2e-buffer-youtube',
+        name: '@e2e-youtube',
+        service: 'youtube',
+        isDisconnected: false,
+        isLocked: false,
+        isQueuePaused: false,
+      },
+    ];
+  }
+  async listPosts() {
+    return { posts: [], hasNextPage: false, endCursor: null };
   }
 }
