@@ -10,7 +10,7 @@ name: Quality gates
 # exception rather than the flow.
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
 
 permissions:
