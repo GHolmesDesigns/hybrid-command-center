@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { layoutSettled } from './ready';
 
 /**
  * The Wave 6 spec for C56. Settings used to be six cards in a two-column grid, and two cards
@@ -74,6 +75,13 @@ const openSettings = async (page: Page) => {
   await page.goto('/settings');
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
   await expect(page.locator('.settings-layout .settings-card')).toHaveCount(7);
+  // Every measurement below is taken across two separate renders and compared to the pixel, so the
+  // two have to be laid out in the same font. `client/src/styles.css` fetches DM Sans and Manrope
+  // with `display=swap`, which means one render can be measured in the fallback face and its
+  // partner in the real one — about a line's worth of difference in a small font, which is the size
+  // of the gap this spec failed by on CI. Waiting here rather than at each call site keeps the two
+  // comparable by construction, and leaves the assertions exact.
+  await layoutSettled(page);
 };
 
 /** The Drive card as it looks connected, with a root folder set: several controls taller. */

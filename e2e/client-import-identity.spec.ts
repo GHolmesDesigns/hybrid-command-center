@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { gotoSettled } from './ready';
 
 /**
  * The Wave 10 spec for C70. Import identity is only worth anything across two separate imports of a
@@ -59,7 +60,7 @@ test('a client identity outlives a rename at its source, and follows a merge', a
     return dialog;
   };
 
-  await page.goto('/import');
+  await gotoSettled(page, '/import');
   await expect(page.getByRole('heading', { level: 1, name: 'Import' })).toBeVisible();
 
   // The first import creates the client and records the identity it arrived under.
@@ -114,7 +115,7 @@ test('a client identity outlives a rename at its source, and follows a merge', a
       data: { name: survivorName, contactName: 'E2E Survivor Contact' },
     })
   ).json();
-  await page.goto(`/clients/${client.id}`);
+  await gotoSettled(page, `/clients/${client.id}`);
   await page.getByRole('button', { name: 'Merge client' }).click();
   const merge = page.getByRole('dialog');
   await merge.getByLabel('Merge into').selectOption(survivor.id);
@@ -157,7 +158,7 @@ test('a client identity outlives a rename at its source, and follows a merge', a
   });
 
   // The identity now resolves to the survivor, one hop, so the playbook adds nothing to the source.
-  await page.goto('/import');
+  await gotoSettled(page, '/import');
   const fourth = await check(playbook(`E2E Identity Renamed Again ${run}`));
   await expect(fourth.getByText('Ready to create 0 records')).toBeVisible();
   await fourth.getByRole('button', { name: /Import 0 records/ }).click();

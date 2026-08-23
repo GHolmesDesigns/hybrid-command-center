@@ -8,6 +8,29 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [4.7.3] - 2026-08-23
+
+### Fixed
+
+- **A change you make no longer disappears when the page finishes loading.** Two panels threw away
+  what you had just done if a background request happened to answer a moment later. In **Settings**,
+  pressing **Reset to defaults** could silently snap back to the palette you were replacing — and on
+  the other side of a save, the sidebar could repaint itself in the old colours *after* the app had
+  already told you the branding was saved. In the publishing preview, ticking an account could
+  quietly untick itself while the preview settled. In both places your edit now stands, and the page
+  only takes the server's version again once you have saved.
+
+### Changed
+
+- Browser tests wait for the page's web fonts to finish loading before clicking or measuring
+  anything. The studio's two typefaces are fetched over the network and swapped in when they
+  arrive, which re-lays out the page underneath a test that had already been told it was ready —
+  three separate intermittent failures, all of them timing rather than a fault in the app.
+
+### Breaking changes
+
+- None.
+
 ## [4.7.2] - 2026-08-22
 
 ### Changed
