@@ -394,6 +394,47 @@ CREATE TABLE IF NOT EXISTS signal_provider_posts (
   provider_url TEXT,
   snapshot_at TEXT NOT NULL
 );
+-- What the provider reports for one platform over one of its own windows: a second, cheaper
+-- question than the per-delivery figures, stored separately because it answers something different.
+--
+-- This table never replaces signal_post_metrics and is never read in its place. Those rows answer
+-- "what did this delivery get", asked by post_result_id, and are refreshed per post; these answer
+-- "what does the provider report for this platform over this window", asked by platform and
+-- timeframe, and are replaced as one generation. A window row is not a better copy of a metrics row
+-- -- the two can legitimately disagree, because the provider chose which deliveries the window names
+-- and this app chose which deliveries the per-post refresh asked about.
+--
+-- Keyed (platform, timeframe, post_result_id) because that is what one row is: the provider's reading
+-- for one delivery inside one window of one platform. post_result_id is the provider's own identity
+-- for the delivery and is NOT NULL -- the wire parser refuses a page carrying a row without one,
+-- because docs/post-bridge-api-surface.md section 14 records the response grain as unverified and a
+-- row that cannot be attributed might be an account aggregate rather than a delivery.
+--
+-- No foreign key to signal_publication_targets, deliberately. A row the provider named that no local
+-- delivery claims is ordinary and is kept: it is counted as unmapped, shown as unmapped, and never
+-- added into an account total. A foreign key would delete exactly the rows that carry that
+-- information, and the join is by post_result_id at read time instead
+-- (idx_signal_publication_targets_result already exists for it).
+--
+-- Nothing here is ever written by a failed refresh. Every page is read before the first statement
+-- runs, and the replacement -- delete this platform/timeframe generation, insert the new one, stamp
+-- refreshed_at -- is one transaction, so a refusal leaves the whole prior snapshot in place rather
+-- than half of a new one. refreshed_at is this app's own clock for the generation; provider_synced_at
+-- is the provider's own last_synced_at for the row, and one being fresh does not make the other
+-- fresh. match_confidence and platform_post_id are provenance under exactly the rules the
+-- per-delivery table states, read by the same shared function, and neither has a default.
+CREATE TABLE IF NOT EXISTS signal_analytics_window_metrics (
+  platform TEXT NOT NULL,
+  timeframe TEXT NOT NULL,
+  post_result_id TEXT NOT NULL,
+  analytics_id TEXT NOT NULL,
+  row_platform TEXT NOT NULL,
+  views INTEGER NOT NULL DEFAULT 0, likes INTEGER NOT NULL DEFAULT 0,
+  comments INTEGER NOT NULL DEFAULT 0, shares INTEGER NOT NULL DEFAULT 0,
+  provider_synced_at TEXT, match_confidence TEXT, platform_post_id TEXT,
+  refreshed_at TEXT NOT NULL,
+  PRIMARY KEY(platform, timeframe, post_result_id)
+);
 `;
 
 /**

@@ -40,6 +40,12 @@ export const INTEGRATION_OPERATIONS = [
   // somebody else's records. A log reader asking 'what did this app do to my schedule' can see at a
   // glance that the answer here is nothing.
   'signal.provider-inventory-refresh',
+  // Reading a provider-filtered window of figures. Separate from `signal.analytics-sync` because it
+  // is a different question with a different failure: a sync asks the provider to refresh its own
+  // copy for the deliveries this app named, and this asks which deliveries the provider itself would
+  // name over one of its windows. One replaces a whole snapshot or replaces nothing, so a log reader
+  // can tell an all-or-nothing window read apart from a per-post refresh at a glance.
+  'signal.analytics-window-refresh',
 ] as const;
 export type IntegrationOperation = (typeof INTEGRATION_OPERATIONS)[number];
 
@@ -120,6 +126,7 @@ export const INTEGRATION_OPERATION_LABEL: Record<IntegrationOperation, string> =
   'signal.provider-cancel': 'Signal provider cancel',
   'signal.analytics-sync': 'Signal analytics sync',
   'signal.provider-inventory-refresh': 'Signal provider inventory refresh',
+  'signal.analytics-window-refresh': 'Signal analytics window refresh',
 };
 
 export const INTEGRATION_OUTCOME_LABEL: Record<IntegrationOutcome, string> = {

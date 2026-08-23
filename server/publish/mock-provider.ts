@@ -13,6 +13,11 @@ import type {
   ProviderAnalyticsRecord,
 } from './analytics-provider.ts';
 import type { ProviderInventoryPage, ProviderInventoryProvider } from './inventory-provider.ts';
+import type {
+  AnalyticsWindowProvider,
+  ProviderAnalyticsWindowPage,
+} from './analytics-window-provider.ts';
+import type { AnalyticsWindow, AnalyticsWindowRow } from '../../shared/publish-analytics-window.ts';
 import { ANALYTICS_PLATFORMS, type AnalyticsPlatform } from '../../shared/publish-analytics.ts';
 import type { ProviderInventoryPost } from '../../shared/provider-inventory.ts';
 
@@ -227,5 +232,46 @@ export class MockProviderInventoryProvider implements ProviderInventoryProvider 
   /** One complete page: what the provider holds, and no next page. */
   hold(posts: ProviderInventoryPost[]): void {
     this.pages = [{ posts, next: { done: true } }];
+  }
+}
+
+/**
+ * The window provider every automated test runs against. Nothing here contacts Post Bridge.
+ *
+ * Pages are answered in the order they are asked for rather than looked up by token, which is what
+ * lets one fixture be a provider that pages properly and another be a provider that keeps handing back
+ * the token it was already on. `reads` is the proof a test needs most often: every request the walk
+ * made, in order, so "every page was read before anything was written" and "no window was asked for
+ * without a verified meaning" are both assertions about a list rather than hopes.
+ */
+export class MockAnalyticsWindowProvider implements AnalyticsWindowProvider {
+  readonly available = true;
+  /** Every request `listWindow` was asked for, in order. */
+  readonly reads: {
+    platform: AnalyticsPlatform;
+    timeframe: AnalyticsWindow;
+    pageToken?: number;
+  }[] = [];
+  /** What to answer, one entry per call. A walk that asks for more than there are fails. */
+  pages: ProviderAnalyticsWindowPage[] = [];
+  /** Raise instead of answering this one-based call — the page-failure fixture. */
+  failureAt?: number;
+  failure?: Error;
+  async listWindow(request: {
+    platform: AnalyticsPlatform;
+    timeframe: AnalyticsWindow;
+    pageToken?: number;
+  }): Promise<ProviderAnalyticsWindowPage> {
+    const call = this.reads.length + 1;
+    this.reads.push({ ...request });
+    if (this.failureAt === call)
+      throw this.failure ?? new PublishProviderError(`Post Bridge refused page ${call}.`, false);
+    const page = this.pages[call - 1];
+    if (!page) throw new PublishProviderError(`The mock provider has no page ${call}.`, false);
+    return page;
+  }
+  /** One complete page: the rows the provider names for this window, and no next page. */
+  hold(rows: AnalyticsWindowRow[], warnings: string[] = []): void {
+    this.pages = [{ rows, next: { done: true }, warnings }];
   }
 }

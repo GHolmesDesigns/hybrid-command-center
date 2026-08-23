@@ -5037,3 +5037,170 @@ button.tag-chip.toggle.active {
   width: 12px;
   height: 12px;
 }
+
+/* Provider window: what the provider reports for one platform over one of its own windows.
+   Built like the inventory card beside it, because it is the same kind of thing — a read of the
+   provider with exactly one control that reaches it. */
+.signal-window {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 18px;
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.signal-window-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  max-width: 78ch;
+}
+.signal-window-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+.signal-window-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.signal-window-controls select {
+  font-size: 13px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: inherit;
+}
+/* The window's meaning, and the unverified case marked by its icon and its words as well as by its
+   tint — the rule every status in this app follows. */
+.signal-window-meaning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  max-width: 88ch;
+}
+.signal-window-meaning svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+}
+.signal-window-meaning.is-unverified {
+  border-left-color: #c8a53a;
+  background: #fdf8e7;
+}
+.signal-window-groups {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.signal-window-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 12px;
+}
+.signal-window-group > p {
+  margin: 0;
+}
+.signal-window-group-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.signal-window-group-channel,
+.signal-window-group-account {
+  color: var(--muted);
+  font-size: 11px;
+}
+.signal-window-coverage {
+  color: var(--muted);
+  line-height: 1.5;
+}
+.signal-window-nothing {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.signal-window-nothing svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+/* Unmapped rows sit apart from the groups on purpose: they are counted, shown, and never added into
+   an account total above. */
+.signal-window-unmapped {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-left-color: #b9c6dd;
+  border-radius: 8px;
+  background: #f7f9fd;
+  font-size: 12px;
+}
+.signal-window-unmapped > p {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  line-height: 1.5;
+}
+.signal-window-unmapped > p svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+}
+.signal-window-unmapped ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.signal-window-unmapped li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.signal-window-synced {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}

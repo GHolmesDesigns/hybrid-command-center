@@ -1339,6 +1339,56 @@ record is about*, and neither is a claim about the counts:
 Automatic analytics refresh of any kind; anything derived from a figure — engagement rates,
 per-follower ratios, campaign roll-ups, comparisons between posts; `video_description` and
 `duration`, which are read past rather than stored — `platform_post_id` and `match_confidence` were
-too, until C79 stored them as provenance in §16.3; the `timeframe` and `platform` filters on
-`GET /v1/analytics`; and any write to `signal_posts` from this path, which stays impossible rather
-than merely unimplemented.
+too, until C79 stored them as provenance in §16.3; and any write to `signal_posts` from this path,
+which stays impossible rather than merely unimplemented.
+
+The `timeframe` and `platform` filters were on that list until C80, which is §16.6.
+
+### 16.6 The provider-filtered window, and the gate it ships behind
+
+A second question, asked of the same endpoint: **what does the provider report for one platform over
+one of its own windows.** One request rather than a walk over every delivery, which is the whole
+reason it exists.
+
+**It is not a replacement for §16.3 and cannot become one.** `AnalyticsProvider.list(postResultIds)`
+and `signal_post_metrics` are untouched. A window read writes only
+`signal_analytics_window_metrics`, keyed `(platform, timeframe, post_result_id)`, and the two stores
+may legitimately disagree — the provider chose which deliveries a window names, and this app chose
+which deliveries a per-post refresh asked about. A fifth provider interface,
+`AnalyticsWindowProvider`, has one method and that method lists, so nothing on this path can reach
+`analytics/sync`, a post, a publication, a target, or a per-delivery figure.
+
+**A snapshot is replaced whole or not at all.** Every page is read before the first statement runs,
+under the pagination rule `shared/provider-inventory.ts` already holds — §14's question 4 recorded
+that this endpoint answers the same `meta` envelope as `GET /v1/posts`, so it is one rule and not a
+second copy. A refusal, an unreadable page, a token that does not advance, or a safety bound leaves
+the whole prior generation in place. The outcome is `SUCCESS` or `FAILURE` and never `PARTIAL`.
+
+**The one derivation is addition**, over a delivery set the panel names, and every group reports
+`measuredDeliveries` beside `deliveries`. A group with nothing measured carries no `totals` field
+rather than a row of zeros — §16.3's distinction carried up to an account. No rate, average,
+normalisation, or follower comparison; those still belong to a card that decides what they mean.
+
+**A row the provider named that no local delivery claims is unmapped**: stored, counted, shown, and
+never attributed to an account. It is information rather than a fault, which is why a snapshot
+carrying one is still a `SUCCESS`. A row arriving with *no* `post_result_id` is a different matter
+and fails the whole read — §14 records the response grain as unverified, so a row that cannot be
+attributed might be an account aggregate, and storing it would present one as a window.
+
+**No window is offered, and that is the shipped behaviour.** §14 records the `timeframe` semantics,
+the response grain, how a row maps to an account, and the rate-limit contract as *still unverified*,
+each concluding *"C80 stays blocked."* `ANALYTICS_WINDOW_EVIDENCE` in
+`shared/publish-analytics-window.ts` is the gate: it verifies nothing today, so the panel offers no
+window, explains why in place of the control, and the service refuses an unverified window before any
+request is built. Turning one on is one entry in that table plus the dated §14 row it cites — the same
+construction `ANALYTICS_MATCH_CONFIDENCE_LABEL` uses for match values and `publishRoleDelivers` for
+media roles.
+
+**What would settle it.** A single read-only `GET /v1/analytics?platform=&timeframe=` against an
+already-sent post, needing no live write. The precondition did not exist when the probe last ran —
+§14's own note is that these claims wait on *"a post published from the connected Instagram account
+that the provider has counted"* — and as of 2026-08-23 it does: a delivery published 2026-08-21 is
+counted, carries a `platform_post_id`, and reports a `match_confidence`. So these rows moved from
+*unaskable* to *askable and unanswered*. The read stays owner-run and out of CI, because no automated
+test may contact the real provider, and nothing here changes until a dated §14 row records what came
+back.

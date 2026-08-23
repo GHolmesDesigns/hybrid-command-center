@@ -97,6 +97,7 @@ import type { PublishVariantMediaRole } from '../../../shared/publish-variant-me
 import { PlatformVariantsEditor, PublishPreviewTabs } from './SignalVariants';
 import { SignalHealthPanel } from './SignalHealth';
 import { SignalProviderInventoryPanel } from './SignalProviderInventory';
+import { SignalAnalyticsWindowPanel } from './SignalAnalyticsWindow';
 import { SignalMetrics } from './SignalMetrics';
 import { previewPlatforms, variantList, variantMap } from './signal-variants';
 
@@ -2019,6 +2020,10 @@ export function SignalView() {
           out into it. A local read of stored rows — nothing here contacts the provider until
           somebody presses its own refresh. */}
       <SignalProviderInventoryPanel reloadKey={healthKey} />
+      {/* Beside the inventory and before the campaign segmentation, which is the order of the
+          questions: what is out there, what does the provider report over a window, and what did our
+          own campaigns get. All three are local reads on mount. */}
+      <SignalAnalyticsWindowPanel reloadKey={healthKey} />
       {/* Below the planner, because it is what happened rather than what is planned — and because it
           reads the figures a post's own panel already stored, so it belongs after the posts and not
           in front of them. `healthKey` is bumped by every save here, which is also every edit that

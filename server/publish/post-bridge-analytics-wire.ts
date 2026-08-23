@@ -101,6 +101,28 @@ function readPlatformPostId(
 }
 
 /**
+ * Both provenance fields, read under one set of rules for both analytics reads.
+ *
+ * Exported and shared with `post-bridge-analytics-window-wire.ts` rather than copied into it. The
+ * decision *what shape will this app store a match value in* is one decision, and the window read
+ * carries the same two fields off the same `AnalyticsDto` row; a second copy of the rule would be
+ * the place where an unrecognised value eventually borrows `exact`'s label, which is exactly what
+ * `analyticsMatchStorable` exists to prevent.
+ */
+export function readAnalyticsProvenance(
+  row: Record<string, unknown>,
+  resultId: string,
+  warnings: string[],
+): { matchConfidence?: string; platformPostId?: string } {
+  const matchConfidence = readMatchConfidence(row.match_confidence, resultId, warnings);
+  const platformPostId = readPlatformPostId(row.platform_post_id, resultId, warnings);
+  return {
+    ...(matchConfidence ? { matchConfidence } : {}),
+    ...(platformPostId ? { platformPostId } : {}),
+  };
+}
+
+/**
  * The `data` array, as records this app's vocabulary, plus what it would not store.
  *
  * A body carrying no `data` at all is an empty answer rather than a failure: the endpoint has
@@ -126,8 +148,6 @@ export function parsePostBridgeAnalyticsList(body: unknown): ProviderAnalyticsLi
   const records = data.map((entry): ProviderAnalyticsRecord => {
     const row = (entry ?? {}) as Record<string, unknown>;
     const postResultId = String(row.post_result_id);
-    const matchConfidence = readMatchConfidence(row.match_confidence, postResultId, warnings);
-    const platformPostId = readPlatformPostId(row.platform_post_id, postResultId, warnings);
     return {
       analyticsId: String(row.id),
       postResultId,
@@ -140,8 +160,7 @@ export function parsePostBridgeAnalyticsList(body: unknown): ProviderAnalyticsLi
         ? { lastSyncedAt: row.last_synced_at }
         : {}),
       ...(typeof row.share_url === 'string' && row.share_url ? { shareUrl: row.share_url } : {}),
-      ...(matchConfidence ? { matchConfidence } : {}),
-      ...(platformPostId ? { platformPostId } : {}),
+      ...readAnalyticsProvenance(row, postResultId, warnings),
     };
   });
   return { records, warnings };

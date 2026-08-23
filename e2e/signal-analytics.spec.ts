@@ -9,7 +9,15 @@ import { expect, test } from '@playwright/test';
  * last-synchronised time appear. The rules behind availability, backoff, and daily gains are covered
  * against fixtures in `shared/publish-analytics.test.ts` and `server/publish/analytics.test.ts`.
  *
- * Specs share one database, so every locator is scoped to the post this spec created.
+ * C80 extends it with the second question the same provider answers: a window read, which is one
+ * request rather than a walk over every delivery. The browser is what proves the panel opens on
+ * stored rows, that one press replaces a generation, that a row belonging to nothing here is counted
+ * and kept out of the account totals, and that a second press which fails leaves the first read
+ * exactly where it was.
+ *
+ * Specs share one database, so every locator is scoped to the post this spec created — and the window
+ * assertions are scoped to the provider account they belong to rather than to a count, because the
+ * denominator is every delivery in the file and other specs add to it.
  */
 test('figures arrive only when asked, and an unmeasured channel says so rather than showing a zero', async ({
   page,
@@ -96,4 +104,58 @@ test('figures arrive only when asked, and an unmeasured channel says so rather t
   // And the figures path changed nothing about the plan or the delivery.
   const reread = await page.request.get(`/api/signal/posts/${postId}`);
   expect(await reread.json()).toMatchObject({ status: 'SCHEDULED', date: '2099-09-15' });
+
+  // ---------------------------------------------------------------------------------------------
+  // C80: the same provider, asked what it reports over one of its own windows.
+  // ---------------------------------------------------------------------------------------------
+  await editor.getByRole('button', { name: 'Close editor' }).click();
+  const windowPanel = page.getByRole('region', {
+    name: 'What the provider reports over a window',
+  });
+
+  // Opening the planner read stored rows and nothing else — no window has been read yet.
+  await expect(windowPanel).toContainText('This window has never been read.');
+  // The panel says what a window total is not, beside where the numbers will be.
+  await expect(windowPanel).toContainText(
+    'Nothing here is a rate, an average, or a share of anything',
+  );
+
+  // One press, and the whole generation is replaced.
+  await windowPanel.getByRole('button', { name: 'Refresh window' }).click();
+  await expect(windowPanel).toContainText('Last complete read');
+
+  // The mapped account carries the provider's own counts, added over the deliveries it named. These
+  // are the window fixture's numbers and not the per-delivery fixture's, which is what proves the
+  // panel read `signal_analytics_window_metrics` rather than the figures the Figures panel stored.
+  const account = windowPanel.locator('.signal-window-group').filter({ hasText: 'Account 904' });
+  await expect(account).toContainText((5117).toLocaleString('en-US'));
+  await expect(account).toContainText((402).toLocaleString('en-US'));
+  await expect(account).toContainText('named in this window');
+  await expect(account).not.toContainText((4210).toLocaleString('en-US'));
+
+  // A row the provider named that nothing here claims is counted, shown, and kept out of the account
+  // totals above — which is the difference between a window and an account aggregate.
+  const unmapped = windowPanel.locator('.signal-window-unmapped');
+  await expect(unmapped).toContainText('match no delivery recorded here');
+  await expect(unmapped).toContainText('made-in-post-bridge');
+  await expect(unmapped).toContainText((9000).toLocaleString('en-US'));
+  await expect(account).not.toContainText((9000).toLocaleString('en-US'));
+
+  // A second press fails. The reason appears and the first read survives whole.
+  await windowPanel.getByRole('button', { name: 'Refresh window' }).click();
+  await expect(windowPanel).toContainText('nothing was replaced');
+  await expect(account).toContainText((5117).toLocaleString('en-US'));
+  await expect(unmapped).toContainText('made-in-post-bridge');
+
+  // The window path touched neither the post nor its per-delivery figures. The per-delivery totals
+  // are still the ones the Figures panel synchronised, untouched by a window read that stored
+  // different numbers for the same delivery — which is the two-stores rule, on screen.
+  const afterWindow = await page.request.get(`/api/signal/posts/${postId}`);
+  expect(await afterWindow.json()).toMatchObject({ status: 'SCHEDULED', date: '2099-09-15' });
+  const metrics = await page.request.get(`/api/signal/posts/${postId}/metrics`);
+  expect(await metrics.json()).toMatchObject({
+    targets: expect.arrayContaining([
+      expect.objectContaining({ totals: { views: 4210, likes: 318, comments: 24, shares: 61 } }),
+    ]),
+  });
 });
