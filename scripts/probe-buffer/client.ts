@@ -186,11 +186,17 @@ export class BufferProbeClient {
     return post(data.post);
   }
 
-  async edit(id: string, text: string): Promise<BufferPost> {
+  async edit(id: string, text: string, asset?: BufferProbeAsset): Promise<BufferPost> {
     const data = await this.request(
       `edit disposable post ${id}`,
       `mutation BufferProbeEdit($input: EditPostInput!) { editPost(input: $input) { __typename ... on PostActionSuccess { post { ${POST_FIELDS} } } ... on MutationError { message } } }`,
-      { input: { id, text } },
+      {
+        input: {
+          id,
+          text,
+          ...(asset ? { assets: [{ [asset.kind]: { url: asset.url } }] } : {}),
+        },
+      },
     );
     return this.action(data.editPost, 'editPost');
   }

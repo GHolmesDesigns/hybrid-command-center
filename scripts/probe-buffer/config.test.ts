@@ -164,8 +164,15 @@ describe('Buffer probe guards', () => {
   });
 
   it('refuses a target outside the approved connected set', () => {
-    const outcome = parseBufferProbeArgs([...base, '--target', 'tiktok:different'], {}, now);
-    expect(outcome.refusals.join('\n')).toMatch(
+    const duplicate = parseBufferProbeArgs(
+      [...base, '--target', 'tiktok:tt_1', '--target', 'tiktok:tt_1'],
+      {},
+      now,
+    );
+    expect(duplicate.refusals.join('\n')).toMatch(/duplicates an id or service/);
+
+    const outside = parseBufferProbeArgs([...base, '--target', 'tiktok:different'], {}, now);
+    expect(outside.refusals.join('\n')).toMatch(
       /not present in the approved connected --channel set/,
     );
   });

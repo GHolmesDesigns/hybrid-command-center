@@ -50,9 +50,10 @@
   least 48 hours away, an unused label, and the label typed back. An owner-approved public fixture is
   passed explicitly as
   `--media <service>:<image|video>:<https-url>`; the URL must be credential-free, query-free HTTPS
-  and is bound only to that approved service. It creates one disposable scheduled post per approved
-  channel, reads and edits each, and deletes only those ids in `finally`; a complete paginated read
-  must prove absence. Its
+  and is bound only to that approved service. The same fixture is sent on create and edit; live
+  TikTok evidence shows that omitting it from edit is refused rather than preserved. It creates one
+  disposable scheduled post per approved target, reads and edits each, and deletes only those ids in
+  `finally`; a complete paginated read must prove absence. Its
   hard 50-request budget reserves 12 calls for cleanup. The credential and transcript are never
   committed.
 - `npm test`: unit/integration tests with mock Drive

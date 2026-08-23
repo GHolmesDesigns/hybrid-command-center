@@ -180,8 +180,10 @@ label, a zoned instant at least 48 hours away, and the label typed back. An opti
 public fixture is explicit too:
 `--media <service>:<image|video>:<https-url>` accepts one credential-free, query-free HTTPS file URL
 per approved service and binds it only to that service's create. The probe verifies the account and
-channel set before a write, creates one disposable scheduled post per named channel, reads each by
-id, edits and reads it again, and deletes only ids it created in `finally`. Cleanup is independently
+channel set before a write, creates one disposable scheduled post per named target, reads each by
+id, resends the same approved fixture on edit, reads it again, and deletes only ids it created in
+`finally`. The explicit edit asset is required by observed TikTok behavior even though the published
+`EditPostInput` contract says omission preserves the existing asset list. Cleanup is independently
 proved by a complete
 cursor-paginated read. A hard 50-request budget includes cleanup, with 12 calls reserved for it;
 there is no retry and no deliberate 429. The transcript and credential are never committed.
@@ -194,11 +196,15 @@ fail-closed.
 
 ### 2.2 Buffer result matrix — 23 August 2026
 
-The account owner authorized the exact account, organization, TikTok channel, YouTube channel, two
-disposable fixtures, scheduled instant, and probe label on 23 August 2026. The guarded run spent
-four of its 50-request budget, matched both approved channels, then stopped on TikTok's first create
-before Buffer created any post. Created: 0; deleted: 0; leftovers: 0. “Verified” below names the
-evidence source; it does not silently turn a published schema into observed live behavior.
+The account owner authorized the exact account, organization, connected TikTok and YouTube channel
+set, disposable targets, scheduled instant, labels, and later the exact public TikTok image fixture
+on 23 August 2026. The first guarded run spent four of its 50-request budget and stopped on
+TikTok's text-only create with no post created. A TikTok-only preflight then spent two reads and
+stopped before writes when the first guard version could not distinguish the connected set from the
+write subset. After that distinction was made explicit, the image-backed run spent eight requests:
+one TikTok post was created and read back, edit refused, and cleanup deleted it and proved complete
+absence. Created: 1; deleted: 1; leftovers: 0. “Verified” below names the evidence source; it does
+not silently turn a published schema into observed live behavior.
 
 | Claim | Result | Evidence and disposition |
 | --- | --- | --- |
@@ -206,19 +212,22 @@ evidence source; it does not silently turn a published schema into observed live
 | Buffer's service vocabulary includes TikTok, YouTube, Bluesky, and Threads | **verified** | Official `Service` enum read 23 August 2026. The current two-channel split is therefore an account-cap decision, not a support gap. |
 | Account → organizations → channels → posts is the identity hierarchy | **verified** | Official data-model and generated GraphQL reference read 23 August 2026. Later code must still validate every live response. |
 | One `createPost` mutation creates one post for one `channelId` | **verified** | Official `CreatePostInput` and data-model contract. Live per-channel id/readback remains a separate row below. |
-| The approved TikTok channel accepts a text-only disposable custom-scheduled post | **negative** | The owner-approved live probe reached `createPost`, which returned `InvalidInputError`: `Invalid post: TikTok posts require at least one image or video.` Buffer created no post. Later work must provide an explicitly approved public media fixture before it can test TikTok create. |
+| The approved TikTok channel accepts a text-only disposable custom-scheduled post | **negative** | The owner-approved live probe reached `createPost`, which returned `InvalidInputError`: `Invalid post: TikTok posts require at least one image or video.` Buffer created no post. |
+| The approved TikTok channel accepts the owner-approved direct public PNG and returns a per-channel post id | **verified** | The image-backed live create succeeded for the exact TikTok target and the returned identity matched the target and caption. Acceptance proves create-time validation only, not publish-time media fetch or delivery. |
 | The approved YouTube channel accepts a disposable custom-scheduled post and returns a per-channel id | **still unverified** | The fail-closed run stopped at TikTok's first create, before reaching YouTube. It did not infer YouTube behavior or retry past the refusal. |
-| By-id read preserves channel, text, due time, and status after create | **still unverified** | The query shape is documented; an independent live readback was not run. |
-| `editPost` preserves the id and applies text without clearing an omitted schedule | **still unverified** | The omission rule is documented; live create/edit/readback was not run. |
-| `deletePost` returns the deleted id and a complete paginated read proves absence | **still unverified** | The mutation and cursor contract are documented; cleanup was not exercised. Later cards cannot claim deletion proof from the mutation alone. |
-| Typed mutation errors and system `errors[]` carry the documented shapes | **verified** | Official error guide and union reference read 23 August 2026; injected fixtures cover both parsers. The live TikTok create also returned the documented `InvalidInputError` typed mutation shape. System-error behavior remains contract-and-fixture evidence rather than a provoked live refusal. |
+| By-id read preserves channel, text, due time, and status after TikTok image create | **verified** | The image-backed live run reached edit only after an independent by-id read matched the created post's target and caption. |
+| `editPost` applies text while an omitted asset list preserves TikTok media | **negative** | The image-backed post's text-only edit returned `InvalidInputError`: `Invalid post: TikTok posts require at least one image or video.` For this channel the documented omission rule did not make the edit valid; the guarded probe must resend the same approved asset explicitly. |
+| `editPost` applies text when the approved TikTok asset is resubmitted | **still unverified** | The probe now resends the exact create fixture, but that corrected edit has not yet been owner-run under a fresh unused label. |
+| `deletePost` returns the deleted id and a complete paginated read proves absence | **verified** | Cleanup returned the one created TikTok id, and a complete cursor-paginated read found no created id. No remote leftover remains. |
+| Typed mutation errors and system `errors[]` carry the documented shapes | **verified** | Official error guide and union reference read 23 August 2026; injected fixtures cover both parsers. Live TikTok create and edit refusals also returned the documented `InvalidInputError` typed mutation shape. System-error behavior remains contract-and-fixture evidence rather than a provoked live refusal. |
 | A natural 429 carries usable `RateLimit` / `RateLimit-Policy` and `Retry-After` values | **still unverified** | The headers are documented. The probe never provokes load; it records them only if they arrive naturally. |
 | Buffer has no media upload path and accepts hosted asset URLs | **verified** | Official asset/create contract and roadmap read 23 August 2026. A Drive viewer URL remains invalid by architecture even before a provider call. |
-| Direct public HTTPS TikTok/YouTube media is fetched and delivered as documented | **still unverified** | This card's safe probe is text-only. Media fixtures and delivery belong to the later confirmed adapter card. |
+| Direct public HTTPS TikTok/YouTube media is fetched and delivered as documented | **still unverified** | Buffer accepted the owner-approved TikTok PNG URL on create, but the probe deleted the scheduled post before publish. Create-time acceptance is not evidence of Buffer's later fetch or TikTok delivery; YouTube media was not attempted. |
 
-**Negative result:** this account's approved TikTok channel refused the text-only fixture because a
-TikTok post requires an image or video. The fail-closed run created nothing, left nothing behind,
-and did not reach YouTube, edit, readback, or delete. Those unattempted claims remain **still
+**Negative results:** this account's approved TikTok channel refused a text-only create because a
+TikTok post requires an image or video. It accepted the exact public PNG on create and readback, but
+then refused an edit that omitted `assets` for the same reason. Cleanup is positively proved; edit
+with the asset explicitly resubmitted, YouTube, and publish-time delivery remain **still
 unverified**, never negative and never permission to build.
 
 **Revisit this app's decision when any of these becomes true**, and not before:

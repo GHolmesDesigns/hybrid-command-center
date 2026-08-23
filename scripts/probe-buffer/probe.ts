@@ -29,7 +29,7 @@ export interface BufferProbeApi {
     asset?: BufferProbeAsset,
   ): Promise<BufferPost>;
   read(id: string, options?: { teardown?: boolean }): Promise<BufferPost>;
-  edit(id: string, text: string): Promise<BufferPost>;
+  edit(id: string, text: string, asset?: BufferProbeAsset): Promise<BufferPost>;
   delete(id: string): Promise<string>;
   list(organizationId: string, after: string | null, teardown?: boolean): Promise<BufferPage>;
 }
@@ -66,7 +66,7 @@ function initialClaims(): BufferProbeClaim[] {
       claim: 'Media uses stable direct public HTTPS URLs; no Buffer upload endpoint exists.',
       state: 'still unverified',
       evidence:
-        'Documented by the dated contract read; this text-only live probe does not invent or test a byte path.',
+        'The probe sends only an explicit owner-approved URL fixture. Acceptance on create or edit does not prove publish-time fetch or delivery.',
     },
   ];
 }
@@ -158,7 +158,7 @@ export async function runBufferProbe(input: {
       if (readback.channelId !== channel.id || readback.text !== initialText)
         throw new Error(`Independent create readback for ${channel.service} disagreed.`);
       const editedText = `${config.probeLabel} edited disposable Buffer contract probe`;
-      const edited = await client.edit(createdPost.id, editedText);
+      const edited = await client.edit(createdPost.id, editedText, asset);
       if (edited.id !== createdPost.id || edited.text !== editedText)
         throw new Error(`Edit response for ${channel.service} disagreed.`);
       const editedReadback = await client.read(createdPost.id);

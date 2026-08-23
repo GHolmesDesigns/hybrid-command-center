@@ -93,6 +93,7 @@ describe('Buffer GraphQL probe client', () => {
   });
 
   it('maps channels, read, edit, delete, and paginated list operations', async () => {
+    const requests: string[] = [];
     const bodies = [
       { data: { channels: [{ id: 'tt_1', name: 'TikTok', service: 'tiktok' }] } },
       {
@@ -143,11 +144,22 @@ describe('Buffer GraphQL probe client', () => {
     const client = new BufferProbeClient({
       apiKey: 'key',
       baseUrl: 'https://api.buffer.com',
-      transport: async () => ({ status: 200, headers: {}, body: bodies.shift() }),
+      transport: async (request) => {
+        requests.push(request.body);
+        return { status: 200, headers: {}, body: bodies.shift() };
+      },
     });
     await expect(client.channels('org_1')).resolves.toHaveLength(1);
     await expect(client.read('post_1')).resolves.toMatchObject({ id: 'post_1', dueAt: null });
-    await expect(client.edit('post_1', 'edited')).resolves.toMatchObject({ text: 'edited' });
+    await expect(
+      client.edit('post_1', 'edited', {
+        kind: 'image',
+        url: 'https://static.example.com/probe.png',
+      }),
+    ).resolves.toMatchObject({ text: 'edited' });
+    expect(JSON.parse(requests[2] as string).variables.input.assets).toEqual([
+      { image: { url: 'https://static.example.com/probe.png' } },
+    ]);
     await expect(client.delete('post_1')).resolves.toBe('post_1');
     await expect(client.list('org_1', null)).resolves.toMatchObject({
       hasNextPage: true,

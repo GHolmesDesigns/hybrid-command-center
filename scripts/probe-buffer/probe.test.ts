@@ -58,8 +58,8 @@ class FakeClient implements BufferProbeApi {
     if (!post) throw new Error('not found');
     return post;
   }
-  async edit(id: string, text: string) {
-    this.calls.push(`edit:${id}`);
+  async edit(id: string, text: string, asset?: BufferProbeAsset) {
+    this.calls.push(`edit:${id}:${asset?.kind ?? 'text'}`);
     if (this.failEdit) throw new Error('edit refused');
     const post = await this.read(id);
     const edited = { ...post, text };
@@ -102,6 +102,8 @@ describe('Buffer live probe', () => {
     expect(client.posts.size).toBe(0);
     expect(client.calls).toContain('create:tt_1:image');
     expect(client.calls).toContain('create:yt_1:text');
+    expect(client.calls).toContain('edit:post_tt_1:image');
+    expect(client.calls).toContain('edit:post_yt_1:text');
   });
 
   it('verifies the full connected set but writes only the explicit target subset', async () => {
@@ -116,6 +118,7 @@ describe('Buffer live probe', () => {
       leftovers: [],
     });
     expect(client.calls).toContain('create:tt_1:image');
+    expect(client.calls).toContain('edit:post_tt_1:image');
     expect(client.calls.some((call) => call.startsWith('create:yt_1'))).toBe(false);
   });
 
