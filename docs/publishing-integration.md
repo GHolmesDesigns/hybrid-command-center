@@ -188,25 +188,31 @@ fail-closed.
 
 ### 2.2 Buffer result matrix — 23 August 2026
 
-No live write was authorized or run for this card. “Verified” below names the evidence source; it
-does not silently turn a published schema into observed live behavior.
+The account owner authorized the exact account, organization, TikTok channel, YouTube channel, two
+disposable fixtures, scheduled instant, and probe label on 23 August 2026. The guarded run spent
+four of its 50-request budget, matched both approved channels, then stopped on TikTok's first create
+before Buffer created any post. Created: 0; deleted: 0; leftovers: 0. “Verified” below names the
+evidence source; it does not silently turn a published schema into observed live behavior.
 
 | Claim | Result | Evidence and disposition |
 | --- | --- | --- |
-| The credential can read this account and its routed channels | **verified** | Owner read on 22 August 2026 accepted the credential and listed one TikTok and one YouTube channel. Exact ids remain owner-held and uncommitted. |
+| The credential can read the exact approved account, organization, and routed channels | **verified** | The owner-approved live probe on 23 August 2026 matched one connected, unlocked TikTok channel and one connected, unlocked YouTube channel before any write. Exact ids remain owner-held and uncommitted. |
 | Buffer's service vocabulary includes TikTok, YouTube, Bluesky, and Threads | **verified** | Official `Service` enum read 23 August 2026. The current two-channel split is therefore an account-cap decision, not a support gap. |
 | Account → organizations → channels → posts is the identity hierarchy | **verified** | Official data-model and generated GraphQL reference read 23 August 2026. Later code must still validate every live response. |
 | One `createPost` mutation creates one post for one `channelId` | **verified** | Official `CreatePostInput` and data-model contract. Live per-channel id/readback remains a separate row below. |
-| The approved TikTok and YouTube channels accept disposable custom-scheduled posts and return distinct ids | **still unverified** | Requires the owner-approved live probe. No write was made. C84–C87 remain fail-closed on observed behavior. |
+| The approved TikTok channel accepts a text-only disposable custom-scheduled post | **negative** | The owner-approved live probe reached `createPost`, which returned `InvalidInputError`: `Invalid post: TikTok posts require at least one image or video.` Buffer created no post. Later work must provide an explicitly approved public media fixture before it can test TikTok create. |
+| The approved YouTube channel accepts a disposable custom-scheduled post and returns a per-channel id | **still unverified** | The fail-closed run stopped at TikTok's first create, before reaching YouTube. It did not infer YouTube behavior or retry past the refusal. |
 | By-id read preserves channel, text, due time, and status after create | **still unverified** | The query shape is documented; an independent live readback was not run. |
 | `editPost` preserves the id and applies text without clearing an omitted schedule | **still unverified** | The omission rule is documented; live create/edit/readback was not run. |
 | `deletePost` returns the deleted id and a complete paginated read proves absence | **still unverified** | The mutation and cursor contract are documented; cleanup was not exercised. Later cards cannot claim deletion proof from the mutation alone. |
-| Typed mutation errors and system `errors[]` carry the documented shapes | **verified** | Official error guide and union reference read 23 August 2026; injected fixtures cover both parsers. Natural account-specific error values remain unobserved. |
+| Typed mutation errors and system `errors[]` carry the documented shapes | **verified** | Official error guide and union reference read 23 August 2026; injected fixtures cover both parsers. The live TikTok create also returned the documented `InvalidInputError` typed mutation shape. System-error behavior remains contract-and-fixture evidence rather than a provoked live refusal. |
 | A natural 429 carries usable `RateLimit` / `RateLimit-Policy` and `Retry-After` values | **still unverified** | The headers are documented. The probe never provokes load; it records them only if they arrive naturally. |
 | Buffer has no media upload path and accepts hosted asset URLs | **verified** | Official asset/create contract and roadmap read 23 August 2026. A Drive viewer URL remains invalid by architecture even before a provider call. |
 | Direct public HTTPS TikTok/YouTube media is fetched and delivered as documented | **still unverified** | This card's safe probe is text-only. Media fixtures and delivery belong to the later confirmed adapter card. |
 
-**Negative results:** none — because no live mutation was run. An unattempted claim is **still
+**Negative result:** this account's approved TikTok channel refused the text-only fixture because a
+TikTok post requires an image or video. The fail-closed run created nothing, left nothing behind,
+and did not reach YouTube, edit, readback, or delete. Those unattempted claims remain **still
 unverified**, never negative and never permission to build.
 
 **Revisit this app's decision when any of these becomes true**, and not before:
