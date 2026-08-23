@@ -8,10 +8,19 @@ name: Quality gates
 # commit. What is deliberately not covered: a branch pushed before its pull request exists. Under
 # `AGENTS.md` a card opens its pull request as a draft from the first push, so that window is the
 # exception rather than the flow.
+#
+# `types` is spelled out because of the fourth one. A bare `pull_request` means
+# `opened, synchronize, reopened`, and **`ready_for_review` is not in that set** — so marking a draft
+# ready started nothing, and the newest run for the pull request stayed the draft-time one. The
+# version gate below is written to fire at exactly that moment and defers on every other, which meant
+# it never ran at all: it was skipped on drafts by its own condition, never triggered on the toggle
+# that ends draft state, and skipped by the script itself on a `main` push where HEAD is the base it
+# would compare against. The other three are named only because adding one requires listing them all.
 on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: read
@@ -22,7 +31,12 @@ permissions:
 # only through `refs/pull/N/merge` and `main` only through `refs/heads/main`, so a superseded
 # commit is cancelled by its successor without a second trigger racing it.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # Two groups per branch rather than one, because the ready-for-review run answers a narrower
+  # question than the others: it runs the fast checks and skips both browser jobs. Sharing a group
+  # would let it cancel a full run still in flight for the same tree, leaving a pull request whose
+  # newest result is the half that does not include a test. They are different questions about the
+  # same commit, so they queue independently; within each group a superseded run is still cancelled.
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event.action == 'ready_for_review' && 'ready' || 'full' }}
   # Except on the default branch: a push there is a merge, and every merge commit keeps its own
   # recorded result rather than being cancelled by the next one.
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
@@ -87,6 +101,14 @@ jobs:
       # changelog, removes the fragment, and marks the PR ready. Enforce the version then and on
       # main; branch-push runs defer to the corresponding pull_request run because push events do
       # not expose draft state.
+      #
+      # *Then* is the `ready_for_review` event, which the trigger above now lists — without it this
+      # condition was unreachable in the only state that satisfies it. The `main` arm stays, and it
+      # is worth knowing that it does not enforce anything on its own: after a merge, HEAD *is*
+      # `origin/main` and carries the same version, so `check:version-bump` reports
+      # `skipped — HEAD is 'origin/main' itself` and exits 0. It is a backstop for a push that
+      # somehow differs from the base, not a second gate, and a green tick there is not evidence
+      # that a version was checked.
       - name: Check the version was bumped
         if: >-
           github.ref == 'refs/heads/main' ||
@@ -95,6 +117,13 @@ jobs:
 
   quality-gates:
     needs: checks
+    # Skipped on the ready-for-review toggle. That event changes no file: the tree it would test is
+    # the one the last `synchronize` run already tested, minutes earlier in the ordinary flow. What
+    # ending draft state does change is whether a version is required, and that is decided in
+    # `checks` above for the price of one Ubuntu minute. Re-running tests, coverage, the build, and a
+    # browser suite to re-answer a question nothing has touched is what #278 removed from this
+    # workflow; adding it back through a new trigger would undo that.
+    if: github.event.action != 'ready_for_review'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -149,6 +178,10 @@ jobs:
   # does not wait for the slow Linux job, so both platforms still report together.
   e2e-windows:
     needs: checks
+    # Skipped on the ready-for-review toggle, for the reason on `quality-gates` and more so: this is
+    # the job that bills at 2x, and the tree is unchanged. Paying 6-8 billable minutes to re-prove a
+    # Windows exit on a commit already proved is the exact spend #278 was filed to stop.
+    if: github.event.action != 'ready_for_review'
     runs-on: windows-latest
     timeout-minutes: 8
 

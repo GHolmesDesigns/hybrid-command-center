@@ -8,6 +8,27 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [4.7.5] - 2026-08-23
+
+### Fixed
+
+- The finalization gate now actually runs. Marking a pull request ready for review triggers the
+  version check, which had been unreachable: the workflow listened for pushes and openings but not
+  for the moment a draft stops being a draft, so the check that only applies to a ready pull request
+  was never reached in that state. A card marked ready without its version bump now fails instead of
+  merging quietly.
+
+### Changed
+
+- Marking a pull request ready re-runs only the fast checks — audit, typecheck, lint, formatting, and
+  the version rule. The test, coverage, build, and browser suites are skipped for that event, because
+  it changes no file and the tree was already tested on the last push. No paid Windows run is spent
+  re-proving a commit that has not moved.
+
+### Breaking changes
+
+- None.
+
 ## [4.7.4] - 2026-08-23
 
 ### Fixed
