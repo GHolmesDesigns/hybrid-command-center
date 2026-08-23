@@ -1,4 +1,4 @@
-import { test, expect, type Locator } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 
 /**
  * The Wave 1 spec for C32. A stretched card is invisible to every other check in this
@@ -18,10 +18,9 @@ import { test, expect, type Locator } from '@playwright/test';
  * card's spec, `settings-column-independence.spec.ts`. This one is only about where it ends.
  *
  * Both Drive states are covered, because they differ by a couple of hundred pixels and a
- * height assertion that only holds for the short one proves very little. The connected state
- * is faked at the HTTP boundary with `page.route`: this suite has no Google credentials, and
- * the question here is what CSS does with the markup, not how the markup was earned. Real
- * Drive is never contacted.
+ * height assertion that only holds for the short one proves very little. Both states are
+ * faked at the HTTP boundary with `page.route`, so local Google credentials cannot decide
+ * which markup the test measures. Real Drive is never contacted.
  */
 
 /**
@@ -41,6 +40,21 @@ const unexplainedSpaceBelowContent = (card: Locator) =>
 const heightOf = (card: Locator) =>
   card.evaluate((element) => Math.round(element.getBoundingClientRect().height));
 
+/** The Drive card before Google OAuth credentials have been configured. */
+const serveUnconfiguredDrive = (page: Page) =>
+  page.route('**/api/settings/drive', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        configured: false,
+        connected: false,
+        rootFolderId: null,
+        rootFolderUrl: null,
+      }),
+    }),
+  );
+
 test('the Settings cards size to their content at desktop width, in both Drive states', async ({
   page,
 }) => {
@@ -55,6 +69,7 @@ test('the Settings cards size to their content at desktop width, in both Drive s
 
   // 1. Disconnected without credentials — the state every install starts in, and the state the
   //    blank area was first reported against.
+  await serveUnconfiguredDrive(page);
   await page.goto('/settings');
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
   await expect(drive.getByRole('heading', { level: 2, name: 'Google Drive' })).toBeVisible();

@@ -19,10 +19,10 @@ import { layoutSettled } from './ready';
  *   - At one column the two stacks meet at the same gap they use internally, so the six cards
  *     read as one stack, in document order.
  *
- * The connected Drive state is faked at the HTTP boundary with `page.route`, as it is in
- * `settings-card-height.spec.ts` — this suite has no Google credentials, and the question is what
- * the layout does with a card that grew, not how it earned the extra content. Real Drive is never
- * contacted.
+ * Both Drive states are faked at the HTTP boundary with `page.route`, as they are in
+ * `settings-card-height.spec.ts`, so local Google credentials cannot decide which markup the test
+ * measures. The question is what the layout does with a card that grew, not how it earned the
+ * extra content. Real Drive is never contacted.
  */
 
 /** `.settings-layout`'s gap, and `.settings-column`'s, in `client/src/styles.css`. */
@@ -99,6 +99,21 @@ const serveConnectedDrive = (page: Page) =>
     }),
   );
 
+/** The Drive card before Google OAuth credentials have been configured. */
+const serveUnconfiguredDrive = (page: Page) =>
+  page.route('**/api/settings/drive', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        configured: false,
+        connected: false,
+        rootFolderId: null,
+        rootFolderUrl: null,
+      }),
+    }),
+  );
+
 const find = (boxes: CardBox[], heading: string) => {
   const box = boxes.find((candidate) => candidate.heading === heading);
   if (!box) throw new Error(`no Settings card headed "${heading}"`);
@@ -148,7 +163,7 @@ test('a Settings card follows its own column, and no card follows the other one'
 
   // The same card a few hundred pixels shorter: no credentials, so nothing but the warning and
   // a disabled button. The content above the rest of the left stack has shrunk.
-  await page.unroute('**/api/settings/drive');
+  await serveUnconfiguredDrive(page);
   await openSettings(page);
   await expect(page.getByText('Credentials required')).toBeVisible();
   const disconnected = await cardBoxes(page);
