@@ -559,6 +559,11 @@ export function deliveryTargetSummary(
   if (target.manualCompletedAt) return { label: 'Finished by hand', group: 'DELIVERED' };
   if (deliveryModeNeedsPerson(target.mode) && target.outcome === 'SUCCESS')
     return { label: 'Waiting for you to finish', group: 'ATTENTION' };
+  if (target.outcome === 'SUCCESS' && publication.state === 'SUBMITTED')
+    return {
+      label: PUBLICATION_STATE_LABEL.SUBMITTED,
+      group: PUBLICATION_STATE_GROUP.SUBMITTED,
+    };
   if (target.outcome === 'SUCCESS') return { label: 'Delivered', group: 'DELIVERED' };
   return {
     label: PUBLICATION_STATE_LABEL[publication.state],

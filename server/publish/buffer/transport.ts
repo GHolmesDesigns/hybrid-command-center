@@ -92,6 +92,8 @@ export async function bufferGraphqlRequest(
     baseUrl: string;
     query: string;
     variables: Record<string, unknown>;
+    /** A write whose transport never answered may have landed and must never be retried blindly. */
+    ambiguousOnTransport?: boolean;
   },
 ): Promise<Record<string, unknown>> {
   let response: { status: number; headers: Record<string, string>; body: unknown };
@@ -105,7 +107,9 @@ export async function bufferGraphqlRequest(
       body: JSON.stringify({ query: input.query, variables: input.variables }),
     });
   } catch (error) {
-    throw new BufferProviderError((error as Error).message);
+    throw new BufferProviderError((error as Error).message, {
+      ambiguous: input.ambiguousOnTransport ?? false,
+    });
   }
   const headers = bufferRecordedHeaders(response.headers);
   if (response.status < 200 || response.status >= 300)

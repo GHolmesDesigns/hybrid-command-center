@@ -208,6 +208,22 @@ account owner must approve the exact channel ids and disposable fixtures before 
 account/channel set, ambiguous write, or unproved cleanup stops the run and leaves later cards
 fail-closed.
 
+The C87 runtime write path now exists behind `BufferWriteProvider`, but production remains closed by
+`BUFFER_WRITE_EVIDENCE`: TikTok's approved image-backed create/edit/delete round trip is verified,
+while the exact connected YouTube channel is still unverified. Automated tests inject
+`MockBufferWriteProvider`; CI never contacts Buffer.
+
+**C87 write and lifecycle rules.** A confirmed plan emits one `createPost` per selected channel,
+pins `mode: customScheduled` and `needsApproval: false`, and never exposes queue, immediate-share,
+approval, recurrence, queue movement, or template controls. Each answered mutation is committed to
+its own target row immediately, including its opaque Buffer post id. A definite quota or rate-limit
+refusal is distinct from ambiguity; a transport failure without an answer stops the sequence and is
+never retried. Reads, edits, reschedules, and cancels address that exact id, require a fresh hash over
+Signal plus the remote record, and are offered only from `Post.allowedActions`. `Post.error.rawError`
+is discarded by the wire parser; only its safe message and support URL can move farther.
+Reconciliation updates publication and target rows only and never writes `signal_posts`, campaigns,
+media, or planning status.
+
 ### 2.2 Buffer result matrix — 23 August 2026
 
 The account owner authorized the exact account, organization, connected TikTok and YouTube channel
@@ -1295,9 +1311,9 @@ written in the same transaction as the publication-state change it describes.
 Named so an implementation card does not assume otherwise: media **storage**; the planner
 UI beyond the confirmed submit flow and publication state; multi-workspace or per-client API keys;
 and publishing anything that is not a Signal post. Section 2.1 now settles Buffer's explicit route,
-contract, credential names, and owner-run probe. The production Buffer adapter, provider-neutral
-schema, and runtime publishing remain later Wave 15 cards; this card deliberately adds none of
-them.
+contract, credential names, owner-run probe, provider-neutral schema, and the evidence-gated C87
+adapter. Production enablement remains a dated owner action rather than a credential-presence side
+effect.
 
 **Media upload has moved off that list, in one direction only.** §3.3 now records the boundary: the
 confirmed publishing path may stream user-selected Drive files to the provider through

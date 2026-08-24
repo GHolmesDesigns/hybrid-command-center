@@ -4,6 +4,17 @@ import type { SignalChannel } from './signal.ts';
 /** The provider id every Buffer route stores on a target or publication. */
 export const BUFFER_PROVIDER = 'buffer';
 
+/**
+ * Production Buffer writes remain closed until the owner-run C83 round trip records the exact
+ * connected channels. Tests inject a mock write provider; changing this value requires that dated
+ * evidence and its publishing-record update in the same change.
+ */
+export const BUFFER_WRITE_EVIDENCE = {
+  enabled: false,
+  reason:
+    'Buffer publishing is built but not production-enabled: the owner-run C83 create, read, edit, and cleanup evidence has not been recorded for the connected channels.',
+} as const;
+
 /** The only origin this app posts Buffer GraphQL to. */
 export const BUFFER_API_URL = 'https://api.buffer.com';
 

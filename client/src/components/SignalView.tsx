@@ -100,6 +100,7 @@ import { SignalProviderInventoryPanel } from './SignalProviderInventory';
 import { SignalAnalyticsWindowPanel } from './SignalAnalyticsWindow';
 import { SignalMetrics } from './SignalMetrics';
 import { previewPlatforms, variantList, variantMap } from './signal-variants';
+import { BUFFER_PROVIDER } from '../../../shared/buffer';
 
 type SignalRange = {
   from: string;
@@ -403,11 +404,19 @@ function DeliveryTarget({
   target,
   busy,
   finish,
+  preview,
+  compare,
+  apply,
+  close,
 }: {
   publication: SignalPublication;
   target: SignalPublicationTarget;
   busy: boolean;
   finish: () => void;
+  preview?: ProviderReconcilePreview;
+  compare?: () => void;
+  apply?: (action: ProviderAction) => void;
+  close?: () => void;
 }) {
   const summary = deliveryTargetSummary(publication, target);
   const platformLabel = platformLabelFor(target.platform, target.channel);
@@ -441,6 +450,17 @@ function DeliveryTarget({
           Mark {platformLabel} finished
         </button>
       )}
+      {target.provider === BUFFER_PROVIDER &&
+        target.remotePostId &&
+        (preview && apply && close ? (
+          <ProviderReconcilePanel preview={preview} busy={busy} apply={apply} close={close} />
+        ) : (
+          compare && (
+            <button type="button" className="secondary" disabled={busy} onClick={compare}>
+              Compare this Buffer target
+            </button>
+          )
+        ))}
     </li>
   );
 }
@@ -549,6 +569,7 @@ function Editor({
    * next decision to be taken against a freshly read record rather than a stale panel.
    */
   const [providerPreview, setProviderPreview] = useState<ProviderReconcilePreview | null>(null);
+  const [providerPreviewTarget, setProviderPreviewTarget] = useState<number | null>(null);
   const [deliveryTick, setDeliveryTick] = useState(0);
   const [presetNotice, setPresetNotice] = useState('');
   const checked = useRef(new Set<string>());
@@ -801,13 +822,16 @@ function Editor({
    * the comparison, and clearing the message on the way would erase the refusal that explains why
    * the panel just changed under the reader.
    */
-  const compareProvider = async (publicationId: string, keepError = false) => {
+  const compareProvider = async (publicationId: string, keepError = false, accountId?: number) => {
     setBusy(true);
     if (!keepError) setError('');
     try {
+      setProviderPreviewTarget(accountId ?? null);
       setProviderPreview(
         await send<ProviderReconcilePreview>(
-          `/signal/publications/${publicationId}/provider/preview`,
+          accountId === undefined
+            ? `/signal/publications/${publicationId}/provider/preview`
+            : `/signal/publications/${publicationId}/targets/${accountId}/provider/preview`,
           'POST',
         ),
       );
@@ -826,24 +850,31 @@ function Editor({
    * the old one would be describing a record that no longer exists. The delivery history is reread
    * for the same reason.
    */
-  const applyProviderAction = async (publicationId: string, action: ProviderAction) => {
+  const applyProviderAction = async (
+    publicationId: string,
+    action: ProviderAction,
+    accountId?: number,
+  ) => {
     if (!providerPreview) return;
     setBusy(true);
     setError('');
     try {
       await send<SignalPublication>(
-        `/signal/publications/${publicationId}/provider/apply`,
+        accountId === undefined
+          ? `/signal/publications/${publicationId}/provider/apply`
+          : `/signal/publications/${publicationId}/targets/${accountId}/provider/apply`,
         'POST',
         { action, reconcileHash: providerPreview.reconcileHash },
       );
       setProviderPreview(null);
+      setProviderPreviewTarget(null);
       setPublications(await api<SignalPublication[]>(`/signal/posts/${post.id}/publications`));
     } catch (reason) {
       setError((reason as Error).message);
       // A refused action leaves the panel open on a comparison that is now known to be stale, so
       // it is taken again rather than left showing what the refusal just contradicted — and the
       // refusal itself is kept, because it is the reason the panel changed.
-      await compareProvider(publicationId, true).catch(() => undefined);
+      await compareProvider(publicationId, true, accountId).catch(() => undefined);
     } finally {
       setBusy(false);
     }
@@ -1515,6 +1546,24 @@ function Editor({
                           target={target}
                           busy={busy}
                           finish={() => finishDelivery(publication.id, target.accountId)}
+                          preview={
+                            providerPreview?.publicationId === publication.id &&
+                            providerPreviewTarget === target.accountId
+                              ? providerPreview
+                              : undefined
+                          }
+                          compare={
+                            target.provider === BUFFER_PROVIDER && target.remotePostId
+                              ? () => void compareProvider(publication.id, false, target.accountId)
+                              : undefined
+                          }
+                          apply={(action) =>
+                            void applyProviderAction(publication.id, action, target.accountId)
+                          }
+                          close={() => {
+                            setProviderPreview(null);
+                            setProviderPreviewTarget(null);
+                          }}
                         />
                       ))}
                     </ul>
@@ -1545,7 +1594,9 @@ function Editor({
                     {/* Manual refresh outlives the automatic schedule on purpose: `UNCONFIRMED`
                         is the state a person resolves, and it is exactly the state the timer has
                         stopped asking about. */}
-                    {publication.providerPostId &&
+                    {(publication.providerPostId ||
+                      (publication.provider === BUFFER_PROVIDER &&
+                        publication.targets.some((target) => target.remotePostId))) &&
                       (isReconcilableState(publication.state) ||
                         publication.state === 'UNCONFIRMED') && (
                         <button

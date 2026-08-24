@@ -54,6 +54,11 @@ export interface TargetRow {
   /** The provider's `post-results` row id. NULL until a check has reported one. */
   post_result_id: string | null;
   remote_post_id: string | null;
+  remote_state?: string | null;
+  remote_updated_at?: string | null;
+  remote_allowed_actions?: string | null;
+  sent_text?: string | null;
+  sent_due_at?: string | null;
   account_provider?: string | null;
   provider_account_ref?: string | null;
 }

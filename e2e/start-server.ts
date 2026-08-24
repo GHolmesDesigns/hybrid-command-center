@@ -11,6 +11,7 @@ import {
   MockProviderInventoryProvider,
   MockPublishProvider,
   MockBufferReadProvider,
+  MockBufferWriteProvider,
 } from '../server/publish/mock-provider.ts';
 import { MockDriveMediaProvider } from '../server/drive/mock-provider.ts';
 
@@ -182,6 +183,9 @@ analyticsWindow.pages = [
 ];
 analyticsWindow.failureAt = 2;
 
+const bufferWrite = new MockBufferWriteProvider();
+bufferWrite.createdStateByChannel.set('e2e-buffer-youtube', 'FAILED');
+
 const app = createApp(db, {
   publishTimezone: 'America/New_York',
   publish,
@@ -189,6 +193,7 @@ const app = createApp(db, {
   inventory,
   analyticsWindow,
   bufferRead: new MockBufferReadProvider(),
+  bufferWrite,
   // The window the fixture may ask about. The app itself offers none — `ANALYTICS_WINDOW_EVIDENCE`
   // records §14's unverified rows — so without this the refresh path could not be reached at all.
   // A build a person uses never gets this option; see the option's own comment in `server/app.ts`.

@@ -123,6 +123,10 @@ import {
 import { PublishRequestError, PublishService } from './publish/service.ts';
 import { BufferAccountsService } from './publish/buffer-accounts.ts';
 import { BufferReadClient } from './publish/buffer/client.ts';
+import { BufferWriteClient } from './publish/buffer/write-client.ts';
+import type { BufferWriteProvider } from './publish/buffer/write-provider.ts';
+import { UnavailableBufferWriteProvider } from './publish/buffer/write-provider.ts';
+import { BUFFER_WRITE_EVIDENCE } from '../shared/buffer.ts';
 import {
   UnavailableBufferReadProvider,
   type BufferReadProvider,
@@ -265,6 +269,8 @@ export type AppOptions = {
    * channels, and posts and cannot submit, edit, delete, upload, or measure anything.
    */
   bufferRead?: BufferReadProvider;
+  /** Test-only Buffer write provider. Production stays behind BUFFER_WRITE_EVIDENCE. */
+  bufferWrite?: BufferWriteProvider;
   /**
    * Test-only window provider, separate again for the same reason: what the window panel is handed can
    * list provider rows for one platform and window, and cannot sync, submit, update, or cancel
@@ -544,6 +550,11 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     (publishConfigured()
       ? new PostBridgeProvider(config.publish.apiKey)
       : new UnavailablePublishProvider());
+  const bufferWrite =
+    options.bufferWrite ??
+    (bufferConfigured() && BUFFER_WRITE_EVIDENCE.enabled
+      ? new BufferWriteClient(config.buffer.apiKey)
+      : new UnavailableBufferWriteProvider(BUFFER_WRITE_EVIDENCE.reason));
   const publisher = new PublishService(
     db,
     signalProvider(db),
@@ -551,6 +562,8 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     options.publishTimezone ?? config.publish.timezone,
     clock,
     driveMedia(),
+    'post-bridge',
+    bufferWrite,
   );
   // Beside the publisher and not inside it. It holds its own provider, which has no way to submit,
   // update, or cancel anything, and it never touches `SignalProvider` at all.
@@ -2008,6 +2021,41 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       next(error);
     }
   });
+  app.post(
+    '/api/signal/publications/:id/targets/:accountId/provider/preview',
+    async (req, res, next) => {
+      try {
+        const accountId = z.coerce.number().int().positive().parse(req.params.accountId);
+        const listed = await resolvePublishingTargets(db, publishProvider, bufferAccounts, clock);
+        res.json(await publisher.bufferTargetPreview(req.params.id, accountId, listed));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+  app.post(
+    '/api/signal/publications/:id/targets/:accountId/provider/apply',
+    async (req, res, next) => {
+      try {
+        const accountId = z.coerce.number().int().positive().parse(req.params.accountId);
+        const input = z
+          .object({ action: z.enum(PROVIDER_ACTIONS), reconcileHash: z.string().length(64) })
+          .parse(req.body);
+        const listed = await resolvePublishingTargets(db, publishProvider, bufferAccounts, clock);
+        res.json(
+          await publisher.applyBufferTargetAction(
+            req.params.id,
+            accountId,
+            input.action,
+            input.reconcileHash,
+            listed,
+          ),
+        );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
   /**
    * The figures stored against one post's deliveries. A local read: no provider call on any path.
    *
