@@ -170,6 +170,26 @@ describe('provider boundary', () => {
     ).rejects.toThrow('Publishing is off.');
     await expect(provider.check('missing')).rejects.toThrow('Publishing is off.');
     await expect(provider.cancel('missing')).rejects.toThrow('Publishing is off.');
+    await expect(
+      provider.uploadMedia({
+        name: 'a.jpg',
+        mimeType: 'image/jpeg',
+        sizeBytes: 1,
+        body: (async function* () {
+          yield new Uint8Array([1]);
+        })(),
+      }),
+    ).rejects.toThrow('Publishing is off.');
+    await expect(provider.describe('missing')).rejects.toThrow('Publishing is off.');
+    await expect(
+      provider.update('missing', {
+        caption: '',
+        mediaUrls: [],
+        scheduledInstant: '',
+        timezone: '',
+        targets: [],
+      }),
+    ).rejects.toThrow('Publishing is off.');
   });
 });
 
