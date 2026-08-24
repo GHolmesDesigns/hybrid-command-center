@@ -8,6 +8,23 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [4.8.1] - 2026-08-23
+
+### Added
+
+- Provider-specific publish capabilities for Buffer by platform and scheduling type, separate from the Post Bridge table.
+- Buffer media rules: Drive references refuse before confirmation; notification scheduling sends no media from this app; automatic TikTok may carry a direct public HTTPS URL where C83 verified create.
+- Composer hint before choosing a Buffer account explaining TikTok and YouTube media limits.
+- Preview shows the exact Buffer payload (`bufferWire`), delivery mode, refusals, and warnings without contacting Buffer or fetching media.
+
+### Changed
+
+- Mixed Post Bridge and Buffer targets in one submission refuse rather than splitting implicitly.
+
+### Breaking changes
+
+- None.
+
 ## [4.8.0] - 2026-08-23
 
 ### Changed

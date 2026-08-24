@@ -2,6 +2,7 @@
 import {
   bufferCapabilityFor,
   DEFAULT_BUFFER_SCHEDULING_TYPE,
+  isBufferProvider,
   publishCapabilityForProvider,
 } from './buffer-capabilities.ts';
 import { publishCapabilityFor, publishKindSupported } from './publish-capabilities.ts';
@@ -31,6 +32,18 @@ describe('Buffer publish capabilities', () => {
     const automatic = bufferCapabilityFor('youtube', 'automatic');
     expect(automatic?.kinds.POST).toMatchObject({ automatic: false, manualFinish: false });
     expect(publishKindSupported(automatic!.kinds.REEL)).toBe(false);
+  });
+
+  it('recognises the Buffer provider id', () => {
+    expect(isBufferProvider(BUFFER_PROVIDER)).toBe(true);
+    expect(isBufferProvider(undefined)).toBe(false);
+    expect(isBufferProvider('post-bridge')).toBe(false);
+  });
+
+  it('covers notification scheduling for YouTube kinds', () => {
+    const notification = bufferCapabilityFor('youtube', 'notification');
+    expect(notification?.kinds.REEL.manualFinish).toBe(true);
+    expect(notification?.kinds.CAROUSEL.automatic).toBe(false);
   });
 
   it('selects Buffer versus Post Bridge by provider', () => {

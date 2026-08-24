@@ -92,6 +92,16 @@ describe('Buffer media planning', () => {
     });
     expect(warned.warnings.some((warning) => warning.includes('query'))).toBe(true);
 
+    const hashed = 'https://cdn.example.com/a.mp4#part';
+    const hashWarned = bufferMediaPlan({
+      capability: bufferCapabilityFor('tiktok', 'automatic')!,
+      platform: 'tiktok',
+      schedulingType: 'automatic',
+      content: content([hashed]),
+      media: [urlPostMedia(hashed)],
+    });
+    expect(hashWarned.warnings.some((warning) => warning.includes('fragment'))).toBe(true);
+
     const youtube = bufferMediaPlan({
       capability: bufferCapabilityFor('youtube', 'automatic')!,
       platform: 'youtube',
@@ -100,5 +110,64 @@ describe('Buffer media planning', () => {
       media: [urlPostMedia('https://cdn.example.com/a.mp4')],
     });
     expect(youtube.refusals[0]).toMatch(/not available yet/i);
+  });
+
+  it('maps image and document assets and carries title metadata', () => {
+    const automatic = bufferCapabilityFor('tiktok', 'automatic')!;
+    const imageUrl = 'https://cdn.example.com/photo.jpg';
+    const pdfUrl = 'https://cdn.example.com/brief.pdf';
+    const imagePlan = bufferMediaPlan({
+      capability: automatic,
+      platform: 'tiktok',
+      schedulingType: 'automatic',
+      content: content([imageUrl], { title: 'TikTok title' }),
+      media: [urlPostMedia(imageUrl)],
+    });
+    expect(imagePlan.bufferWire?.assets).toEqual([{ image: { url: imageUrl } }]);
+    expect(imagePlan.bufferWire?.metadata).toEqual({ tiktok: { title: 'TikTok title' } });
+
+    const pdfPlan = bufferMediaPlan({
+      capability: automatic,
+      platform: 'tiktok',
+      schedulingType: 'automatic',
+      content: content([pdfUrl]),
+      media: [urlPostMedia(pdfUrl)],
+    });
+    expect(pdfPlan.bufferWire?.assets).toEqual([{ document: { url: pdfUrl } }]);
+
+    const youtubeNotification = bufferCapabilityFor('youtube', 'notification')!;
+    const youtubePlan = bufferMediaPlan({
+      capability: youtubeNotification,
+      platform: 'youtube',
+      schedulingType: 'notification',
+      content: content([], { title: 'YouTube title' }),
+      media: [],
+    });
+    expect(youtubePlan.bufferWire?.metadata).toEqual({ youtube: { title: 'YouTube title' } });
+  });
+
+  it('refuses URLs whose kind cannot be classified', () => {
+    const unknownUrl = 'https://cdn.example.com/asset';
+    const plan = bufferMediaPlan({
+      capability: bufferCapabilityFor('tiktok', 'automatic')!,
+      platform: 'tiktok',
+      schedulingType: 'automatic',
+      content: content([unknownUrl]),
+      media: [urlPostMedia(unknownUrl)],
+    });
+    expect(plan.bufferWire).toBeUndefined();
+    expect(plan.refusals[0]).toMatch(/cannot classify/i);
+  });
+
+  it('synthesizes URL rows when media is not stored on the post', () => {
+    const url = 'https://cdn.example.com/clip.mp4';
+    const plan = bufferMediaPlan({
+      capability: bufferCapabilityFor('tiktok', 'automatic')!,
+      platform: 'tiktok',
+      schedulingType: 'automatic',
+      content: content([url]),
+      media: [],
+    });
+    expect(plan.bufferWire?.assets).toEqual([{ video: { url } }]);
   });
 });

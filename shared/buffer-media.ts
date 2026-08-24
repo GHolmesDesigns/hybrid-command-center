@@ -32,13 +32,9 @@ const bufferAssetKindFor = (media: SignalPostMedia): 'image' | 'video' | 'docume
 };
 
 const expiringUrlWarning = (url: string): string | undefined => {
-  try {
-    const parsed = new URL(url);
-    if (parsed.search || parsed.hash) {
-      return `${url} carries a query or fragment. Buffer may not fetch it when the post publishes.`;
-    }
-  } catch {
-    return undefined;
+  const parsed = new URL(url);
+  if (parsed.search || parsed.hash) {
+    return `${url} carries a query or fragment. Buffer may not fetch it when the post publishes.`;
   }
   return undefined;
 };
