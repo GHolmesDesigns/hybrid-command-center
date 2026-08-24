@@ -214,6 +214,7 @@ describe('additive schema migration', () => {
         'signal_post_campaigns',
         'client_merges',
         'client_import_aliases',
+        'signal_post_import_aliases',
       ]),
     );
     // The integration activity log arrives empty: a migration invents no history.
@@ -227,6 +228,11 @@ describe('additive schema migration', () => {
     // And no client arrives with an import identity: which client a source calls what is something
     // only a playbook carrying that pair can say, so a migration has nothing to fill this from.
     expect(rows(db, 'SELECT COUNT(*) AS total FROM client_import_aliases')).toEqual([{ total: 0 }]);
+    // A migration cannot infer a stable outside identity from copy or schedule, so post aliases
+    // also arrive empty rather than claiming a weak fallback as permanent identity.
+    expect(rows(db, 'SELECT COUNT(*) AS total FROM signal_post_import_aliases')).toEqual([
+      { total: 0 },
+    ]);
     // And no alert is acknowledged on arrival: the summary is derived, so an upgrade cannot know
     // which of the lines it is about to show have already been seen.
     expect(rows(db, 'SELECT COUNT(*) AS total FROM signal_alert_acks')).toEqual([{ total: 0 }]);

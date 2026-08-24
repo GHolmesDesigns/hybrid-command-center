@@ -226,13 +226,14 @@ A post is the **same post** across imports when:
    the post they were recorded against, whatever the row now says about date or copy. Namespace is
    `signal-import:<post_import_source>` with a UUID source, for the same reason client identity uses
    a UUID in the playbook.
-2. **Fallback, when the workbook carries no identity.** Scheduled date (blank matches blank only) plus
-   trimmed text compared case-insensitively. This is a weak key and the importer must say so; it
-   exists only for workbooks written before identity columns were added.
+2. **Otherwise the fallback.** When the workbook carries no identity, or carries a valid identity
+   that has not been recorded yet, resolution checks scheduled date (blank matches blank only) plus
+   trimmed text compared case-insensitively. This is a weak key and the importer must say so. A row
+   with no identity may be matched by it, but can never gain an identity the workbook did not name.
 3. **Disagreement is refused.** Identity resolving to one post and the fallback to another rejects
    the **whole** import with both posts named — the same refusal rule client identity uses.
-4. **Confirmed fallback match records identity** in the same transaction, so the next import
-   resolves by the pair.
+4. **A confirmed fallback match carrying a new identity records that identity** in the same
+   transaction, so the next import resolves by the pair. A plain fallback match records nothing.
 
 Two rows of one workbook claiming the same identity, or the same fallback key, are preview errors.
 
