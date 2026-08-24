@@ -32,10 +32,12 @@ import { PageHead } from './Shell';
  */
 export function ImportView({
   open,
+  openSignal,
   /** Bumped by the import modal on every receipt, which is this page's cue to reload. */
   importedAt,
 }: {
   open: () => void;
+  openSignal: () => void;
   importedAt: number;
 }) {
   const [receipts, setReceipts] = useState<ImportReceipt[]>([]);
@@ -93,6 +95,9 @@ export function ImportView({
             </a>
             <button onClick={open}>
               <Upload /> Import a playbook
+            </button>
+            <button className="secondary" onClick={openSignal}>
+              <Upload /> Import Signal queue
             </button>
           </div>
         }
