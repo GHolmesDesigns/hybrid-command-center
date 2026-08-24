@@ -11,6 +11,9 @@ import {
   type PublishPlatformCapability,
   type PublishPostKind,
 } from '../../../shared/publish-capabilities';
+import { publishCapabilityForProvider } from '../../../shared/buffer-capabilities';
+import { BUFFER_TARGET_MEDIA_HINT } from '../../../shared/buffer-media';
+import { BUFFER_PROVIDER } from '../../../shared/buffer';
 import {
   publishVariantFieldSupported,
   publishVariantPlacements,
@@ -671,9 +674,11 @@ function TargetChoice({
   busy: boolean;
 }) {
   const onPlatform = accounts.filter((account) => account.platform === report.platform);
+  const bufferOnPlatform = onPlatform.some((account) => account.provider === BUFFER_PROVIDER);
   if (!report.platform || onPlatform.length === 0) return null;
   return (
     <fieldset className="signal-target-choice">
+      {bufferOnPlatform && <p className="signal-target-choice-hint">{BUFFER_TARGET_MEDIA_HINT}</p>}
       <legend>Accounts</legend>
       <p className="signal-target-choice-hint">
         {selected.length === 0
@@ -779,7 +784,9 @@ function PreviewPanel({
   targetChoice: React.ReactNode;
 }) {
   const content = report.content;
-  const capability = report.platform ? publishCapabilityFor(report.platform) : undefined;
+  const capability = report.platform
+    ? publishCapabilityForProvider(report.provider, report.platform, report.bufferSchedulingType)
+    : undefined;
   const overridden = content
     ? (Object.keys(content.sources) as PublishVariantField[]).filter(
         (field) => content.sources[field] !== 'BASE',
@@ -863,6 +870,14 @@ function PreviewPanel({
                 />
               ))}
             </ol>
+          )}
+          {report.bufferWire && (
+            <>
+              <h4>Buffer payload</h4>
+              <pre className="signal-preview-buffer-wire">
+                {JSON.stringify(report.bufferWire, null, 2)}
+              </pre>
+            </>
           )}
         </>
       ) : (

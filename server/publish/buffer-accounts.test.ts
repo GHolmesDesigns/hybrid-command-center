@@ -9,7 +9,11 @@ import type {
   BufferPostsPage,
   BufferReadProvider,
 } from './buffer/read-provider.ts';
-import { BufferAccountsService } from './buffer-accounts.ts';
+import {
+  BufferAccountsService,
+  bufferTargetsFromDb,
+  resolveBufferOrganizationId,
+} from './buffer-accounts.ts';
 import { MockPublishProvider } from './mock-provider.ts';
 
 class MockBufferReadProvider implements BufferReadProvider {
@@ -198,6 +202,39 @@ describe('BufferAccountsService', () => {
     const service = new BufferAccountsService(db, provider, clock);
     await service.refresh();
     expect(service.read().lastRefreshAt).toBe(NOW.toISOString());
+  });
+
+  it('maps stored channels to publish targets and drops unknown platforms', async () => {
+    const provider = new MockBufferReadProvider();
+    const service = new BufferAccountsService(db, provider, clock);
+    await service.refresh();
+    const targets = bufferTargetsFromDb(db);
+    expect(targets.map((target) => target.platform).sort()).toEqual([
+      'tiktok',
+      'youtube',
+      'youtube',
+    ]);
+    expect(service.selectableTargets()).toHaveLength(2);
+    expect(service.read().organizationId).toBe('org-1');
+  });
+
+  it('uses the default clock when none is supplied', async () => {
+    const provider = new MockBufferReadProvider();
+    const service = new BufferAccountsService(db, provider);
+    const refreshed = await service.refresh();
+    expect(refreshed.lastRefreshAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+});
+
+describe('resolveBufferOrganizationId', () => {
+  it('refuses when Buffer returns no organizations', () => {
+    expect(() => resolveBufferOrganizationId([])).toThrow(/no organizations/);
+  });
+
+  it('refuses when the configured organization id is absent from the account', () => {
+    expect(() => resolveBufferOrganizationId([{ id: 'a' }], 'missing')).toThrow(
+      /BUFFER_ORGANIZATION_ID/,
+    );
   });
 });
 

@@ -7,6 +7,8 @@ import {
   type PublishPostKind,
 } from './publish-capabilities.ts';
 import type { PublishResolvedContent } from './publish-variants.ts';
+import type { BufferSchedulingType } from './buffer-capabilities.ts';
+import type { BufferWirePreview } from './buffer-media.ts';
 
 export const PUBLICATION_STATES = [
   'SUBMITTING',
@@ -129,6 +131,8 @@ export interface PublishChannelTargetReport {
   status: PublishChannelStatus;
   refusals: string[];
   warnings: string[];
+  bufferWire?: BufferWirePreview;
+  bufferSchedulingType?: BufferSchedulingType;
 }
 
 export interface PublishChannelReport {
@@ -167,6 +171,8 @@ export interface PublishChannelReport {
   targets?: PublishChannelTargetReport[];
   refusals: string[];
   warnings: string[];
+  bufferWire?: BufferWirePreview;
+  bufferSchedulingType?: BufferSchedulingType;
 }
 
 export interface PublishPreview {

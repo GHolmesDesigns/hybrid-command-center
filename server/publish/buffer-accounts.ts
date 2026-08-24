@@ -2,6 +2,7 @@ import type { Db } from '../db.ts';
 import { transaction } from '../db.ts';
 import { getSetting, setSetting } from '../drive/service.ts';
 import { recordIntegrationEvent, redactSecrets } from '../integration-log.ts';
+import { DEFAULT_BUFFER_SCHEDULING_TYPE } from '../../shared/buffer-capabilities.ts';
 import {
   BUFFER_POSTS_PAGE_MAX,
   BUFFER_PROVIDER,
@@ -165,6 +166,7 @@ export const bufferTargetsFromDb = (db: Db): PublishTarget[] => {
       platform: channel.platform,
       handle: channel.handle,
       name: channel.displayName,
+      schedulingType: DEFAULT_BUFFER_SCHEDULING_TYPE,
       ...(channel.unavailable ? { unavailable: channel.unavailable } : {}),
     };
     index += 1;

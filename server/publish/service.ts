@@ -236,8 +236,12 @@ export class PublishService {
     };
   }
 
-  async submit(postId: string, expectedHash: string): Promise<SignalPublication> {
-    const plan = await this.preview(postId);
+  async submit(
+    postId: string,
+    expectedHash: string,
+    listedTargets?: readonly PublishTarget[],
+  ): Promise<SignalPublication> {
+    const plan = await this.preview(postId, listedTargets);
     // The gate is every refusal in the plan, per-channel ones included, so a reason the preview
     // showed the user can never be stepped over at commit.
     const blockers = publishPreviewRefusals(plan);

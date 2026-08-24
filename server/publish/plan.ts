@@ -24,9 +24,18 @@ import {
   publishPlatformFor,
   publishPostKindFor,
   PUBLISH_POST_KIND_LABEL,
+  type PublishPlatform,
   type PublishPlatformCapability,
   type PublishPostKind,
 } from '../../shared/publish-capabilities.ts';
+import { BUFFER_PROVIDER } from '../../shared/buffer.ts';
+import {
+  DEFAULT_BUFFER_SCHEDULING_TYPE,
+  isBufferProvider,
+  publishCapabilityForProvider,
+  type BufferSchedulingType,
+} from '../../shared/buffer-capabilities.ts';
+import { bufferMediaPlan, type BufferWirePreview } from '../../shared/buffer-media.ts';
 import {
   publishEffectiveCaption,
   publishVariantFieldSupported,
@@ -361,7 +370,7 @@ function resolveTarget(
   connected: PublishTarget[],
 ): { target?: PublishTarget; refusal?: string } {
   const candidates = connected.filter((target) => target.platform === platform);
-  const resolved =
+  let resolved =
     platform === 'facebook'
       ? candidates.filter(
           (target) =>
@@ -369,6 +378,12 @@ function resolveTarget(
             target.handle.toLowerCase().replace(/[^a-z0-9]/g, '') === 'gholmesdesigns',
         )
       : candidates;
+  // Buffer accounts are listed for planning; until Buffer publishing lands, §3.1 stays on Post Bridge
+  // whenever it also lists the platform, so a read-only refresh cannot block an ordinary submit.
+  const postBridgeOnly = resolved.filter(
+    (target) => (target.provider ?? 'post-bridge') === 'post-bridge',
+  );
+  if (postBridgeOnly.length) resolved = postBridgeOnly;
   if (resolved.length === 1) {
     const target = resolved[0] as PublishTarget;
     if (target.unavailable)
@@ -380,13 +395,31 @@ function resolveTarget(
   return {
     refusal:
       resolved.length === 0
-        ? `${label} has no connected account${platform === 'facebook' ? ' for G.Holmes Designs' : ''}. Connect one in Post Bridge.`
+        ? `${label} has no connected account${platform === 'facebook' ? ' for G.Holmes Designs' : ''}. Connect one in ${connectLabelForProvider(
+            candidates.some((entry) => targetProvider(entry) === 'post-bridge')
+              ? 'post-bridge'
+              : candidates[0]
+                ? targetProvider(candidates[0])
+                : 'post-bridge',
+          )}.`
         : `${label} resolved to ${resolved.length} connected accounts${platform === 'facebook' ? ' for G.Holmes Designs' : ''} and this app sends to exactly one. Disconnect the ones this campaign must not reach.`,
   };
 }
 
 const targetProvider = (target: PublishTarget): string => target.provider ?? 'post-bridge';
 const targetAccountRef = (target: PublishTarget): string => target.accountRef ?? String(target.id);
+const connectLabelForProvider = (provider: string): string =>
+  provider === BUFFER_PROVIDER ? 'Buffer' : 'Post Bridge';
+
+const capabilityForTarget = (
+  platform: PublishPlatform,
+  target: PublishTarget | undefined,
+): PublishPlatformCapability | undefined =>
+  publishCapabilityForProvider(
+    target ? targetProvider(target) : undefined,
+    platform,
+    target?.schedulingType,
+  ) ?? publishCapabilityFor(platform);
 
 /**
  * The same resolution, as the list every later stage reads.
@@ -443,21 +476,54 @@ interface PublishTargetResolution {
   content: PublishChannelContent;
   refusals: string[];
   warnings: string[];
+  bufferWire?: BufferWirePreview;
+  bufferSchedulingType?: BufferSchedulingType;
 }
 
 function resolutionForTarget(
   base: PublishPlanBase,
-  capability: PublishPlatformCapability,
+  platform: PublishPlatform,
   variants: readonly PublishVariantRecord[],
   target: PublishTarget | undefined,
 ): PublishTargetResolution {
-  const { content, warnings } = resolveForTarget(base, capability, variants, target?.id);
+  const capability = capabilityForTarget(platform, target);
+  if (!capability) throw new Error(`Missing capability for ${platform}`);
+  const { content, warnings: resolveWarnings } = resolveForTarget(
+    base,
+    capability,
+    variants,
+    target?.id,
+  );
+  const warnings = [...resolveWarnings];
+  const refusals: string[] = [];
+  let bufferWire: BufferWirePreview | undefined;
+  let bufferSchedulingType: BufferSchedulingType | undefined;
+
+  if (target && isBufferProvider(targetProvider(target))) {
+    bufferSchedulingType = target.schedulingType ?? DEFAULT_BUFFER_SCHEDULING_TYPE;
+    const mediaPlan = bufferMediaPlan({
+      capability,
+      platform,
+      schedulingType: bufferSchedulingType,
+      content,
+      media: base.media,
+    });
+    refusals.push(...mediaPlan.refusals);
+    warnings.push(...mediaPlan.warnings);
+    bufferWire = mediaPlan.bufferWire;
+  }
+
   const preflight = preflightPlatform({ capability, content, media: base.media });
+  refusals.push(...preflight.refusals);
+  warnings.push(...preflight.warnings);
+
   return {
     ...(target ? { target } : {}),
     content,
-    refusals: [...preflight.refusals],
-    warnings: [...warnings, ...preflight.warnings],
+    refusals,
+    warnings,
+    ...(bufferWire ? { bufferWire } : {}),
+    ...(bufferSchedulingType ? { bufferSchedulingType } : {}),
   };
 }
 
@@ -573,8 +639,8 @@ function reportForChannel(
   // The list is one entry long today. It is built as a list so that the piece which teaches this
   // planner about an explicit selection changes what fills it rather than how it is read.
   const resolutions = targets.length
-    ? targets.map((target) => resolutionForTarget(base, capability, variants, target))
-    : [resolutionForTarget(base, capability, variants, undefined)];
+    ? targets.map((target) => resolutionForTarget(base, capability.platform, variants, target))
+    : [resolutionForTarget(base, capability.platform, variants, undefined)];
   const primary = resolutions[0] as PublishTargetResolution;
   // The channel-level fields describe the first target, so a reader written before per-account
   // reports existed still sees something true rather than nothing.
@@ -596,6 +662,10 @@ function reportForChannel(
             status: (resolution.refusals.length ? 'BLOCKED' : 'READY') as PublishChannelStatus,
             refusals: resolution.refusals,
             warnings: resolution.warnings,
+            ...(resolution.bufferWire ? { bufferWire: resolution.bufferWire } : {}),
+            ...(resolution.bufferSchedulingType
+              ? { bufferSchedulingType: resolution.bufferSchedulingType }
+              : {}),
           };
         })
     : undefined;
@@ -640,6 +710,8 @@ function reportForChannel(
         }
       : {}),
     content: primary.content,
+    ...(primary.bufferWire ? { bufferWire: primary.bufferWire } : {}),
+    ...(primary.bufferSchedulingType ? { bufferSchedulingType: primary.bufferSchedulingType } : {}),
     ...(targetReports ? { targets: targetReports } : {}),
     refusals,
     // The first target's warnings, plus the one warning that belongs to the channel rather than to
@@ -903,6 +975,16 @@ export function buildPublishPlan(
   if (channels.every((report) => report.accountId === undefined))
     refusals.push('No publishable channel has a resolved provider target.');
 
+  const submissionProviders = new Set(targets.map((target) => target.provider ?? 'post-bridge'));
+  if (submissionProviders.has(BUFFER_PROVIDER) && submissionProviders.size > 1)
+    refusals.push(
+      'One submission cannot mix Post Bridge and Buffer targets. Choose accounts from one provider per send, or publish in separate steps.',
+    );
+
+  const hasPostBridgeTarget = targets.some(
+    (target) => (target.provider ?? 'post-bridge') !== BUFFER_PROVIDER,
+  );
+
   // Provider-wide rather than per platform, like the caption rule above: one submission carries one
   // media array, whatever each platform would have preferred.
   const media = agreedMedia(channels, post.mediaUrls);
@@ -913,30 +995,33 @@ export function buildPublishPlan(
   );
   const driveMedia = mediaSources.filter((item) => item.source === 'DRIVE');
   const urlMedia = mediaSources.filter((item) => item.source === 'URL');
-  if (driveMedia.length && urlMedia.length) {
-    const driveNames = driveMedia.map((item) => item.driveName ?? item.url).join(', ');
-    const urlNames = urlMedia.map((item) => item.url).join(', ');
-    refusals.push(
-      `This provider cannot mix Drive uploads (${driveNames}) with public URLs (${urlNames}) in one submission. Use only Drive files or only public URLs, or publish them separately.`,
-    );
-  }
-  const uploadedImageCount = driveMedia.filter((item) =>
-    item.mimeType?.startsWith('image/'),
-  ).length;
-  if (uploadedImageCount > SIGNAL_DRIVE_IMAGE_MAX_ITEMS)
-    refusals.push(`Post Bridge accepts at most ${SIGNAL_DRIVE_IMAGE_MAX_ITEMS} uploaded images.`);
-  const totalDriveBytes = driveMedia.reduce((total, item) => total + (item.sizeBytes ?? 0), 0);
-  if (totalDriveBytes > SIGNAL_DRIVE_TOTAL_MAX_BYTES)
-    refusals.push('The selected Drive files exceed Post Bridge’s 500 MB total upload limit.');
-  const accountMedia = accountMediaFor(channels, post.media);
-  refusals.push(...accountMedia.refusals);
-  // Per-account media only exists as provider ids, so the whole post has to be Drive-sourced. A
-  // URL post that gave one account its own files would need `media` and `media_urls` in one
-  // request, which C75 refuses at the submission level for exactly this reason.
-  if (accountMedia.perAccount.length && urlMedia.length)
-    refusals.push(
-      `This post's own media is ${urlMedia.length === 1 ? 'a public address' : 'public addresses'}, and per-account media is only sent as files uploaded from Drive. Give the post Drive files, or give every account the same media.`,
-    );
+  let accountMedia = accountMediaFor(channels, post.media);
+  if (hasPostBridgeTarget) {
+    if (driveMedia.length && urlMedia.length) {
+      const driveNames = driveMedia.map((item) => item.driveName ?? item.url).join(', ');
+      const urlNames = urlMedia.map((item) => item.url).join(', ');
+      refusals.push(
+        `This provider cannot mix Drive uploads (${driveNames}) with public URLs (${urlNames}) in one submission. Use only Drive files or only public URLs, or publish them separately.`,
+      );
+    }
+    const uploadedImageCount = driveMedia.filter((item) =>
+      item.mimeType?.startsWith('image/'),
+    ).length;
+    if (uploadedImageCount > SIGNAL_DRIVE_IMAGE_MAX_ITEMS)
+      refusals.push(`Post Bridge accepts at most ${SIGNAL_DRIVE_IMAGE_MAX_ITEMS} uploaded images.`);
+    const totalDriveBytes = driveMedia.reduce((total, item) => total + (item.sizeBytes ?? 0), 0);
+    if (totalDriveBytes > SIGNAL_DRIVE_TOTAL_MAX_BYTES)
+      refusals.push('The selected Drive files exceed Post Bridge’s 500 MB total upload limit.');
+    accountMedia = accountMediaFor(channels, post.media);
+    refusals.push(...accountMedia.refusals);
+    // Per-account media only exists as provider ids, so the whole post has to be Drive-sourced. A
+    // URL post that gave one account its own files would need `media` and `media_urls` in one
+    // request, which C75 refuses at the submission level for exactly this reason.
+    if (accountMedia.perAccount.length && urlMedia.length)
+      refusals.push(
+        `This post's own media is ${urlMedia.length === 1 ? 'a public address' : 'public addresses'}, and per-account media is only sent as files uploaded from Drive. Give the post Drive files, or give every account the same media.`,
+      );
+  } else refusals.push(...accountMedia.refusals);
   const platformConfigurations = platformConfigurationsFor(channels, caption);
   const accountConfigurations = accountConfigurationsFor(
     channels,
@@ -1021,6 +1106,31 @@ export function buildPublishPlan(
           : [];
       }),
     ),
+    ...(channels.some((report) => report.bufferWire)
+      ? {
+          bufferWire: channels.flatMap((report) => {
+            const entries = report.targets?.length
+              ? report.targets
+              : report.accountId !== undefined
+                ? [
+                    {
+                      accountId: report.accountId,
+                      bufferWire: report.bufferWire,
+                      bufferSchedulingType: report.bufferSchedulingType,
+                    },
+                  ]
+                : [];
+            return entries
+              .filter((entry) => 'bufferWire' in entry && entry.bufferWire)
+              .map((entry) => ({
+                channel: report.channel,
+                accountId: entry.accountId,
+                schedulingType: entry.bufferSchedulingType ?? report.bufferSchedulingType,
+                wire: entry.bufferWire,
+              }));
+          }),
+        }
+      : {}),
   };
   const preview: PublishPreview & { request?: PublishRequest; mediaSources?: SignalPostMedia[] } = {
     available: true,
@@ -1053,7 +1163,10 @@ export function buildPublishPlan(
         }
       : {}),
   };
-  if (scheduledInstant && publishPreviewRefusals(preview).length === 0)
+  const bufferOnly =
+    targets.length > 0 &&
+    targets.every((target) => (target.provider ?? 'post-bridge') === BUFFER_PROVIDER);
+  if (scheduledInstant && publishPreviewRefusals(preview).length === 0 && !bufferOnly)
     preview.request = {
       caption,
       ...(driveMedia.length ? { mediaIds: [] } : { mediaUrls: media.mediaUrls }),
