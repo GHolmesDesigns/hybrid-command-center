@@ -4402,6 +4402,40 @@ button.tag-chip.toggle.active {
   width: auto;
   margin: 0;
 }
+.signal-target-choice-option {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px;
+  margin-bottom: 5px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.signal-target-choice-option:last-of-type {
+  margin-bottom: 0;
+}
+.signal-target-choice-option label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+}
+.signal-target-choice-option input {
+  flex: 0 0 auto;
+  width: auto;
+  margin: 0;
+}
+.signal-target-choice-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.signal-target-choice-state {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+}
 .signal-variant-url {
   flex-basis: 100%;
   overflow-wrap: anywhere;

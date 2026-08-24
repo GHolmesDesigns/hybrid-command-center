@@ -208,6 +208,33 @@ describe('choosing a channel’s accounts', () => {
       targets: [{ channel: 'fb', providerAccountIds: [902] }],
     });
   });
+
+  it('says why an account cannot be used right now, tied to its own checkbox', async () => {
+    testState.publishPreviewPayload = preview({
+      connectedAccounts: [
+        ...CONNECTED,
+        {
+          id: 907,
+          platform: 'facebook',
+          handle: 'pausedpage',
+          name: 'Paused Page',
+          unavailable: 'Queue paused in Buffer',
+        },
+      ],
+    });
+    const accounts = await openPreview();
+    const checkbox = accounts.getByRole('checkbox', { name: 'pausedpage' });
+    expect(accounts.getByText('Queue paused in Buffer')).toBeInTheDocument();
+    const describedBy = checkbox.getAttribute('aria-describedby');
+    expect(describedBy).toBeTruthy();
+    expect(document.getElementById(describedBy as string)).toHaveTextContent(
+      'Queue paused in Buffer',
+    );
+    // An account with nothing wrong with it carries no such wiring.
+    expect(accounts.getByRole('checkbox', { name: 'gholmesdesigns' })).not.toHaveAttribute(
+      'aria-describedby',
+    );
+  });
 });
 
 describe('each chosen account answers for itself', () => {
