@@ -311,6 +311,10 @@ CREATE TABLE IF NOT EXISTS signal_publication_targets (
   channel TEXT NOT NULL, provider_account_id INTEGER NOT NULL, outcome TEXT, permalink TEXT, error TEXT,
   handle TEXT NOT NULL DEFAULT '', mode TEXT NOT NULL DEFAULT 'AUTOMATIC', manual_completed_at TEXT,
   post_result_id TEXT, remote_post_id TEXT,
+  -- Buffer owns one post per target. These fields snapshot that target's last answered remote state
+  -- and preconditions independently, so editing or cancelling one channel cannot rewrite another.
+  remote_state TEXT, remote_updated_at TEXT, remote_allowed_actions TEXT,
+  sent_text TEXT, sent_due_at TEXT,
   PRIMARY KEY(publication_id, provider_account_id)
 );
 -- Current totals per delivery, and the daily snapshots behind them.

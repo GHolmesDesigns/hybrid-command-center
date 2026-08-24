@@ -3,7 +3,7 @@ import { createDb, type Db } from '../db.ts';
 import { LocalSignalProvider } from '../signal/read.ts';
 import { listIntegrationEvents } from '../integration-log.ts';
 import { buildPublishPlan, preflightPlatform, publishInstantFor } from './plan.ts';
-import { MockPublishProvider } from './mock-provider.ts';
+import { MockBufferWriteProvider, MockPublishProvider } from './mock-provider.ts';
 import { PublishProviderError } from './provider.ts';
 import { UnavailablePublishProvider, type PublishRequest } from './provider.ts';
 import { PublishService } from './service.ts';
@@ -56,6 +56,8 @@ import type { SignalPostMedia } from '../../shared/signal-media.ts';
 import { postBridgePlatformConfigurations } from './post-bridge-wire.ts';
 import { BUFFER_PROVIDER } from '../../shared/buffer.ts';
 import type { PublishTarget } from './provider.ts';
+import { resolveProviderAccounts } from './accounts.ts';
+import { BufferWriteError } from './buffer/write-provider.ts';
 
 let db: Db;
 const targets = [
@@ -969,6 +971,10 @@ describe('delivery mode, decided from the capability contract', () => {
       group: 'DELIVERED',
     });
     expect(deliveryTargetAwaitsPerson(finished)).toBe(false);
+    expect(deliveryTargetSummary({ state: 'SUBMITTED' }, target({ outcome: 'SUCCESS' }))).toEqual({
+      label: PUBLICATION_STATE_LABEL.SUBMITTED,
+      group: 'IN_FLIGHT',
+    });
     // With no outcome of its own a target falls back to what the publication says.
     expect(deliveryTargetSummary({ state: 'SUBMITTING' }, target())).toEqual({
       label: PUBLICATION_STATE_LABEL.SUBMITTING,
@@ -2380,6 +2386,266 @@ describe('Buffer publish planning', () => {
     const report = reportFor(plan, 'tt');
     expect(report.bufferWire?.assets).toEqual([{ video: { url } }]);
     expect(plan.request).toBeUndefined();
+  });
+});
+
+describe('Buffer confirmed publishing', () => {
+  const rawTargets: PublishTarget[] = [
+    {
+      id: 0,
+      provider: BUFFER_PROVIDER,
+      accountRef: 'buffer-tiktok',
+      platform: 'tiktok',
+      handle: '@buffer-tiktok',
+      name: 'TikTok',
+      schedulingType: 'notification',
+    },
+    {
+      id: 1,
+      provider: BUFFER_PROVIDER,
+      accountRef: 'buffer-youtube',
+      platform: 'youtube',
+      handle: '@buffer-youtube',
+      name: 'YouTube',
+      schedulingType: 'notification',
+    },
+  ];
+
+  const setup = () => {
+    const post = add({ channels: ['tt', 'yt'], mediaUrls: [] });
+    const listed = resolveProviderAccounts(db, rawTargets, () => new Date('2026-01-01'));
+    const insert = db.prepare(
+      'INSERT INTO signal_post_publish_targets(post_id,channel,provider_account_id,created_at) VALUES(?,?,?,?)',
+    );
+    insert.run(post.id, 'tt', listed[0]?.id, '2026-01-01T00:00:00.000Z');
+    insert.run(post.id, 'yt', listed[1]?.id, '2026-01-01T00:00:00.000Z');
+    const buffer = new MockBufferWriteProvider();
+    const service = new PublishService(
+      db,
+      new LocalSignalProvider(db),
+      new MockPublishProvider(),
+      'America/New_York',
+      () => new Date('2026-01-01T00:00:00.000Z'),
+      new MockDriveMediaProvider(),
+      'post-bridge',
+      buffer,
+    );
+    return { post, listed, buffer, service };
+  };
+
+  it('pins Signal scheduling fields and stores one exact remote id per channel', async () => {
+    const { post, listed, buffer, service } = setup();
+    const preview = await service.preview(post.id, listed);
+    const publication = await service.submit(post.id, preview.planHash, listed);
+
+    expect(buffer.creates).toHaveLength(2);
+    expect(buffer.creates.every((input) => input.mode === 'customScheduled')).toBe(true);
+    expect(buffer.creates.every((input) => input.needsApproval === false)).toBe(true);
+    expect(buffer.creates.map((input) => input.channelId)).toEqual([
+      'buffer-tiktok',
+      'buffer-youtube',
+    ]);
+    expect(publication.provider).toBe('buffer');
+    expect(publication.state).toBe('SUBMITTED');
+    expect(publication.targets.map((target) => target.remotePostId)).toEqual([
+      'mock-buffer-1',
+      'mock-buffer-2',
+    ]);
+  });
+
+  it('keeps a truthful partial result and never retries an ambiguous create', async () => {
+    const { post, listed, buffer, service } = setup();
+    buffer.createFailureAt = 2;
+    buffer.createFailure = new BufferWriteError('connection ended without an answer', 'AMBIGUOUS');
+    const preview = await service.preview(post.id, listed);
+    const publication = await service.submit(post.id, preview.planHash, listed);
+
+    expect(buffer.creates).toHaveLength(2);
+    expect(publication.state).toBe('PARTIAL');
+    expect(publication.targets[0]).toMatchObject({
+      outcome: 'SUCCESS',
+      remotePostId: 'mock-buffer-1',
+    });
+    expect(publication.targets[1]?.outcome).toBeUndefined();
+    expect(publication.targets[1]?.error).toMatch(/without an answer/);
+  });
+
+  it('rechecks exact remote state, edits one target, cancels another, and never moves Signal', async () => {
+    const { post, listed, buffer, service } = setup();
+    const preview = await service.preview(post.id, listed);
+    const publication = await service.submit(post.id, preview.planHash, listed);
+    const before = db.prepare('SELECT date,time,status FROM signal_posts WHERE id=?').get(post.id);
+
+    db.prepare('UPDATE signal_posts SET text=?,updated_at=? WHERE id=?').run(
+      'Edited Buffer copy',
+      '2026-01-01T00:01:00.000Z',
+      post.id,
+    );
+    const first = listed[0] as (typeof listed)[number];
+    const content = await service.bufferTargetPreview(publication.id, first.id, listed);
+    expect(providerActionOffer(content, 'UPDATE_CONTENT')?.available).toBe(true);
+    await service.applyBufferTargetAction(
+      publication.id,
+      first.id,
+      'UPDATE_CONTENT',
+      content.reconcileHash,
+      listed,
+    );
+    expect(buffer.edits.at(-1)).toMatchObject({ id: 'mock-buffer-1', text: 'Edited Buffer copy' });
+
+    const second = listed[1] as (typeof listed)[number];
+    const cancellation = await service.bufferTargetPreview(publication.id, second.id, listed);
+    const updated = await service.applyBufferTargetAction(
+      publication.id,
+      second.id,
+      'CANCEL',
+      cancellation.reconcileHash,
+      listed,
+    );
+    expect(buffer.cancels).toEqual(['mock-buffer-2']);
+    expect(updated.state).toBe('PARTIAL');
+    expect(db.prepare('SELECT date,time,status FROM signal_posts WHERE id=?').get(post.id)).toEqual(
+      before,
+    );
+  });
+
+  it('rejects a target action when Buffer moved after preview', async () => {
+    const { post, listed, buffer, service } = setup();
+    const preview = await service.preview(post.id, listed);
+    const publication = await service.submit(post.id, preview.planHash, listed);
+    const first = listed[0] as (typeof listed)[number];
+    db.prepare('UPDATE signal_posts SET text=? WHERE id=?').run('Fresh Signal text', post.id);
+    const comparison = await service.bufferTargetPreview(publication.id, first.id, listed);
+    const remote = buffer.posts.get('mock-buffer-1') as NonNullable<
+      ReturnType<typeof buffer.posts.get>
+    >;
+    buffer.posts.set('mock-buffer-1', { ...remote, allowedActions: [] });
+
+    await expect(
+      service.applyBufferTargetAction(
+        publication.id,
+        first.id,
+        'UPDATE_CONTENT',
+        comparison.reconcileHash,
+        listed,
+      ),
+    ).rejects.toThrow(/changed after this comparison/);
+    expect(buffer.edits).toEqual([]);
+  });
+
+  it('distinguishes all-definite failure, mixed refusal, and first-target ambiguity', async () => {
+    {
+      const { post, listed, buffer, service } = setup();
+      buffer.createFailures.set(1, new BufferWriteError('quota full', 'QUOTA_REFUSAL'));
+      buffer.createFailures.set(2, new BufferWriteError('bad YouTube input', 'INVALID_INPUT'));
+      const preview = await service.preview(post.id, listed);
+      const publication = await service.submit(post.id, preview.planHash, listed);
+      expect(publication.state).toBe('FAILED');
+      expect(publication.targets.every((target) => target.outcome === 'FAILURE')).toBe(true);
+    }
+    db.close();
+    db = createDb(':memory:');
+    {
+      const { post, listed, buffer, service } = setup();
+      buffer.createFailures.set(1, new BufferWriteError('definite refusal', 'INVALID_INPUT'));
+      const preview = await service.preview(post.id, listed);
+      expect((await service.submit(post.id, preview.planHash, listed)).state).toBe('PARTIAL');
+    }
+    db.close();
+    db = createDb(':memory:');
+    {
+      const { post, listed, buffer, service } = setup();
+      buffer.createFailures.set(1, new BufferWriteError('no answer', 'AMBIGUOUS'));
+      const preview = await service.preview(post.id, listed);
+      const publication = await service.submit(post.id, preview.planHash, listed);
+      expect(publication.state).toBe('UNCONFIRMED');
+      expect(buffer.creates).toHaveLength(1);
+    }
+  });
+
+  it('maps complete Buffer reconciliation to submitted, confirmed, and failed', async () => {
+    const { post, listed, buffer, service } = setup();
+    const preview = await service.preview(post.id, listed);
+    const publication = await service.submit(post.id, preview.planHash, listed);
+    expect((await service.reconcile(publication.id)).state).toBe('SUBMITTED');
+
+    for (const [id, remote] of buffer.posts)
+      buffer.posts.set(id, { ...remote, state: 'PUBLISHED' });
+    expect((await service.reconcile(publication.id)).state).toBe('CONFIRMED');
+    for (const [id, remote] of buffer.posts) buffer.posts.set(id, { ...remote, state: 'FAILED' });
+    expect((await service.reconcile(publication.id)).state).toBe('FAILED');
+  });
+
+  it('records a failed Buffer read without changing the last known delivery state', async () => {
+    const { post, listed, buffer, service } = setup();
+    const preview = await service.preview(post.id, listed);
+    const publication = await service.submit(post.id, preview.planHash, listed);
+    const before = service.get(publication.id);
+    buffer.posts.delete('mock-buffer-2');
+
+    await expect(service.reconcile(publication.id)).rejects.toThrow('not found');
+    expect(service.get(publication.id)).toEqual(before);
+    expect(
+      db
+        .prepare(
+          "SELECT outcome FROM integration_events WHERE operation='signal.reconcile' ORDER BY created_at DESC,id DESC LIMIT 1",
+        )
+        .get(),
+    ).toEqual({ outcome: 'FAILURE' });
+  });
+
+  it('offers only returned actions, reschedules one target, and cancels all targets', async () => {
+    const { post, listed, buffer, service } = setup();
+    const preview = await service.preview(post.id, listed);
+    const publication = await service.submit(post.id, preview.planHash, listed);
+    db.prepare('UPDATE signal_posts SET time=? WHERE id=?').run('10:00', post.id);
+    const first = listed[0] as (typeof listed)[number];
+    const schedule = await service.bufferTargetPreview(publication.id, first.id, listed);
+    expect(providerActionOffer(schedule, 'UPDATE_SCHEDULE')?.available).toBe(true);
+    expect(providerActionOffer(schedule, 'RESTORE_AND_RESUBMIT')?.available).toBe(false);
+    await service.applyBufferTargetAction(
+      publication.id,
+      first.id,
+      'UPDATE_SCHEDULE',
+      schedule.reconcileHash,
+      listed,
+    );
+    expect(buffer.edits.at(-1)?.dueAt).toBe('2027-08-14T14:00:00.000Z');
+
+    for (const account of listed) {
+      const comparison = await service.bufferTargetPreview(publication.id, account.id, listed);
+      await service.applyBufferTargetAction(
+        publication.id,
+        account.id,
+        'CANCEL',
+        comparison.reconcileHash,
+        listed,
+      );
+    }
+    expect((service.get(publication.id) as SignalPublication).state).toBe('CANCELLED');
+  });
+
+  it('refuses missing publications, targets, remote ids, and non-Buffer target previews', async () => {
+    const { post, listed, service } = setup();
+    await expect(service.bufferTargetPreview('missing', 1, listed)).rejects.toThrow('not found');
+    const preview = await service.preview(post.id, listed);
+    const publication = await service.submit(post.id, preview.planHash, listed);
+    await expect(service.bufferTargetPreview(publication.id, 999, listed)).rejects.toThrow(
+      'not on this publication',
+    );
+    db.prepare(
+      'UPDATE signal_publication_targets SET remote_post_id=NULL WHERE publication_id=? AND provider_account_id=?',
+    ).run(publication.id, listed[0]?.id);
+    await expect(
+      service.bufferTargetPreview(publication.id, listed[0]?.id ?? 0, listed),
+    ).rejects.toThrow('no confirmed remote post id');
+
+    db.prepare("UPDATE signal_publications SET provider='post-bridge' WHERE id=?").run(
+      publication.id,
+    );
+    await expect(
+      service.bufferTargetPreview(publication.id, listed[1]?.id ?? 0, listed),
+    ).rejects.toThrow('not a Buffer publication');
   });
 });
 

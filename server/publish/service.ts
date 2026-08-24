@@ -15,13 +15,14 @@ import {
   deliveryModeNeedsPerson,
   isReconcilableState,
   providerActionOffer,
+  PROVIDER_ACTIONS,
   publicationDriftFields,
   publicationTracksProvider,
   publishPreviewRefusals,
   reconcileSchedule,
   RECONCILE_MAX_ATTEMPTS,
 } from '../../shared/publish.ts';
-import { buildPublishPlan, publishInstantFor } from './plan.ts';
+import { buildPublishPlan, planHash, publishInstantFor } from './plan.ts';
 import { buildProviderReconcile, providerRecordNeedsWithdrawal } from './reconcile.ts';
 import {
   PublishMediaUploadError,
@@ -44,6 +45,15 @@ import type { SignalPostMedia } from '../../shared/signal-media.ts';
 import { resolveProviderAccounts } from './accounts.ts';
 import { bufferConfigured } from '../config.ts';
 import type { PublishTarget } from './provider.ts';
+import { BUFFER_PROVIDER } from '../../shared/buffer.ts';
+import type { BufferWirePreview } from '../../shared/buffer-media.ts';
+import {
+  BufferWriteError,
+  UnavailableBufferWriteProvider,
+  type BufferCreatePostInput,
+  type BufferWritePost,
+  type BufferWriteProvider,
+} from './buffer/write-provider.ts';
 
 export class PublishRequestError extends Error {
   readonly status: 400 | 404 | 409;
@@ -62,6 +72,7 @@ export class PublishService {
   private readonly clock: () => Date;
   private readonly driveMedia: DriveMediaProvider;
   private readonly providerId: string;
+  private readonly bufferWrite: BufferWriteProvider;
   constructor(
     db: Db,
     signal: SignalProvider,
@@ -70,6 +81,9 @@ export class PublishService {
     clock: () => Date = () => new Date(),
     driveMedia: DriveMediaProvider = new DisconnectedDriveMediaProvider(),
     providerId = 'post-bridge',
+    bufferWrite: BufferWriteProvider = new UnavailableBufferWriteProvider(
+      'Buffer publishing is not production-enabled.',
+    ),
   ) {
     this.db = db;
     this.signal = signal;
@@ -78,6 +92,38 @@ export class PublishService {
     this.clock = clock;
     this.driveMedia = driveMedia;
     this.providerId = providerId;
+    this.bufferWrite = bufferWrite;
+  }
+
+  private bufferInputs(
+    plan: PublishPreview,
+  ): { target: PublishPreview['targets'][number]; input: BufferCreatePostInput }[] {
+    const dueAt = plan.scheduledInstant;
+    if (!dueAt) return [];
+    return plan.targets.flatMap((target) => {
+      if ((target.provider ?? this.providerId) !== BUFFER_PROVIDER || !target.accountRef) return [];
+      const channel = plan.channels.find((entry) => entry.channel === target.channel);
+      const targetReport = channel?.targets?.find((entry) => entry.accountId === target.accountId);
+      const content = targetReport?.content ?? channel?.content;
+      const wire = (targetReport?.bufferWire ?? channel?.bufferWire) as
+        BufferWirePreview | undefined;
+      if (!content || !wire) return [];
+      return [
+        {
+          target,
+          input: {
+            channelId: target.accountRef,
+            text: content.caption,
+            dueAt,
+            mode: 'customScheduled',
+            needsApproval: false,
+            source: 'hybrid-command-center',
+            assets: wire.assets,
+            ...(wire.metadata ? { metadata: wire.metadata } : {}),
+          },
+        },
+      ];
+    });
   }
 
   private assertProviderRoute(provider: string): void {
@@ -245,13 +291,27 @@ export class PublishService {
     // The gate is every refusal in the plan, per-channel ones included, so a reason the preview
     // showed the user can never be stepped over at commit.
     const blockers = publishPreviewRefusals(plan);
-    if (!plan.available || blockers.length || !plan.request)
+    const bufferInputs = this.bufferInputs(plan);
+    const bufferOnly =
+      plan.targets.length > 0 &&
+      plan.targets.every((target) => (target.provider ?? this.providerId) === BUFFER_PROVIDER);
+    if (!plan.available || blockers.length || (!plan.request && !bufferOnly))
       throw new PublishRequestError(blockers.join(' ') || 'Publishing is unavailable.', 400);
     if (plan.planHash !== expectedHash)
       throw new PublishRequestError(
         'The post or provider targets changed after preview. Preview it again before submitting.',
         409,
       );
+    if (bufferOnly) {
+      if (!this.bufferWrite.available)
+        throw new PublishRequestError(
+          'Buffer publishing remains fail-closed until the owner-run C83 write evidence is recorded.',
+          409,
+        );
+      if (bufferInputs.length !== plan.targets.length)
+        throw new PublishRequestError('A Buffer target has no complete write plan.', 400);
+      return this.submitBuffer(postId, plan, bufferInputs);
+    }
     const existing = this.db
       .prepare(
         "SELECT 1 FROM signal_publications WHERE post_id=? AND state IN ('SUBMITTING','SUBMITTED','UNCONFIRMED') LIMIT 1",
@@ -410,6 +470,197 @@ export class PublishService {
   }
 
   /**
+   * One Buffer mutation per target, persisted in answered order. An ambiguous create stops the
+   * sequence and is never retried; already answered targets remain exact and readable.
+   */
+  private async submitBuffer(
+    postId: string,
+    plan: PublishPreview,
+    creates: { target: PublishPreview['targets'][number]; input: BufferCreatePostInput }[],
+  ): Promise<SignalPublication> {
+    const existing = this.db
+      .prepare(
+        "SELECT 1 FROM signal_publications WHERE post_id=? AND state IN ('SUBMITTING','SUBMITTED','UNCONFIRMED','PARTIAL') LIMIT 1",
+      )
+      .get(postId);
+    if (existing)
+      throw new PublishRequestError(
+        'This post already has a live publication. Double-submit was blocked.',
+        409,
+      );
+    const publicationId = crypto.randomUUID();
+    const timestamp = this.clock().toISOString();
+    transaction(this.db, () => {
+      this.db
+        .prepare(
+          `INSERT INTO signal_publications(
+             id,post_id,state,provider,provider_post_id,idempotency_key,scheduled_instant,timezone,
+             sent_caption,sent_channels,sent_media,sent_configurations,sent_account_configurations,
+             sent_media_sources,sent_provider_media_ids,error,created_at,updated_at
+           ) VALUES(?,?,'SUBMITTING',?,NULL,?,?,?,?,?,?,?,?,?,NULL,NULL,?,?)`,
+        )
+        .run(
+          publicationId,
+          postId,
+          BUFFER_PROVIDER,
+          crypto.randomUUID(),
+          plan.scheduledInstant as string,
+          plan.timezone as string,
+          plan.caption,
+          JSON.stringify(plan.targets.map((target) => target.channel)),
+          JSON.stringify([]),
+          JSON.stringify([]),
+          JSON.stringify({ version: 1, items: [] }),
+          JSON.stringify({ version: 1, items: [] }),
+          timestamp,
+          timestamp,
+        );
+      const insert = this.db.prepare(
+        `INSERT INTO signal_publication_targets(
+           publication_id,channel,provider_account_id,handle,mode,sent_text,sent_due_at
+         ) VALUES(?,?,?,?,?,?,?)`,
+      );
+      for (const { target, input } of creates)
+        insert.run(
+          publicationId,
+          target.channel,
+          target.accountId,
+          target.handle,
+          target.mode,
+          input.text,
+          input.dueAt,
+        );
+    });
+
+    let successes = 0;
+    let failures = 0;
+    let ambiguous = false;
+    for (const { target, input } of creates) {
+      try {
+        const remote = await this.bufferWrite.create(input);
+        successes += 1;
+        this.recordBufferAnswer(publicationId, postId, plan.caption, target.accountId, remote, {
+          outcome: 'SUCCESS',
+          summary: `Buffer accepted ${target.handle || target.channel} as remote post ${remote.id}.`,
+        });
+      } catch (error) {
+        const failure = error as Error;
+        const uncertain = error instanceof BufferWriteError && error.ambiguous;
+        ambiguous ||= uncertain;
+        if (!uncertain) failures += 1;
+        this.recordBufferFailure(
+          publicationId,
+          postId,
+          plan.caption,
+          target.accountId,
+          failure,
+          uncertain,
+        );
+        if (uncertain) break;
+      }
+    }
+    const state = ambiguous
+      ? successes > 0
+        ? 'PARTIAL'
+        : 'UNCONFIRMED'
+      : failures === creates.length
+        ? 'FAILED'
+        : failures > 0
+          ? 'PARTIAL'
+          : 'SUBMITTED';
+    transaction(this.db, () => {
+      this.db
+        .prepare('UPDATE signal_publications SET state=?,updated_at=? WHERE id=?')
+        .run(state, this.clock().toISOString(), publicationId);
+      recordIntegrationEvent(this.db, {
+        source: 'signal-campaign',
+        operation: 'signal.publish',
+        outcome: state === 'PARTIAL' ? 'PARTIAL' : state === 'FAILED' ? 'FAILURE' : 'SUCCESS',
+        summary: ambiguous
+          ? `Buffer stopped after an ambiguous answer; ${successes} target ${successes === 1 ? 'was' : 'were'} confirmed accepted.`
+          : `Buffer answered ${successes + failures} target ${successes + failures === 1 ? 'submission' : 'submissions'}; ${successes} accepted and ${failures} refused.`,
+        entities: [{ type: 'signalPost', id: postId, label: plan.caption.slice(0, 80) }],
+        correlationId: publicationId,
+      });
+    });
+    return this.get(publicationId) as SignalPublication;
+  }
+
+  private recordBufferAnswer(
+    publicationId: string,
+    postId: string,
+    caption: string,
+    accountId: number,
+    remote: BufferWritePost,
+    answer: { outcome: 'SUCCESS' | 'FAILURE'; summary: string },
+  ): void {
+    const timestamp = this.clock().toISOString();
+    transaction(this.db, () => {
+      this.db
+        .prepare(
+          `UPDATE signal_publication_targets
+              SET outcome=?,remote_post_id=?,remote_state=?,remote_allowed_actions=?,error=?,remote_updated_at=?
+            WHERE publication_id=? AND provider_account_id=?`,
+        )
+        .run(
+          answer.outcome,
+          remote.id,
+          remote.state,
+          JSON.stringify(remote.allowedActions),
+          remote.error ? redactSecrets(remote.error) : null,
+          timestamp,
+          publicationId,
+          accountId,
+        );
+      recordIntegrationEvent(this.db, {
+        source: 'signal-campaign',
+        operation: 'signal.publish',
+        outcome: answer.outcome === 'SUCCESS' ? 'SUCCESS' : 'FAILURE',
+        summary: answer.summary,
+        entities: [{ type: 'signalPost', id: postId, label: caption.slice(0, 80) }],
+        correlationId: publicationId,
+        ...(remote.error ? { error: remote.error } : {}),
+      });
+    });
+  }
+
+  private recordBufferFailure(
+    publicationId: string,
+    postId: string,
+    caption: string,
+    accountId: number,
+    error: Error,
+    ambiguous: boolean,
+  ): void {
+    const safe = redactSecrets(error.message);
+    transaction(this.db, () => {
+      this.db
+        .prepare(
+          `UPDATE signal_publication_targets SET outcome=?,error=?,remote_updated_at=?
+            WHERE publication_id=? AND provider_account_id=?`,
+        )
+        .run(
+          ambiguous ? null : 'FAILURE',
+          safe,
+          this.clock().toISOString(),
+          publicationId,
+          accountId,
+        );
+      recordIntegrationEvent(this.db, {
+        source: 'signal-campaign',
+        operation: 'signal.publish',
+        outcome: ambiguous ? 'PARTIAL' : 'FAILURE',
+        summary: ambiguous
+          ? 'Buffer never answered this target create; no retry was attempted and later targets were not sent.'
+          : 'Buffer definitely refused this target create.',
+        entities: [{ type: 'signalPost', id: postId, label: caption.slice(0, 80) }],
+        correlationId: publicationId,
+        error: safe,
+      });
+    });
+  }
+
+  /**
    * The target rows for one publication, in the order the plan resolved them.
    *
    * `rowid` rather than a channel or an account ordering: it is the insertion order, which is the
@@ -524,6 +775,8 @@ export class PublishService {
   ): Promise<SignalPublication> {
     const current = this.get(publicationId);
     if (!current) throw new PublishRequestError('Publication not found.', 404);
+    if (current.provider === BUFFER_PROVIDER)
+      return this.reconcileBuffer(current, options.automatic ?? false);
     if (!current.providerPostId)
       throw new PublishRequestError(
         'This publication has no provider id to check. Inspect it in Post Bridge.',
@@ -581,6 +834,310 @@ export class PublishService {
       });
     });
     return this.get(publicationId) as SignalPublication;
+  }
+
+  private async reconcileBuffer(
+    current: SignalPublication,
+    automatic: boolean,
+  ): Promise<SignalPublication> {
+    if (!this.bufferWrite.available)
+      throw new PublishRequestError(
+        'This Buffer publication cannot be queried through Post Bridge; Buffer publishing is not enabled for provider reads.',
+        409,
+      );
+    if (automatic) return current;
+    const answered: { target: SignalPublication['targets'][number]; remote: BufferWritePost }[] =
+      [];
+    try {
+      for (const target of current.targets) {
+        if (!target.remotePostId) continue;
+        answered.push({ target, remote: await this.bufferWrite.read(target.remotePostId) });
+      }
+    } catch (error) {
+      transaction(this.db, () => {
+        recordIntegrationEvent(this.db, {
+          source: 'signal-campaign',
+          operation: 'signal.reconcile',
+          outcome: 'FAILURE',
+          summary: 'Buffer reconciliation failed before any local delivery state was changed.',
+          entities: [
+            {
+              type: 'signalPost',
+              id: current.postId,
+              label: current.sentCaption.slice(0, 80),
+            },
+          ],
+          correlationId: current.id,
+          error: error instanceof Error ? error.message : 'Buffer reconciliation failed.',
+        });
+      });
+      throw error;
+    }
+    if (!answered.length)
+      throw new PublishRequestError(
+        'No Buffer target has a known remote post id to reconcile.',
+        409,
+      );
+    const states = answered.map(({ remote }) => remote.state);
+    const state = states.every((value) => value === 'PUBLISHED')
+      ? 'CONFIRMED'
+      : states.every((value) => value === 'FAILED')
+        ? 'FAILED'
+        : states.some((value) => value === 'FAILED' || value === 'PUBLISHED')
+          ? 'PARTIAL'
+          : 'SUBMITTED';
+    const timestamp = this.clock().toISOString();
+    transaction(this.db, () => {
+      const update = this.db.prepare(
+        `UPDATE signal_publication_targets
+            SET outcome=?,remote_state=?,remote_allowed_actions=?,remote_updated_at=?,error=?
+          WHERE publication_id=? AND provider_account_id=?`,
+      );
+      for (const { target, remote } of answered)
+        update.run(
+          remote.state === 'FAILED'
+            ? 'FAILURE'
+            : remote.state === 'PUBLISHED'
+              ? 'SUCCESS'
+              : (target.outcome ?? 'SUCCESS'),
+          remote.state,
+          JSON.stringify(remote.allowedActions),
+          timestamp,
+          remote.error ? redactSecrets(remote.error) : null,
+          current.id,
+          target.accountId,
+        );
+      this.db
+        .prepare(
+          `UPDATE signal_publications
+              SET state=?,checked_at=?,checked_state=?,prior_state=?,updated_at=? WHERE id=?`,
+        )
+        .run(
+          state,
+          timestamp,
+          state,
+          state === current.state ? null : current.state,
+          timestamp,
+          current.id,
+        );
+      recordIntegrationEvent(this.db, {
+        source: 'signal-campaign',
+        operation: 'signal.reconcile',
+        outcome: state === 'PARTIAL' ? 'PARTIAL' : state === 'FAILED' ? 'FAILURE' : 'SUCCESS',
+        summary: `Read ${answered.length} exact Buffer target ${answered.length === 1 ? 'post' : 'posts'}; the publication is ${state.toLowerCase()}.`,
+        entities: [
+          { type: 'signalPost', id: current.postId, label: current.sentCaption.slice(0, 80) },
+        ],
+        correlationId: current.id,
+      });
+    });
+    return this.get(current.id) as SignalPublication;
+  }
+
+  async bufferTargetPreview(
+    publicationId: string,
+    accountId: number,
+    listedTargets: readonly PublishTarget[],
+  ): Promise<ProviderReconcilePreview> {
+    const publication = this.get(publicationId);
+    if (!publication) throw new PublishRequestError('Publication not found.', 404);
+    if (publication.provider !== BUFFER_PROVIDER)
+      throw new PublishRequestError('This target is not a Buffer publication.', 409);
+    const target = publication.targets.find((candidate) => candidate.accountId === accountId);
+    if (!target) throw new PublishRequestError('That delivery is not on this publication.', 404);
+    if (!target.remotePostId)
+      throw new PublishRequestError('This Buffer target has no confirmed remote post id.', 409);
+    const plan = await this.preview(publication.postId, listedTargets);
+    const create = this.bufferInputs(plan).find((entry) => entry.target.accountId === accountId);
+    if (!create)
+      throw new PublishRequestError(
+        'The current Signal plan no longer resolves this Buffer target.',
+        409,
+      );
+    const remote = await this.bufferWrite.read(target.remotePostId);
+    const record: ProviderPostRecord = {
+      providerPostId: remote.id,
+      state: remote.state,
+      caption: remote.text,
+      scheduledInstant: remote.dueAt,
+      mediaUrls: [],
+      accountIds: [accountId],
+    };
+    const diffs = [
+      {
+        field: 'caption' as const,
+        changed: create.input.text !== remote.text,
+        local: create.input.text,
+        remote: remote.text,
+      },
+      {
+        field: 'schedule' as const,
+        changed: create.input.dueAt !== remote.dueAt,
+        local: create.input.dueAt,
+        remote: remote.dueAt ?? 'Not scheduled',
+      },
+    ];
+    const changed = diffs.filter((diff) => diff.changed).map((diff) => diff.field);
+    const editAllowed = remote.allowedActions.includes('editPost');
+    const deleteAllowed = remote.allowedActions.includes('deletePost');
+    const actions = PROVIDER_ACTIONS.map((action) => {
+      const refusals: string[] = [];
+      if (action === 'UPDATE_CONTENT' && !changed.includes('caption'))
+        refusals.push('Buffer already has this target content.');
+      if (action === 'UPDATE_SCHEDULE' && !changed.includes('schedule'))
+        refusals.push('Buffer already has this target instant.');
+      if ((action === 'UPDATE_CONTENT' || action === 'UPDATE_SCHEDULE') && !editAllowed)
+        refusals.push('Buffer did not return editPost in allowedActions for this post.');
+      if (action === 'CANCEL' && !deleteAllowed)
+        refusals.push('Buffer did not return deletePost in allowedActions for this post.');
+      if (action === 'RESTORE_AND_RESUBMIT')
+        refusals.push(
+          'Buffer restore-and-resubmit is declined; cancel and take a fresh confirmation separately.',
+        );
+      return { action, available: refusals.length === 0, refusals };
+    });
+    return {
+      publicationId,
+      postId: publication.postId,
+      record,
+      reconcileHash: planHash({
+        provider: BUFFER_PROVIDER,
+        publicationId,
+        accountId,
+        planHash: plan.planHash,
+        remote,
+      }),
+      diffs,
+      changed,
+      actions,
+      warnings: [],
+      refusals: [],
+    };
+  }
+
+  async applyBufferTargetAction(
+    publicationId: string,
+    accountId: number,
+    action: ProviderAction,
+    expectedHash: string,
+    listedTargets: readonly PublishTarget[],
+  ): Promise<SignalPublication> {
+    const preview = await this.bufferTargetPreview(publicationId, accountId, listedTargets);
+    if (preview.reconcileHash !== expectedHash)
+      throw new PublishRequestError(
+        'The Signal plan or exact Buffer target changed after this comparison. Compare it again.',
+        409,
+      );
+    const offer = providerActionOffer(preview, action);
+    if (!offer?.available)
+      throw new PublishRequestError(
+        offer?.refusals.join(' ') || 'That action is unavailable.',
+        409,
+      );
+    const publication = this.get(publicationId) as SignalPublication;
+    const target = publication.targets.find(
+      (candidate) => candidate.accountId === accountId,
+    ) as SignalPublication['targets'][number];
+    const plan = await this.preview(publication.postId, listedTargets);
+    const create = this.bufferInputs(plan).find(
+      (entry) => entry.target.accountId === accountId,
+    ) as {
+      input: BufferCreatePostInput;
+    };
+    const remoteId = target.remotePostId as string;
+    if (action === 'CANCEL') {
+      await this.bufferWrite.cancel(remoteId);
+      const timestamp = this.clock().toISOString();
+      transaction(this.db, () => {
+        this.db
+          .prepare(
+            `UPDATE signal_publication_targets
+                SET outcome='FAILURE',remote_state=NULL,remote_allowed_actions='[]',error='Cancelled in Buffer.',remote_updated_at=?
+              WHERE publication_id=? AND provider_account_id=?`,
+          )
+          .run(timestamp, publicationId, accountId);
+        this.recomputeBufferPublicationState(publicationId, timestamp);
+        recordIntegrationEvent(this.db, {
+          source: 'signal-campaign',
+          operation: 'signal.reconcile',
+          outcome: 'SUCCESS',
+          summary: `Cancelled exact Buffer target ${target.handle || target.channel}.`,
+          entities: [
+            {
+              type: 'signalPost',
+              id: publication.postId,
+              label: publication.sentCaption.slice(0, 80),
+            },
+          ],
+          correlationId: publicationId,
+        });
+      });
+      return this.get(publicationId) as SignalPublication;
+    }
+    const remote = await this.bufferWrite.edit(
+      action === 'UPDATE_SCHEDULE'
+        ? { id: remoteId, dueAt: create.input.dueAt }
+        : {
+            id: remoteId,
+            text: create.input.text,
+            assets: create.input.assets,
+            ...(create.input.metadata ? { metadata: create.input.metadata } : {}),
+          },
+    );
+    const timestamp = this.clock().toISOString();
+    transaction(this.db, () => {
+      this.db
+        .prepare(
+          `UPDATE signal_publication_targets
+              SET remote_state=?,remote_allowed_actions=?,remote_updated_at=?,error=NULL,
+                  sent_text=CASE WHEN ?='UPDATE_CONTENT' THEN ? ELSE sent_text END,
+                  sent_due_at=CASE WHEN ?='UPDATE_SCHEDULE' THEN ? ELSE sent_due_at END
+            WHERE publication_id=? AND provider_account_id=?`,
+        )
+        .run(
+          remote.state,
+          JSON.stringify(remote.allowedActions),
+          timestamp,
+          action,
+          create.input.text,
+          action,
+          create.input.dueAt,
+          publicationId,
+          accountId,
+        );
+      recordIntegrationEvent(this.db, {
+        source: 'signal-campaign',
+        operation: 'signal.reconcile',
+        outcome: 'SUCCESS',
+        summary: `Updated exact Buffer target ${target.handle || target.channel} ${action === 'UPDATE_SCHEDULE' ? 'schedule' : 'content'}.`,
+        entities: [
+          {
+            type: 'signalPost',
+            id: publication.postId,
+            label: publication.sentCaption.slice(0, 80),
+          },
+        ],
+        correlationId: publicationId,
+      });
+    });
+    return this.get(publicationId) as SignalPublication;
+  }
+
+  private recomputeBufferPublicationState(publicationId: string, timestamp: string): void {
+    const rows = this.db
+      .prepare('SELECT outcome,error FROM signal_publication_targets WHERE publication_id=?')
+      .all(publicationId) as { outcome: string | null; error: string | null }[];
+    const cancelled = rows.filter((row) => row.error === 'Cancelled in Buffer.').length;
+    const successful = rows.filter((row) => row.outcome === 'SUCCESS').length;
+    const state =
+      cancelled === rows.length
+        ? 'CANCELLED'
+        : cancelled > 0 && successful > 0
+          ? 'PARTIAL'
+          : 'SUBMITTED';
+    this.db
+      .prepare('UPDATE signal_publications SET state=?,updated_at=? WHERE id=?')
+      .run(state, timestamp, publicationId);
   }
 
   /**

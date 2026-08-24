@@ -21,6 +21,13 @@ import type { AnalyticsWindow, AnalyticsWindowRow } from '../../shared/publish-a
 import { ANALYTICS_PLATFORMS, type AnalyticsPlatform } from '../../shared/publish-analytics.ts';
 import type { ProviderInventoryPost } from '../../shared/provider-inventory.ts';
 import type { BufferChannel, BufferReadProvider } from './buffer/read-provider.ts';
+import type {
+  BufferCreatePostInput,
+  BufferEditPostInput,
+  BufferWritePost,
+  BufferWriteProvider,
+} from './buffer/write-provider.ts';
+import { BufferWriteError } from './buffer/write-provider.ts';
 
 /**
  * The provider every automated test runs against. Nothing here contacts Post Bridge.
@@ -308,5 +315,63 @@ export class MockBufferReadProvider implements BufferReadProvider {
   }
   async listPosts() {
     return { posts: [], hasNextPage: false, endCursor: null };
+  }
+}
+
+/** Stateful Buffer write provider for unit and E2E tests. It never contacts Buffer. */
+export class MockBufferWriteProvider implements BufferWriteProvider {
+  readonly available = true;
+  readonly creates: BufferCreatePostInput[] = [];
+  readonly reads: string[] = [];
+  readonly edits: BufferEditPostInput[] = [];
+  readonly cancels: string[] = [];
+  readonly posts = new Map<string, BufferWritePost>();
+  createFailureAt?: number;
+  createFailure?: Error;
+  readonly createFailures = new Map<number, Error>();
+  readonly createdStateByChannel = new Map<string, BufferWritePost['state']>();
+  private sequence = 0;
+  async create(input: BufferCreatePostInput): Promise<BufferWritePost> {
+    this.creates.push(structuredClone(input));
+    const mappedFailure = this.createFailures.get(this.creates.length);
+    if (mappedFailure) throw mappedFailure;
+    if (this.createFailureAt === this.creates.length)
+      throw this.createFailure ?? new BufferWriteError('Mock Buffer refusal.', 'INVALID_INPUT');
+    const post: BufferWritePost = {
+      id: `mock-buffer-${++this.sequence}`,
+      channelId: input.channelId,
+      text: input.text,
+      dueAt: input.dueAt,
+      state: this.createdStateByChannel.get(input.channelId) ?? 'SCHEDULED',
+      allowedActions: ['editPost', 'deletePost'],
+    };
+    this.posts.set(post.id, post);
+    return structuredClone(post);
+  }
+  async read(id: string): Promise<BufferWritePost> {
+    this.reads.push(id);
+    const post = this.posts.get(id);
+    if (!post) throw new BufferWriteError('Mock Buffer post not found.', 'DEFINITE_REFUSAL');
+    return structuredClone(post);
+  }
+  async edit(input: BufferEditPostInput): Promise<BufferWritePost> {
+    this.edits.push(structuredClone(input));
+    const current = await this.read(input.id);
+    if (!current.allowedActions.includes('editPost'))
+      throw new BufferWriteError('Mock Buffer edit is not allowed.', 'DEFINITE_REFUSAL');
+    const next = {
+      ...current,
+      ...(input.text !== undefined ? { text: input.text } : {}),
+      ...(input.dueAt !== undefined ? { dueAt: input.dueAt } : {}),
+    };
+    this.posts.set(input.id, next);
+    return structuredClone(next);
+  }
+  async cancel(id: string): Promise<void> {
+    this.cancels.push(id);
+    const current = await this.read(id);
+    if (!current.allowedActions.includes('deletePost'))
+      throw new BufferWriteError('Mock Buffer delete is not allowed.', 'DEFINITE_REFUSAL');
+    this.posts.delete(id);
   }
 }

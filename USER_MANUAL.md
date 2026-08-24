@@ -679,6 +679,15 @@ The editor keeps two different facts apart, and it says which is which.
 **Planning status** — Draft, Scheduled, Published — is yours. It is what you say about the post,
 and nothing the app or a provider does ever writes it.
 
+For Buffer targets, confirmation creates one separate remote post for each selected TikTok or
+YouTube channel. The delivery rows keep the exact Buffer id and may disagree: one can be accepted
+while another fails. Use **Refresh delivery** to read those exact ids again. Use **Compare this
+Buffer target** before changing its content, moving its time, or cancelling it; the confirmation is
+for that one channel and expires if either Signal or Buffer changes. A cancellation never deletes or
+reschedules the Signal post. If Buffer never answers a create, stop and inspect Buffer before trying
+anything again. Runtime Buffer writes remain unavailable until the owner-run connection check has
+been recorded; the preview continues to show the fail-closed reason in the meantime.
+
 **Delivery**, below it, is what actually happened, with one row per account the post was sent to.
 Each row carries two things:
 

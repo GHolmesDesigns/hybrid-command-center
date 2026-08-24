@@ -1,6 +1,9 @@
 import { bufferPlatformForService, bufferUnavailableReason } from '../../../shared/buffer.ts';
 import { BufferProviderError } from './error.ts';
 import type { BufferChannel, BufferOrganization, BufferPost } from './read-provider.ts';
+import type { BufferRemoteAction, BufferWritePost } from './write-provider.ts';
+import { BUFFER_REMOTE_ACTIONS, BufferWriteError } from './write-provider.ts';
+import type { ProviderPostState } from '../../../shared/publish.ts';
 
 const object = (value: unknown, label: string): Record<string, unknown> => {
   if (!value || typeof value !== 'object' || Array.isArray(value))
@@ -60,6 +63,65 @@ export const parseBufferPost = (value: unknown): BufferPost => {
     dueAt,
     channelId: stringField(row, 'channelId', 'Buffer post'),
   };
+};
+
+const bufferPostState = (status: string): ProviderPostState => {
+  switch (status) {
+    case 'buffer':
+    case 'approved':
+      return 'SCHEDULED';
+    case 'draft':
+    case 'approval_pending':
+      return 'DRAFT';
+    case 'sent':
+      return 'PUBLISHED';
+    case 'failed':
+      return 'FAILED';
+    default:
+      return 'PROCESSING';
+  }
+};
+
+/** Parses only safe post evidence. `error.rawError` is intentionally never read or returned. */
+export const parseBufferWritePost = (value: unknown): BufferWritePost => {
+  const row = object(value, 'Buffer write post');
+  const dueAt = row.dueAt;
+  if (dueAt !== null && typeof dueAt !== 'string')
+    throw new BufferProviderError('Buffer write post dueAt is neither a string nor null.');
+  const allowed = Array.isArray(row.allowedActions)
+    ? row.allowedActions.filter(
+        (action): action is BufferRemoteAction =>
+          typeof action === 'string' &&
+          (BUFFER_REMOTE_ACTIONS as readonly string[]).includes(action),
+      )
+    : [];
+  const error =
+    row.error && typeof row.error === 'object' && !Array.isArray(row.error)
+      ? (row.error as Record<string, unknown>)
+      : undefined;
+  return {
+    id: stringField(row, 'id', 'Buffer write post'),
+    channelId: stringField(row, 'channelId', 'Buffer write post'),
+    text: typeof row.text === 'string' ? row.text : '',
+    dueAt,
+    state: bufferPostState(stringField(row, 'status', 'Buffer write post')),
+    allowedActions: allowed,
+    ...(typeof error?.message === 'string' ? { error: error.message } : {}),
+    ...(typeof error?.supportUrl === 'string' ? { supportUrl: error.supportUrl } : {}),
+  };
+};
+
+/** Success-or-typed-error mutation union. Unknown members refuse rather than becoming success. */
+export const parseBufferPostMutation = (value: unknown): BufferWritePost => {
+  const result = object(value, 'Buffer mutation result');
+  const type = stringField(result, '__typename', 'Buffer mutation result');
+  if (type === 'PostActionSuccess') return parseBufferWritePost(result.post);
+  const message =
+    typeof result.message === 'string' ? result.message : 'Buffer refused the mutation.';
+  if (type === 'InvalidInputError') throw new BufferWriteError(message, 'INVALID_INPUT');
+  if (type === 'LimitReachedError') throw new BufferWriteError(message, 'QUOTA_REFUSAL');
+  if (type === 'VoidMutationError') throw new BufferWriteError(message, 'DEFINITE_REFUSAL');
+  throw new BufferWriteError(`Unknown Buffer mutation result ${type}.`, 'DEFINITE_REFUSAL');
 };
 
 export const parseBufferPostsPage = (
