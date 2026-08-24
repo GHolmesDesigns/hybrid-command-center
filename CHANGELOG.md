@@ -8,6 +8,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [4.8.3] - 2026-08-24
+
+### Changed
+
+- Update the development toolchain dependencies, including Vite, Vitest, ESLint, and the React Vite plugin.
+
+### Breaking changes
+
+- None.
+
 ## [4.8.2] - 2026-08-24
 
 ### Changed
