@@ -8,6 +8,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [4.8.5] - 2026-08-24
+
+### Changed
+
+- Update the CodeQL GitHub Actions to 4.37.8.
+
+### Breaking changes
+
+- None.
+
 ## [4.8.1] - 2026-08-23
 
 ### Added
