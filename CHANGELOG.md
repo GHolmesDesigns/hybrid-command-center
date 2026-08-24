@@ -18,6 +18,36 @@ The version a card ships as is decided at merge time — see the bump rule in `A
 
 - None.
 
+## [4.8.4] - 2026-08-24
+
+### Changed
+
+- Update the Google APIs Node.js client to 176.0.0.
+
+### Breaking changes
+
+- None.
+
+## [4.8.3] - 2026-08-24
+
+### Changed
+
+- Update the development toolchain dependencies, including Vite, Vitest, ESLint, and the React Vite plugin.
+
+### Breaking changes
+
+- None.
+
+## [4.8.2] - 2026-08-24
+
+### Changed
+
+- Update the production Lucide icon dependency to 1.33.0.
+
+### Breaking changes
+
+- None.
+
 ## [4.8.1] - 2026-08-23
 
 ### Added
