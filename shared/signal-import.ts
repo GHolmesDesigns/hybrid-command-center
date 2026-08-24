@@ -56,6 +56,25 @@ export const emptySignalImportCounts = (): SignalImportCounts => ({
 export const signalImportTotal = (counts: SignalImportCounts) =>
   counts.SignalPosts + counts.SignalMedia + counts.SignalVariants;
 
+/**
+ * One `[SignalMedia]` row as the dry run left it — workbook identity plus whatever Drive (or the
+ * URL path) answered. Drive fields are present only when `source` is `DRIVE` and resolution
+ * succeeded; a failed Drive row still appears so the preview can name what did not bind.
+ */
+export interface SignalImportResolvedMedia {
+  sheet: 'SignalMedia';
+  row: number;
+  postKey: string;
+  order: number;
+  source: 'URL' | 'DRIVE';
+  url: string;
+  resolved: boolean;
+  driveName?: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  resolvedAt?: string;
+}
+
 export interface SignalImportPreview {
   schemaVersion: number;
   ok: boolean;
@@ -67,6 +86,12 @@ export interface SignalImportPreview {
   updated: SignalImportCreation[];
   skipped: SignalImportSkip[];
   issues: SignalImportIssue[];
+  /** Every media row the workbook named, in workbook order within each post. */
+  resolvedMedia: SignalImportResolvedMedia[];
+  /** Drive rows the workbook named — compared with `driveResolved` for the human stop. */
+  driveNamed: number;
+  /** Drive rows that bound a fingerprint in this dry run. */
+  driveResolved: number;
   duplicateRule: string[];
   fingerprint: string;
 }

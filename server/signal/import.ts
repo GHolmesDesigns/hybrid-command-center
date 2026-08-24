@@ -15,8 +15,14 @@ import {
   planSignalPostIdentities,
   type SignalPostIdentityMatch,
 } from '../domain/signal-post-identity.ts';
-import { resolveDriveMedia, driveMediaProvider, type DriveMediaProvider } from '../drive/media.ts';
 import {
+  resolveDriveMedia,
+  parseDriveMediaLink,
+  driveMediaProvider,
+  type DriveMediaProvider,
+} from '../drive/media.ts';
+import {
+  signalMediaFingerprint,
   signalPostMediaIssue,
   urlPostMedia,
   type SignalPostMedia,
@@ -56,6 +62,7 @@ import {
   type SignalImportOutcome,
   type SignalImportPreview,
   type SignalImportReceipt,
+  type SignalImportResolvedMedia,
   type SignalImportSkip,
 } from '../../shared/signal-import.ts';
 
@@ -244,6 +251,132 @@ const issue = (
   message: string,
   column?: string,
 ) => issues.push({ sheet, row, ...(column ? { column } : {}), message });
+
+/**
+ * Bind one `[SignalMedia]` row. Format refusals that need no Drive round-trip — a `URL` on a Drive
+ * host, a forged or mistyped Drive link — happen before `getFile`. Everything else is Drive's own
+ * words on that row alone, so one unreachable file does not stop the rest of the workbook from
+ * being planned.
+ */
+async function resolveSignalMediaRow(
+  media: MediaPlan,
+  provider: DriveMediaProvider,
+  issues: SignalImportIssue[],
+) {
+  if (media.source === 'URL') {
+    try {
+      const item = urlPostMedia(media.url);
+      const mediaIssue = signalPostMediaIssue(item);
+      if (mediaIssue) {
+        issue(issues, 'SignalMedia', media.row, mediaIssue, 'url');
+        return;
+      }
+      media.media = item;
+    } catch (error) {
+      issue(
+        issues,
+        'SignalMedia',
+        media.row,
+        error instanceof Error ? error.message : 'That media URL is not usable.',
+        'url',
+      );
+    }
+    return;
+  }
+  // Parse before contacting Drive: a mistyped link is a format refusal, not a provider call.
+  try {
+    parseDriveMediaLink(media.url);
+  } catch (error) {
+    issue(
+      issues,
+      'SignalMedia',
+      media.row,
+      error instanceof Error ? error.message : 'That Drive link is not usable.',
+      'url',
+    );
+    return;
+  }
+  try {
+    media.media = await resolveDriveMedia({ link: media.url, provider });
+    const mediaIssue = signalPostMediaIssue(media.media);
+    if (mediaIssue) issue(issues, 'SignalMedia', media.row, mediaIssue);
+  } catch (error) {
+    issue(
+      issues,
+      'SignalMedia',
+      media.row,
+      error instanceof Error ? error.message : 'Drive resolution failed.',
+    );
+  }
+}
+
+/**
+ * Re-resolve every Drive media reference the preview bound and refuse when any fingerprint moved.
+ * The confirm transaction writes the descriptors the preview showed; this check is what makes a
+ * file replaced under the same id between looking and pressing a refusal rather than a silent
+ * rewrite — the same staleness rule publish confirmation uses.
+ */
+async function assertPreviewDriveFingerprints(
+  plan: Plan,
+  provider: DriveMediaProvider,
+): Promise<SignalImportIssue[]> {
+  const issues: SignalImportIssue[] = [];
+  for (const post of plan.posts) {
+    for (const media of post.media) {
+      if (media.source !== 'DRIVE' || !media.media) continue;
+      try {
+        const current = await resolveDriveMedia({ link: media.url, provider });
+        if (
+          JSON.stringify(signalMediaFingerprint(current)) !==
+          JSON.stringify(signalMediaFingerprint(media.media))
+        ) {
+          issue(
+            issues,
+            'SignalMedia',
+            media.row,
+            `${media.media.driveName ?? 'That Drive file'} changed after the import preview. Check the Signal import again.`,
+          );
+        }
+      } catch (error) {
+        issue(
+          issues,
+          'SignalMedia',
+          media.row,
+          error instanceof Error ? error.message : 'Drive resolution failed.',
+        );
+      }
+    }
+  }
+  return issues;
+}
+
+function resolvedMediaFromPlan(plan: Plan): SignalImportResolvedMedia[] {
+  return plan.posts.flatMap((post) =>
+    post.media.map((media) => {
+      const base: SignalImportResolvedMedia = {
+        sheet: 'SignalMedia',
+        row: media.row,
+        postKey: media.postKey,
+        order: media.order,
+        source: media.source,
+        url: media.media?.url ?? media.url,
+        resolved: Boolean(media.media),
+      };
+      if (media.media?.source === 'DRIVE') {
+        return {
+          ...base,
+          ...(media.media.driveName ? { driveName: media.media.driveName } : {}),
+          ...(media.media.mimeType ? { mimeType: media.media.mimeType } : {}),
+          ...(media.media.sizeBytes !== null && media.media.sizeBytes !== undefined
+            ? { sizeBytes: media.media.sizeBytes }
+            : {}),
+          ...(media.media.driveVerifiedAt ? { resolvedAt: media.media.driveVerifiedAt } : {}),
+        };
+      }
+      return base;
+    }),
+  );
+}
 
 async function buildPlan(parsed: Parsed, db: Db, provider: DriveMediaProvider): Promise<Plan> {
   const issues: SignalImportIssue[] = [];
@@ -440,23 +573,7 @@ async function buildPlan(parsed: Parsed, db: Db, provider: DriveMediaProvider): 
     if (post.media.length > 20)
       issue(issues, 'SignalMedia', post.row, 'A post may reference at most 20 media items.');
     post.media.sort((a, b) => a.order - b.order);
-    for (const media of post.media) {
-      try {
-        media.media =
-          media.source === 'URL'
-            ? urlPostMedia(media.url)
-            : await resolveDriveMedia({ link: media.url, provider });
-        const mediaIssue = signalPostMediaIssue(media.media);
-        if (mediaIssue) issue(issues, 'SignalMedia', media.row, mediaIssue);
-      } catch (error) {
-        issue(
-          issues,
-          'SignalMedia',
-          media.row,
-          error instanceof Error ? error.message : 'Drive resolution failed.',
-        );
-      }
-    }
+    for (const media of post.media) await resolveSignalMediaRow(media, provider, issues);
   }
   for (const entry of variantRows.entries) {
     const v = entry.values;
@@ -606,6 +723,9 @@ export function toSignalImportPreview(plan: Plan, fingerprint: string): SignalIm
     const sheet = key.split(':')[0] as keyof SignalImportCounts;
     if (sheet in c.failures) c.failures[sheet]++;
   }
+  const resolvedMedia = resolvedMediaFromPlan(plan);
+  const driveNamed = resolvedMedia.filter((m) => m.source === 'DRIVE').length;
+  const driveResolved = resolvedMedia.filter((m) => m.source === 'DRIVE' && m.resolved).length;
   return {
     schemaVersion: plan.schemaVersion,
     ok: plan.issues.length === 0,
@@ -614,6 +734,9 @@ export function toSignalImportPreview(plan: Plan, fingerprint: string): SignalIm
     updated: plan.updated,
     skipped: plan.skipped,
     issues: plan.issues,
+    resolvedMedia,
+    driveNamed,
+    driveResolved,
     duplicateRule: SIGNAL_IMPORT_DUPLICATE_RULE,
     fingerprint,
   };
@@ -791,7 +914,7 @@ function applyPlan(db: Db, plan: Plan) {
       db.prepare('DELETE FROM signal_post_variants WHERE post_id=?').run(postId);
       db.prepare('DELETE FROM signal_post_variant_media WHERE post_id=?').run(postId);
       const vi = db.prepare(
-        `INSERT INTO signal_post_variants(post_id,platform,account_id,caption,media_urls,post_kind,title,first_comment,disclose_synthetic_media,cover_image_url,thumbnail_url,updated_at) VALUES(?,?,?,?,?,?,?,?,NULL,NULL,NULL,?)`,
+        `INSERT INTO signal_post_variants(post_id,platform,account_id,caption,media_urls,post_kind,title,first_comment,disclose_synthetic_media,cover_image_url,thumbnail_url,updated_at) VALUES(?,?,?,?,?,?,?,?,?,NULL,NULL,?)`,
       );
       const ri = db.prepare(
         `INSERT INTO signal_post_variant_media(post_id,platform,account_id,role,url,source,drive_file_id,drive_name,mime_type,size_bytes,drive_version,drive_modified_at,drive_checksum,drive_verified_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -850,13 +973,15 @@ export async function commitSignalImport(
       'This Signal workbook changed since it was previewed. Review the new preview before importing.',
     );
   // A confirmed preview owns the resolved Drive descriptors. Reusing that immutable plan is what
-  // keeps confirmation side-effect free and makes a changed Drive fingerprint a stale preview
-  // rather than an opportunity to silently resolve a new file. Identity is deliberately re-run
-  // against the current workspace below.
+  // keeps confirmation from silently rewriting a fingerprint the person never saw. Identity is
+  // deliberately re-run against the current workspace below; Drive is re-resolved only to prove
+  // the preview's fingerprints still match.
   let plan = input.fingerprint ? previewPlans.get(parsed.fingerprint) : undefined;
+  if (input.fingerprint && !plan)
+    throw new Error('This Signal import preview expired. Check the Signal import again.');
   if (!plan) plan = await buildPlan(parsed, db, provider);
-  if (!plan) throw new Error('The Signal import could not be planned.');
   if (input.fingerprint && plan) {
+    const stale = await assertPreviewDriveFingerprints(plan, provider);
     const currentPlan = plan;
     const identity = planSignalPostIdentities(
       currentPlan.posts.map((p) => ({
@@ -875,6 +1000,7 @@ export async function commitSignalImport(
       aliases: identity.aliases,
       issues: [
         ...currentPlan.issues,
+        ...stale,
         ...identity.issues.map((x) => ({ sheet: 'SignalPosts', row: x.row, message: x.message })),
       ],
     };
@@ -935,7 +1061,6 @@ interface ReceiptRow {
   filename: string | null;
   outcome: SignalImportOutcome;
   created_count: number;
-  updated_count: number;
   skipped_count: number;
   failed_count: number;
   detail: string;
@@ -957,7 +1082,7 @@ function receiptFromRow(row: ReceiptRow): SignalImportReceipt {
     ...(row.filename ? { filename: row.filename } : {}),
     outcome: row.outcome,
     createdCount: row.created_count,
-    updatedCount: row.updated_count,
+    updatedCount: signalImportTotal(detail.updates ?? emptySignalImportCounts()),
     skippedCount: row.skipped_count,
     failedCount: row.failed_count,
     creates: detail.creates ?? emptySignalImportCounts(),
@@ -979,7 +1104,7 @@ export function listSignalImportReceipts(
   return (
     db
       .prepare(
-        `SELECT id,source,input_kind,filename,outcome,created_count,updated_count,
+        `SELECT id,source,input_kind,filename,outcome,created_count,
                 skipped_count,failed_count,detail,error,created_at
            FROM import_receipts
           WHERE source=?

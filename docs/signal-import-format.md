@@ -206,15 +206,18 @@ version fingerprint so the stored row is evidence of the bytes someone previewed
 
 **The decision this format records:** Drive resolution happens in the **dry run**, read-only, with no
 bytes read and no Drive writes — the same call `POST /api/signal/drive-media/resolve` makes today.
-The fingerprint returned there is written inside the confirm transaction. A file that changes
-between dry run and confirm invalidates the plan hash and is refused, matching publish preflight.
+The fingerprint returned there is written inside the confirm transaction. Confirmation **re-resolves**
+each Drive reference immediately before the write and refuses when a fingerprint moved — a file
+replaced under the same id between preview and confirm is exactly the case the fingerprint exists
+for, matching publish preflight. The campaign playbook importer's dry run still does not contact
+Drive.
 
 **The rejected alternative:** public `https:` URLs only, with Drive attached by hand afterwards.
 That would leave every row whose media lives in Drive unimportable and would recreate the drift
 between the queue and Signal the import exists to prevent.
 
-This is a deliberate, documented break from the playbook rule, not an accident. C90 implements it;
-this card only states it.
+This is a deliberate, documented break from the playbook rule, not an accident. C91 (#273)
+implements it; C88 only stated it and C90 wired the dry-run shell that this card completes.
 
 ## Post identity and duplicates
 
@@ -271,15 +274,21 @@ The preview shows:
 - counts that would be created, updated, and skipped;
 - every validation error with sheet, row, column, and message;
 - duplicate keys and unresolved references;
-- Drive links that failed resolution, with the Drive error;
+- each `[SignalMedia]` row with what Drive said when it resolved — name, MIME type, size, and
+  resolution time — or a row-level Drive error in Drive's own words;
+- a prominent stop when fewer Drive files resolved than the workbook named;
 - identity disagreements and duplicate identity claims;
 - the duplicate rule in the preview's own words.
 
-Confirmation is enabled only for a clean preview. All SQLite writes occur in one transaction on
-confirm. A database failure rolls back the entire import.
+Confirmation is enabled only for a clean preview, and only when every required Drive reference
+resolved. All SQLite writes occur in one transaction on confirm. A database failure rolls back the
+entire import.
 
-Drive links are resolved during the dry run only. The confirm transaction stores the fingerprint
-from that run; it does not call Drive again.
+Drive links are resolved during the dry run. Confirmation re-resolves each bound Drive reference
+and refuses when a fingerprint moved; the transaction then stores the fingerprint the preview
+showed. A format refusal that needs no Drive round-trip — a `URL` row on a Drive host, a forged or
+mistyped Drive link — never contacts Drive. One unresolvable file errors its own row and leaves the
+rest of the workbook's plan intact.
 
 ## The pasted text form
 
@@ -301,18 +310,21 @@ POST-001	1	DRIVE	https://drive.google.com/file/d/abc123/view
 - `\|` separates list values in a single cell.
 - Row numbers in error messages count from each tab's heading.
 
-## Importer behavior (forward reference)
+## Importer behavior
 
-C90 (#272) implements the importer against this document. Rules settled here that C90 must not
-re-decide:
+C90 (#272) shipped the dry-run / confirm shell; C91 (#273) completes Drive media on `[SignalMedia]`.
+Rules settled here that the importer must not re-decide:
 
 - Matched posts are **updated**, not duplicated, using the identity rules in C89.
 - Unmatched rows are **created**.
+- An import that names media **replaces** that post's media rather than appending to it, in workbook
+  `media_order`.
 - `schema_version` is read from a `Schema version` or `schema_version` label on a documentation tab.
   A workbook that declares nothing is assumed to be version 1.
 - `TRUE`/`FALSE` typed as text is accepted for booleans where noted.
 - Every import writes a receipt — created, updated, skipped, and failed counts with reasons — in the
   same spirit as the campaign playbook importer.
+- Drive resolution for `[SignalVariants]` role media is C93's remaining departure, not this card.
 
 ## What this wave leaves unbuilt
 

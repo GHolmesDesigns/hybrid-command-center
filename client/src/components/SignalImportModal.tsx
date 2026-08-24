@@ -1,11 +1,13 @@
 import { useRef, useState, type ChangeEvent } from 'react';
 import { AlertCircle, CheckCircle2, FileSpreadsheet, RefreshCw, Upload } from 'lucide-react';
 import { send } from '../api';
+import { formatFileSize } from '../../../shared/drive';
 import {
   SIGNAL_IMPORT_SHEETS,
   signalImportTotal,
   type SignalImportPreview,
   type SignalImportReceipt,
+  type SignalImportResolvedMedia,
 } from '../../../shared/signal-import';
 
 type Source = { filename?: string; contentBase64?: string; text?: string };
@@ -99,7 +101,7 @@ export function SignalImportForm({
         <>
           <p className="field-hint">
             Import planned Signal posts from an .xlsx workbook or pasted tabs. Drive links are
-            checked during preview; no publishing provider is contacted.
+            resolved during preview; no publishing provider is contacted.
           </p>
           <label>
             Signal import workbook
@@ -185,6 +187,7 @@ function SignalImportPreviewPanel({
   receipt: SignalImportReceipt | null;
 }) {
   const committed = receipt?.outcome === 'COMMITTED';
+  const driveShort = preview.driveNamed > preview.driveResolved;
   return (
     <div className="import-preview">
       <div
@@ -207,6 +210,19 @@ function SignalImportPreviewPanel({
           </span>
         </div>
       </div>
+      {driveShort && (
+        <div className="inline-warning blocked" role="alert">
+          <AlertCircle />
+          <div>
+            <strong>
+              Resolved {preview.driveResolved} of {preview.driveNamed} Drive files
+            </strong>
+            <span>
+              Every Drive media row the workbook names has to bind before confirmation is available.
+            </span>
+          </div>
+        </div>
+      )}
       <table className="import-counts">
         <caption className="sr-only">What this Signal import would do, per tab</caption>
         <thead>
@@ -228,6 +244,7 @@ function SignalImportPreviewPanel({
           ))}
         </tbody>
       </table>
+      {preview.resolvedMedia.length > 0 && <ResolvedMediaList items={preview.resolvedMedia} />}
       {preview.issues.length > 0 && (
         <section className="import-list" aria-label="Problems to fix">
           <h3>Problems to fix</h3>
@@ -250,5 +267,38 @@ function SignalImportPreviewPanel({
         </section>
       )}
     </div>
+  );
+}
+
+function ResolvedMediaList({ items }: { items: SignalImportResolvedMedia[] }) {
+  return (
+    <section className="import-list" aria-label="Media this import would write">
+      <h3>Media this import would write</h3>
+      <ul>
+        {items.map((item) => (
+          <li key={`${item.postKey}-${item.order}-${item.row}`}>
+            <span className="import-where">
+              {item.postKey} · order {item.order}
+              {item.row ? ` · row ${item.row}` : ''}
+            </span>
+            <span>
+              {item.source === 'DRIVE' ? (
+                item.resolved ? (
+                  <>
+                    <strong>{item.driveName}</strong>
+                    {` · ${item.mimeType} · ${formatFileSize(item.sizeBytes ?? null)}`}
+                    {item.resolvedAt ? ` · resolved ${item.resolvedAt}` : ''}
+                  </>
+                ) : (
+                  <>Drive file did not resolve</>
+                )
+              ) : (
+                <>Public URL · {item.url}</>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

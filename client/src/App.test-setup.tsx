@@ -13,6 +13,12 @@ import {
   type ImportReceipt,
   type PlaybookPreview,
 } from '../../shared/playbook';
+import {
+  SIGNAL_IMPORT_DUPLICATE_RULE,
+  emptySignalImportCounts,
+  type SignalImportPreview,
+  type SignalImportReceipt,
+} from '../../shared/signal-import';
 import { DRIVE_FOLDER_MIME, type DriveFile, type DriveListing } from '../../shared/drive';
 import type { IntegrationEvent } from '../../shared/integration-log';
 import type { CalendarRange } from '../../shared/calendar';
@@ -73,6 +79,7 @@ export {
   App,
   APP_VERSION,
   emptyCounts,
+  emptySignalImportCounts,
 };
 export type { Branding, Category, Client, DashboardData, Project, Tag, Task };
 export type { ImportReceipt, PlaybookPreview };
@@ -190,6 +197,8 @@ export const testState = {
   importReceiptsPayload: [] as ImportReceipt[],
   importPreviewPayload: null as PlaybookPreview | null,
   importCommitPayload: null as { status: number; body: unknown } | null,
+  signalImportPreviewPayload: null as SignalImportPreview | null,
+  signalImportCommitPayload: null as { status: number; body: unknown } | null,
   /** The integration activity log the Import page reads, or an error in its place. */
   integrationActivityPayload: [] as IntegrationEvent[],
   integrationActivityError: null as string | null,
@@ -1074,6 +1083,15 @@ const respondTo = (url: string, init?: RequestInit) => {
     }
     return reply(answer.status, answer.body);
   }
+  if (url.endsWith('/api/import/signal/preview') && method === 'POST')
+    return (
+      testState.signalImportPreviewPayload ?? reply(400, { error: 'No Signal preview was set up.' })
+    );
+  if (url.endsWith('/api/import/signal') && method === 'POST') {
+    const answer = testState.signalImportCommitPayload;
+    if (!answer) return reply(400, { error: 'No Signal commit was set up.' });
+    return reply(answer.status, answer.body);
+  }
   const files = url.match(/\/api\/projects\/([^/?]+)\/files(?:\?(.*))?$/);
   if (files && method === 'GET') {
     const query = new URLSearchParams(files[2] ?? '');
@@ -1328,6 +1346,39 @@ export const preview = (overrides: Partial<PlaybookPreview> = {}): PlaybookPrevi
   ...overrides,
 });
 
+/** A Signal import dry run in the shape the server answers with, varied per case. */
+export const signalPreview = (
+  overrides: Partial<SignalImportPreview> = {},
+): SignalImportPreview => ({
+  schemaVersion: 1,
+  ok: true,
+  creates: { ...emptySignalImportCounts(), SignalPosts: 1, SignalMedia: 1 },
+  updates: emptySignalImportCounts(),
+  skips: emptySignalImportCounts(),
+  failures: emptySignalImportCounts(),
+  created: [{ sheet: 'SignalPosts', row: 2, key: 'POST-1', label: 'Imported copy' }],
+  updated: [],
+  skipped: [],
+  issues: [],
+  resolvedMedia: [
+    {
+      sheet: 'SignalMedia',
+      row: 2,
+      postKey: 'POST-1',
+      order: 1,
+      source: 'URL',
+      url: 'https://example.com/image.jpg',
+      resolved: true,
+    },
+  ],
+  driveNamed: 0,
+  driveResolved: 0,
+  duplicateRule: SIGNAL_IMPORT_DUPLICATE_RULE,
+  fingerprint: 'b'.repeat(64),
+  ...overrides,
+});
+
+export type { SignalImportPreview, SignalImportReceipt };
 /** One Drive item in the shape the files endpoint answers with, varied per case. */
 export const driveFile = (
   id: string,
@@ -1411,6 +1462,8 @@ beforeEach(() => {
   testState.importReceiptsPayload = [];
   testState.importPreviewPayload = null;
   testState.importCommitPayload = null;
+  testState.signalImportPreviewPayload = null;
+  testState.signalImportCommitPayload = null;
   testState.integrationActivityPayload = [];
   testState.integrationActivityError = null;
   testState.driveListingPayload = null;
