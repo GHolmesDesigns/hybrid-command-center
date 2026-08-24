@@ -1,4 +1,5 @@
 import type { ProviderPostRecord } from '../../shared/publish.ts';
+import type { BufferSchedulingType } from '../../shared/buffer-capabilities.ts';
 
 export type { ProviderPostRecord };
 
@@ -14,6 +15,7 @@ export interface PublishTarget {
   name: string;
   /** Present when the provider lists the account but it cannot be used right now. */
   unavailable?: string;
+  schedulingType?: BufferSchedulingType;
 }
 
 /**

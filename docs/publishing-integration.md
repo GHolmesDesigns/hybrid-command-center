@@ -166,6 +166,20 @@ HTTPS URL. A Google Drive viewer/share URL is a page rather than media. Drive by
 Post Bridge's signed upload path, and this app will not proxy or host them. A Buffer target whose
 media is not already public therefore refuses before any mutation.
 
+**Recorded media decision (C86, option 2).** Buffer targets take **no media from this app** under
+notification scheduling — the default until Buffer's channels API returns scheduling type per
+channel. TikTok and YouTube carry text into Buffer; Buffer reminds you in the platform app to attach
+media and finish the post there. Automatic TikTok may carry a **direct public HTTPS address** already
+stored on the post where C83 verified create; automatic YouTube stays **fail-closed** until a live
+create is recorded. **Rejected:** a second public address beside Drive (option 1 — two addresses that
+can drift); Drive-side public sharing (option 3 — changes file audience under every existing rule).
+Option 4 (text-only `createIdea` / channel draft without scheduling) was evaluated and rejected for
+this wave: C86 implements notification scheduling with empty `assets`, which is the same manual-finish
+cost with a scheduled reminder rather than an Ideas-library handoff. **Reopen when** Buffer's roadmap
+items *Image assets for API*, *Copy media to Buffer storage after post creation*, or *TikTok binary
+file upload (`FILE_UPLOAD`) support* ship — last updated 22 August 2026. A post mixing Post Bridge and
+Buffer targets in one submission **refuses** rather than splitting implicitly.
+
 **Credential contract.** `BUFFER_API_KEY` is the canonical server-only setting. For one release,
 `BUFFER_KEY` is accepted only when the canonical setting is absent; when both exist,
 `BUFFER_API_KEY` wins. Neither name nor value reaches the browser or an integration log. Presence

@@ -54,6 +54,8 @@ import { seedSignalPost } from '../signal/test-fixture.ts';
 import { MockDriveMediaProvider } from '../drive/mock-provider.ts';
 import type { SignalPostMedia } from '../../shared/signal-media.ts';
 import { postBridgePlatformConfigurations } from './post-bridge-wire.ts';
+import { BUFFER_PROVIDER } from '../../shared/buffer.ts';
+import type { PublishTarget } from './provider.ts';
 
 let db: Db;
 const targets = [
@@ -168,6 +170,26 @@ describe('provider boundary', () => {
     ).rejects.toThrow('Publishing is off.');
     await expect(provider.check('missing')).rejects.toThrow('Publishing is off.');
     await expect(provider.cancel('missing')).rejects.toThrow('Publishing is off.');
+    await expect(
+      provider.uploadMedia({
+        name: 'a.jpg',
+        mimeType: 'image/jpeg',
+        sizeBytes: 1,
+        body: (async function* () {
+          yield new Uint8Array([1]);
+        })(),
+      }),
+    ).rejects.toThrow('Publishing is off.');
+    await expect(provider.describe('missing')).rejects.toThrow('Publishing is off.');
+    await expect(
+      provider.update('missing', {
+        caption: '',
+        mediaUrls: [],
+        scheduledInstant: '',
+        timezone: '',
+        targets: [],
+      }),
+    ).rejects.toThrow('Publishing is off.');
   });
 });
 
@@ -2293,6 +2315,71 @@ describe('a publication migrated from before the media snapshot', () => {
       preview.reconcileHash,
     );
     expect(updated.sentMedia).toEqual(['https://cdn.example.com/a.jpg']);
+  });
+});
+
+describe('Buffer publish planning', () => {
+  const bufferTikTok: PublishTarget = {
+    id: 50,
+    provider: BUFFER_PROVIDER,
+    accountRef: 'chan-tiktok',
+    platform: 'tiktok',
+    handle: '@studio',
+    name: 'Studio TikTok',
+    schedulingType: 'notification',
+  };
+  const bufferAutomatic: PublishTarget = {
+    ...bufferTikTok,
+    id: 60,
+    schedulingType: 'automatic',
+  };
+
+  it('refuses Drive media for Buffer before confirmation', () => {
+    const media = driveDescriptor('buffer-drive');
+    const plan = buildPublishPlan(
+      add({ channels: ['tt'], media: [media], mediaUrls: [media.url] }),
+      [bufferTikTok],
+      'America/New_York',
+      new Date('2026-01-01'),
+    );
+    expect(reportFor(plan, 'tt').refusals.some((refusal) => refusal.includes('Drive'))).toBe(true);
+    expect(reportFor(plan, 'tt').bufferWire).toBeUndefined();
+    expect(plan.request).toBeUndefined();
+  });
+
+  it('refuses mixed Post Bridge and Buffer targets in one submission', () => {
+    const plan = buildPublishPlan(
+      add({
+        channels: ['x', 'tt'],
+        mediaUrls: ['https://cdn.example.com/a.jpg'],
+      }),
+      [{ id: 1, platform: 'twitter', handle: '@gholmes', name: 'G.Holmes Designs' }, bufferTikTok],
+      'America/New_York',
+      new Date('2026-01-01'),
+      [],
+      [
+        { channel: 'x', providerAccountId: 1 },
+        { channel: 'tt', providerAccountId: 50 },
+      ],
+    );
+    expect(plan.refusals).toEqual(
+      expect.arrayContaining([expect.stringMatching(/cannot mix Post Bridge and Buffer/i)]),
+    );
+  });
+
+  it('shows automatic TikTok bufferWire for a public URL', () => {
+    const url = 'https://cdn.example.com/clip.mp4';
+    const plan = buildPublishPlan(
+      add({ channels: ['tt'], mediaUrls: [url] }),
+      [bufferAutomatic],
+      'America/New_York',
+      new Date('2026-01-01'),
+      [],
+      [{ channel: 'tt', providerAccountId: 60 }],
+    );
+    const report = reportFor(plan, 'tt');
+    expect(report.bufferWire?.assets).toEqual([{ video: { url } }]);
+    expect(plan.request).toBeUndefined();
   });
 });
 

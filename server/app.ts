@@ -1948,7 +1948,8 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   app.post('/api/signal/posts/:id/publish', async (req, res, next) => {
     try {
       const input = z.object({ planHash: z.string().length(64) }).parse(req.body);
-      res.status(201).json(await publisher.submit(req.params.id, input.planHash));
+      const listed = await resolvePublishingTargets(db, publishProvider, bufferAccounts, clock);
+      res.status(201).json(await publisher.submit(req.params.id, input.planHash, listed));
     } catch (error) {
       next(error);
     }

@@ -9,22 +9,19 @@ import { expect, test } from '@playwright/test';
 test('publish preview refreshes Buffer accounts and an ordinary page load does not', async ({
   page,
 }) => {
-  const activity = await page.request.get('/api/integrations/activity?limit=50');
-  expect(
-    ((await activity.json()) as { operation: string }[]).filter(
+  const countRefreshes = async () => {
+    const activity = await page.request.get('/api/integrations/activity?limit=50');
+    return ((await activity.json()) as { operation: string }[]).filter(
       (event) => event.operation === 'signal.buffer-accounts-refresh',
-    ),
-  ).toHaveLength(0);
+    ).length;
+  };
+
+  const before = await countRefreshes();
 
   await page.goto('/signal?month=2099-09');
-  await expect(page.getByRole('region', { name: '2099-09' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 2, name: 'September 2099' })).toBeVisible();
 
-  const afterLoad = await page.request.get('/api/integrations/activity?limit=50');
-  expect(
-    ((await afterLoad.json()) as { operation: string }[]).filter(
-      (event) => event.operation === 'signal.buffer-accounts-refresh',
-    ),
-  ).toHaveLength(0);
+  expect(await countRefreshes()).toBe(before);
 
   const created = await page.request.post('/api/signal/posts', {
     data: {
@@ -51,10 +48,12 @@ test('publish preview refreshes Buffer accounts and an ordinary page load does n
   const stored = await page.request.get('/api/signal/buffer-accounts');
   expect((await stored.json()).channels).toHaveLength(2);
 
-  const afterPreview = await page.request.get('/api/integrations/activity?limit=50');
-  const refreshes = (
-    (await afterPreview.json()) as { operation: string; outcome: string }[]
-  ).filter((event) => event.operation === 'signal.buffer-accounts-refresh');
-  expect(refreshes).toHaveLength(1);
+  const afterPreview = await countRefreshes();
+  expect(afterPreview).toBe(before + 1);
+
+  const activity = await page.request.get('/api/integrations/activity?limit=50');
+  const refreshes = ((await activity.json()) as { operation: string; outcome: string }[]).filter(
+    (event) => event.operation === 'signal.buffer-accounts-refresh',
+  );
   expect(refreshes[0]?.outcome).toBe('SUCCESS');
 });

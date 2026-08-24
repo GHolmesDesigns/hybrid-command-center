@@ -6,6 +6,7 @@ import {
   mapBufferChannel,
   parseBufferAccount,
   parseBufferChannel,
+  parseBufferPost,
   parseBufferPostsPage,
 } from './wire.ts';
 
@@ -48,6 +49,16 @@ describe('buffer wire parsers', () => {
         pageInfo: { hasNextPage: false, endCursor: null },
       }).posts,
     ).toHaveLength(1);
+
+    expect(
+      parseBufferPost({
+        id: 'p2',
+        text: 'b',
+        status: 'scheduled',
+        dueAt: '2030-01-01T00:00:00.000Z',
+        channelId: 'c2',
+      }),
+    ).toMatchObject({ id: 'p2', dueAt: '2030-01-01T00:00:00.000Z' });
   });
 
   it('refuses HTTP failures and GraphQL errors inside HTTP 200', async () => {

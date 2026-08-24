@@ -179,6 +179,40 @@ describe('a stale selection', () => {
   });
 });
 
+describe('Buffer accounts beside Post Bridge', () => {
+  it('auto-resolves on Post Bridge when both list the same platform', () => {
+    const post = getPost(
+      db,
+      seedSignalPost(db, {
+        channels: ['tt'],
+        mediaUrls: ['https://example.com/frame.jpg'],
+      }).id,
+    ) as SignalPost;
+    const connected: PublishTarget[] = [
+      {
+        id: 904,
+        provider: 'post-bridge',
+        accountRef: '904',
+        platform: 'tiktok',
+        handle: '@pb',
+        name: 'Post Bridge',
+      },
+      {
+        id: 905,
+        provider: 'buffer',
+        accountRef: 'buf-tt',
+        platform: 'tiktok',
+        handle: '@buf',
+        name: 'Buffer',
+      },
+    ];
+    const preview = plan(post, [], [], connected);
+    expect(preview.channels[0]?.status).toBe('READY');
+    expect(preview.targets[0]?.provider).toBe('post-bridge');
+    expect(preview.connectedAccounts).toHaveLength(2);
+  });
+});
+
 describe('the plan hash', () => {
   it('changes when the same local surrogate moves to another provider identity', () => {
     const post = seed(['fb']);
