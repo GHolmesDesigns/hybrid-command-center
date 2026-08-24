@@ -1,6 +1,6 @@
 {
   "name": "hybrid-command-center",
-  "version": "4.8.1",
+  "version": "4.8.2",
   "private": true,
   "type": "module",
   "engines": {
@@ -40,7 +40,7 @@
     "express": "^5.2.1",
     "googleapis": "^174.0.1",
     "helmet": "^8.3.0",
-    "lucide-react": "^1.31.0",
+    "lucide-react": "^1.33.0",
     "pino": "^10.3.1",
     "pino-http": "^11.0.0",
     "react": "^19.2.8",
