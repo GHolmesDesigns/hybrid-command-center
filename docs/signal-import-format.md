@@ -1,7 +1,7 @@
 # Signal Import Format
 
-Status: specified. The importer is **not** built here — see card C90 (#272). This document is the
-format and the boundary decisions the Wave 16 importer cards are written against.
+Status: implemented by C90 (#272). This document is the format and the boundary decisions the Wave
+16 importer is built against.
 
 Schema version: `1`
 

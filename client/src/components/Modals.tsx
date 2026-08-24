@@ -8,6 +8,7 @@ import { ClientMergeForm } from './ClientMerge';
 import { dateInput } from './formatting';
 import { Field, FormEnd, Select, TagChipInput, TextArea } from './FormControls';
 import { ImportForm } from './ImportModal';
+import { SignalImportForm } from './SignalImportModal';
 import { TASK_TYPE_LABEL, type TagDraft, syncProjectCategories, syncTaskTags } from './ui-shared';
 import { TaskDetail } from './TaskDetail';
 
@@ -74,6 +75,12 @@ export function ModalHost({
     return (
       <EntityModal title="Import a campaign playbook" wide close={close}>
         <ImportForm close={close} imported={imported} refresh={refresh} flash={flash} />
+      </EntityModal>
+    );
+  if (modal.type === 'signalImport')
+    return (
+      <EntityModal title="Import Signal queue" wide close={close}>
+        <SignalImportForm close={close} imported={imported} refresh={refresh} flash={flash} />
       </EntityModal>
     );
   if (modal.type === 'task')

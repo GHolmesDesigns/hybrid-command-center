@@ -155,6 +155,13 @@ import {
   previewPlaybook,
 } from './import.ts';
 import {
+  SIGNAL_IMPORT_CONTENT_BASE64_MAX,
+  SIGNAL_IMPORT_TEXT_MAX,
+  commitSignalImport,
+  listSignalImportReceipts,
+  previewSignalImport,
+} from './signal/import.ts';
+import {
   DRIVE_BUDGET,
   DRIVE_SYNC_BUDGET,
   IMPORT_BUDGET,
@@ -1535,6 +1542,40 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     const receipt = getReceipt(db, req.params.id);
     if (!receipt) return res.status(404).json({ error: 'Import receipt not found.' });
     res.json(receipt);
+  });
+  const signalImportInput = z
+    .object({
+      filename: z.string().trim().max(255).optional(),
+      contentBase64: z.string().max(SIGNAL_IMPORT_CONTENT_BASE64_MAX).optional(),
+      text: z.string().max(SIGNAL_IMPORT_TEXT_MAX).optional(),
+      fingerprint: z.string().trim().max(128).optional(),
+    })
+    .refine((value) => Boolean(value.contentBase64) !== Boolean(value.text), {
+      message: 'Provide either a workbook file or pasted Signal tabs.',
+    });
+  app.post('/api/import/signal/preview', async (req, res, next) => {
+    try {
+      const { fingerprint: _fingerprint, ...input } = signalImportInput.parse(req.body);
+      void _fingerprint;
+      res.json(await previewSignalImport(db, input, driveMedia()));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/import/signal', async (req, res, next) => {
+    try {
+      const result = await commitSignalImport(db, signalImportInput.parse(req.body), driveMedia());
+      res.status(result.receipt.outcome === 'COMMITTED' ? 201 : 409).json(result);
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.get('/api/import/signal/receipts', async (_req, res, next) => {
+    try {
+      res.json(await listSignalImportReceipts(db));
+    } catch (error) {
+      next(error);
+    }
   });
 
   /**

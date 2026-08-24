@@ -11,6 +11,7 @@
 /** Integrations that write to the log. One value per external system, not per operation. */
 export const INTEGRATION_SOURCES = [
   'campaign-playbook',
+  'signal-import',
   'signal-campaign',
   'google-drive',
 ] as const;
@@ -22,6 +23,7 @@ export type IntegrationSource = (typeof INTEGRATION_SOURCES)[number];
  */
 export const INTEGRATION_OPERATIONS = [
   'playbook.import',
+  'signal.import',
   'calendar.sync',
   'drive.sync',
   'signal.publish',
@@ -116,12 +118,14 @@ export const INTEGRATION_EVENT_PAGE_MAX = INTEGRATION_EVENT_LIMIT;
 
 export const INTEGRATION_SOURCE_LABEL: Record<IntegrationSource, string> = {
   'campaign-playbook': 'Campaign playbook',
+  'signal-import': 'Signal import',
   'signal-campaign': 'Signal Campaign',
   'google-drive': 'Google Drive',
 };
 
 export const INTEGRATION_OPERATION_LABEL: Record<IntegrationOperation, string> = {
   'playbook.import': 'Playbook import',
+  'signal.import': 'Signal import',
   'calendar.sync': 'Calendar sync',
   'drive.sync': 'Drive sync',
   'signal.publish': 'Signal publish',

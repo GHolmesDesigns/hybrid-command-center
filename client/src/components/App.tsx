@@ -44,6 +44,7 @@ export type Modal =
   | { type: 'task'; value?: Task; projectId?: string }
   | { type: 'taskDetail'; value: Task }
   | { type: 'import' }
+  | { type: 'signalImport' }
   | null;
 
 const SIDEBAR_KEY = 'hcc-sidebar-collapsed';
@@ -305,7 +306,11 @@ export function App() {
             <Route
               path="/import"
               element={
-                <ImportView open={() => setModal({ type: 'import' })} importedAt={importedAt} />
+                <ImportView
+                  open={() => setModal({ type: 'import' })}
+                  openSignal={() => setModal({ type: 'signalImport' })}
+                  importedAt={importedAt}
+                />
               }
             />
             <Route
