@@ -687,16 +687,25 @@ function TargetChoice({
       </p>
       {onPlatform.map((account) => {
         const checked = selected.includes(account.id);
+        const stateId = account.unavailable ? `target-choice-${account.id}-state` : undefined;
         return (
-          <label key={account.id} className="signal-target-choice-option">
-            <input
-              type="checkbox"
-              checked={checked}
-              disabled={busy}
-              onChange={(event) => onToggle(account.id, event.target.checked)}
-            />
-            <span>{account.handle || account.name}</span>
-          </label>
+          <div key={account.id} className="signal-target-choice-option">
+            <label>
+              <input
+                type="checkbox"
+                checked={checked}
+                disabled={busy}
+                aria-describedby={stateId}
+                onChange={(event) => onToggle(account.id, event.target.checked)}
+              />
+              <span className="signal-target-choice-name">{account.handle || account.name}</span>
+            </label>
+            {account.unavailable && (
+              <span className="signal-target-choice-state" id={stateId}>
+                {account.unavailable}
+              </span>
+            )}
+          </div>
         );
       })}
       <button type="button" className="secondary" disabled={!dirty || busy} onClick={onSave}>
