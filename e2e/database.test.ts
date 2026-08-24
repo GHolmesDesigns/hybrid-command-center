@@ -22,6 +22,7 @@ describe('E2E database safety', () => {
 
   it('removes the dedicated E2E database and its SQLite sidecar files', () => {
     const databasePath = validateE2eDatabasePath('./data/e2e.db');
+    fs.mkdirSync(path.dirname(databasePath), { recursive: true });
     fs.writeFileSync(databasePath, '');
     fs.writeFileSync(`${databasePath}-wal`, '');
     expect(resetE2eDatabase('./data/e2e.db')).toBe(databasePath);
