@@ -121,6 +121,19 @@ CREATE TABLE IF NOT EXISTS signal_posts (
   cta TEXT NOT NULL DEFAULT 'NONE', position INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
+-- One row per stable identity a Signal post carries at an authoring source. Copy and schedule are
+-- deliberately absent from this key: both are ordinary edits, so neither can identify the post
+-- across imports. The namespace is signal-import:<stable-source-uuid>; the external id is opaque
+-- and case-sensitive. One pair can name exactly one post, while one post may have identities from
+-- several sources. Deleting a post removes its aliases because Signal posts, unlike clients, may
+-- be hard-deleted after confirmation.
+CREATE TABLE IF NOT EXISTS signal_post_import_aliases (
+  source_namespace TEXT NOT NULL,
+  external_id      TEXT NOT NULL,
+  post_id          TEXT NOT NULL REFERENCES signal_posts(id) ON DELETE CASCADE,
+  created_at       TEXT NOT NULL,
+  UNIQUE (source_namespace, external_id)
+);
 -- Signal campaigns: the shared vocabulary a post's content belongs to, modelled exactly as tags
 -- and categories are one level up -- a name-unique row here and a join below, so a post can carry
 -- several, renaming one is a single write that reaches every post, and deleting one detaches it
@@ -510,6 +523,10 @@ CREATE INDEX IF NOT EXISTS idx_integration_events_correlation ON integration_eve
 -- The calendar reads a date range; the planner reads the queue. Both are this one index:
 -- dated rows order by day, and the NULL dates group together at the front.
 CREATE INDEX IF NOT EXISTS idx_signal_posts_date ON signal_posts(date, time);
+-- Imports resolve an alias by its unique pair. This reverse index serves post deletion and any
+-- later inspection of the identities one post is known by.
+CREATE INDEX IF NOT EXISTS idx_signal_post_import_aliases_post
+  ON signal_post_import_aliases(post_id);
 CREATE INDEX IF NOT EXISTS idx_signal_post_channels_channel ON signal_post_channels(channel);
 -- The campaign side of the join: what a campaign's deletion has to detach, what its post count
 -- counts, and what the segmented analytics read walks. The post side is the primary key's prefix.
