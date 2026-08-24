@@ -12,7 +12,7 @@ The version a card ships as is decided at merge time — see the bump rule in `A
 
 ### Changed
 
-- Update the CodeQL GitHub Actions used by the security workflow.
+- Update the CodeQL GitHub Actions to 4.37.8.
 
 ### Breaking changes
 
