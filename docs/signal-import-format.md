@@ -260,8 +260,12 @@ An importer must **never**:
 - read or write Drive bytes, rename or move Drive files, or provision Drive folders;
 - download arbitrary URLs to discover media.
 
-Capability verdicts for what would happen **if** someone later published are C92's preview warnings,
-not this format's columns.
+Capability verdicts for what would happen **if** someone later published are preview warnings from
+the shared publish capability contract (`shared/publish-capabilities.ts`). They **inform and never
+refuse**: a caption over Bluesky's hard limit still imports. Validation errors still refuse the
+whole import. Durable findings (limits, media bounds, unreachable channels) are distinguished from
+momentary ones (no connected account today). Connected accounts are read from the local store; the
+preview never calls a publishing provider. Verdicts are carried into the receipt.
 
 ## Dry-run preview and confirmation
 
@@ -278,7 +282,10 @@ The preview shows:
   resolution time — or a row-level Drive error in Drive's own words;
 - a prominent stop when fewer Drive files resolved than the workbook named;
 - identity disagreements and duplicate identity claims;
-- the duplicate rule in the preview's own words.
+- the duplicate rule in the preview's own words;
+- a capability summary (how many posts import clean vs carry a warning) and per-row, per-channel
+  findings — over caption limit, media required or out of bounds, unreachable channel, and missing
+  connected account — labelled as about the content or about right now.
 
 Confirmation is enabled only for a clean preview, and only when every required Drive reference
 resolved. All SQLite writes occur in one transaction on confirm. A database failure rolls back the

@@ -2,9 +2,12 @@ import { useRef, useState, type ChangeEvent } from 'react';
 import { AlertCircle, CheckCircle2, FileSpreadsheet, RefreshCw, Upload } from 'lucide-react';
 import { send } from '../api';
 import { formatFileSize } from '../../../shared/drive';
+import { SIGNAL_CHANNEL_LABEL, type SignalChannel } from '../../../shared/signal';
 import {
   SIGNAL_IMPORT_SHEETS,
+  SIGNAL_IMPORT_VERDICT_DURABILITY_LABEL,
   signalImportTotal,
+  type SignalImportCapabilityVerdict,
   type SignalImportPreview,
   type SignalImportReceipt,
   type SignalImportResolvedMedia,
@@ -188,6 +191,8 @@ function SignalImportPreviewPanel({
 }) {
   const committed = receipt?.outcome === 'COMMITTED';
   const driveShort = preview.driveNamed > preview.driveResolved;
+  const capability = receipt?.capabilitySummary ?? preview.capabilitySummary;
+  const verdicts = receipt?.capabilityVerdicts ?? preview.capabilityVerdicts;
   return (
     <div className="import-preview">
       <div
@@ -210,6 +215,25 @@ function SignalImportPreviewPanel({
           </span>
         </div>
       </div>
+      {capability.postsEvaluated > 0 && (
+        <div
+          className={`inline-warning ${capability.postsWithWarnings === 0 ? 'ready' : 'attention'}`}
+          role="status"
+        >
+          {capability.postsWithWarnings === 0 ? <CheckCircle2 /> : <AlertCircle />}
+          <div>
+            <strong>
+              {capability.postsClean} of {capability.postsEvaluated} posts import clean for
+              publishing
+            </strong>
+            <span>
+              {capability.postsWithWarnings === 0
+                ? 'No capability warnings against the content or connected accounts.'
+                : `${capability.postsWithWarnings} post${capability.postsWithWarnings === 1 ? '' : 's'} ${capability.postsWithWarnings === 1 ? 'carries' : 'carry'} ${verdicts.length} warning${verdicts.length === 1 ? '' : 's'} — import still proceeds.`}
+            </span>
+          </div>
+        </div>
+      )}
       {driveShort && (
         <div className="inline-warning blocked" role="alert">
           <AlertCircle />
@@ -244,6 +268,7 @@ function SignalImportPreviewPanel({
           ))}
         </tbody>
       </table>
+      {verdicts.length > 0 && <CapabilityVerdictList verdicts={verdicts} />}
       {preview.resolvedMedia.length > 0 && <ResolvedMediaList items={preview.resolvedMedia} />}
       {preview.issues.length > 0 && (
         <section className="import-list" aria-label="Problems to fix">
@@ -266,6 +291,63 @@ function SignalImportPreviewPanel({
           </ul>
         </section>
       )}
+    </div>
+  );
+}
+
+function CapabilityVerdictList({ verdicts }: { verdicts: SignalImportCapabilityVerdict[] }) {
+  const durable = verdicts.filter((item) => item.durability === 'DURABLE');
+  const momentary = verdicts.filter((item) => item.durability === 'MOMENTARY');
+  return (
+    <section className="import-list" aria-label="Publishing capability warnings">
+      <h3>Publishing capability warnings</h3>
+      <p className="field-hint">
+        These do not block the import. Fix copy and media in Signal, or reconnect accounts later.
+      </p>
+      {durable.length > 0 && (
+        <VerdictGroup
+          title="About the content"
+          hint={SIGNAL_IMPORT_VERDICT_DURABILITY_LABEL.DURABLE}
+          verdicts={durable}
+        />
+      )}
+      {momentary.length > 0 && (
+        <VerdictGroup
+          title="About right now"
+          hint={SIGNAL_IMPORT_VERDICT_DURABILITY_LABEL.MOMENTARY}
+          verdicts={momentary}
+        />
+      )}
+    </section>
+  );
+}
+
+function VerdictGroup({
+  title,
+  hint,
+  verdicts,
+}: {
+  title: string;
+  hint: string;
+  verdicts: SignalImportCapabilityVerdict[];
+}) {
+  return (
+    <div className="import-verdict-group">
+      <h4>{title}</h4>
+      <p className="field-hint">{hint}</p>
+      <ul>
+        {verdicts.map((item, index) => (
+          <li key={`${item.postKey}-${item.channel}-${index}`}>
+            <span className="import-where">
+              {item.postKey}
+              {item.row ? ` · row ${item.row}` : ''} ·{' '}
+              {SIGNAL_CHANNEL_LABEL[item.channel as SignalChannel] ?? item.channel}
+              {item.publishWouldRefuse ? ' · would refuse publish' : ' · would warn on publish'}
+            </span>
+            <span>{item.message}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

@@ -128,6 +128,14 @@ describe('Signal import modal', () => {
           updated: [],
           skipped: [],
           issues: [],
+          capabilitySummary: {
+            postsEvaluated: 0,
+            postsClean: 0,
+            postsWithWarnings: 0,
+            durableCount: 0,
+            momentaryCount: 0,
+          },
+          capabilityVerdicts: [],
           createdAt: '2026-08-24T12:01:00.000Z',
         },
       },
@@ -141,5 +149,44 @@ describe('Signal import modal', () => {
     expect(within(dialog).getByText(/resolved 2026-08-24T12:00:00.000Z/)).toBeVisible();
     fireEvent.click(within(dialog).getByRole('button', { name: /Import 2 records/ }));
     expect(await within(dialog).findByText('Imported 2 records')).toBeVisible();
+  });
+
+  it('summarises durable and momentary capability warnings without blocking import', async () => {
+    testState.signalImportPreviewPayload = signalPreview({
+      capabilitySummary: {
+        postsEvaluated: 2,
+        postsClean: 1,
+        postsWithWarnings: 1,
+        durableCount: 1,
+        momentaryCount: 1,
+      },
+      capabilityVerdicts: [
+        {
+          postKey: 'POST-1',
+          row: 2,
+          channel: 'bsky',
+          durability: 'DURABLE',
+          message: 'Bluesky limits captions to 300 characters and this one is 301. Remove 1.',
+          publishWouldRefuse: true,
+        },
+        {
+          postKey: 'POST-1',
+          row: 2,
+          channel: 'bsky',
+          durability: 'MOMENTARY',
+          message: 'Bluesky has no connected account. Connect one in Post Bridge.',
+          publishWouldRefuse: true,
+        },
+      ],
+    });
+    const dialog = await openSignalImport();
+    await pasteAndCheck(dialog);
+
+    expect(await within(dialog).findByText(/1 of 2 posts import clean/)).toBeVisible();
+    expect(within(dialog).getByText(/1 post carries 2 warnings/)).toBeVisible();
+    expect(within(dialog).getByText('About the content')).toBeVisible();
+    expect(within(dialog).getByText('About right now')).toBeVisible();
+    expect(within(dialog).getAllByText(/would refuse publish/).length).toBe(2);
+    expect(within(dialog).getByRole('button', { name: /Import 2 records/ })).toBeEnabled();
   });
 });

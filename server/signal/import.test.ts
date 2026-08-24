@@ -510,4 +510,45 @@ POST-1	instagram
     expect(refused.ok).toBe(false);
     expect(refused.issues.some((i) => /duplicated/i.test(i.message))).toBe(true);
   });
+
+  it('reports capability warnings without refusing, and still imports an over-limit caption', async () => {
+    const caption = 'b'.repeat(301);
+    const text = `[SignalPosts]
+post_key	text	channels	date	time	format	status	campaigns	cta
+POST-BSKY	${caption}	bsky		09:00	TEXT	DRAFT	NONE	NONE
+`;
+    const preview = await previewSignalImport(db, { text }, drive);
+    expect(preview.ok).toBe(true);
+    expect(preview.capabilitySummary.postsWithWarnings).toBe(1);
+    expect(preview.capabilitySummary.postsClean).toBe(0);
+    expect(
+      preview.capabilityVerdicts.some(
+        (v) =>
+          v.durability === 'DURABLE' &&
+          v.publishWouldRefuse &&
+          /limits captions to 300/.test(v.message),
+      ),
+    ).toBe(true);
+    expect(
+      preview.capabilityVerdicts.some(
+        (v) => v.durability === 'MOMENTARY' && /no connected account/.test(v.message),
+      ),
+    ).toBe(true);
+    const result = await commitSignalImport(db, { text, fingerprint: preview.fingerprint }, drive);
+    expect(result.receipt.outcome).toBe('COMMITTED');
+    expect(result.receipt.capabilityVerdicts).toHaveLength(preview.capabilityVerdicts.length);
+    expect(
+      (db.prepare('SELECT text FROM signal_posts').get() as { text: string }).text.length,
+    ).toBe(301);
+  });
+
+  it('still refuses the whole import on a validation error', async () => {
+    const text = `[SignalPosts]
+post_key	text	channels
+NOT A KEY	copy	bsky
+`;
+    const preview = await previewSignalImport(db, { text }, drive);
+    expect(preview.ok).toBe(false);
+    expect(preview.issues.length).toBeGreaterThan(0);
+  });
 });

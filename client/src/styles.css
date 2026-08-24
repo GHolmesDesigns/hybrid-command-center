@@ -2411,6 +2411,12 @@ button.tag-chip.toggle.active {
   border-color: #bcdccb;
   color: #245743;
 }
+/* Capability warnings inform; they are not the blocked red of a validation refusal. */
+.inline-warning.attention {
+  background: #fbf5e8;
+  border-color: #e6d4a8;
+  color: #6a5420;
+}
 .import-preview {
   display: flex;
   flex-direction: column;
@@ -2418,6 +2424,16 @@ button.tag-chip.toggle.active {
 }
 .import-preview > .inline-warning {
   margin: 0;
+}
+.import-verdict-group {
+  margin-top: 10px;
+}
+.import-verdict-group h4 {
+  font: 700 12px Manrope;
+  margin: 0 0 4px;
+}
+.import-verdict-group .field-hint {
+  margin: 0 0 8px;
 }
 .import-counts {
   width: 100%;
