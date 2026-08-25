@@ -922,7 +922,10 @@ of it. Concretely:
   the two back in step is a separate act a person confirms — §7.2.
 - **Deleting a post with a live submission cancels first.** `cancel()` runs, and if it fails the
   delete is refused with the reason. The alternative is an app that has forgotten about a post the
-  world is still going to see.
+  world is still going to see. C106 ([#305](https://github.com/GHolmesDesigns/hybrid-command-center/issues/305))
+  separates this conflated behaviour into withdraw, retire, and unpublish vocabulary;
+  [`published-deletion-decision.md`](published-deletion-decision.md) is the settlement, and C107
+  (#306) implements the split.
 
 ### 7.1 Schema sketch
 
