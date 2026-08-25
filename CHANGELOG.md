@@ -8,6 +8,30 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [4.8.6] - 2026-08-25
+
+### Fixed
+
+- **Confirm and submit** no longer appears ready for a Buffer plan while production Buffer writes
+  stay evidence-gated. The same fail-closed reason is shown on the preview, so Confirm stays
+  disabled until writes are enabled, and a Post Bridge plan still confirms when Buffer writes are
+  closed.
+
+### Added
+
+- **Drive override for Buffer media.** Buffer refused any Drive-sourced media outright, because a
+  Drive share link is an HTML viewer page even when "anyone with the link" makes the file public —
+  Buffer's fetcher can never use it as-is. A channel tab now offers an explicit, per-send override
+  that converts the link to Drive's direct-download address instead of refusing, with a warning
+  that the conversion can fail silently at publish time: Drive interstitials larger files with a
+  virus-scan page instead of the bytes, unpredictably, and Buffer fetches hours or days after the
+  post is scheduled. The override is not persisted — it is threaded into the plan hash so toggling
+  it invalidates a stale confirmation, and every send has to accept the risk again.
+
+### Breaking changes
+
+None.
+
 ## [4.8.5] - 2026-08-24
 
 ### Changed
