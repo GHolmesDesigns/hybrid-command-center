@@ -676,7 +676,9 @@ function reportForChannel(
             ...(resolution.bufferSchedulingType
               ? { bufferSchedulingType: resolution.bufferSchedulingType }
               : {}),
-            ...(resolution.driveOverridable ? { driveOverridable: resolution.driveOverridable } : {}),
+            ...(resolution.driveOverridable
+              ? { driveOverridable: resolution.driveOverridable }
+              : {}),
           };
         })
     : undefined;

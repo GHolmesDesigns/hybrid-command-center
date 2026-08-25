@@ -2009,7 +2009,12 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       res
         .status(201)
         .json(
-          await publisher.submit(req.params.id, input.planHash, listed, input.driveOverride ?? false),
+          await publisher.submit(
+            req.params.id,
+            input.planHash,
+            listed,
+            input.driveOverride ?? false,
+          ),
         );
     } catch (error) {
       next(error);

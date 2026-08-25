@@ -93,8 +93,7 @@ export const bufferMediaPlan = (input: {
 
   if (!driveOverride) {
     for (const item of selected) {
-      if (item.source === 'DRIVE')
-        refusals.push(driveRefusal(label, item.driveName ?? item.url));
+      if (item.source === 'DRIVE') refusals.push(driveRefusal(label, item.driveName ?? item.url));
     }
     if (refusals.length) return { refusals, warnings, driveOverridable };
   }
@@ -143,7 +142,9 @@ export const bufferMediaPlan = (input: {
         continue;
       }
       warnings.push(driveOverrideWarning(label, item.driveName ?? item.url));
-      assets.push({ [assetKind]: { url: driveDirectDownloadUrl(item.driveFileId) } } as BufferWireAsset);
+      assets.push({
+        [assetKind]: { url: driveDirectDownloadUrl(item.driveFileId) },
+      } as BufferWireAsset);
       continue;
     }
     if (item.source !== 'URL') continue;

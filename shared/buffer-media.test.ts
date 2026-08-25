@@ -1,5 +1,9 @@
 ﻿import { describe, expect, it } from 'vitest';
-import { bufferMediaPlan, driveDirectDownloadUrl, BUFFER_MEDIA_ROUTE_SUMMARY } from './buffer-media.ts';
+import {
+  bufferMediaPlan,
+  driveDirectDownloadUrl,
+  BUFFER_MEDIA_ROUTE_SUMMARY,
+} from './buffer-media.ts';
 import { bufferCapabilityFor } from './buffer-capabilities.ts';
 import type { PublishChannelContent } from './publish.ts';
 import { urlPostMedia, type SignalPostMedia } from './signal-media.ts';
@@ -82,9 +86,7 @@ describe('Buffer media planning', () => {
     });
     expect(plan.refusals).toEqual([]);
     expect(plan.driveOverridable).toBe(true);
-    expect(plan.bufferWire?.assets).toEqual([
-      { video: { url: driveDirectDownloadUrl('abc') } },
-    ]);
+    expect(plan.bufferWire?.assets).toEqual([{ video: { url: driveDirectDownloadUrl('abc') } }]);
     expect(plan.warnings.some((warning) => warning.includes('direct-download'))).toBe(true);
   });
 
