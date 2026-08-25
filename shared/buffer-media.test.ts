@@ -90,6 +90,36 @@ describe('Buffer media planning', () => {
     expect(plan.warnings.some((warning) => warning.includes('direct-download'))).toBe(true);
   });
 
+  it('refuses an overridden Drive reference with no file id', () => {
+    const automatic = bufferCapabilityFor('tiktok', 'automatic')!;
+    const noFileId: SignalPostMedia = { ...driveVideo, driveFileId: null };
+    const plan = bufferMediaPlan({
+      capability: automatic,
+      platform: 'tiktok',
+      schedulingType: 'automatic',
+      content: content([noFileId.url]),
+      media: [noFileId],
+      driveOverride: true,
+    });
+    expect(plan.bufferWire).toBeUndefined();
+    expect(plan.refusals[0]).toMatch(/without a Drive file id/);
+  });
+
+  it('refuses an overridden Drive reference whose MIME type does not classify', () => {
+    const automatic = bufferCapabilityFor('tiktok', 'automatic')!;
+    const unclassified: SignalPostMedia = { ...driveVideo, mimeType: 'application/zip' };
+    const plan = bufferMediaPlan({
+      capability: automatic,
+      platform: 'tiktok',
+      schedulingType: 'automatic',
+      content: content([unclassified.url]),
+      media: [unclassified],
+      driveOverride: true,
+    });
+    expect(plan.bufferWire).toBeUndefined();
+    expect(plan.refusals[0]).toMatch(/cannot classify/);
+  });
+
   it('builds the direct-download address from the file id', () => {
     expect(driveDirectDownloadUrl('abc 123')).toBe(
       'https://drive.google.com/uc?export=download&id=abc%20123',

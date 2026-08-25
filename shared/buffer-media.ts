@@ -147,7 +147,8 @@ export const bufferMediaPlan = (input: {
       } as BufferWireAsset);
       continue;
     }
-    if (item.source !== 'URL') continue;
+    // `item.source` is narrowed to 'URL' here: the only other value the type admits is 'DRIVE',
+    // and every path through that branch above continues.
     const assetKind = bufferAssetKindFor(item);
     if (!assetKind) {
       refusals.push(
