@@ -63,6 +63,11 @@ import type {
   PublishPreview,
 } from '../../shared/publish.ts';
 import { deliveryModeForCapability, publishPreviewRefusals } from '../../shared/publish.ts';
+import {
+  PUBLISH_NOW_WARNINGS,
+  type PublishTiming,
+  publishNowPlanRefusals,
+} from '../../shared/publish-now.ts';
 import type {
   PublishAccountConfiguration,
   PublishPlatformConfiguration,
@@ -917,6 +922,7 @@ export function buildPublishPlan(
    * accepts and why it is opt-in only.
    */
   driveOverride = false,
+  timing: PublishTiming = 'scheduled',
 ): PublishPreview & {
   request?: PublishRequest;
   mediaSources?: SignalPostMedia[];
@@ -930,7 +936,7 @@ export function buildPublishPlan(
   if (!caption) refusals.push('Post Bridge requires a caption.');
   if (!post.date) refusals.push('An unscheduled post has no publishing instant.');
   let scheduledInstant: string | undefined;
-  if (post.date) {
+  if (post.date && timing === 'scheduled') {
     try {
       scheduledInstant = publishInstantFor(post.date, post.time, zone);
       if (new Date(scheduledInstant) <= now)
@@ -938,6 +944,14 @@ export function buildPublishPlan(
     } catch (error) {
       refusals.push((error as Error).message);
     }
+  } else if (post.date && timing === 'now') {
+    try {
+      // Still computed for display beside the planned slot, but never sent on the wire.
+      scheduledInstant = publishInstantFor(post.date, post.time, zone);
+    } catch (error) {
+      refusals.push((error as Error).message);
+    }
+    warnings.push(...PUBLISH_NOW_WARNINGS);
   }
   if (post.status === 'PUBLISHED')
     warnings.push('You marked this published yourself; sending it will post it again.');
@@ -1013,6 +1027,8 @@ export function buildPublishPlan(
     (target) => (target.provider ?? 'post-bridge') !== BUFFER_PROVIDER,
   );
 
+  if (timing === 'now') refusals.push(...publishNowPlanRefusals(targets));
+
   // Provider-wide rather than per platform, like the caption rule above: one submission carries one
   // media array, whatever each platform would have preferred.
   const media = agreedMedia(channels, post.mediaUrls);
@@ -1060,6 +1076,7 @@ export function buildPublishPlan(
   const stable = {
     postId: post.id,
     updatedAt: post.updatedAt,
+    timing,
     caption,
     // Not otherwise implied by anything else in this object where a Buffer target has no Drive
     // media selected — the flag itself still has to invalidate a confirmation taken before it
@@ -1081,7 +1098,7 @@ export function buildPublishPlan(
       const descriptor = post.media.find((item) => item.url === url);
       return descriptor ? signalMediaFingerprint(descriptor) : { source: 'URL', url };
     }),
-    scheduledInstant,
+    scheduledInstant: timing === 'now' ? null : scheduledInstant,
     timezone: zone,
     targets,
     platformConfigurations,
@@ -1168,6 +1185,7 @@ export function buildPublishPlan(
     available: true,
     postId: post.id,
     planHash: planHash(stable),
+    timing,
     caption,
     scheduledInstant,
     timezone: zone,
@@ -1198,11 +1216,15 @@ export function buildPublishPlan(
   const bufferOnly =
     targets.length > 0 &&
     targets.every((target) => (target.provider ?? 'post-bridge') === BUFFER_PROVIDER);
-  if (scheduledInstant && publishPreviewRefusals(preview).length === 0 && !bufferOnly)
+  if (
+    (timing === 'scheduled' ? scheduledInstant : timing === 'now') &&
+    publishPreviewRefusals(preview).length === 0 &&
+    !bufferOnly
+  )
     preview.request = {
       caption,
       ...(driveMedia.length ? { mediaIds: [] } : { mediaUrls: media.mediaUrls }),
-      scheduledInstant,
+      scheduledInstant: timing === 'now' ? null : (scheduledInstant as string),
       timezone: zone,
       targets: targets.map((target) => ({
         accountId: target.accountId,

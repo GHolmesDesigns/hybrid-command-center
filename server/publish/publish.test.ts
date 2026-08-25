@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createDb, type Db } from '../db.ts';
 import { LocalSignalProvider } from '../signal/read.ts';
 import { listIntegrationEvents } from '../integration-log.ts';
@@ -1015,6 +1015,15 @@ describe('bounded reconciliation', () => {
       new Date('2030-01-01T00:00:00.000Z'),
     );
     expect(spent).toEqual({ due: false, exhausted: true });
+  });
+
+  it('treats an immediate send as due on the first automatic check', () => {
+    expect(
+      reconcileSchedule(
+        publication({ scheduledInstant: null }),
+        new Date('2026-09-14T12:00:00.000Z'),
+      ),
+    ).toEqual({ dueAt: undefined, due: true, exhausted: false });
   });
 
   it('never schedules a check there is no answer left to ask for', () => {
@@ -2859,5 +2868,74 @@ describe('provider-qualified delivery identity', () => {
     db.prepare("UPDATE signal_publications SET provider='buffer' WHERE id=?").run(publication.id);
     await expect(service.reconcile(publication.id)).rejects.toThrow(/cannot be queried through/);
     expect(provider.checks).toEqual([]);
+  });
+});
+
+describe('Publish now', () => {
+  const previousEvidence = process.env.PUBLISH_NOW_EVIDENCE;
+
+  beforeEach(() => {
+    process.env.PUBLISH_NOW_EVIDENCE = '1';
+  });
+
+  afterEach(() => {
+    if (previousEvidence === undefined) delete process.env.PUBLISH_NOW_EVIDENCE;
+    else process.env.PUBLISH_NOW_EVIDENCE = previousEvidence;
+  });
+
+  it('plans an immediate send with no scheduled instant on the wire', () => {
+    const post = add({ channels: ['x'], date: '2099-01-01', time: '09:00' });
+    const plan = buildPublishPlan(post, targets, 'America/New_York', new Date('2026-01-01'), [], [], false, 'now');
+    expect(plan.timing).toBe('now');
+    expect(plan.request?.scheduledInstant).toBeNull();
+    expect(publishPreviewRefusals(plan)).toEqual([]);
+    expect(plan.warnings.some((warning) => warning.includes('irreversible'))).toBe(true);
+  });
+
+  it('refuses publish now when evidence is closed', () => {
+    delete process.env.PUBLISH_NOW_EVIDENCE;
+    const post = add({ channels: ['x'], date: '2099-01-01', time: '09:00' });
+    const plan = buildPublishPlan(post, targets, 'America/New_York', new Date('2026-01-01'), [], [], false, 'now');
+    expect(publishPreviewRefusals(plan).length).toBeGreaterThan(0);
+    expect(plan.request).toBeUndefined();
+  });
+
+  it('uses a different plan hash from scheduled publishing', () => {
+    const post = add({ channels: ['x'], date: '2099-01-01', time: '09:00' });
+    const scheduled = buildPublishPlan(post, targets, 'America/New_York', new Date('2026-01-01'));
+    const now = buildPublishPlan(
+      post,
+      targets,
+      'America/New_York',
+      new Date('2026-01-01'),
+      [],
+      [],
+      false,
+      'now',
+    );
+    expect(now.planHash).not.toBe(scheduled.planHash);
+  });
+
+  it('submits immediately without changing planning status', async () => {
+    const post = add({ channels: ['x'], date: '2099-01-01', time: '09:00', status: 'SCHEDULED' });
+    const provider = new MockPublishProvider(targets);
+    const service = new PublishService(
+      db,
+      new LocalSignalProvider(db),
+      provider,
+      'America/New_York',
+      () => new Date('2026-01-01'),
+    );
+    const preview = await service.previewNow(post.id);
+    const publication = await service.submitNow(post.id, preview.planHash);
+    expect(publication.state).toBe('SUBMITTED');
+    expect(provider.submissions[0]?.scheduledInstant).toBeNull();
+    expect(
+      (db.prepare('SELECT status FROM signal_posts WHERE id=?').get(post.id) as { status: string })
+        .status,
+    ).toBe('SCHEDULED');
+    expect(
+      listIntegrationEvents(db).some((event) => event.operation === 'signal.publish-now'),
+    ).toBe(true);
   });
 });

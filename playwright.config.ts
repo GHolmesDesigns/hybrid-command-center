@@ -36,6 +36,7 @@ export default defineConfig({
         DATABASE_PATH: './data/e2e.db',
         APP_ORIGIN: e2eWebOrigin,
         BUFFER_API_KEY: 'e2e-buffer-key',
+        PUBLISH_NOW_EVIDENCE: '1',
       },
       url: `${e2eApiOrigin}/api/health`,
       reuseExistingServer: false,
@@ -51,7 +52,7 @@ export default defineConfig({
       // started the same way: the CLI has no reason to stop when Playwright goes away, and
       // an interrupted run that leaves it holding 5174 blocks every run after it.
       command: 'node --experimental-strip-types e2e/start-web.ts',
-      env: { API_PORT, WEB_HOST: '127.0.0.1', WEB_PORT },
+      env: { API_PORT, WEB_HOST: '127.0.0.1', WEB_PORT, VITE_PUBLISH_NOW_EVIDENCE: '1' },
       url: e2eWebOrigin,
       reuseExistingServer: false,
       timeout: 120_000,

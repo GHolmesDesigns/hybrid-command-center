@@ -27,6 +27,7 @@ export const INTEGRATION_OPERATIONS = [
   'calendar.sync',
   'drive.sync',
   'signal.publish',
+  'signal.publish-now',
   'signal.reconcile',
   // Writes to a post the provider already holds. Separate from `signal.publish` because they are a
   // different question in the log — *what did we change out there*, not *what did we send* — and
@@ -129,6 +130,7 @@ export const INTEGRATION_OPERATION_LABEL: Record<IntegrationOperation, string> =
   'calendar.sync': 'Calendar sync',
   'drive.sync': 'Drive sync',
   'signal.publish': 'Signal publish',
+  'signal.publish-now': 'Signal publish now',
   'signal.reconcile': 'Signal reconcile',
   'signal.provider-update': 'Signal provider update',
   'signal.provider-cancel': 'Signal provider cancel',

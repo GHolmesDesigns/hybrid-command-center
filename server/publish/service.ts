@@ -45,6 +45,7 @@ import type { SignalPostMedia } from '../../shared/signal-media.ts';
 import { resolveProviderAccounts } from './accounts.ts';
 import { bufferConfigured } from '../config.ts';
 import type { PublishTarget } from './provider.ts';
+import type { PublishTiming } from '../../shared/publish-now.ts';
 import { BUFFER_PROVIDER, BUFFER_WRITE_EVIDENCE } from '../../shared/buffer.ts';
 import type { BufferWirePreview } from '../../shared/buffer-media.ts';
 import {
@@ -158,6 +159,7 @@ export class PublishService {
     postId: string,
     listedTargets?: readonly PublishTarget[],
     driveOverride = false,
+    timing: PublishTiming = 'scheduled',
   ): Promise<PublishPreview & { request?: PublishRequest; mediaSources?: SignalPostMedia[] }> {
     const publishingConfigured = this.provider.available || bufferConfigured();
     if (!publishingConfigured || !this.timezone)
@@ -215,8 +217,17 @@ export class PublishService {
         await this.signal.listVariants(postId),
         await this.signal.listPublishTargets(postId),
         driveOverride,
+        timing,
       ),
     );
+  }
+
+  previewNow(
+    postId: string,
+    listedTargets?: readonly PublishTarget[],
+    driveOverride = false,
+  ) {
+    return this.preview(postId, listedTargets, driveOverride, 'now');
   }
 
   /** Uploads Drive sources once, after the hash gate and immediately before the post operation. */
@@ -229,7 +240,7 @@ export class PublishService {
     input: {
       postId: string;
       correlationId: string;
-      operation: 'signal.publish' | 'signal.provider-update';
+      operation: 'signal.publish' | 'signal.publish-now' | 'signal.provider-update';
     },
   ): Promise<{
     request: PublishRequest;
@@ -311,8 +322,9 @@ export class PublishService {
     expectedHash: string,
     listedTargets?: readonly PublishTarget[],
     driveOverride = false,
+    timing: PublishTiming = 'scheduled',
   ): Promise<SignalPublication> {
-    const plan = await this.preview(postId, listedTargets, driveOverride);
+    const plan = await this.preview(postId, listedTargets, driveOverride, timing);
     // The gate is every refusal in the plan, per-channel ones included, so a reason the preview
     // showed the user can never be stepped over at commit.
     const blockers = publishPreviewRefusals(plan);
@@ -323,6 +335,11 @@ export class PublishService {
     // Evidence-closed Buffer writes are named before the generic refusal join so Confirm's error
     // stays the production-enablement reason rather than a concatenated plan dump — and so the
     // submit-time gate remains reachable after preview has already refused for the same cause.
+    if (timing === 'now' && bufferOnly)
+      throw new PublishRequestError(
+        'Publish now is not available for Buffer targets until the immediate-create contract is verified.',
+        400,
+      );
     if (bufferOnly && !this.bufferWrite.available)
       throw new PublishRequestError(this.bufferWriteClosedReason(), 409);
     if (!plan.available || blockers.length || (!plan.request && !bufferOnly))
@@ -332,6 +349,7 @@ export class PublishService {
         'The post or provider targets changed after preview. Preview it again before submitting.',
         409,
       );
+    const publishOperation = timing === 'now' ? 'signal.publish-now' : 'signal.publish';
     if (bufferOnly) {
       if (bufferInputs.length !== plan.targets.length)
         throw new PublishRequestError('A Buffer target has no complete write plan.', 400);
@@ -351,7 +369,7 @@ export class PublishService {
     const prepared = await this.prepareMedia(plan, {
       postId,
       correlationId: publicationId,
-      operation: 'signal.publish',
+      operation: publishOperation,
     });
     const request = prepared.request;
     const timestamp = this.clock().toISOString();
@@ -401,7 +419,7 @@ export class PublishService {
           transaction(this.db, () => {
             recordIntegrationEvent(this.db, {
               source: 'signal-campaign',
-              operation: 'signal.publish',
+              operation: publishOperation,
               outcome: 'PARTIAL',
               summary: `${prepared.providerMediaIds.length} provider media asset${prepared.providerMediaIds.length === 1 ? '' : 's'} landed, but a concurrent submit won the local publication lock before any post request was made. Post Bridge documents unattached expiry after 24 hours; that timing remains unverified.`,
               entities: [{ type: 'signalPost', id: postId, label: plan.caption.slice(0, 80) }],
@@ -450,7 +468,7 @@ export class PublishService {
           .filter(Boolean);
         recordIntegrationEvent(this.db, {
           source: 'signal-campaign',
-          operation: 'signal.publish',
+          operation: publishOperation,
           outcome:
             result.state === 'PARTIAL'
               ? 'PARTIAL'
@@ -480,7 +498,7 @@ export class PublishService {
           );
         recordIntegrationEvent(this.db, {
           source: 'signal-campaign',
-          operation: 'signal.publish',
+          operation: publishOperation,
           outcome: ambiguous ? 'PARTIAL' : 'FAILURE',
           summary: ambiguous
             ? 'Publish result is unconfirmed; no retry was attempted.'
@@ -492,6 +510,15 @@ export class PublishService {
       });
     }
     return this.get(publicationId) as SignalPublication;
+  }
+
+  submitNow(
+    postId: string,
+    expectedHash: string,
+    listedTargets?: readonly PublishTarget[],
+    driveOverride = false,
+  ) {
+    return this.submit(postId, expectedHash, listedTargets, driveOverride, 'now');
   }
 
   /**

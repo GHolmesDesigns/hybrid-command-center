@@ -9,6 +9,13 @@ import {
 import type { PublishResolvedContent } from './publish-variants.ts';
 import type { BufferSchedulingType } from './buffer-capabilities.ts';
 import type { BufferWirePreview } from './buffer-media.ts';
+import type { PublishTiming } from './publish-now.ts';
+export type { PublishTiming } from './publish-now.ts';
+export {
+  PUBLISH_NOW_WARNINGS,
+  PUBLISH_TIMING_LABEL,
+  publishNowPlanRefusals,
+} from './publish-now.ts';
 
 export const PUBLICATION_STATES = [
   'SUBMITTING',
@@ -184,6 +191,8 @@ export interface PublishPreview {
   postId: string;
   planHash: string;
   caption: string;
+  /** `scheduled` sends an explicit instant; `now` posts immediately with no scheduled instant. */
+  timing?: PublishTiming;
   scheduledInstant?: string;
   timezone?: string;
   targets: PublishTargetPreview[];
@@ -237,7 +246,7 @@ export interface SignalPublication {
   state: PublicationState;
   provider: string;
   providerPostId?: string;
-  scheduledInstant: string;
+  scheduledInstant: string | null;
   timezone: string;
   sentCaption: string;
   sentChannels: SignalChannel[];
@@ -506,9 +515,15 @@ export function reconcileSchedule(
   ] as number;
   const dueAt =
     publication.checkAttempts === 0 || !publication.checkedAt
-      ? publication.scheduledInstant
+      ? (publication.scheduledInstant ?? undefined)
       : minutesAfter(publication.checkedAt, gap);
-  return { dueAt, due: Date.parse(dueAt) <= now.getTime(), exhausted: false };
+  const due =
+    publication.scheduledInstant === null && publication.checkAttempts === 0
+      ? true
+      : dueAt
+        ? Date.parse(dueAt) <= now.getTime()
+        : false;
+  return { dueAt, due, exhausted: false };
 }
 
 /**
