@@ -3764,6 +3764,35 @@ button.tag-chip.toggle.active {
 .signal-status.status-scheduled {
   color: var(--blue);
 }
+/* Delivery beside planning on a planner card. Named in text and given its own icon shape —
+   colour is a second cue, never the first. Compact enough for month cells and the queue. */
+.signal-card-delivery {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.signal-card-delivery svg {
+  width: 11px;
+  height: 11px;
+}
+.signal-card-delivery.delivery-none {
+  color: var(--muted);
+}
+.signal-card-delivery.delivery-in_flight {
+  color: var(--blue);
+}
+.signal-card-delivery.delivery-delivered {
+  color: var(--green);
+}
+.signal-card-delivery.delivery-partial,
+.signal-card-delivery.delivery-failed,
+.signal-card-delivery.delivery-ambiguous,
+.signal-card-delivery.delivery-manual {
+  color: #8d601c;
+}
 /* Painted from the channel's own treatment, the same three properties the calendar's chip
    reads. The initial sits on top of them and is what identifies the channel; the colours are
    the second cue and never the first. */

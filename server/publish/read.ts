@@ -47,3 +47,26 @@ export function publicationsForHealth(db: Db, createdSince: string): SignalPubli
     .all(createdSince) as unknown as PublicationRow[];
   return rows.map((row) => toPublication(row, targetRowsFor(db, row.id)));
 }
+
+/**
+ * The delivery records for one planner batch of posts.
+ *
+ * Bounded by the post ids the planner already decided to show — the dated range page plus the
+ * unscheduled queue — so opening Signal is one local read rather than one request per card. Empty
+ * input is an empty answer: there is nothing to look up and no reason to build an `IN ()`.
+ *
+ * Read-only: the same `toPublication` / `targetRowsFor` path the health summary uses, with no
+ * drift recomputation and no provider contact.
+ */
+export function publicationsForPosts(db: Db, postIds: readonly string[]): SignalPublication[] {
+  if (postIds.length === 0) return [];
+  const placeholders = postIds.map(() => '?').join(',');
+  const rows = db
+    .prepare(
+      `SELECT * FROM signal_publications
+        WHERE post_id IN (${placeholders})
+        ORDER BY created_at DESC, id DESC`,
+    )
+    .all(...postIds) as unknown as PublicationRow[];
+  return rows.map((row) => toPublication(row, targetRowsFor(db, row.id)));
+}

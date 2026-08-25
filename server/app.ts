@@ -80,6 +80,7 @@ import {
   restoreQueueAlert,
   writeQueueHealthConfig,
 } from './signal/queue-health.ts';
+import { readCardDeliveries } from './signal/card-delivery.ts';
 import {
   SignalCampaignInUseError,
   SignalCampaignNameTakenError,
@@ -1627,6 +1628,22 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   app.get('/api/signal/health', (_req, res, next) => {
     try {
       res.json(readQueueHealth(db, clock()));
+    } catch (error) {
+      next(error);
+    }
+  });
+  /**
+   * Delivery answers for every planner card in the range, plus the unscheduled queue.
+   *
+   * One bounded local read of publication and target rows. Opening Signal spends no provider
+   * request and no per-card HTTP call — the grid already has the posts; this is the delivery
+   * half derived beside them. Nothing here writes a post or a planning status.
+   */
+  app.get('/api/signal/card-delivery', (req, res, next) => {
+    try {
+      const { from, to } = signalRangeQuery.parse(req.query);
+      if (from > to) return res.status(400).json({ error: 'The range ends before it starts.' });
+      res.json(readCardDeliveries(db, from, to));
     } catch (error) {
       next(error);
     }
