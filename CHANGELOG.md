@@ -8,6 +8,20 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.2.1] - 2026-08-25
+
+### Added
+
+- **Publish now** is a separate, irreversible action from scheduled publishing: its own no-write
+  preview and confirmation name the provider, accounts, effective content, media, delivery mode,
+  and the absence of a scheduled instant. Post Bridge sends `scheduled_at: null` only on this path;
+  Buffer stays refused until its immediate-create contract is verified. Production remains
+  evidence-gated until the owner-run probe records a dated §14 result.
+
+### Breaking changes
+
+None.
+
 ## [5.2.0] - 2026-08-25
 
 ### Added
