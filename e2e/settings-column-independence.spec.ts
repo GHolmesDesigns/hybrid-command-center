@@ -127,9 +127,9 @@ test('each Settings column stacks on its own at desktop width', async ({ page })
 
   const cards = await cardBoxes(page);
   expect(cards.map((card) => card.heading)).toEqual(READING_ORDER);
-  // Four cards in the left stack and three in the right, and every card in one — a card left as
+  // Four cards in the left stack and four in the right, and every card in one — a card left as
   // the grid's own child would report column -1 and be back in a shared row track.
-  expect(cards.map((card) => card.column)).toEqual([0, 0, 0, 0, 1, 1, 1]);
+  expect(cards.map((card) => card.column)).toEqual([0, 0, 0, 0, 1, 1, 1, 1]);
 
   const [left, right] = [0, 1].map((column) => cards.filter((card) => card.column === column));
 

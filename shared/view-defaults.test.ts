@@ -46,6 +46,15 @@ describe('viewDefaultsIssues', () => {
       path: 'clients.sort',
       message: 'Unknown clients field "sort".',
     });
+    expect(
+      viewDefaultsIssues({
+        ...CANONICAL_VIEW_DEFAULTS,
+        projects: { visibility: 'live', sort: 'recently-updated', layout: 'grid' },
+      }),
+    ).toContainEqual({
+      path: 'projects.layout',
+      message: 'Unknown projects field "layout".',
+    });
   });
 
   it('rejects a value outside the settled vocabulary', () => {
@@ -57,9 +66,69 @@ describe('viewDefaultsIssues', () => {
       path: 'projects.sort',
       message: `Expected one of ${PROJECT_SORTS.join(', ')}.`,
     });
+    expect(
+      viewDefaultsIssues(
+        defaults({ projects: { visibility: 'active' as never, sort: 'recently-updated' } }),
+      ),
+    ).toContainEqual({
+      path: 'projects.visibility',
+      message: 'Expected one of live, archived, all.',
+    });
+    expect(
+      viewDefaultsIssues(defaults({ clients: { visibility: 'live' as never } })),
+    ).toContainEqual({
+      path: 'clients.visibility',
+      message: 'Expected one of active, archived, all.',
+    });
     expect(viewDefaultsIssues(defaults({ calendar: { view: 'year' as never } }))).toContainEqual({
       path: 'calendar.view',
       message: 'Expected one of today, week, month.',
+    });
+  });
+
+  it('rejects a page entry that is not a plain object', () => {
+    expect(viewDefaultsIssues({ ...CANONICAL_VIEW_DEFAULTS, clients: null })).toContainEqual({
+      path: 'clients',
+      message: 'Expected a clients defaults object.',
+    });
+    expect(viewDefaultsIssues({ ...CANONICAL_VIEW_DEFAULTS, clients: ['active'] })).toContainEqual({
+      path: 'clients',
+      message: 'Expected a clients defaults object.',
+    });
+    expect(viewDefaultsIssues({ ...CANONICAL_VIEW_DEFAULTS, projects: [] })).toContainEqual({
+      path: 'projects',
+      message: 'Expected a projects defaults object.',
+    });
+    expect(viewDefaultsIssues({ ...CANONICAL_VIEW_DEFAULTS, calendar: 'month' })).toContainEqual({
+      path: 'calendar',
+      message: 'Expected a calendar defaults object.',
+    });
+    expect(viewDefaultsIssues({ ...CANONICAL_VIEW_DEFAULTS, signal: null })).toContainEqual({
+      path: 'signal',
+      message: 'Expected a signal defaults object.',
+    });
+  });
+
+  it('still validates present pages when another page is absent', () => {
+    const withoutClients = {
+      projects: CANONICAL_VIEW_DEFAULTS.projects,
+      calendar: CANONICAL_VIEW_DEFAULTS.calendar,
+      signal: CANONICAL_VIEW_DEFAULTS.signal,
+    };
+    const issues = viewDefaultsIssues(withoutClients);
+    expect(issues).toContainEqual({ path: 'clients', message: 'Missing page "clients".' });
+    expect(isViewDefaults(withoutClients)).toBe(false);
+  });
+
+  it('rejects an unknown field on a time-view page', () => {
+    expect(
+      viewDefaultsIssues({
+        ...CANONICAL_VIEW_DEFAULTS,
+        calendar: { view: 'month', period: 'current' },
+      }),
+    ).toContainEqual({
+      path: 'calendar.period',
+      message: 'Unknown calendar field "period".',
     });
   });
 
