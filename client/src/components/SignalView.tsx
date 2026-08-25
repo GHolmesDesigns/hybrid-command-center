@@ -87,6 +87,12 @@ import {
   type SignalPublicationTarget,
 } from '../../../shared/publish';
 import {
+  CARD_DELIVERY_LABEL,
+  type CardDelivery,
+  type CardDeliverySnapshot,
+  type CardDeliveryState,
+} from '../../../shared/card-delivery';
+import {
   publishPlatformFor,
   publishPostKindFor,
   PUBLISH_PLATFORM_LABEL,
@@ -213,6 +219,20 @@ const StatusIcon = ({ status }: { status: SignalStatus }) =>
   );
 
 /**
+ * Delivery on a planner card: icon shape plus words, never colour alone.
+ *
+ * Reuses the same shapes the delivery panel already taught — check, clock, alert, stop — so a
+ * card and an open post agree about what "needs attention" looks like.
+ */
+const CardDeliveryIcon = ({ state }: { state: CardDeliveryState }) => {
+  if (state === 'DELIVERED') return <CheckCircle2 aria-hidden="true" />;
+  if (state === 'FAILED' || state === 'AMBIGUOUS' || state === 'PARTIAL' || state === 'MANUAL')
+    return <AlertTriangle aria-hidden="true" />;
+  if (state === 'IN_FLIGHT') return <Clock3 aria-hidden="true" />;
+  return <Circle aria-hidden="true" />;
+};
+
+/**
  * One channel, as a swatch with its initial on it. The colours come from the channel's own
  * treatment and the initial is drawn on top of them, so the chip still names its channel with
  * the hue removed. Beside a checkbox the full name is already the label, which is the one place
@@ -233,11 +253,25 @@ function ChannelChip({ channel, labelled = true }: { channel: SignalChannel; lab
   );
 }
 
-function PostMeta({ post }: { post: SignalPost }) {
+/**
+ * Planning status and delivery status, named separately on the card.
+ *
+ * Planning is the user's own claim (`SignalPost.status`). Delivery is the derived answer from
+ * stored publication/target rows. They share a row so a glance sees both, and each carries its
+ * own label prefix so neither is only a colour.
+ */
+function PostMeta({ post, delivery }: { post: SignalPost; delivery: CardDelivery }) {
   return (
     <div className="signal-post-meta">
       <span className={`signal-status status-${post.status.toLowerCase()}`}>
-        <StatusIcon status={post.status} /> {SIGNAL_STATUS_LABEL[post.status]}
+        <StatusIcon status={post.status} />
+        <span className="sr-only">Planning: </span>
+        {SIGNAL_STATUS_LABEL[post.status]}
+      </span>
+      <span className={`signal-card-delivery delivery-${delivery.state.toLowerCase()}`}>
+        <CardDeliveryIcon state={delivery.state} />
+        <span className="sr-only">Delivery: </span>
+        {delivery.label}
       </span>
       {post.channels.map((channel) => (
         <ChannelChip channel={channel} key={channel} />
@@ -471,10 +505,12 @@ function DeliveryTarget({
  */
 function Post({
   post,
+  delivery,
   open,
   preview = false,
 }: {
   post: SignalPost;
+  delivery: CardDelivery;
   open: (post: SignalPost) => void;
   /** Set in a day cell, which has neighbours to stretch. The queue is a column of its own. */
   preview?: boolean;
@@ -491,7 +527,7 @@ function Post({
         onClick={() => open(post)}
         aria-label={`Edit ${post.text}`}
       >
-        <PostMeta post={post} />
+        <PostMeta post={post} delivery={delivery} />
         <span className="signal-post-text" id={textId}>
           {trimmed && !expanded ? previewOf(post.text) : post.text}
         </span>
@@ -1826,6 +1862,14 @@ export function SignalView() {
   const [posts, setPosts] = useState<SignalPost[]>([]);
   const [queue, setQueue] = useState<SignalPost[]>([]);
   /**
+   * Delivery answers for every card currently on the planner, keyed by post id.
+   *
+   * Loaded in the same pass as the posts — one bounded local batch, never a request per card and
+   * never a provider call. Absent ids fall back to "not submitted" so a card always has two named
+   * indicators even if the batch and the grid briefly disagree.
+   */
+  const [cardDeliveries, setCardDeliveries] = useState<Map<string, CardDelivery>>(new Map());
+  /**
    * The workspace's campaigns, for the editor's chip input to suggest from.
    *
    * Loaded here rather than in the editor so opening a post costs no extra request, and reloaded
@@ -1860,15 +1904,17 @@ export function SignalView() {
     setError('');
     const { from, to } = bounds;
     try {
-      const [range, nextQueue, nextCampaigns] = await Promise.all([
+      const [range, nextQueue, nextCampaigns, nextDeliveries] = await Promise.all([
         api<SignalRange>(`/signal/posts?from=${from}&to=${to}`),
         api<SignalPost[]>('/signal/queue'),
         api<SignalCampaignSummary[]>('/signal/campaigns'),
+        api<CardDeliverySnapshot>(`/signal/card-delivery?from=${from}&to=${to}`),
       ]);
       setPosts(range.posts);
       setTruncated(range.truncated);
       setQueue(nextQueue);
       setCampaigns(nextCampaigns);
+      setCardDeliveries(new Map(nextDeliveries.deliveries.map((entry) => [entry.postId, entry])));
     } catch (reason) {
       setError((reason as Error).message);
     } finally {
@@ -1876,6 +1922,15 @@ export function SignalView() {
     }
   }, [bounds]);
 
+  const deliveryFor = useCallback(
+    (postId: string): CardDelivery =>
+      cardDeliveries.get(postId) ?? {
+        postId,
+        state: 'NONE',
+        label: CARD_DELIVERY_LABEL.NONE,
+      },
+    [cardDeliveries],
+  );
   useEffect(() => {
     void load();
   }, [load]);
@@ -1912,7 +1967,14 @@ export function SignalView() {
       },
       { replace: true },
     );
-  }, [setParams]);
+    // The editor can submit, finish, or cancel a delivery without going through `saved`, so the
+    // cards reread their batch when it closes rather than keeping a stale "not submitted".
+    void api<CardDeliverySnapshot>(`/signal/card-delivery?from=${bounds.from}&to=${bounds.to}`)
+      .then((snapshot) =>
+        setCardDeliveries(new Map(snapshot.deliveries.map((entry) => [entry.postId, entry]))),
+      )
+      .catch(() => undefined);
+  }, [bounds.from, bounds.to, setParams]);
 
   const byDate = useMemo(() => {
     const grouped = new Map<string, SignalPost[]>();
@@ -2034,7 +2096,7 @@ export function SignalView() {
             <ul className="signal-queue-list">
               {queue.map((post) => (
                 <li key={post.id}>
-                  <Post post={post} open={setEditing} />
+                  <Post post={post} delivery={deliveryFor(post.id)} open={setEditing} />
                 </li>
               ))}
             </ul>
@@ -2103,7 +2165,12 @@ export function SignalView() {
                     <ul>
                       {scheduled.map((post) => (
                         <li key={post.id}>
-                          <Post post={post} open={setEditing} preview />
+                          <Post
+                            post={post}
+                            delivery={deliveryFor(post.id)}
+                            open={setEditing}
+                            preview
+                          />
                         </li>
                       ))}
                     </ul>

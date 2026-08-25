@@ -8,6 +8,22 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.1.0] - 2026-08-25
+
+### Added
+
+- Signal planner cards now show **planning status** and **delivery status** as two separately named
+  indicators. Delivery is derived from stored publication and target rows in one bounded local
+  batch when the planner opens — no provider call, and no request per card. Cards distinguish not
+  submitted, in progress, delivered, partly delivered, not delivered, unconfirmed, and finish by
+  hand, with text and iconography rather than colour alone. Partial and unconfirmed answers stay
+  visible instead of collapsing into scheduled or failed. The calendar remains read-only, and
+  provider results still never write a post's planning status.
+
+### Breaking changes
+
+None.
+
 ## [5.0.1] - 2026-08-25
 
 ### Fixed

@@ -43,6 +43,7 @@ import type {
   PublishPreview,
   SignalPublication,
 } from '../../shared/publish';
+import type { CardDelivery, CardDeliverySnapshot } from '../../shared/card-delivery';
 import type { PublishVariantRecord } from '../../shared/publish-variants';
 import type { PostMetricsSummary } from '../../shared/publish-analytics';
 import {
@@ -218,6 +219,11 @@ export const testState = {
   signalMutationError: null as string | null,
   publishPreviewPayload: null as PublishPreview | null,
   publicationsPayload: [] as SignalPublication[],
+  /**
+   * Planner-card delivery answers. Unset means every post in the planner payload is "not
+   * submitted", which is what suites that are not about card delivery should see.
+   */
+  cardDeliveryPayload: null as CardDelivery[] | null,
   publishSubmitPayload: null as SignalPublication | null,
   publishReconcilePayload: null as SignalPublication | null,
   publishFinishPayload: null as SignalPublication | null,
@@ -707,6 +713,19 @@ const respondTo = (url: string, init?: RequestInit) => {
     return testState.queueHealthError
       ? reply(503, { error: testState.queueHealthError })
       : testState.queueHealthSummary;
+  if (url.includes('/api/signal/card-delivery?') && method === 'GET') {
+    const query = new URL(url, 'http://localhost').searchParams;
+    const from = query.get('from') ?? '';
+    const to = query.get('to') ?? '';
+    const deliveries =
+      testState.cardDeliveryPayload ??
+      testState.signalPostsPayload.map((post): CardDelivery => ({
+        postId: post.id,
+        state: 'NONE',
+        label: 'Not submitted',
+      }));
+    return { from, to, deliveries } satisfies CardDeliverySnapshot;
+  }
   if (url.endsWith('/api/signal/health/config') && method === 'PUT') {
     testState.queueHealthSummary = {
       ...testState.queueHealthSummary,
@@ -1481,6 +1500,7 @@ beforeEach(() => {
   testState.signalMutationError = null;
   testState.publishPreviewPayload = null;
   testState.publicationsPayload = [];
+  testState.cardDeliveryPayload = null;
   testState.publishSubmitPayload = null;
   testState.publishReconcilePayload = null;
   testState.publishFinishPayload = null;
