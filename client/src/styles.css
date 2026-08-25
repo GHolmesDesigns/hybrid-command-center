@@ -573,6 +573,12 @@ button svg,
   color: var(--ink);
   font-weight: 700;
 }
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
 .top-action {
   padding: 9px 13px;
   flex-shrink: 0;
@@ -3687,6 +3693,22 @@ button.tag-chip.toggle.active {
   font-size: 12px;
   font-weight: 700;
 }
+.signal-day-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.signal-day-add {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  color: var(--muted);
+}
+.signal-day-add:hover,
+.signal-day-add:focus-visible {
+  color: var(--ink);
+  background: #eef1eb;
+}
 .signal-day > header strong {
   padding: 2px 5px;
   border-radius: 999px;
@@ -3698,6 +3720,15 @@ button.tag-chip.toggle.active {
 .signal-day-empty {
   color: #a3a8a4;
   font-size: 10px;
+}
+.signal-add-post {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-bottom: 12px;
+  padding: 9px 12px;
 }
 /* The frame is the wrapper, not a control: editing and expanding are two sibling buttons
    inside it, so neither can nest in the other. */

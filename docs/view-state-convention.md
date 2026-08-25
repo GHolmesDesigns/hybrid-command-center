@@ -39,7 +39,7 @@ contain an unknown or retired value.
 | Projects | Collection | Live projects by recent activity | `visibility`, `client`, `sort`, and `categories` |
 | Status | Workflow board | Canonical task-status order | Project, client, priority, type, focus, and tag filters |
 | Calendar | Time view | Current week | View and selected date/month when away from the default |
-| Signal | Time view | Current week | View and selected date/month when away from the default, `post` for an open post, and `campaigns`, `channels`, `accounts`, `from`, and `to` for the campaign-figures filters |
+| Signal | Time view | Current week | View and selected date/month when away from the default, `post` for an open post, `new` for the shared Add Post form, and `campaigns`, `channels`, `accounts`, `from`, and `to` for the campaign-figures filters |
 | Files | Context browser | Explicit project, remembered project, then first live project | Project and folder selections |
 
 Projects uses `live`, `archived`, and `all`; Clients uses its domain term `active` in place of
@@ -59,3 +59,11 @@ Signal's `post` is a selection rather than a period: it names the post whose edi
 queue-health alert can link straight to the post it is about. It is read defensively like every other
 parameter — a post the workspace no longer has reports itself and leaves the planner usable — and it
 is dropped from the address when the editor closes, so the ordinary planner keeps a short one.
+
+Signal's `new` is the shared Add Post creation state. Every entry point — the day-cell plus, the
+queue **Add post** action, and the top navigation **Add post** action — writes the same parameter
+and opens the same editor form. `new=1` starts an unscheduled draft; `new=YYYY-MM-DD` starts one
+dated to that local calendar day, never an instant, so a cell's date survives every timezone. An
+invalid value is ignored. Closing, saving, or opening an existing post drops `new` and leaves
+month, view, and campaign-figure filters alone. When both `post` and `new` are present, `post`
+wins so an alert link still opens the post it named.
