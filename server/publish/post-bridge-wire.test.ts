@@ -40,6 +40,15 @@ describe('Post Bridge media wire shapes', () => {
     expect(postBridgePostBody(request)).not.toHaveProperty('media_urls');
   });
 
+  it('sends null scheduled_at when the request carries no instant', () => {
+    const request: PublishRequest = {
+      ...base,
+      scheduledInstant: null,
+      mediaUrls: ['https://cdn.test/image.png'],
+    };
+    expect(postBridgePostBody(request).scheduled_at).toBeNull();
+  });
+
   it('builds and parses the verified reservation fields', () => {
     expect(
       postBridgeUploadReservationBody({ name: 'image.png', mimeType: 'image/png', sizeBytes: 136 }),

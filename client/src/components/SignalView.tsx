@@ -114,6 +114,10 @@ import { SignalAnalyticsWindowPanel } from './SignalAnalyticsWindow';
 import { SignalMetrics } from './SignalMetrics';
 import { previewPlatforms, variantList, variantMap } from './signal-variants';
 import { BUFFER_PROVIDER } from '../../../shared/buffer';
+import {
+  POST_BRIDGE_PUBLISH_NOW_EVIDENCE,
+  publishNowEvidenceEnabled,
+} from '../../../shared/publish-now';
 
 type SignalRange = {
   from: string;
@@ -671,6 +675,10 @@ function Editor({
   const hasUnsavedVariants =
     JSON.stringify(variantList(layers)) !== JSON.stringify(variantList(savedLayers));
   const hasPublishableChannel = Boolean(post?.channels.some((channel) => channel !== 'blog'));
+  const publishNowOffered =
+    POST_BRIDGE_PUBLISH_NOW_EVIDENCE.enabled ||
+    publishNowEvidenceEnabled() ||
+    import.meta.env.VITE_PUBLISH_NOW_EVIDENCE === '1';
   const hasTailorablePlatform = post ? previewPlatforms(post).length > 0 : false;
   const warnsAboutXLink = draft.channels.includes('x') && signalTextHasLink(draft.text);
   /**
@@ -836,6 +844,29 @@ function Editor({
     return run;
   };
 
+  const previewPublishNow = async () => {
+    if (!post) return;
+    if (previewInFlight.current) return previewInFlight.current;
+    setBusy(true);
+    setError('');
+    const run = (async () => {
+      try {
+        setPublishPreview(
+          await send<PublishPreview>(`/signal/posts/${post.id}/publish-now/preview`, 'POST', {
+            driveOverride,
+          }),
+        );
+      } catch (reason) {
+        setError((reason as Error).message);
+      } finally {
+        setBusy(false);
+        previewInFlight.current = null;
+      }
+    })();
+    previewInFlight.current = run;
+    return run;
+  };
+
   /**
    * An account override saved from inside the preview, and the preview re-run against it.
    *
@@ -862,11 +893,11 @@ function Editor({
     setError('');
     try {
       await send(`/signal/posts/${post.id}/publish-targets`, 'PUT', { targets });
-      setPublishPreview(
-        await send<PublishPreview>(`/signal/posts/${post.id}/publish/preview`, 'POST', {
-          driveOverride,
-        }),
-      );
+      const previewPath =
+        publishPreview?.timing === 'now'
+          ? `/signal/posts/${post.id}/publish-now/preview`
+          : `/signal/posts/${post.id}/publish/preview`;
+      setPublishPreview(await send<PublishPreview>(previewPath, 'POST', { driveOverride }));
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Could not save the accounts.');
     } finally {
@@ -886,11 +917,11 @@ function Editor({
     setBusy(true);
     setError('');
     try {
-      setPublishPreview(
-        await send<PublishPreview>(`/signal/posts/${post.id}/publish/preview`, 'POST', {
-          driveOverride: next,
-        }),
-      );
+      const previewPath =
+        publishPreview?.timing === 'now'
+          ? `/signal/posts/${post.id}/publish-now/preview`
+          : `/signal/posts/${post.id}/publish/preview`;
+      setPublishPreview(await send<PublishPreview>(previewPath, 'POST', { driveOverride: next }));
     } catch (reason) {
       setError((reason as Error).message);
     } finally {
@@ -903,11 +934,14 @@ function Editor({
     setBusy(true);
     setError('');
     try {
-      const publication = await send<SignalPublication>(
-        `/signal/posts/${post.id}/publish`,
-        'POST',
-        { planHash: publishPreview.planHash, driveOverride },
-      );
+      const path =
+        publishPreview.timing === 'now'
+          ? `/signal/posts/${post.id}/publish-now`
+          : `/signal/posts/${post.id}/publish`;
+      const publication = await send<SignalPublication>(path, 'POST', {
+        planHash: publishPreview.planHash,
+        driveOverride,
+      });
       setPublications((current) => [publication, ...current]);
       setPublishPreview(null);
     } catch (reason) {
@@ -1679,7 +1713,9 @@ function Editor({
                         {PUBLICATION_STATE_LABEL[publication.state]}
                       </DeliveryChip>{' '}
                       <span className="signal-delivery-instant">
-                        {new Date(publication.scheduledInstant).toLocaleString()}
+                        {publication.scheduledInstant
+                          ? new Date(publication.scheduledInstant).toLocaleString()
+                          : 'Immediate send'}
                       </span>
                     </p>
                     <p>{PUBLICATION_STATE_DESCRIPTION[publication.state]}</p>
@@ -1799,14 +1835,30 @@ function Editor({
             </section>
           )}
           {post && publishPreview && (
-            <section className="signal-publish-preview" aria-label="Publish confirmation">
-              <h3>Confirm publishing</h3>
-              {publishPreview.scheduledInstant && (
+            <section
+              className="signal-publish-preview"
+              aria-label={
+                publishPreview.timing === 'now'
+                  ? 'Publish now confirmation'
+                  : 'Publish confirmation'
+              }
+            >
+              <h3>
+                {publishPreview.timing === 'now' ? 'Confirm publish now' : 'Confirm publishing'}
+              </h3>
+              {publishPreview.timing === 'now' ? (
                 <p>
-                  <strong>{publishPreview.timezone}</strong>: {post.date} at {post.time}
-                  <br />
-                  UTC: {publishPreview.scheduledInstant}
+                  <strong>No scheduled instant.</strong> The provider posts immediately. Signal
+                  keeps the planned date and time ({post.date} at {post.time}) for planning only.
                 </p>
+              ) : (
+                publishPreview.scheduledInstant && (
+                  <p>
+                    <strong>{publishPreview.timezone}</strong>: {post.date} at {post.time}
+                    <br />
+                    UTC: {publishPreview.scheduledInstant}
+                  </p>
+                )
               )}
               {/* The post's own caption. What each target actually receives is in its own tab,
                   because after an override there is no single answer to show here. */}
@@ -1858,7 +1910,7 @@ function Editor({
                   onClick={confirmPublish}
                   disabled={busy || publishPreviewRefusals(publishPreview).length > 0}
                 >
-                  Confirm and submit
+                  {publishPreview.timing === 'now' ? 'Confirm publish now' : 'Confirm and submit'}
                 </button>
               </div>
             </section>
@@ -1889,16 +1941,30 @@ function Editor({
               )}
             </button>
             {post && post.date && hasPublishableChannel && !publishPreview && (
-              <button
-                type="button"
-                className="secondary"
-                disabled={busy || hasUnsavedChanges || hasUnsavedVariants}
-                onClick={previewPublish}
-              >
-                {hasUnsavedChanges || hasUnsavedVariants
-                  ? 'Save changes before preview'
-                  : 'Show preview'}
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={busy || hasUnsavedChanges || hasUnsavedVariants}
+                  onClick={previewPublish}
+                >
+                  {hasUnsavedChanges || hasUnsavedVariants
+                    ? 'Save changes before preview'
+                    : 'Show preview'}
+                </button>
+                {publishNowOffered && (
+                  <button
+                    type="button"
+                    className="secondary danger-text"
+                    disabled={busy || hasUnsavedChanges || hasUnsavedVariants}
+                    onClick={previewPublishNow}
+                  >
+                    {hasUnsavedChanges || hasUnsavedVariants
+                      ? 'Save changes before publish now'
+                      : 'Publish now'}
+                  </button>
+                )}
+              </>
             )}
           </div>
         </form>

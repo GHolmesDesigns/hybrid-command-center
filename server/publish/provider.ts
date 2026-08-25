@@ -75,7 +75,8 @@ export interface PublishAccountConfiguration {
 
 interface PublishRequestBase {
   caption: string;
-  scheduledInstant: string;
+  /** An explicit instant for scheduled delivery, or null when the provider posts immediately. */
+  scheduledInstant: string | null;
   timezone: string;
   targets: { accountId: number; provider?: string; accountRef?: string; platform: string }[];
   /** Omitted entirely when no platform is tailored. */

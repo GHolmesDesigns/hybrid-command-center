@@ -276,7 +276,10 @@ CREATE TABLE IF NOT EXISTS signal_post_publish_targets (
 CREATE TABLE IF NOT EXISTS signal_publications (
   id TEXT PRIMARY KEY, post_id TEXT NOT NULL REFERENCES signal_posts(id) ON DELETE RESTRICT,
   state TEXT NOT NULL, provider TEXT NOT NULL, provider_post_id TEXT,
-  idempotency_key TEXT NOT NULL UNIQUE, scheduled_instant TEXT NOT NULL, timezone TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL UNIQUE,
+  -- NULL means the provider was asked to post immediately (Publish now); a string is the explicit
+  -- instant that was sent for scheduled publishing.
+  scheduled_instant TEXT, timezone TEXT NOT NULL,
   sent_caption TEXT NOT NULL, sent_channels TEXT NOT NULL, error TEXT,
   -- What the provider was handed, snapshotted like the caption above: sent_media is the JSON media
   -- array and sent_configurations the JSON platform_configurations. Both exist so that comparing a
@@ -795,6 +798,43 @@ export function applyAdditiveMigrations(db: Db, referenceSchema = schema): strin
 }
 
 /**
+ * Relaxes `signal_publications.scheduled_instant` from NOT NULL to nullable so Publish now rows
+ * can record the absence of a scheduled instant. SQLite cannot drop NOT NULL through `ALTER TABLE`,
+ * so an existing table is rebuilt once when the live column still carries the constraint.
+ */
+export function relaxPublicationScheduledInstant(db: Db): boolean {
+  const column = tableInfo(db, 'signal_publications').find(
+    (entry) => entry.name === 'scheduled_instant',
+  );
+  if (!column?.notnull) return false;
+  transaction(db, () => {
+    db.exec(`CREATE TABLE signal_publications_scheduled_instant_migration (
+      id TEXT PRIMARY KEY, post_id TEXT NOT NULL REFERENCES signal_posts(id) ON DELETE RESTRICT,
+      state TEXT NOT NULL, provider TEXT NOT NULL, provider_post_id TEXT,
+      idempotency_key TEXT NOT NULL UNIQUE, scheduled_instant TEXT, timezone TEXT NOT NULL,
+      sent_caption TEXT NOT NULL, sent_channels TEXT NOT NULL, error TEXT,
+      sent_media TEXT, sent_configurations TEXT,
+      sent_media_sources TEXT, sent_provider_media_ids TEXT,
+      sent_account_configurations TEXT,
+      checked_at TEXT, check_attempts INTEGER NOT NULL DEFAULT 0,
+      checked_state TEXT, prior_state TEXT,
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+    )`);
+    db.exec(`INSERT INTO signal_publications_scheduled_instant_migration
+      SELECT id, post_id, state, provider, provider_post_id, idempotency_key, scheduled_instant,
+             timezone, sent_caption, sent_channels, error, sent_media, sent_configurations,
+             sent_media_sources, sent_provider_media_ids, sent_account_configurations,
+             checked_at, check_attempts, checked_state, prior_state, created_at, updated_at
+        FROM signal_publications`);
+    db.exec('DROP TABLE signal_publications');
+    db.exec(
+      'ALTER TABLE signal_publications_scheduled_instant_migration RENAME TO signal_publications',
+    );
+  });
+  return true;
+}
+
+/**
  * Gives every project a `last_activity_at`, taking it from the `updated_at` the
  * row already carries, and returns how many rows it filled.
  *
@@ -1151,6 +1191,7 @@ export function createDb(
   db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;');
   db.exec(tableSchema);
   const applied = applyAdditiveMigrations(db);
+  relaxPublicationScheduledInstant(db);
   backfillProjectActivity(db);
   backfillSignalCampaigns(db);
   backfillProviderAccounts(db);
