@@ -8,6 +8,124 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.0.0] - 2026-08-25
+
+Version 5.0 turns Signal into a fuller planning and publishing workspace. It brings provider-aware
+publishing, richer delivery oversight, campaign figures, safer imports, more useful calendar and
+Status views, and a collection of workflow and accessibility improvements into one release —
+closing out every change fragment recorded since 4.0.0 (C40 onward) in one consolidated entry.
+
+### Publish through the right provider
+
+- Signal can route publishing accounts explicitly instead of assuming every account belongs to one
+  provider. Existing Post Bridge history remains intact, while TikTok and YouTube can use Buffer
+  without automatic fallback, dual submission, or first-matching account behavior.
+- Publishing previews identify the provider account selected for each channel and explain whether
+  the target is ready, blocked, or unavailable.
+- Buffer account discovery is read-only, server-side, and limited to explicitly mapped TikTok and
+  YouTube channels.
+- Buffer and Post Bridge identities stay separate all the way through planning, delivery,
+  inventory, and reconciliation.
+- Media and platform checks are specific to the chosen provider and post shape. Unsupported
+  combinations are refused before confirmation.
+- A confirmed Buffer submission records each target's own remote post identity and reports
+  complete, partial, failed, or unconfirmed outcomes without silently retrying an ambiguous write.
+- Threads joins Signal's supported channels, wired to Post Bridge's existing capability.
+- What the publishing integration deliberately does not build is recorded, with the reason and the
+  concrete thing that would reopen each item.
+
+### Keep published work under control
+
+- Compare a submitted post with what its provider currently holds.
+- Confirm separate actions to update content, update the schedule, cancel a scheduled provider
+  post, or restore from Signal and resubmit.
+- See provider inventory, including posts the provider holds that Signal did not create, without
+  adopting or modifying them.
+- Review **What needs attention** for failed, partial, unconfirmed, overdue, manually finished,
+  stale, or under-covered deliveries. Acknowledging an alert never changes the underlying post.
+
+### Understand performance in context
+
+- **Figures** shows provider-reported views, likes, comments, and shares per delivery, plus daily
+  gains where the provider supplies them.
+- Signal campaigns group posts with reusable labels and aggregate the provider's own delivery
+  figures.
+- Campaign filters and date ranges remain bookmarkable, and **No campaign** remains visible rather
+  than hiding uncategorized work.
+- Refreshes are always initiated by a person. A failed refresh preserves the last complete
+  known-good snapshot.
+
+### Plan and navigate more easily
+
+- Calendar and Signal now offer linkable Today, Week, and Month views.
+- Project tasks can be reordered with drag-and-drop or an accessible position control, and the
+  same order appears on the Status board.
+- Status filters support multiple clients, projects, priorities, task types, and focus values,
+  with selections preserved in the URL.
+- Projects open on live work by recent activity and preserve filter and sort choices in browser
+  history.
+- Project status, Signal channels, notes, categories, and responsive Settings layouts are clearer
+  and easier to scan.
+- Task cards show their internal working notes separately from the client-facing description,
+  clamped so a long note cannot take over the card.
+- Signal editors include reusable channel presets while keeping every final channel choice
+  editable.
+
+### Import and organize with safer identities
+
+- Signal's workbook format supports a preview-first, confirmed import of campaign content into the
+  local schedule.
+- A post's import identity survives edits to its copy, allowing a later import to update the
+  intended post instead of creating a duplicate.
+- Drive media references are resolved as metadata during preview and written with the post only
+  after confirmation; preview does not read file bytes.
+- Client imports can match a durable external identity instead of relying on a changeable name.
+- Client merges can choose the surviving value field by field while preserving projects, aliases,
+  Drive boundaries, and audit-safe confirmation.
+- What Signal import deliberately leaves unbuilt is recorded, with why and the concrete thing that
+  would reopen each item.
+
+### Fixes and refinements
+
+- The first **Show preview** action behaves consistently instead of requiring a second attempt.
+- Publishing account controls remain aligned with the account names and state text they label.
+- **Confirm and submit** preserves provider-specific failure and ambiguous-result handling while
+  allowing valid confirmed submissions to complete.
+- Signal warns about full URLs, `www.` addresses, and bare domains that X removes from post text.
+- Google Drive share links are refused as public media URLs instead of being accepted as though
+  they were direct media.
+- Failed deliveries are no longer described as awaiting figures.
+- Scheduling no longer rebuilds timezone rules for every candidate instant.
+- Several layout, spacing, contrast, keyboard-focus, and production-startup defects have been
+  corrected.
+
+### Safety and privacy
+
+- Publishing remains preview-first and explicitly confirmed.
+- A failed provider never falls through to another provider.
+- Ambiguous writes are not retried automatically; Signal records what is known and asks for
+  reconciliation.
+- Provider credentials remain server-only, and automated tests use mocked providers.
+- Signal stores references and metadata, not media files. Drive viewer links are never treated as
+  direct media, and preview does not fetch private Drive bytes.
+- Analytics, inventory, calendar, and provider-comparison paths remain read-only.
+
+### Configuration notes
+
+- Post Bridge publishing continues to use `POST_BRIDGE_API_KEY` and the configured publishing
+  timezone.
+- Buffer uses server-only `BUFFER_API_KEY`. `BUFFER_ORGANIZATION_ID` is required only when the
+  connected Buffer account exposes more than one organization.
+- Buffer is an explicit route for supported accounts, not a fallback for Post Bridge.
+
+### Breaking changes
+
+The Signal API now represents campaigns as a list. Responses from Signal post, queue, and calendar
+routes return `campaigns: { id, name }[]` instead of one `campaign` string, and Signal write routes
+accept an array of campaign names. The application migrates existing campaign values automatically
+without deleting the legacy stored column. Only private scripts or bookmarklets that consume the
+old API field need updating.
+
 ## [4.8.6] - 2026-08-25
 
 ### Fixed
