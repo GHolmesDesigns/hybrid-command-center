@@ -42,7 +42,8 @@ Six things follow:
    (#177).
 6. **Development coordination** — **deferred.** Coordinating multiple coding agents across Git
    branches and GitHub issues is a different product from exposing this workspace; it is not
-   answered here.
+   answered here. **Agent handoffs between IDE platforms** on the same workspace are scoped in
+   [`agent-coordination-plan.md`](agent-coordination-plan.md) (C109–C112).
 
 ---
 
@@ -399,13 +400,46 @@ campaign management, alert ack, settings updates. Confirm flags on destructive o
 integration refresh tools with rate limits and `integration_events`.
 **Out of scope:** Provider submit/apply/cancel/publish-now.
 
-### C109 — Network MCP behind operator auth (deferred)
+### C109 — Agent coordination hub decision
+
+**Branch:** `docs/<issue>-agent-coordination-decision`
+**Depends on:** C105 (#304), C106 (MCP scaffold with `agent_label`).
+**Scope:** Finalize [`agent-coordination-plan.md`](agent-coordination-plan.md) §4–§8 — handoff
+primitive, lifecycle, authorization, audit, threat-model checklist. No runtime change.
+**Blocks:** C110, C111, C112.
+
+### C110 — Agent handoff queue (domain and schema)
+
+**Branch:** `feat/<issue>-agent-handoff-queue`
+**Depends on:** C109, C107.
+**Scope:** `agent_handoffs`, `agent_handoff_notes`, `server/domain/agent-coordination.ts`, HTTP
+service for operator cancel. See [`agent-coordination-plan.md`](agent-coordination-plan.md) §C110.
+**Blocks:** C111, C112.
+
+### C111 — Coordination MCP tools
+
+**Branch:** `feat/<issue>-mcp-coordination-tools`
+**Depends on:** C110, C108.
+**Scope:** `coordination_*` MCP tools and `hcc://coordination/inbox` resource. Requires
+`agent_label` on writes.
+**Blocks:** none.
+
+### C112 — Operator coordination inbox (UI)
+
+**Branch:** `feat/<issue>-coordination-inbox-ui`
+**Depends on:** C110.
+**Scope:** Agent handoffs panel, `/api/coordination/*`, `e2e/coordination-inbox.spec.ts`.
+**Blocks:** none.
+
+### C113 — Network MCP behind operator auth (deferred)
 
 **Branch:** `feat/<issue>-mcp-network`
-**Depends on:** C108, C51 (#177), C53 (#179), C55 (#181).
+**Depends on:** C108, C111, C51 (#177), C53 (#179), C55 (#181).
 **Scope:** Streamable HTTP MCP on the same origin as the API, session + CSRF + agent label header,
-same tool surface as stdio.
+same tool surface as stdio plus coordination tools.
 **Out of scope:** Provider-write tools unless a new security decision record says otherwise.
+
+Full card text: [`agent-coordination-plan.md`](agent-coordination-plan.md).
 
 ---
 
@@ -430,6 +464,7 @@ health from Cursor without starting the browser, and no tool performs a network 
 - [`post-bridge-api-surface.md`](post-bridge-api-surface.md) §9 — why provider MCP is read-risk, write-danger.
 - [`cloud-hosting.md`](cloud-hosting.md) §5 — operator authentication model for deferred network MCP.
 - [`AGENTS.md`](../AGENTS.md) — Files read-only boundary, integration log rules, Signal authority.
+- [`agent-coordination-plan.md`](agent-coordination-plan.md) — handoff hub cards C109–C113.
 
 ---
 
