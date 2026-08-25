@@ -159,6 +159,61 @@ export function signalMediaKindFor(
     : signalMediaKind(media.url);
 }
 
+/**
+ * How many public image/video addresses one preview panel may ask the browser to load.
+ *
+ * A preview is for order and crop, not for pulling a whole campaign asset library through the
+ * operator's browser. Items past this bound stay as labelled text with their open link.
+ */
+export const SIGNAL_PUBLIC_PREVIEW_MAX_ITEMS = 8;
+
+/**
+ * The privacy sentence shown beside the text-only / remote-preview choice.
+ *
+ * Stated once so the UI, the manual, and the fixtures cannot drift: loading a remote preview is a
+ * browser request to that host, and that host sees the viewer's IP. The server never makes it.
+ */
+export const SIGNAL_PUBLIC_PREVIEW_IP_NOTE =
+  'Loading a public preview asks that host for the file and shares your IP address with it. Keep text only to leave the addresses as text.';
+
+/**
+ * Whether a public URL looks signed or time-bounded from its address alone.
+ *
+ * A query string or fragment is enough: Buffer already warns that those may fail at publish time,
+ * and a preview that embeds one would still share the viewer's IP for bytes that may already be
+ * gone. Classification stays pathname-only (`signalMediaKind`); this answer is only about whether
+ * the browser should be asked to fetch.
+ */
+export function signalUrlLooksSignedOrExpiring(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return Boolean(parsed.search || parsed.hash);
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Whether this reference may become an `<img>` or `<video>` after the person opts into public
+ * previews.
+ *
+ * Only a positively classified public HTTPS image or video without a query or fragment qualifies.
+ * Drive viewer pages, PDFs, unknown kinds, and signed or expiring addresses stay text — embedding
+ * any of them would either fetch HTML, invent a kind, or hit a host for bytes that may no longer
+ * resolve.
+ */
+export function signalPublicPreviewEligible(
+  media: Pick<SignalPostMedia, 'source' | 'url' | 'mimeType'>,
+): boolean {
+  if (media.source !== 'URL') return false;
+  const kind = signalMediaKindFor(media);
+  if (kind !== 'image' && kind !== 'video') return false;
+  // `signalMediaKind` already parsed this URL to classify it; a second parse only reads protocol.
+  const parsed = new URL(media.url);
+  if (parsed.protocol !== 'https:') return false;
+  return !signalUrlLooksSignedOrExpiring(media.url);
+}
+
 export const SIGNAL_CHANNEL_LABEL: Record<SignalChannel, string> = {
   blog: 'Blog',
   bsky: 'Bluesky',

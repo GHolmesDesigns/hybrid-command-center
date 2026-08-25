@@ -1,6 +1,14 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ExternalLink, FileText, Play, RefreshCw } from 'lucide-react';
-import { SIGNAL_CHANNEL_LABEL, signalMediaKindFor, type SignalPost } from '../../../shared/signal';
+import {
+  SIGNAL_CHANNEL_LABEL,
+  SIGNAL_PUBLIC_PREVIEW_IP_NOTE,
+  SIGNAL_PUBLIC_PREVIEW_MAX_ITEMS,
+  signalMediaKindFor,
+  signalPublicPreviewEligible,
+  signalUrlLooksSignedOrExpiring,
+  type SignalPost,
+} from '../../../shared/signal';
 import { urlPostMedia, type SignalPostMedia } from '../../../shared/signal-media';
 import { formatFileSize } from '../../../shared/drive';
 import { useServerSeeded } from '../useServerSeeded';
@@ -51,10 +59,11 @@ import { previewPlatforms, variantFieldCount, variantKey } from './signal-varian
  *    (C76) are the one place where *offered* and *delivered* come apart, and the control says so:
  *    Post Bridge names a cover for Instagram and a thumbnail for YouTube, the live probe verified
  *    neither, so the role is stored, version-bound, and reported as held rather than sent.
- * 2. **Nothing remote loads until the preview is asked for.** No thumbnail, no video, no provider
- *    call. The composer above renders text alone, and pressing **Show preview** is the only thing
- *    in this file that causes the browser to fetch anything at all. Video needs a second explicit
- *    press, because a preview that starts playing is a preview that decided for you.
+ * 2. **Nothing remote loads until the person asks twice.** No thumbnail, no video, no provider
+ *    call before **Show preview**. That press still shows media as labelled text. Public image and
+ *    video previews are a second, optional choice — **Show public media previews** — because
+ *    loading one shares the viewer's IP with that host. Video needs a third explicit press, and
+ *    never autoplays. Drive, PDF, unknown, and signed or expiring addresses stay text either way.
  *
  * The server fetches none of these URLs, before or after. It never has, for media or anything else
  * (`server/db.ts`, `signal_post_media`), and a preview is the last place to start.
@@ -549,29 +558,39 @@ export function PlatformVariantsEditor({
 }
 
 /**
- * One media reference, rendered as small as it can be while still being worth looking at.
+ * One media reference in the publish preview.
  *
- * An image loads with the preview, because that is what the preview was asked for. A video does
- * not: it takes a second, explicit press, and even then it arrives with controls rather than
- * playing — nothing here autoplays, and no `autoplay` attribute exists in this file to be flipped
- * later. A PDF and an unclassifiable URL are shown as what they are and never embedded.
+ * Default is text: kind, address, open link, and — for Drive — the metadata this app actually
+ * holds. Public image and video bytes load only when the panel opted into remote previews **and**
+ * this item is eligible and inside the bound. A video still needs its own press after that and
+ * never autoplays. Drive viewer pages, PDFs, unknown kinds, signed or expiring addresses, items
+ * past the bound, and failed loads stay labelled text so one bad URL cannot blank the payload.
  *
  * `referrerPolicy="no-referrer"` is on the elements the attribute is defined for, and the app's
  * `Referrer-Policy: no-referrer` response header covers the rest, so nothing this renders tells a
  * media host which page asked for it.
- *
- * **A Drive reference is never embedded.** Its URL is Drive's viewer page rather than the file, so
- * an `<img>` or a `<video>` pointed at it would fetch an HTML document and show a broken frame;
- * what it gets instead is what Drive said about the file and a link to open it. That is also the
- * honest picture of what this app holds: metadata and a version fingerprint, and no bytes.
  */
-function PreviewMedia({ media, index }: { media: SignalPostMedia; index: number }) {
+function PreviewMedia({
+  media,
+  index,
+  allowRemote,
+  remoteSlot,
+}: {
+  media: SignalPostMedia;
+  index: number;
+  allowRemote: boolean;
+  /** 0-based among eligible public items, or null when this one may never load. */
+  remoteSlot: number | null;
+}) {
   const url = media.url;
   const kind = signalMediaKindFor(media);
   const [broken, setBroken] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const label = `Media ${index + 1} · ${kind}`;
   const isDrive = media.source === 'DRIVE';
+  const signedOrExpiring = !isDrive && signalUrlLooksSignedOrExpiring(url);
+  const withinBound = remoteSlot !== null && remoteSlot < SIGNAL_PUBLIC_PREVIEW_MAX_ITEMS;
+  const mayEmbed = allowRemote && withinBound && signalPublicPreviewEligible(media);
 
   const fallback = (
     <p className="signal-preview-media-fallback">
@@ -596,9 +615,33 @@ function PreviewMedia({ media, index }: { media: SignalPostMedia; index: number 
           {media.driveVerifiedAt
             ? ` · checked ${new Date(media.driveVerifiedAt).toLocaleString()}`
             : ''}
+          . Listed as text only — a Drive link is a page to open, not media to embed.
         </p>
       )}
-      {!isDrive &&
+      {!isDrive && signedOrExpiring && (
+        <p className="signal-preview-media-note">
+          <FileText aria-hidden="true" /> This address looks signed or time-bounded, so it stays as
+          text rather than being loaded here.
+        </p>
+      )}
+      {!isDrive && (kind === 'pdf' || kind === 'unknown') && (
+        <p className="signal-preview-media-note">
+          <FileText aria-hidden="true" />{' '}
+          {kind === 'pdf'
+            ? 'A PDF is not shown here; open it to check it.'
+            : 'This address carries no file extension, so its kind could not be read from the URL.'}
+        </p>
+      )}
+      {allowRemote &&
+        remoteSlot !== null &&
+        remoteSlot >= SIGNAL_PUBLIC_PREVIEW_MAX_ITEMS &&
+        signalPublicPreviewEligible(media) && (
+          <p className="signal-preview-media-note">
+            <FileText aria-hidden="true" /> Preview limit reached ({SIGNAL_PUBLIC_PREVIEW_MAX_ITEMS}{' '}
+            public items). Open the address to check this one.
+          </p>
+        )}
+      {mayEmbed &&
         kind === 'image' &&
         (broken ? (
           fallback
@@ -612,7 +655,7 @@ function PreviewMedia({ media, index }: { media: SignalPostMedia; index: number 
             onError={() => setBroken(true)}
           />
         ))}
-      {!isDrive &&
+      {mayEmbed &&
         kind === 'video' &&
         (broken ? (
           fallback
@@ -634,15 +677,74 @@ function PreviewMedia({ media, index }: { media: SignalPostMedia; index: number 
             <Play aria-hidden="true" /> Load this video
           </button>
         ))}
-      {!isDrive && (kind === 'pdf' || kind === 'unknown') && (
-        <p className="signal-preview-media-note">
-          <FileText aria-hidden="true" />{' '}
-          {kind === 'pdf'
-            ? 'A PDF is not shown here; open it to check it.'
-            : 'This address carries no file extension, so its kind could not be read from the URL.'}
+    </li>
+  );
+}
+
+/**
+ * The ordered media list for one target, defaulting to text and opting into remote loads.
+ *
+ * **Show preview** already happened; this is the second gate. The IP note and the text-only choice
+ * sit above the list so a person can keep every address as text, including when some items could
+ * never load. Eligibility and the item bound are computed once so a Drive or signed URL does not
+ * consume a remote slot that a later public image would have used.
+ */
+function PreviewMediaList({
+  mediaUrls,
+  postMedia,
+}: {
+  mediaUrls: readonly string[];
+  postMedia: readonly SignalPostMedia[];
+}) {
+  const [showRemote, setShowRemote] = useState(false);
+  const items = mediaUrls.map(
+    (url) => postMedia.find((item) => item.url === url) ?? urlPostMedia(url),
+  );
+  const remoteSlots = (() => {
+    const slots = new Map<number, number>();
+    let next = 0;
+    items.forEach((media, index) => {
+      if (signalPublicPreviewEligible(media)) {
+        slots.set(index, next);
+        next += 1;
+      }
+    });
+    return slots;
+  })();
+  const eligibleCount = remoteSlots.size;
+
+  return (
+    <div className="signal-preview-media-block">
+      {eligibleCount > 0 ? (
+        <div className="signal-preview-media-choice">
+          <p className="signal-preview-media-privacy">{SIGNAL_PUBLIC_PREVIEW_IP_NOTE}</p>
+          <button
+            type="button"
+            className="secondary"
+            aria-pressed={showRemote}
+            onClick={() => setShowRemote((current) => !current)}
+          >
+            {showRemote ? 'Show text only' : 'Show public media previews'}
+          </button>
+        </div>
+      ) : (
+        <p className="signal-preview-media-privacy">
+          No public image or video on this target can be previewed here. Drive files, PDFs, unknown
+          kinds, and signed or expiring addresses stay as text; the server never fetches them.
         </p>
       )}
-    </li>
+      <ol className="signal-preview-media-list">
+        {items.map((media, index) => (
+          <PreviewMedia
+            key={`${index}-${media.url}`}
+            media={media}
+            index={index}
+            allowRemote={showRemote}
+            remoteSlot={remoteSlots.get(index) ?? null}
+          />
+        ))}
+      </ol>
+    </div>
   );
 }
 
@@ -871,18 +973,7 @@ function PreviewPanel({
           {content.mediaUrls.length === 0 ? (
             <p className="signal-preview-field">No media on this target.</p>
           ) : (
-            <ol className="signal-preview-media-list">
-              {/* The selection is URLs; what each one is comes from the post's own descriptors.
-                  A URL the post no longer carries falls back to a public reference, which is what
-                  it would have been read as before descriptors existed. */}
-              {content.mediaUrls.map((url, index) => (
-                <PreviewMedia
-                  key={`${index}-${url}`}
-                  media={post.media.find((item) => item.url === url) ?? urlPostMedia(url)}
-                  index={index}
-                />
-              ))}
-            </ol>
+            <PreviewMediaList mediaUrls={content.mediaUrls} postMedia={post.media} />
           )}
           {report.bufferWire && (
             <>

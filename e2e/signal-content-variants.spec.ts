@@ -60,12 +60,14 @@ test('platform overrides reach the preview per target and publish through the mo
   await expect(panel).toContainText('2099-11-12 at 09:00 in America/New_York');
   await expect(panel).toContainText('2099-11-12T14:00:00.000Z');
   await expect(panel).toContainText('Automatic publishing');
-  // The media is listed in order, by its own address. `cdn.example.com` does not resolve from a
-  // test machine, so this run also exercises the fallback: a real browser fails the request and the
-  // preview says so instead of showing a gap. The `referrerPolicy` attribute is asserted in
-  // `client/src/Signal.variants.test.tsx`, where the image is not fetched and cannot be replaced by
-  // its own error state before the assertion runs.
+  // The media is listed in order, by its own address. Public bytes stay text until the opt-in;
+  // after that, `cdn.example.com` does not resolve from a test machine, so this run also exercises
+  // the fallback: a real browser fails the request and the preview says so instead of showing a
+  // gap. The `referrerPolicy` attribute is asserted in `client/src/Signal.variants.test.tsx`, where
+  // the image is not fetched and cannot be replaced by its own error state before the assertion.
   await expect(panel).toContainText('Media 1 · image');
+  await expect(panel).toContainText('shares your IP address with it');
+  await panel.getByRole('button', { name: 'Show public media previews' }).click();
   await expect(panel).toContainText('This media could not be shown here.');
   await expect(panel.getByRole('link', { name: /Open/ })).toHaveAttribute(
     'href',

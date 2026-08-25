@@ -9,7 +9,13 @@ import {
   urlPostMedia,
   type SignalPostMedia,
 } from './signal-media.ts';
-import { signalMediaKind, signalMediaKindFor } from './signal.ts';
+import {
+  signalMediaKind,
+  signalMediaKindFor,
+  signalPublicPreviewEligible,
+  signalUrlLooksSignedOrExpiring,
+  SIGNAL_PUBLIC_PREVIEW_MAX_ITEMS,
+} from './signal.ts';
 
 /**
  * The media vocabulary on its own: what a descriptor may be, how each kind is classified, and what
@@ -51,6 +57,38 @@ describe('classifying a reference', () => {
     expect(signalMediaKindFor(video)).toBe('video');
     expect(signalMediaKindFor(urlPostMedia('https://cdn.example.com/a.mp4'))).toBe('video');
     expect(signalMediaKindFor(urlPostMedia('https://cdn.example.com/a'))).toBe('unknown');
+  });
+});
+
+describe('public preview eligibility', () => {
+  it('allows only clean public HTTPS images and videos', () => {
+    expect(signalPublicPreviewEligible(urlPostMedia('https://cdn.example.com/a.jpg'))).toBe(true);
+    expect(signalPublicPreviewEligible(urlPostMedia('https://cdn.example.com/a.mp4'))).toBe(true);
+    expect(signalPublicPreviewEligible(urlPostMedia('http://cdn.example.com/a.jpg'))).toBe(false);
+    expect(signalPublicPreviewEligible(urlPostMedia('https://cdn.example.com/a.pdf'))).toBe(false);
+    expect(signalPublicPreviewEligible(urlPostMedia('https://cdn.example.com/a'))).toBe(false);
+    expect(signalPublicPreviewEligible(drive())).toBe(false);
+  });
+
+  it('keeps signed or expiring addresses as text', () => {
+    expect(signalUrlLooksSignedOrExpiring('https://cdn.example.com/a.jpg?token=1')).toBe(true);
+    expect(signalUrlLooksSignedOrExpiring('https://cdn.example.com/a.jpg#frag')).toBe(true);
+    expect(signalUrlLooksSignedOrExpiring('https://cdn.example.com/a.jpg')).toBe(false);
+    expect(signalPublicPreviewEligible(urlPostMedia('https://cdn.example.com/a.jpg?token=1'))).toBe(
+      false,
+    );
+    expect(signalPublicPreviewEligible(urlPostMedia('https://cdn.example.com/a.mp4#exp=1'))).toBe(
+      false,
+    );
+  });
+
+  it('refuses an unparseable address rather than guessing it is safe to load', () => {
+    expect(signalUrlLooksSignedOrExpiring('not a url')).toBe(true);
+    expect(signalPublicPreviewEligible(urlPostMedia('not a url.jpg'))).toBe(false);
+  });
+
+  it('bounds how many public items one preview panel may load', () => {
+    expect(SIGNAL_PUBLIC_PREVIEW_MAX_ITEMS).toBe(8);
   });
 });
 
