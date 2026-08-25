@@ -114,7 +114,10 @@ import { SignalAnalyticsWindowPanel } from './SignalAnalyticsWindow';
 import { SignalMetrics } from './SignalMetrics';
 import { previewPlatforms, variantList, variantMap } from './signal-variants';
 import { BUFFER_PROVIDER } from '../../../shared/buffer';
-import { POST_BRIDGE_PUBLISH_NOW_EVIDENCE, publishNowEvidenceEnabled } from '../../../shared/publish-now';
+import {
+  POST_BRIDGE_PUBLISH_NOW_EVIDENCE,
+  publishNowEvidenceEnabled,
+} from '../../../shared/publish-now';
 
 type SignalRange = {
   from: string;
@@ -1845,8 +1848,8 @@ function Editor({
               </h3>
               {publishPreview.timing === 'now' ? (
                 <p>
-                  <strong>No scheduled instant.</strong> The provider posts immediately. Signal keeps
-                  the planned date and time ({post.date} at {post.time}) for planning only.
+                  <strong>No scheduled instant.</strong> The provider posts immediately. Signal
+                  keeps the planned date and time ({post.date} at {post.time}) for planning only.
                 </p>
               ) : (
                 publishPreview.scheduledInstant && (

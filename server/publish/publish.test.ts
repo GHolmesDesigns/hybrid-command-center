@@ -2885,7 +2885,16 @@ describe('Publish now', () => {
 
   it('plans an immediate send with no scheduled instant on the wire', () => {
     const post = add({ channels: ['x'], date: '2099-01-01', time: '09:00' });
-    const plan = buildPublishPlan(post, targets, 'America/New_York', new Date('2026-01-01'), [], [], false, 'now');
+    const plan = buildPublishPlan(
+      post,
+      targets,
+      'America/New_York',
+      new Date('2026-01-01'),
+      [],
+      [],
+      false,
+      'now',
+    );
     expect(plan.timing).toBe('now');
     expect(plan.request?.scheduledInstant).toBeNull();
     expect(publishPreviewRefusals(plan)).toEqual([]);
@@ -2895,7 +2904,16 @@ describe('Publish now', () => {
   it('refuses publish now when evidence is closed', () => {
     delete process.env.PUBLISH_NOW_EVIDENCE;
     const post = add({ channels: ['x'], date: '2099-01-01', time: '09:00' });
-    const plan = buildPublishPlan(post, targets, 'America/New_York', new Date('2026-01-01'), [], [], false, 'now');
+    const plan = buildPublishPlan(
+      post,
+      targets,
+      'America/New_York',
+      new Date('2026-01-01'),
+      [],
+      [],
+      false,
+      'now',
+    );
     expect(publishPreviewRefusals(plan).length).toBeGreaterThan(0);
     expect(plan.request).toBeUndefined();
   });

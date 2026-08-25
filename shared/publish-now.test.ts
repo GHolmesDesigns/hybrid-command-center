@@ -39,10 +39,9 @@ describe('publish now evidence', () => {
   it('refuses mixed providers and unknown providers', () => {
     delete process.env.PUBLISH_NOW_EVIDENCE;
     expect(
-      publishNowPlanRefusals([
-        { provider: 'post-bridge' },
-        { provider: 'buffer' },
-      ]).some((refusal) => refusal.includes('cannot mix providers')),
+      publishNowPlanRefusals([{ provider: 'post-bridge' }, { provider: 'buffer' }]).some(
+        (refusal) => refusal.includes('cannot mix providers'),
+      ),
     ).toBe(true);
     expect(publishNowRefusalForProvider('other')).toContain('other');
   });

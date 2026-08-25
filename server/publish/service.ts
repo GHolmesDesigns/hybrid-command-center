@@ -222,11 +222,7 @@ export class PublishService {
     );
   }
 
-  previewNow(
-    postId: string,
-    listedTargets?: readonly PublishTarget[],
-    driveOverride = false,
-  ) {
+  previewNow(postId: string, listedTargets?: readonly PublishTarget[], driveOverride = false) {
     return this.preview(postId, listedTargets, driveOverride, 'now');
   }
 

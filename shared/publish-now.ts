@@ -51,9 +51,7 @@ export const publishNowRefusalForProvider = (provider: string): string | undefin
 };
 
 /** Plan-level refusals for an immediate send over the resolved targets. */
-export const publishNowPlanRefusals = (
-  targets: readonly { provider?: string }[],
-): string[] => {
+export const publishNowPlanRefusals = (targets: readonly { provider?: string }[]): string[] => {
   const refusals: string[] = [];
   const providers = new Set(targets.map((target) => target.provider ?? 'post-bridge'));
   if (providers.size > 1)
