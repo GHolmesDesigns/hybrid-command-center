@@ -1,5 +1,9 @@
 ﻿import { describe, expect, it } from 'vitest';
-import { bufferMediaPlan, BUFFER_MEDIA_ROUTE_SUMMARY } from './buffer-media.ts';
+import {
+  bufferMediaPlan,
+  driveDirectDownloadUrl,
+  BUFFER_MEDIA_ROUTE_SUMMARY,
+} from './buffer-media.ts';
 import { bufferCapabilityFor } from './buffer-capabilities.ts';
 import type { PublishChannelContent } from './publish.ts';
 import { urlPostMedia, type SignalPostMedia } from './signal-media.ts';
@@ -29,28 +33,97 @@ const content = (
 describe('Buffer media planning', () => {
   const capability = bufferCapabilityFor('tiktok', 'notification')!;
 
+  const driveVideo: SignalPostMedia = {
+    source: 'DRIVE',
+    url: 'https://drive.google.com/file/d/abc/view',
+    driveFileId: 'abc',
+    driveName: 'clip.mp4',
+    mimeType: 'video/mp4',
+    sizeBytes: 4,
+    driveVersion: '1',
+    driveModifiedAt: '2026-03-01T12:00:00.000Z',
+    driveChecksum: 'd41d8cd98f00b204e9800998ecf8427e',
+    driveVerifiedAt: '2026-08-20T09:00:00.000Z',
+  };
+
   it('refuses Drive references before any wire is built', () => {
-    const drive: SignalPostMedia = {
-      source: 'DRIVE',
-      url: 'https://drive.google.com/file/d/abc/view',
-      driveFileId: 'abc',
-      driveName: 'clip.mp4',
-      mimeType: 'video/mp4',
-      sizeBytes: 4,
-      driveVersion: '1',
-      driveModifiedAt: '2026-03-01T12:00:00.000Z',
-      driveChecksum: 'd41d8cd98f00b204e9800998ecf8427e',
-      driveVerifiedAt: '2026-08-20T09:00:00.000Z',
-    };
     const plan = bufferMediaPlan({
       capability,
       platform: 'tiktok',
       schedulingType: 'notification',
-      content: content([drive.url]),
-      media: [drive],
+      content: content([driveVideo.url]),
+      media: [driveVideo],
     });
     expect(plan.bufferWire).toBeUndefined();
     expect(plan.refusals[0]).toMatch(/Drive/);
+    // Notification scheduling never touches media, so the override would have nothing to affect.
+    expect(plan.driveOverridable).toBe(false);
+  });
+
+  it('marks a Drive reference overridable under automatic scheduling without accepting the override', () => {
+    const automatic = bufferCapabilityFor('tiktok', 'automatic')!;
+    const plan = bufferMediaPlan({
+      capability: automatic,
+      platform: 'tiktok',
+      schedulingType: 'automatic',
+      content: content([driveVideo.url]),
+      media: [driveVideo],
+    });
+    expect(plan.driveOverridable).toBe(true);
+    expect(plan.bufferWire).toBeUndefined();
+    expect(plan.refusals[0]).toMatch(/Drive/);
+  });
+
+  it('converts a Drive reference to a direct-download link under the override', () => {
+    const automatic = bufferCapabilityFor('tiktok', 'automatic')!;
+    const plan = bufferMediaPlan({
+      capability: automatic,
+      platform: 'tiktok',
+      schedulingType: 'automatic',
+      content: content([driveVideo.url]),
+      media: [driveVideo],
+      driveOverride: true,
+    });
+    expect(plan.refusals).toEqual([]);
+    expect(plan.driveOverridable).toBe(true);
+    expect(plan.bufferWire?.assets).toEqual([{ video: { url: driveDirectDownloadUrl('abc') } }]);
+    expect(plan.warnings.some((warning) => warning.includes('direct-download'))).toBe(true);
+  });
+
+  it('refuses an overridden Drive reference with no file id', () => {
+    const automatic = bufferCapabilityFor('tiktok', 'automatic')!;
+    const noFileId: SignalPostMedia = { ...driveVideo, driveFileId: null };
+    const plan = bufferMediaPlan({
+      capability: automatic,
+      platform: 'tiktok',
+      schedulingType: 'automatic',
+      content: content([noFileId.url]),
+      media: [noFileId],
+      driveOverride: true,
+    });
+    expect(plan.bufferWire).toBeUndefined();
+    expect(plan.refusals[0]).toMatch(/without a Drive file id/);
+  });
+
+  it('refuses an overridden Drive reference whose MIME type does not classify', () => {
+    const automatic = bufferCapabilityFor('tiktok', 'automatic')!;
+    const unclassified: SignalPostMedia = { ...driveVideo, mimeType: 'application/zip' };
+    const plan = bufferMediaPlan({
+      capability: automatic,
+      platform: 'tiktok',
+      schedulingType: 'automatic',
+      content: content([unclassified.url]),
+      media: [unclassified],
+      driveOverride: true,
+    });
+    expect(plan.bufferWire).toBeUndefined();
+    expect(plan.refusals[0]).toMatch(/cannot classify/);
+  });
+
+  it('builds the direct-download address from the file id', () => {
+    expect(driveDirectDownloadUrl('abc 123')).toBe(
+      'https://drive.google.com/uc?export=download&id=abc%20123',
+    );
   });
 
   it('carries no assets under notification scheduling', () => {

@@ -560,6 +560,13 @@ function Editor({
   const [recheckErrors, setRecheckErrors] = useState<Record<string, string>>({});
   const [recheckingId, setRecheckingId] = useState('');
   const [publishPreview, setPublishPreview] = useState<PublishPreview | null>(null);
+  /**
+   * Explicit, per-send permission to send a Buffer target's Drive media as Drive's direct-download
+   * address rather than refuse it. Local to this open post rather than persisted: it is a risk
+   * accepted for one send, not a standing setting, and toggling it re-previews so the plan on
+   * screen always reflects it.
+   */
+  const [driveOverride, setDriveOverride] = useState(false);
   const [publications, setPublications] = useState<SignalPublication[]>([]);
   /**
    * The open provider comparison, keyed by the publication it belongs to.
@@ -733,7 +740,9 @@ function Editor({
     const run = (async () => {
       try {
         setPublishPreview(
-          await send<PublishPreview>(`/signal/posts/${post.id}/publish/preview`, 'POST', {}),
+          await send<PublishPreview>(`/signal/posts/${post.id}/publish/preview`, 'POST', {
+            driveOverride,
+          }),
         );
       } catch (reason) {
         setError((reason as Error).message);
@@ -772,10 +781,35 @@ function Editor({
     try {
       await send(`/signal/posts/${post.id}/publish-targets`, 'PUT', { targets });
       setPublishPreview(
-        await send<PublishPreview>(`/signal/posts/${post.id}/publish/preview`, 'POST', {}),
+        await send<PublishPreview>(`/signal/posts/${post.id}/publish/preview`, 'POST', {
+          driveOverride,
+        }),
       );
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Could not save the accounts.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * Flips the Drive override and re-previews against it, the same way a target selection does: a
+   * toggle the open preview does not reflect would be a plan the person confirms after looking at a
+   * different one, and the plan hash would refuse it at commit anyway — later and less clearly.
+   */
+  const toggleDriveOverride = async (next: boolean) => {
+    setDriveOverride(next);
+    if (previewInFlight.current) await previewInFlight.current;
+    setBusy(true);
+    setError('');
+    try {
+      setPublishPreview(
+        await send<PublishPreview>(`/signal/posts/${post.id}/publish/preview`, 'POST', {
+          driveOverride: next,
+        }),
+      );
+    } catch (reason) {
+      setError((reason as Error).message);
     } finally {
       setBusy(false);
     }
@@ -789,7 +823,7 @@ function Editor({
       const publication = await send<SignalPublication>(
         `/signal/posts/${post.id}/publish`,
         'POST',
-        { planHash: publishPreview.planHash },
+        { planHash: publishPreview.planHash, driveOverride },
       );
       setPublications((current) => [publication, ...current]);
       setPublishPreview(null);
@@ -1706,6 +1740,8 @@ function Editor({
                 onRecheckRole={recheckRoleMedia}
                 resolveDrive={resolveRoleDrive}
                 busy={busy}
+                driveOverride={driveOverride}
+                onDriveOverrideChange={(next) => void toggleDriveOverride(next)}
               />
               {publishPreview.warnings.map((warning) => (
                 <p className="form-warning" key={warning}>

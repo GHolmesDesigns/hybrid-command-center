@@ -775,6 +775,8 @@ function PreviewPanel({
   accountDirty,
   busy,
   targetChoice,
+  driveOverride,
+  onDriveOverrideChange,
 }: {
   report: PublishChannelReport;
   preview: PublishPreview;
@@ -791,6 +793,8 @@ function PreviewPanel({
   accountDirty: boolean;
   busy: boolean;
   targetChoice: React.ReactNode;
+  driveOverride: boolean;
+  onDriveOverrideChange: (next: boolean) => void;
 }) {
   const content = report.content;
   const capability = report.platform
@@ -904,6 +908,18 @@ function PreviewPanel({
           {warning}
         </p>
       ))}
+      {(report.driveOverridable || report.targets?.some((entry) => entry.driveOverridable)) && (
+        <label className="signal-drive-override">
+          <input
+            type="checkbox"
+            checked={driveOverride}
+            disabled={busy}
+            onChange={(event) => onDriveOverrideChange(event.target.checked)}
+          />
+          Send Drive media to Buffer anyway, as a direct-download link (risky — may fail silently
+          when the post publishes)
+        </label>
+      )}
       {capability && report.accountId !== undefined && (
         <details className="signal-variant-account">
           <summary>Override for {report.handle} only</summary>
@@ -957,6 +973,8 @@ export function PublishPreviewTabs({
   resolveDrive,
   savedLayers,
   busy,
+  driveOverride,
+  onDriveOverrideChange,
 }: {
   preview: PublishPreview;
   post: SignalPost;
@@ -976,6 +994,9 @@ export function PublishPreviewTabs({
   /** What the server currently holds, so an account layer knows whether it is unsaved. */
   savedLayers: Map<string, PublishVariantRecord>;
   busy: boolean;
+  /** Whether this send accepts converting a Buffer target's Drive media to a direct-download link. */
+  driveOverride: boolean;
+  onDriveOverrideChange: (next: boolean) => void;
 }) {
   const id = useId();
   const [active, setActive] = useState(0);
@@ -1108,6 +1129,8 @@ export function PublishPreviewTabs({
             onChange(copy);
           }}
           onAccountSave={onSaveAccount}
+          driveOverride={driveOverride}
+          onDriveOverrideChange={onDriveOverrideChange}
         />
       </div>
     </div>

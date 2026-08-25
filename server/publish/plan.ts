@@ -479,6 +479,7 @@ interface PublishTargetResolution {
   warnings: string[];
   bufferWire?: BufferWirePreview;
   bufferSchedulingType?: BufferSchedulingType;
+  driveOverridable?: boolean;
 }
 
 function resolutionForTarget(
@@ -486,6 +487,7 @@ function resolutionForTarget(
   platform: PublishPlatform,
   variants: readonly PublishVariantRecord[],
   target: PublishTarget | undefined,
+  driveOverride: boolean,
 ): PublishTargetResolution {
   const capability = capabilityForTarget(platform, target);
   if (!capability) throw new Error(`Missing capability for ${platform}`);
@@ -499,6 +501,7 @@ function resolutionForTarget(
   const refusals: string[] = [];
   let bufferWire: BufferWirePreview | undefined;
   let bufferSchedulingType: BufferSchedulingType | undefined;
+  let driveOverridable: boolean | undefined;
 
   if (target && isBufferProvider(targetProvider(target))) {
     bufferSchedulingType = target.schedulingType ?? DEFAULT_BUFFER_SCHEDULING_TYPE;
@@ -508,10 +511,12 @@ function resolutionForTarget(
       schedulingType: bufferSchedulingType,
       content,
       media: base.media,
+      driveOverride,
     });
     refusals.push(...mediaPlan.refusals);
     warnings.push(...mediaPlan.warnings);
     bufferWire = mediaPlan.bufferWire;
+    driveOverridable = mediaPlan.driveOverridable;
   }
 
   const preflight = preflightPlatform({ capability, content, media: base.media });
@@ -525,6 +530,7 @@ function resolutionForTarget(
     warnings,
     ...(bufferWire ? { bufferWire } : {}),
     ...(bufferSchedulingType ? { bufferSchedulingType } : {}),
+    ...(driveOverridable ? { driveOverridable } : {}),
   };
 }
 
@@ -599,6 +605,7 @@ function reportForChannel(
   connected: PublishTarget[],
   variants: readonly PublishVariantRecord[],
   selected: readonly number[] = [],
+  driveOverride = false,
 ): PublishChannelReport {
   const channelLabel = SIGNAL_CHANNEL_LABEL[channel] ?? channel;
   const platform = publishPlatformFor(channel);
@@ -640,8 +647,10 @@ function reportForChannel(
   // The list is one entry long today. It is built as a list so that the piece which teaches this
   // planner about an explicit selection changes what fills it rather than how it is read.
   const resolutions = targets.length
-    ? targets.map((target) => resolutionForTarget(base, capability.platform, variants, target))
-    : [resolutionForTarget(base, capability.platform, variants, undefined)];
+    ? targets.map((target) =>
+        resolutionForTarget(base, capability.platform, variants, target, driveOverride),
+      )
+    : [resolutionForTarget(base, capability.platform, variants, undefined, driveOverride)];
   const primary = resolutions[0] as PublishTargetResolution;
   // The channel-level fields describe the first target, so a reader written before per-account
   // reports existed still sees something true rather than nothing.
@@ -666,6 +675,9 @@ function reportForChannel(
             ...(resolution.bufferWire ? { bufferWire: resolution.bufferWire } : {}),
             ...(resolution.bufferSchedulingType
               ? { bufferSchedulingType: resolution.bufferSchedulingType }
+              : {}),
+            ...(resolution.driveOverridable
+              ? { driveOverridable: resolution.driveOverridable }
               : {}),
           };
         })
@@ -713,6 +725,7 @@ function reportForChannel(
     content: primary.content,
     ...(primary.bufferWire ? { bufferWire: primary.bufferWire } : {}),
     ...(primary.bufferSchedulingType ? { bufferSchedulingType: primary.bufferSchedulingType } : {}),
+    ...(primary.driveOverridable ? { driveOverridable: primary.driveOverridable } : {}),
     ...(targetReports ? { targets: targetReports } : {}),
     refusals,
     // The first target's warnings, plus the one warning that belongs to the channel rather than to
@@ -897,6 +910,13 @@ export function buildPublishPlan(
   now = new Date(),
   variants: readonly PublishVariantRecord[] = [],
   selections: PublishTargetSelections = [],
+  /**
+   * Explicit, per-send permission to convert a Buffer target's Drive media to Drive's
+   * direct-download address rather than refuse it. Defaults to false, so an unmodified caller
+   * plans exactly as it did before this existed; see `shared/buffer-media.ts` for the risk this
+   * accepts and why it is opt-in only.
+   */
+  driveOverride = false,
 ): PublishPreview & {
   request?: PublishRequest;
   mediaSources?: SignalPostMedia[];
@@ -938,7 +958,14 @@ export function buildPublishPlan(
       selection.providerAccountId,
     ]);
   const channels = post.channels.map((channel) =>
-    reportForChannel(channel, base, connected, variants, selectedByChannel.get(channel) ?? []),
+    reportForChannel(
+      channel,
+      base,
+      connected,
+      variants,
+      selectedByChannel.get(channel) ?? [],
+      driveOverride,
+    ),
   );
   // One entry per account that will actually be sent to. A channel with an explicit selection
   // contributes each of its ready accounts; a channel without one contributes the single account
@@ -1034,6 +1061,10 @@ export function buildPublishPlan(
     postId: post.id,
     updatedAt: post.updatedAt,
     caption,
+    // Not otherwise implied by anything else in this object where a Buffer target has no Drive
+    // media selected — the flag itself still has to invalidate a confirmation taken before it
+    // changed, even though it would leave `bufferWire` byte-identical in that case.
+    driveOverride,
     // The media that would be sent rather than the post's own, so a selection changed between
     // preview and confirm invalidates the hash exactly as an edited caption does.
     mediaUrls: media.mediaUrls,

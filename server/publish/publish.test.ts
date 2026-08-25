@@ -2353,6 +2353,64 @@ describe('Buffer publish planning', () => {
     expect(plan.request).toBeUndefined();
   });
 
+  it('marks a Buffer target driveOverridable without accepting the override', () => {
+    const media = driveDescriptor('buffer-drive-flag');
+    const plan = buildPublishPlan(
+      add({ channels: ['tt'], media: [media], mediaUrls: [media.url] }),
+      [bufferAutomatic],
+      'America/New_York',
+      new Date('2026-01-01'),
+      [],
+      [{ channel: 'tt', providerAccountId: 60 }],
+    );
+    expect(reportFor(plan, 'tt').driveOverridable).toBe(true);
+    expect(reportFor(plan, 'tt').refusals.some((refusal) => refusal.includes('Drive'))).toBe(true);
+  });
+
+  it('sends Drive media to Buffer as a direct-download link under the override', () => {
+    const media = driveDescriptor('buffer-drive-override');
+    const plan = buildPublishPlan(
+      add({ channels: ['tt'], media: [media], mediaUrls: [media.url] }),
+      [bufferAutomatic],
+      'America/New_York',
+      new Date('2026-01-01'),
+      [],
+      [{ channel: 'tt', providerAccountId: 60 }],
+      true,
+    );
+    const report = reportFor(plan, 'tt');
+    expect(report.refusals).toEqual([]);
+    expect(report.bufferWire?.assets).toEqual([
+      { image: { url: `https://drive.google.com/uc?export=download&id=${media.driveFileId}` } },
+    ]);
+    expect(report.warnings.some((warning) => warning.includes('direct-download'))).toBe(true);
+  });
+
+  it('changes the plan hash when the Drive override is toggled', () => {
+    const media = driveDescriptor('buffer-drive-hash');
+    const post = add({ channels: ['tt'], media: [media], mediaUrls: [media.url] });
+    const targets = [bufferAutomatic];
+    const selections = [{ channel: 'tt' as SignalChannel, providerAccountId: 60 }];
+    const withoutOverride = buildPublishPlan(
+      post,
+      targets,
+      'America/New_York',
+      new Date('2026-01-01'),
+      [],
+      selections,
+    );
+    const withOverride = buildPublishPlan(
+      post,
+      targets,
+      'America/New_York',
+      new Date('2026-01-01'),
+      [],
+      selections,
+      true,
+    );
+    expect(withoutOverride.planHash).not.toBe(withOverride.planHash);
+  });
+
   it('refuses mixed Post Bridge and Buffer targets in one submission', () => {
     const plan = buildPublishPlan(
       add({

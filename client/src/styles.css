@@ -4590,6 +4590,20 @@ button.tag-chip.toggle.active {
   color: var(--muted);
   font-size: 11px;
 }
+.signal-drive-override {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px dashed #8d601c;
+  border-radius: 8px;
+  color: #8d601c;
+  font-size: 11px;
+}
+.signal-drive-override input {
+  margin-top: 2px;
+}
 .signal-preview-media-list {
   display: grid;
   gap: 8px;
