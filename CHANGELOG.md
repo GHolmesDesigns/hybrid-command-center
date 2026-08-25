@@ -8,6 +8,22 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.2.2] - 2026-08-25
+
+### Added
+
+- **Multi-agent MCP decision record** ([`docs/multi-agent-mcp-decision.md`](docs/multi-agent-mcp-decision.md))
+  chooses local stdio Signal-over-MCP, rejects consuming provider MCP servers, and defers network MCP
+  until operator authentication (C51). Follow-up implementation is split into Waves 22–24 without
+  reopening the trust model.
+- **Agent coordination hub plan** ([`docs/agent-coordination-plan.md`](docs/agent-coordination-plan.md))
+  adds handoff-based coordination between IDE agents (C109–C112) and network MCP (C113), with wave
+  milestones, time estimates, and GitHub issues #336–#340.
+
+### Breaking changes
+
+None.
+
 ## [5.2.1] - 2026-08-25
 
 ### Added

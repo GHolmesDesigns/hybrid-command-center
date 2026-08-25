@@ -14,6 +14,8 @@ Signal Campaign can tailor a post per platform and per account, preview what eac
 
 Nothing in this app is reachable off loopback by design, and the server enforces that itself: a `HOST` outside `127.0.0.1`, `::1`, and `localhost` fails the boot while there is no authentication to put in front of it. The decision record that a cloud deployment would be built from — access model, source of truth, authentication, Drive OAuth continuity, and migration — is [Cloud Hosting](docs/cloud-hosting.md).
 
+If IDE agents should plan Signal and workspace work through MCP, read [Multi-Agent MCP](docs/multi-agent-mcp-decision.md) first. It chooses a local stdio server over Signal — not a provider MCP wrapper — keeps provider publishing on the human-confirmed UI path, and defers any network MCP endpoint until operator authentication ships. For agents handing work to each other through the workspace, see [Agent Coordination Hub](docs/agent-coordination-plan.md) (C109–C112).
+
 ## What is included
 
 - Deadline-led dashboard with overdue, due-today, seven-day (today included), and project-health counts, scoped to unarchived work and calculated by the same rules the board filters by
