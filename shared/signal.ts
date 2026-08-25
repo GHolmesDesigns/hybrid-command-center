@@ -208,12 +208,9 @@ export function signalPublicPreviewEligible(
   if (media.source !== 'URL') return false;
   const kind = signalMediaKindFor(media);
   if (kind !== 'image' && kind !== 'video') return false;
-  try {
-    const parsed = new URL(media.url);
-    if (parsed.protocol !== 'https:') return false;
-  } catch {
-    return false;
-  }
+  // `signalMediaKind` already parsed this URL to classify it; a second parse only reads protocol.
+  const parsed = new URL(media.url);
+  if (parsed.protocol !== 'https:') return false;
   return !signalUrlLooksSignedOrExpiring(media.url);
 }
 

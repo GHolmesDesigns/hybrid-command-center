@@ -82,6 +82,11 @@ describe('public preview eligibility', () => {
     );
   });
 
+  it('refuses an unparseable address rather than guessing it is safe to load', () => {
+    expect(signalUrlLooksSignedOrExpiring('not a url')).toBe(true);
+    expect(signalPublicPreviewEligible(urlPostMedia('not a url.jpg'))).toBe(false);
+  });
+
   it('bounds how many public items one preview panel may load', () => {
     expect(SIGNAL_PUBLIC_PREVIEW_MAX_ITEMS).toBe(8);
   });
