@@ -518,6 +518,21 @@ export function isSignalDate(value: string): boolean {
   return day >= 1 && day <= signalDaysInMonth(year, month);
 }
 
+/**
+ * Signal's query-addressable Add Post creation state, per `docs/view-state-convention.md`.
+ *
+ * `new=1` opens an unscheduled draft; `new=YYYY-MM-DD` opens one dated to that local calendar day.
+ * Anything else is ignored so a typo cannot fail the planner.
+ */
+export function parseSignalCreateParam(
+  value: string | null,
+): { creating: false } | { creating: true; date: string | null } {
+  if (value === null) return { creating: false };
+  if (value === '1') return { creating: true, date: null };
+  if (isSignalDate(value)) return { creating: true, date: value };
+  return { creating: false };
+}
+
 /** The first and last day of the month a `YYYY-MM-DD` falls in, as the same kind of string. */
 export function signalMonthBounds(date: string): { from: string; to: string } {
   const [year, month] = date.split('-').map(Number) as [number, number];

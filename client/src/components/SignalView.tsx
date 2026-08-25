@@ -24,11 +24,13 @@ import {
   SIGNAL_CHANNELS,
   SIGNAL_CTA_LABEL,
   SIGNAL_CTAS,
+  SIGNAL_DEFAULT_TIME,
   SIGNAL_FORMAT_LABEL,
   SIGNAL_FORMATS,
   SIGNAL_STATUS_LABEL,
   SIGNAL_STATUSES,
   isSignalDate,
+  parseSignalCreateParam,
   resolveSignalChannelPreset,
   signalChannelPresentation,
   signalMediaKindFor,
@@ -182,6 +184,24 @@ const draftFor = (post: SignalPost): Draft => ({
   status: post.status,
   campaigns: post.campaigns,
   cta: post.cta,
+});
+
+/**
+ * An empty draft for the shared Add Post form.
+ *
+ * A day-cell entry passes that cell's `YYYY-MM-DD` string; the top navigation and queue actions
+ * pass `null` so the post starts in the unscheduled queue. Nothing is written until Save.
+ */
+const blankDraft = (date: string | null): Draft => ({
+  text: '',
+  channels: [],
+  media: [],
+  date: date ?? '',
+  time: SIGNAL_DEFAULT_TIME,
+  format: 'TEXT',
+  status: 'DRAFT',
+  campaigns: [],
+  cta: 'NONE',
 });
 
 /**
@@ -564,13 +584,17 @@ function Post({
 
 function Editor({
   post,
+  createDate = null,
   campaigns,
   close,
   saved,
   opened,
   removed,
 }: {
-  post: SignalPost;
+  /** Null means Add Post: the same form, writing with POST on save rather than PATCH. */
+  post: SignalPost | null;
+  /** Prefill when creating; ignored when editing. Null is the unscheduled queue. */
+  createDate?: string | null;
   /** The workspace's campaigns, for the chip input to suggest from. Loaded once by the planner. */
   campaigns: SignalCampaignSummary[];
   close: () => void;
@@ -578,7 +602,8 @@ function Editor({
   opened: (post: SignalPost) => Promise<void>;
   removed: (id: string) => Promise<void>;
 }) {
-  const [draft, setDraft] = useState(() => draftFor(post));
+  const creating = post === null;
+  const [draft, setDraft] = useState(() => (post ? draftFor(post) : blankDraft(createDate)));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [mediaInput, setMediaInput] = useState('');
@@ -635,11 +660,13 @@ function Editor({
   const [layers, setLayers] = useState(() => variantMap([]));
   const [suggestedSlot, setSuggestedSlot] = useState<SignalSlot | null>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
-  const hasUnsavedChanges = JSON.stringify(draft) !== JSON.stringify(draftFor(post));
+  const hasUnsavedChanges = creating
+    ? JSON.stringify(draft) !== JSON.stringify(blankDraft(createDate))
+    : JSON.stringify(draft) !== JSON.stringify(draftFor(post));
   const hasUnsavedVariants =
     JSON.stringify(variantList(layers)) !== JSON.stringify(variantList(savedLayers));
-  const hasPublishableChannel = post.channels.some((channel) => channel !== 'blog');
-  const hasTailorablePlatform = previewPlatforms(post).length > 0;
+  const hasPublishableChannel = Boolean(post?.channels.some((channel) => channel !== 'blog'));
+  const hasTailorablePlatform = post ? previewPlatforms(post).length > 0 : false;
   const warnsAboutXLink = draft.channels.includes('x') && signalTextHasLink(draft.text);
   /**
    * Channels on this post that no submission reaches, answered from the same capability contract
@@ -647,6 +674,7 @@ function Editor({
    * no route is the same fact arriving a different way.
    */
   const undeliverable = useMemo(() => {
+    if (!post) return [];
     const delivered = new Set(
       publications.flatMap((publication) => publication.targets.map((target) => target.channel)),
     );
@@ -656,7 +684,7 @@ function Editor({
         deliveryModeFor(publishPlatformFor(channel), publishPostKindFor(post.format)) ===
           'UNSUPPORTED',
     );
-  }, [post.channels, post.format, publications]);
+  }, [post, publications]);
   /**
    * The result identities the deliveries are carrying, as one string.
    *
@@ -688,10 +716,14 @@ function Editor({
   }, [close]);
 
   useEffect(() => {
+    if (!post) {
+      setPublications([]);
+      return;
+    }
     api<SignalPublication[]>(`/signal/posts/${post.id}/publications`)
       .then(setPublications)
       .catch(() => setPublications([]));
-  }, [post.id]);
+  }, [post]);
 
   /**
    * The stored overrides, read as text and nothing else.
@@ -701,6 +733,11 @@ function Editor({
    * the preview is asked for.
    */
   useEffect(() => {
+    if (!post) {
+      setSavedLayers(variantMap([]));
+      setLayers(variantMap([]));
+      return;
+    }
     api<PublishVariantRecord[]>(`/signal/posts/${post.id}/variants`)
       .then((stored) => {
         setSavedLayers(variantMap(stored));
@@ -710,9 +747,10 @@ function Editor({
         setSavedLayers(variantMap([]));
         setLayers(variantMap([]));
       });
-  }, [post.id]);
+  }, [post]);
 
   const saveVariants = async (): Promise<boolean> => {
+    if (!post) return false;
     setBusy(true);
     setError('');
     try {
@@ -758,6 +796,7 @@ function Editor({
     accountId: number | null,
     role: PublishVariantMediaRole,
   ) => {
+    if (!post) return;
     const stored = await send<PublishVariantRecord[]>(
       `/signal/posts/${post.id}/variants/media/recheck`,
       'POST',
@@ -770,6 +809,7 @@ function Editor({
   };
 
   const previewPublish = async () => {
+    if (!post) return;
     if (previewInFlight.current) return previewInFlight.current;
     setBusy(true);
     setError('');
@@ -811,6 +851,7 @@ function Editor({
    * server would then refuse.
    */
   const saveTargets = async (targets: { channel: string; providerAccountIds: number[] }[]) => {
+    if (!post) return;
     if (previewInFlight.current) await previewInFlight.current;
     setBusy(true);
     setError('');
@@ -834,6 +875,7 @@ function Editor({
    * different one, and the plan hash would refuse it at commit anyway — later and less clearly.
    */
   const toggleDriveOverride = async (next: boolean) => {
+    if (!post) return;
     setDriveOverride(next);
     if (previewInFlight.current) await previewInFlight.current;
     setBusy(true);
@@ -852,7 +894,7 @@ function Editor({
   };
 
   const confirmPublish = async () => {
-    if (!publishPreview || publishPreviewRefusals(publishPreview).length) return;
+    if (!post || !publishPreview || publishPreviewRefusals(publishPreview).length) return;
     setBusy(true);
     setError('');
     try {
@@ -871,6 +913,7 @@ function Editor({
   };
 
   const markPublished = async () => {
+    if (!post) return;
     setBusy(true);
     setError('');
     try {
@@ -942,7 +985,7 @@ function Editor({
     action: ProviderAction,
     accountId?: number,
   ) => {
-    if (!providerPreview) return;
+    if (!post || !providerPreview) return;
     setBusy(true);
     setError('');
     try {
@@ -1048,19 +1091,22 @@ function Editor({
     }
     setBusy(true);
     setError('');
+    const body = {
+      ...draft,
+      text: draft.text.trim(),
+      date: draft.date || null,
+      // The source and the address, and nothing else. A Drive item sends its link, which the
+      // server parses and resolves; the metadata beside it here is what the server last said and
+      // is never sent back as if it were a fact this form knows.
+      media: draft.media.map((item) => ({ source: item.source, url: item.url })),
+      // Names, so a campaign typed here is resolved or created inside the same transaction as the
+      // post. An empty array is *this post belongs to none*, which is why it is always sent.
+      campaigns: draft.campaigns.map((campaign) => campaign.name),
+    };
     try {
-      const next = await send<SignalPost>(`/signal/posts/${post.id}`, 'PATCH', {
-        ...draft,
-        text: draft.text.trim(),
-        date: draft.date || null,
-        // The source and the address, and nothing else. A Drive item sends its link, which the
-        // server parses and resolves; the metadata beside it here is what the server last said and
-        // is never sent back as if it were a fact this form knows.
-        media: draft.media.map((item) => ({ source: item.source, url: item.url })),
-        // Names, so a campaign typed here is resolved or created inside the same transaction as the
-        // post. An empty array is *this post belongs to none*, which is why it is always sent.
-        campaigns: draft.campaigns.map((campaign) => campaign.name),
-      });
+      const next = creating
+        ? await send<SignalPost>('/signal/posts', 'POST', body)
+        : await send<SignalPost>(`/signal/posts/${post.id}`, 'PATCH', body);
       await saved(next);
     } catch (reason) {
       setError((reason as Error).message);
@@ -1069,6 +1115,7 @@ function Editor({
   };
 
   const remove = async () => {
+    if (!post) return;
     if (!window.confirm('Delete this Signal post? This cannot be undone.')) return;
     setBusy(true);
     setError('');
@@ -1082,6 +1129,7 @@ function Editor({
   };
 
   const duplicate = async () => {
+    if (!post) return;
     setBusy(true);
     setError('');
     try {
@@ -1093,6 +1141,7 @@ function Editor({
   };
 
   const suggestSlot = async () => {
+    if (!post) return;
     setBusy(true);
     setError('');
     try {
@@ -1105,7 +1154,7 @@ function Editor({
   };
 
   const confirmSlot = async () => {
-    if (!suggestedSlot) return;
+    if (!post || !suggestedSlot) return;
     setBusy(true);
     setError('');
     try {
@@ -1201,6 +1250,7 @@ function Editor({
    * metadata exactly where they are and shows the reason beside it.
    */
   const recheckDriveMedia = async (driveFileId: string) => {
+    if (!post) return;
     setRecheckingId(driveFileId);
     setDriveError('');
     setRecheckErrors((current) => {
@@ -1264,7 +1314,7 @@ function Editor({
         <header>
           <div>
             <span className="eyebrow">Signal Campaign</span>
-            <h2 id="signal-editor-title">Edit post</h2>
+            <h2 id="signal-editor-title">{creating ? 'Add post' : 'Edit post'}</h2>
           </div>
           <button className="icon-btn" onClick={close} aria-label="Close editor">
             <X />
@@ -1357,7 +1407,7 @@ function Editor({
                             busy ||
                             recheckingId !== '' ||
                             hasUnsavedChanges ||
-                            !post.media.some(
+                            !post?.media.some(
                               (stored) =>
                                 stored.source === 'DRIVE' &&
                                 stored.driveFileId === item.driveFileId,
@@ -1488,22 +1538,26 @@ function Editor({
             </label>
           </div>
           <div className="signal-slot-actions">
-            <button
-              type="button"
-              className="secondary"
-              disabled={busy || hasUnsavedChanges}
-              onClick={() => void duplicate()}
-            >
-              <Copy aria-hidden="true" /> Duplicate to unscheduled queue
-            </button>
-            <button
-              type="button"
-              className="secondary"
-              disabled={busy || hasUnsavedChanges}
-              onClick={() => void suggestSlot()}
-            >
-              Suggest next open slot
-            </button>
+            {post && (
+              <>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={busy || hasUnsavedChanges}
+                  onClick={() => void duplicate()}
+                >
+                  <Copy aria-hidden="true" /> Duplicate to unscheduled queue
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={busy || hasUnsavedChanges}
+                  onClick={() => void suggestSlot()}
+                >
+                  Suggest next open slot
+                </button>
+              </>
+            )}
             {draft.date && (
               <button
                 type="button"
@@ -1514,7 +1568,7 @@ function Editor({
               </button>
             )}
           </div>
-          {hasUnsavedChanges && (
+          {post && hasUnsavedChanges && (
             <p className="signal-preset-notice">
               Save changes before duplicating or suggesting a slot.
             </p>
@@ -1589,7 +1643,7 @@ function Editor({
           />
           {/* Tailored from the post as it is saved, not as it is being typed: a platform override
               of a caption that has not been written yet would be an override of nothing. */}
-          {hasTailorablePlatform && (
+          {post && hasTailorablePlatform && (
             <PlatformVariantsEditor
               post={post}
               layers={layers}
@@ -1604,7 +1658,7 @@ function Editor({
           {/* Delivery sits beside the planning status above, never inside it. The status select is
               the user's own claim about the post; everything here is what a provider did with one
               submission, per account, and neither one is allowed to write the other. */}
-          {(publications.length > 0 || undeliverable.length > 0) && (
+          {post && (publications.length > 0 || undeliverable.length > 0) && (
             <section className="signal-delivery" aria-label="Delivery">
               <h3>Delivery</h3>
               <p className="signal-delivery-note">
@@ -1739,7 +1793,7 @@ function Editor({
               <SignalMetrics key={metricsKey} postId={post.id} busy={busy} />
             </section>
           )}
-          {publishPreview && (
+          {post && publishPreview && (
             <section className="signal-publish-preview" aria-label="Publish confirmation">
               <h3>Confirm publishing</h3>
               {publishPreview.scheduledInstant && (
@@ -1808,24 +1862,28 @@ function Editor({
             {error}
           </div>
           <div className="signal-editor-actions">
-            <button
-              type="button"
-              className="secondary danger-text"
-              disabled={busy}
-              onClick={remove}
-            >
-              <Trash2 /> Delete
-            </button>
+            {post && (
+              <button
+                type="button"
+                className="secondary danger-text"
+                disabled={busy}
+                onClick={remove}
+              >
+                <Trash2 /> Delete
+              </button>
+            )}
             <button className="submit" disabled={busy}>
               {busy ? (
                 <>
                   <RefreshCw className="spin" /> Saving…
                 </>
+              ) : creating ? (
+                'Add post'
               ) : (
                 'Save post'
               )}
             </button>
-            {post.date && hasPublishableChannel && !publishPreview && (
+            {post && post.date && hasPublishableChannel && !publishPreview && (
               <button
                 type="button"
                 className="secondary"
@@ -1877,9 +1935,7 @@ export function SignalView() {
    */
   const [campaigns, setCampaigns] = useState<SignalCampaignSummary[]>([]);
   const [editing, setEditing] = useState<SignalPost | null>(null);
-  const [idea, setIdea] = useState('');
   const [loading, setLoading] = useState(true);
-  const [adding, setAdding] = useState(false);
   const [error, setError] = useState('');
   const [truncated, setTruncated] = useState(false);
   /**
@@ -1897,6 +1953,13 @@ export function SignalView() {
    * that no longer resolves reports itself and leaves the planner usable.
    */
   const requestedPost = params.get('post');
+  /**
+   * Shared Add Post creation state. Day cells, the queue action, and the top navigation all set
+   * `new`; the editor itself is the same form used for edits. A named `post` wins over `new` so an
+   * alert link still opens the post it named.
+   */
+  const createRequest = parseSignalCreateParam(params.get('new'));
+  const creating = createRequest.creating && !requestedPost ? { date: createRequest.date } : null;
   const opened = useRef<string | null>(null);
 
   const load = useCallback(async () => {
@@ -1955,14 +2018,15 @@ export function SignalView() {
       .catch((reason: Error) => setError(reason.message));
   }, [requestedPost, posts, queue]);
 
-  /** Closes the editor and drops the post from the address, leaving every other parameter alone. */
-  const closeEditor = useCallback(() => {
+  /** Closes the composer and drops `post` / `new` from the address, leaving every other parameter. */
+  const closeComposer = useCallback(() => {
     setEditing(null);
     opened.current = null;
     setParams(
       (current) => {
         const next = new URLSearchParams(current);
         next.delete('post');
+        next.delete('new');
         return next;
       },
       { replace: true },
@@ -1976,6 +2040,46 @@ export function SignalView() {
       .catch(() => undefined);
   }, [bounds.from, bounds.to, setParams]);
 
+  /**
+   * Opens the shared Add Post form with an optional local date.
+   *
+   * Writes `new` into the address and clears any open `post`, so reload and back/forward land on
+   * the same creation state. Month/view/campaign filters stay where they were.
+   */
+  const openCreate = useCallback(
+    (date: string | null) => {
+      setEditing(null);
+      opened.current = null;
+      setParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          next.delete('post');
+          next.set('new', date ?? '1');
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setParams],
+  );
+
+  /** Opens an existing post and clears creation state so the two modes never compete. */
+  const openPost = useCallback(
+    (post: SignalPost) => {
+      setEditing(post);
+      if (params.get('new') === null) return;
+      setParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          next.delete('new');
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [params, setParams],
+  );
+
   const byDate = useMemo(() => {
     const grouped = new Map<string, SignalPost[]>();
     for (const post of posts) {
@@ -1985,25 +2089,8 @@ export function SignalView() {
     return grouped;
   }, [posts]);
 
-  const addIdea = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!idea.trim()) return;
-    setAdding(true);
-    setError('');
-    try {
-      const created = await send<SignalPost>('/signal/posts', 'POST', { text: idea.trim() });
-      setIdea('');
-      await load();
-      setEditing(created);
-    } catch (reason) {
-      setError((reason as Error).message);
-    } finally {
-      setAdding(false);
-    }
-  };
-
   const refreshed = async () => {
-    closeEditor();
+    closeComposer();
     setHealthKey((key) => key + 1);
     await load();
   };
@@ -2075,28 +2162,21 @@ export function SignalView() {
             </div>
             <span className="signal-count">{queue.length}</span>
           </div>
-          <form className="signal-quick-add" onSubmit={addIdea}>
-            <label className="sr-only" htmlFor="signal-idea">
-              Add an idea
-            </label>
-            <textarea
-              id="signal-idea"
-              rows={3}
-              value={idea}
-              onChange={(event) => setIdea(event.target.value)}
-              placeholder="Capture a new post idea…"
-            />
-            <button disabled={adding || !idea.trim()}>
-              {adding ? <RefreshCw className="spin" /> : <Plus />} Add idea
-            </button>
-          </form>
+          <button
+            type="button"
+            className="signal-add-post"
+            onClick={() => openCreate(null)}
+            disabled={creating !== null && creating.date === null}
+          >
+            <Plus /> Add post
+          </button>
           {!loading && queue.length === 0 ? (
             <Empty compact title="Queue clear" body="New ideas without a date will wait here." />
           ) : (
             <ul className="signal-queue-list">
               {queue.map((post) => (
                 <li key={post.id}>
-                  <Post post={post} delivery={deliveryFor(post.id)} open={setEditing} />
+                  <Post post={post} delivery={deliveryFor(post.id)} open={openPost} />
                 </li>
               ))}
             </ul>
@@ -2157,7 +2237,17 @@ export function SignalView() {
                 >
                   <header>
                     <span>{Number(date.slice(-2))}</span>
-                    {date === now && <strong>Today</strong>}
+                    <div className="signal-day-actions">
+                      {date === now && <strong>Today</strong>}
+                      <button
+                        type="button"
+                        className="icon-btn signal-day-add"
+                        aria-label={`Add post on ${date}`}
+                        onClick={() => openCreate(date)}
+                      >
+                        <Plus aria-hidden="true" />
+                      </button>
+                    </div>
                   </header>
                   {scheduled.length === 0 ? (
                     <span className="signal-day-empty">No posts</span>
@@ -2168,7 +2258,7 @@ export function SignalView() {
                           <Post
                             post={post}
                             delivery={deliveryFor(post.id)}
-                            open={setEditing}
+                            open={openPost}
                             preview
                           />
                         </li>
@@ -2200,17 +2290,26 @@ export function SignalView() {
           in front of them. `healthKey` is bumped by every save here, which is also every edit that
           can move a post between campaigns. */}
       <SignalCampaignAnalyticsPanel reloadKey={healthKey} />
-      {editing && (
+      {(creating || editing) && (
         <Editor
-          key={editing.id}
-          post={editing}
+          key={creating ? `new-${creating.date ?? 'queue'}` : (editing as SignalPost).id}
+          post={creating ? null : editing}
+          createDate={creating ? creating.date : null}
           campaigns={campaigns}
-          close={closeEditor}
+          close={closeComposer}
           saved={refreshed}
           opened={async (post) => {
             await load();
             opened.current = post.id;
             setEditing(post);
+            setParams(
+              (current) => {
+                const next = new URLSearchParams(current);
+                next.delete('new');
+                return next;
+              },
+              { replace: true },
+            );
           }}
           removed={refreshed}
         />

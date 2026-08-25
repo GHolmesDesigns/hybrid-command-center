@@ -269,8 +269,12 @@ describe('Calendar', () => {
     await openCalendar();
     await screen.findByText('Read only');
 
+    // The top bar's Add post navigates to Signal; the calendar page itself still has no write.
+    const page = screen
+      .getByRole('heading', { level: 1, name: /September 2026/ })
+      .closest('.page-wrap') as HTMLElement;
     for (const label of [/new post/i, /add/i, /edit/i, /delete/i, /schedule/i, /publish/i]) {
-      expect(screen.queryByRole('button', { name: label })).toBeNull();
+      expect(within(page).queryByRole('button', { name: label })).toBeNull();
     }
     // And nothing it did render sent a write.
     expect(requests.every((call) => call.method === 'GET')).toBe(true);

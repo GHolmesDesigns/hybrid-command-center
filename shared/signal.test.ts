@@ -8,6 +8,7 @@ import {
   SIGNAL_CHANNEL_PRESETS,
   SIGNAL_SLOT_SEARCH_DAYS,
   isSignalChannel,
+  parseSignalCreateParam,
   resolveSignalChannelPreset,
   signalChannelPresentation,
   signalNextDate,
@@ -16,6 +17,22 @@ import {
   suggestNextOpenSignalSlot,
 } from './signal.ts';
 import { contrastRatio, meetsAaText, mixHex, normalizeHex } from './contrast.ts';
+
+describe('Signal Add Post creation param', () => {
+  it('reads an unscheduled draft from new=1', () => {
+    expect(parseSignalCreateParam('1')).toEqual({ creating: true, date: null });
+  });
+
+  it('reads a local calendar day from new=YYYY-MM-DD', () => {
+    expect(parseSignalCreateParam('2026-09-14')).toEqual({ creating: true, date: '2026-09-14' });
+  });
+
+  it('ignores missing and invalid values', () => {
+    expect(parseSignalCreateParam(null)).toEqual({ creating: false });
+    expect(parseSignalCreateParam('true')).toEqual({ creating: false });
+    expect(parseSignalCreateParam('2026-02-31')).toEqual({ creating: false });
+  });
+});
 
 describe('Signal link detection', () => {
   it.each([

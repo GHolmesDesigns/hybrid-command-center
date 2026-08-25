@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import {
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from 'react-router-dom';
 import {
   BriefcaseBusiness,
   CalendarDays,
@@ -55,6 +62,34 @@ const LAST_PROJECT_KEY = 'hcc-last-project';
 function LegacyKanbanRedirect() {
   const { search } = useLocation();
   return <Navigate to={`/status${search}`} replace />;
+}
+
+/**
+ * Opens Signal's shared Add Post form (`new=1`).
+ *
+ * On Signal it merges into the current address so month/view/campaign filters stay put; elsewhere
+ * it navigates to Signal with an unscheduled draft. The form itself lives in SignalView — this is
+ * only the top-bar entry point.
+ */
+function TopbarAddPost() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [params] = useSearchParams();
+  const open = () => {
+    if (location.pathname === '/signal') {
+      const next = new URLSearchParams(params);
+      next.delete('post');
+      next.set('new', '1');
+      navigate({ pathname: '/signal', search: next.toString() }, { replace: true });
+      return;
+    }
+    navigate('/signal?new=1');
+  };
+  return (
+    <button className="top-action" type="button" onClick={open}>
+      <Plus /> Add post
+    </button>
+  );
 }
 
 export function App() {
@@ -208,12 +243,15 @@ export function App() {
             <Menu />
           </button>
           <BreadcrumbTrail clients={clients} projects={projects} />
-          <button
-            className="top-action"
-            onClick={() => setModal({ type: 'task', projectId: defaultProject })}
-          >
-            <Plus /> New task
-          </button>
+          <div className="top-actions">
+            <TopbarAddPost />
+            <button
+              className="top-action"
+              onClick={() => setModal({ type: 'task', projectId: defaultProject })}
+            >
+              <Plus /> New task
+            </button>
+          </div>
         </header>
         <div className="page-wrap">
           <Routes>
