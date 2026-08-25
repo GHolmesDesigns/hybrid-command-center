@@ -376,26 +376,60 @@ Resources are optional in the prototype; tools alone satisfy v1.
 Each card assumes this document and does not reopen transport choice, provider MCP consumption,
 or provider-write policy.
 
-### C106 — Local stdio MCP scaffold and read tools
+### Waves, milestones, and end-to-end coverage
+
+These waves continue from Wave 19 (C103). **Wave 20 and Wave 21 milestones already exist** for
+provider lifecycle and trust decisions — MCP work starts at Wave 22. Coordination cards C109–C113
+are detailed in [`agent-coordination-plan.md`](agent-coordination-plan.md).
+
+| Wave | Cards | Theme | Estimate (sequential) | Browser coverage |
+| --- | --- | --- | --- | --- |
+| 22 — Multi-agent MCP | C105, MCP-C106, MCP-C107, MCP-C108 | Local stdio workspace and Signal access | **~10–22 h** | `e2e/mcp-signal-planning.spec.ts` on MCP-C107 |
+| 23 — Agent coordination hub | C109–C112 | Handoffs and operator inbox | **~7–17 h** | `e2e/coordination-inbox.spec.ts` on C112 |
+| 24 — Network MCP | C113 | HTTPS MCP after operator auth | **4–8 h** | integration tests; C55 staging rehearsal |
+
+**MCP-C106–C108** below are this plan's implementation cards. They are not publishing-wave
+C106–C108 (#305–#307).
+
+| Card | Type | Size | Estimate | Wave | Issue |
+| --- | --- | --- | --- | --- | --- |
+| C105 | `docs` | M | 1–3 h | 22 | #304 |
+| MCP-C106 | `feat` | M | 1–3 h | 22 | TBD |
+| MCP-C107 | `feat` | L | 4–8 h | 22 | TBD |
+| MCP-C108 | `feat` | L | 4–8 h | 22 | TBD |
+
+### C105 — Multi-agent MCP decision (shipped)
+
+**Branch:** `docs/304-multi-agent-mcp-decision`
+**Size:** M · **Estimate:** 1–3 hours · **Wave / milestone:** 22 — Multi-agent MCP
+**Issue:** #304 · **Depends on:** —
+
+This card. No runtime change.
+
+### MCP-C106 — Local stdio MCP scaffold and read tools
 
 **Branch:** `feat/<issue>-mcp-stdio-read`
+**Size:** M · **Estimate:** 1–3 hours · **Wave / milestone:** 22 — Multi-agent MCP
 **Depends on:** C105 (#304).
 **Scope:** `server/mcp/` module, stdio transport, `mcp_agent_events` schema, read-only tools from
 §9.2 (list/get), §9.3 (reads), §9.5, §9.7 (gets), health ping. Spawn via `npm run mcp`.
 **Out of scope:** Any write tool, network listener, provider call.
 
-### C107 — Signal and workspace local-write tools
+### MCP-C107 — Signal and workspace local-write tools
 
 **Branch:** `feat/<issue>-mcp-local-write`
-**Depends on:** C106.
+**Size:** L · **Estimate:** 4–8 hours · **Wave / milestone:** 22 — Multi-agent MCP
+**Depends on:** MCP-C106.
+**Browser coverage:** `e2e/mcp-signal-planning.spec.ts` — agent creates or edits a Signal post via MCP and sees it in the UI.
 **Scope:** Local-write tools for workspace CRUD (without merge commit), Signal planning edits,
 campaign management, alert ack, settings updates. Confirm flags on destructive ops.
 **Out of scope:** Import commit, merge commit, integration writes, publish preview.
 
-### C108 — Preview, import, and integration-write tools
+### MCP-C108 — Preview, import, and integration-write tools
 
 **Branch:** `feat/<issue>-mcp-integration-write`
-**Depends on:** C107.
+**Size:** L · **Estimate:** 4–8 hours · **Wave / milestone:** 22 — Multi-agent MCP
+**Depends on:** MCP-C107.
 **Scope:** Two-step import/merge, `signal_publish_preview`, Drive media resolve/recheck,
 integration refresh tools with rate limits and `integration_events`.
 **Out of scope:** Provider submit/apply/cancel/publish-now.
@@ -403,7 +437,8 @@ integration refresh tools with rate limits and `integration_events`.
 ### C109 — Agent coordination hub decision
 
 **Branch:** `docs/<issue>-agent-coordination-decision`
-**Depends on:** C105 (#304), C106 (MCP scaffold with `agent_label`).
+**Size:** M · **Estimate:** 1–3 hours · **Wave / milestone:** 23 — Agent coordination hub
+**Issue:** #336 · **Depends on:** C105 (#304), MCP-C106 (MCP scaffold with `agent_label`).
 **Scope:** Finalize [`agent-coordination-plan.md`](agent-coordination-plan.md) §4–§8 — handoff
 primitive, lifecycle, authorization, audit, threat-model checklist. No runtime change.
 **Blocks:** C110, C111, C112.
@@ -411,7 +446,8 @@ primitive, lifecycle, authorization, audit, threat-model checklist. No runtime c
 ### C110 — Agent handoff queue (domain and schema)
 
 **Branch:** `feat/<issue>-agent-handoff-queue`
-**Depends on:** C109, C107.
+**Size:** L · **Estimate:** 4–8 hours · **Wave / milestone:** 23 — Agent coordination hub
+**Issue:** #337 · **Depends on:** C109, MCP-C107.
 **Scope:** `agent_handoffs`, `agent_handoff_notes`, `server/domain/agent-coordination.ts`, HTTP
 service for operator cancel. See [`agent-coordination-plan.md`](agent-coordination-plan.md) §C110.
 **Blocks:** C111, C112.
@@ -419,7 +455,8 @@ service for operator cancel. See [`agent-coordination-plan.md`](agent-coordinati
 ### C111 — Coordination MCP tools
 
 **Branch:** `feat/<issue>-mcp-coordination-tools`
-**Depends on:** C110, C108.
+**Size:** M · **Estimate:** 1–3 hours · **Wave / milestone:** 23 — Agent coordination hub
+**Issue:** #338 · **Depends on:** C110, MCP-C108.
 **Scope:** `coordination_*` MCP tools and `hcc://coordination/inbox` resource. Requires
 `agent_label` on writes.
 **Blocks:** none.
@@ -427,14 +464,17 @@ service for operator cancel. See [`agent-coordination-plan.md`](agent-coordinati
 ### C112 — Operator coordination inbox (UI)
 
 **Branch:** `feat/<issue>-coordination-inbox-ui`
-**Depends on:** C110.
+**Size:** M · **Estimate:** 1–3 hours · **Wave / milestone:** 23 — Agent coordination hub
+**Issue:** #339 · **Depends on:** C110.
+**Browser coverage:** `e2e/coordination-inbox.spec.ts`.
 **Scope:** Agent handoffs panel, `/api/coordination/*`, `e2e/coordination-inbox.spec.ts`.
 **Blocks:** none.
 
 ### C113 — Network MCP behind operator auth (deferred)
 
 **Branch:** `feat/<issue>-mcp-network`
-**Depends on:** C108, C111, C51 (#177), C53 (#179), C55 (#181).
+**Size:** L · **Estimate:** 4–8 hours · **Wave / milestone:** 24 — Network MCP (deferred; may join Cloud Hosting)
+**Issue:** #340 · **Depends on:** MCP-C108, C111, C51 (#177), C53 (#179), C55 (#181).
 **Scope:** Streamable HTTP MCP on the same origin as the API, session + CSRF + agent label header,
 same tool surface as stdio plus coordination tools.
 **Out of scope:** Provider-write tools unless a new security decision record says otherwise.
@@ -443,7 +483,7 @@ Full card text: [`agent-coordination-plan.md`](agent-coordination-plan.md).
 
 ---
 
-## 11. Narrow prototype plan (C106)
+## 11. Narrow prototype plan (MCP-C106)
 
 1. Add `server/mcp/stdio.ts` — JSON-RPC loop, tool registry, Zod validation at boundary.
 2. Reuse existing service factories from `server/app.ts` extraction (or inject the same deps tests use).

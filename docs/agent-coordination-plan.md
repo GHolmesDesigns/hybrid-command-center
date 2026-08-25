@@ -19,7 +19,7 @@ changes it.
 
 | Layer | What it provides | Cards |
 | --- | --- | --- |
-| Shared workspace | One SQLite truth for clients, tasks, Signal | C106–C108 |
+| Shared workspace | One SQLite truth for clients, tasks, Signal | MCP-C106–MCP-C108 (Wave 22) |
 | **Agent coordination** | Handoffs, claims, threads, operator inbox | **C109–C112** |
 | Remote access | Network MCP on the hosted origin | C113 |
 
@@ -35,18 +35,53 @@ provider MCP servers.
 ## 2. Dependency graph
 
 ```
-C105 (decided)
-  └─ C106 stdio read
-       └─ C107 local write
-            └─ C108 integration write
-                 ├─ C109 coordination decision (docs)
-                 │    └─ C110 handoff domain + schema
-                 │         ├─ C111 coordination MCP tools
-                 │         └─ C112 operator coordination UI
-                 └─ C113 network MCP (after C51)
+C105 (decided, #304)
+  └─ MCP-C106 stdio read
+       └─ MCP-C107 local write
+            └─ MCP-C108 integration write
+                 ├─ C109 coordination decision (docs, #336)
+                 │    └─ C110 handoff domain + schema (#337)
+                 │         ├─ C111 coordination MCP tools (#338)
+                 │         └─ C112 operator coordination UI (#339)
+                 └─ C113 network MCP (#340, after C51)
 ```
 
 C110–C112 may ship on local stdio before C113. Coordination does not require network access.
+
+### Waves, milestones, and end-to-end coverage
+
+These waves continue the repository sequence from Wave 19 (C103). **Wave 20 (#305–#307 provider
+lifecycle) and Wave 21 (trust decisions) already exist** — MCP work starts at Wave 22. These rows
+are dependency groups; at filing time each wave becomes one GitHub milestone unless split only to
+satisfy the one-`e2e`-spec-per-milestone rule in `AGENTS.md`.
+
+Sizes are the repository label scale, not calendar days: `size-s` under 1 hour, `size-m` 1–3 hours,
+`size-l` 4–8 hours, `size-xl` 8–12 hours, `size-xxl` a day or more.
+
+| Wave | Cards | GitHub issues | Theme | Estimate (sequential) | Browser coverage |
+| --- | --- | --- | --- | --- | --- |
+| 22 — Multi-agent MCP | C105, MCP-C106, MCP-C107, MCP-C108 | #304, TBD | Workspace read/write over local stdio | **~10–22 h** (1–3 h + 1–3 h + 4–8 h + 4–8 h) | `e2e/mcp-signal-planning.spec.ts` on MCP-C107 |
+| 23 — Agent coordination hub | C109, C110, C111, C112 | #336–#339 | Handoffs, claims, operator inbox | **~7–17 h** (1–3 h + 4–8 h + 1–3 h + 1–3 h) | `e2e/coordination-inbox.spec.ts` on C112 |
+| 24 — Network MCP | C113 | #340 | Streamable HTTP MCP after operator auth | **4–8 h** | integration tests only; staging rehearsal per C55 |
+
+**MCP-C106–C108** are the implementation cards named in
+[`multi-agent-mcp-decision.md`](multi-agent-mcp-decision.md) §10. They are **not** publishing-wave
+C106–C108 (#305–#307).
+
+Wave 22 must land before Wave 23 starts implementation work beyond C109 (docs). C109 may merge as
+soon as MCP-C106 lands `agent_label` and `mcp_agent_events`. Wave 24 stays **deferred** until C51
+(#177), C53 (#179), and C55 (#181) merge; it may share the Cloud Hosting milestone rather than
+ship as a code-only Wave 24.
+
+### Card index (coordination and network)
+
+| Card | Type | Size | Estimate | Wave | Issue | Depends on |
+| --- | --- | --- | --- | --- | --- | --- |
+| C109 | `docs` | M | 1–3 h | 23 | #336 | C105 (#304), MCP-C106 |
+| C110 | `feat` | L | 4–8 h | 23 | #337 | C109, MCP-C107 |
+| C111 | `feat` | M | 1–3 h | 23 | #338 | C110, MCP-C108 |
+| C112 | `feat` | M | 1–3 h | 23 | #339 | C110 |
+| C113 | `feat` | L | 4–8 h | 24 | #340 | MCP-C108, C111, C51–C55 |
 
 ---
 
@@ -55,7 +90,8 @@ C110–C112 may ship on local stdio before C113. Coordination does not require n
 ### C109 — Decide the agent coordination hub model
 
 **Type / branch:** `docs/<issue>-agent-coordination-decision`
-**Size:** M · **Labels:** `enhancement` `tier-1-security` `docs`
+**Size:** M · **Estimate:** 1–3 hours · **Wave / milestone:** 23 — Agent coordination hub · **Labels:** `enhancement` `tier-1-security` `docs`
+**Issue:** #336
 **Depends on:** C105 (#304), C106 (MCP scaffold landed — needs `agent_label` and `mcp_agent_events`).
 **Blocks:** C110, C111, C112.
 
@@ -109,7 +145,8 @@ Documentation review, `npm run format:check`, `git diff --check`. No runtime cha
 ### C110 — Agent handoff queue (domain and schema)
 
 **Type / branch:** `feat/<issue>-agent-handoff-queue`
-**Size:** L · **Labels:** `enhancement` `size-l`
+**Size:** L · **Estimate:** 4–8 hours · **Wave / milestone:** 23 — Agent coordination hub · **Labels:** `enhancement` `size-l` `tier-3-schema`
+**Issue:** #337
 **Depends on:** C109, C107 (`agent_label` on MCP writes).
 **Blocks:** C111, C112.
 
@@ -173,7 +210,8 @@ see the chain.
 ### C111 — Coordination MCP tools
 
 **Type / branch:** `feat/<issue>-mcp-coordination-tools`
-**Size:** M · **Labels:** `enhancement` `size-m`
+**Size:** M · **Estimate:** 1–3 hours · **Wave / milestone:** 23 — Agent coordination hub · **Labels:** `enhancement` `size-m`
+**Issue:** #338
 **Depends on:** C110, C108.
 **Blocks:** none (C112 may parallel after C110).
 
@@ -233,7 +271,8 @@ coordination tools; otherwise tools return `REFUSED` with a clear error (read to
 ### C112 — Operator coordination inbox (UI)
 
 **Type / branch:** `feat/<issue>-coordination-inbox-ui`
-**Size:** M · **Labels:** `enhancement` `size-m`
+**Size:** M · **Estimate:** 1–3 hours · **Wave / milestone:** 23 — Agent coordination hub · **Labels:** `enhancement` `size-m`
+**Issue:** #339 · **Browser coverage:** `e2e/coordination-inbox.spec.ts`
 **Depends on:** C110.
 **Blocks:** none.
 
@@ -278,7 +317,8 @@ blockers without opening every MCP session log.
 ### C113 — Network MCP behind operator auth
 
 **Type / branch:** `feat/<issue>-mcp-network`
-**Size:** L · **Labels:** `enhancement` `size-l` `tier-1-security`
+**Size:** L · **Estimate:** 4–8 hours · **Wave / milestone:** 24 — Network MCP (deferred; may join Cloud Hosting) · **Labels:** `enhancement` `size-l` `tier-1-security` `blocked` `deferred`
+**Issue:** #340
 **Depends on:** C108, C111 (coordination tools included in network surface), C51 (#177), C53
 (#179), C55 (#181).
 **Blocks:** none.
