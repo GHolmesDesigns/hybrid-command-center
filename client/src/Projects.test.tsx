@@ -144,6 +144,74 @@ describe('Projects sorting', () => {
     );
   });
 
+  it('hides clients with no live projects from the Live client filter', async () => {
+    await renderProjects('/projects');
+
+    const clientSelect = screen.getByRole('combobox', { name: 'Filter by client' });
+    const optionLabels = Array.from(clientSelect.querySelectorAll('option')).map(
+      (o) => o.textContent,
+    );
+    // Both clients have live projects (Zulu, Alpha), so both stay offered.
+    expect(optionLabels).toEqual(['All clients', 'Acme', 'Bravo']);
+  });
+
+  it('offers only clients with matching projects in each visibility view', async () => {
+    testState.projectsPayload = [
+      // Bravo's only project is archived, so it should drop out of the Live dropdown
+      // while remaining available under Archived and All.
+      ...sortableProjects.filter((p) => p.clientId !== 'client-two'),
+      project('sort-bravo-archived', 'Bravo Only Archived', 'ARCHIVED', {
+        clientId: 'client-two',
+        clientName: 'Bravo',
+      }),
+    ];
+    testState.clientsPayload = sortableClients;
+    render(
+      <MemoryRouter initialEntries={['/projects']}>
+        <App />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
+
+    const clientSelect = screen.getByRole('combobox', { name: 'Filter by client' });
+    const optionLabels = () =>
+      Array.from(clientSelect.querySelectorAll('option')).map((o) => o.textContent);
+    expect(optionLabels()).toEqual(['All clients', 'Acme']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Archived' }));
+    expect(optionLabels()).toEqual(['All clients', 'Acme', 'Bravo']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'All' }));
+    expect(optionLabels()).toEqual(['All clients', 'Acme', 'Bravo']);
+  });
+
+  it('clears a stale client filter when a bookmarked URL names a client hidden by visibility', async () => {
+    testState.projectsPayload = [
+      ...sortableProjects.filter((p) => p.clientId !== 'client-two'),
+      project('sort-bravo-archived', 'Bravo Only Archived', 'ARCHIVED', {
+        clientId: 'client-two',
+        clientName: 'Bravo',
+      }),
+    ];
+    testState.clientsPayload = sortableClients;
+    render(
+      <MemoryRouter initialEntries={['/projects?client=client-two']}>
+        <App />
+        <HistoryProbe />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
+
+    // The invalid selection is ignored on this render, so the list and dropdown resolve
+    // immediately rather than waiting on the URL cleanup below.
+    expect(screen.getByRole('combobox', { name: 'Filter by client' })).toHaveValue('');
+    expect(renderedProjectNames()).toEqual(['Zulu']);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Current location').textContent).not.toContain('client=');
+    });
+  });
+
   it('offers each sort mode and orders projects correctly', async () => {
     await renderProjects();
     const sort = screen.getByRole('combobox', { name: 'Sort projects by' });

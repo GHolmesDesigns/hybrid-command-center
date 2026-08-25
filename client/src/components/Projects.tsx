@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   DndContext,
@@ -132,11 +132,35 @@ export function Projects({
     setParams(next);
   };
   const setCategoryIds = (ids: string[]) => setParam('categories', ids.join(','));
+  // Client choices track the visibility toggle so Live never offers a client whose projects
+  // are all hidden, matching the same filter the project list itself applies. This keys off
+  // project status rather than the client's own status: an active client with only archived
+  // projects still belongs in the Archived dropdown, not the Live one.
+  const clientIdsForVisibility = new Set(
+    projects
+      .filter(
+        (p) =>
+          visibility === 'all' ||
+          (visibility === 'archived' ? p.status === 'ARCHIVED' : p.status !== 'ARCHIVED'),
+      )
+      .map((p) => p.clientId),
+  );
+  const clientOptions = clients.filter((c) => clientIdsForVisibility.has(c.id));
+  // A client named by the URL can fall out of scope when visibility changes (e.g. a bookmark
+  // for an archived-only client, revisited under Live). Falling back to "no filter" here keeps
+  // the list correct on this same render; the effect below then cleans the bookmark itself so
+  // the address bar does not keep pointing at a choice the dropdown no longer offers.
+  const clientFilterValid = !clientFilter || clientOptions.some((c) => c.id === clientFilter);
+  const effectiveClientFilter = clientFilterValid ? clientFilter : '';
+  useEffect(() => {
+    if (!clientFilterValid) setParam('client', '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientFilterValid]);
   const visible = projects.filter(
     (p) =>
       (visibility === 'all' ||
         (visibility === 'archived' ? p.status === 'ARCHIVED' : p.status !== 'ARCHIVED')) &&
-      (!clientFilter || p.clientId === clientFilter) &&
+      (!effectiveClientFilter || p.clientId === effectiveClientFilter) &&
       // Every selected category must be present, so each chip narrows the list the way the
       // selects beside it do rather than widening it.
       selectedCategoryIds.every((id) => p.categories.some((category) => category.id === id)) &&
@@ -235,12 +259,12 @@ export function Projects({
       <div className="filterbar">
         <SearchBox value={query} set={setQuery} placeholder="Search projects…" />
         <select
-          value={clientFilter}
+          value={effectiveClientFilter}
           onChange={(e) => setParam('client', e.target.value)}
           aria-label="Filter by client"
         >
           <option value="">All clients</option>
-          {clients.map((c) => (
+          {clientOptions.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
