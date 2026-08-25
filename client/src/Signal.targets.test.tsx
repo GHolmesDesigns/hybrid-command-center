@@ -301,4 +301,33 @@ describe('each chosen account answers for itself', () => {
     const panel = within(screen.getByRole('tabpanel'));
     expect(panel.queryByText('For the studio')).not.toBeInTheDocument();
   });
+
+  it('matches a cold first Show preview with the second press and starts one request per press', async () => {
+    testState.publishPreviewPayload = preview();
+    testState.signalPostsPayload = [
+      signalPost('target-post', 'A post for two pages', '2026-09-14', { channels: ['fb'] }),
+    ];
+    await openSignal();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit A post for two pages' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Show preview' })).toBeEnabled());
+
+    const before = requests.filter((entry) => entry.url.endsWith('/publish/preview')).length;
+    fireEvent.click(screen.getByRole('button', { name: 'Show preview' }));
+    // A second click before the first settles must not start another request.
+    fireEvent.click(screen.getByRole('button', { name: 'Show preview' }));
+    await screen.findByRole('region', { name: 'Publish confirmation' });
+    expect(requests.filter((entry) => entry.url.endsWith('/publish/preview')).length).toBe(
+      before + 1,
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent('');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Show preview' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Show preview' }));
+    await screen.findByRole('region', { name: 'Publish confirmation' });
+    expect(requests.filter((entry) => entry.url.endsWith('/publish/preview')).length).toBe(
+      before + 2,
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent('');
+  });
 });

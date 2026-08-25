@@ -179,6 +179,14 @@ export class BufferAccountsService {
   private readonly provider: BufferReadProvider;
   private readonly clock: () => Date;
   readonly available: boolean;
+  /**
+   * One in-flight refresh shared by overlapping callers.
+   *
+   * Publish preview, target save, and an explicit refresh can overlap on a single press path. Two
+   * walks replacing the same generation would be a duplicate provider read, not a safer one — so
+   * concurrent callers await the same promise rather than starting a second walk.
+   */
+  private inflight: Promise<BufferAccountsReadResult> | null = null;
   constructor(db: Db, provider: BufferReadProvider, clock: () => Date = () => new Date()) {
     this.db = db;
     this.provider = provider;
@@ -202,6 +210,14 @@ export class BufferAccountsService {
   }
 
   async refresh(): Promise<BufferAccountsReadResult> {
+    if (this.inflight) return this.inflight;
+    this.inflight = this.runRefresh().finally(() => {
+      this.inflight = null;
+    });
+    return this.inflight;
+  }
+
+  private async runRefresh(): Promise<BufferAccountsReadResult> {
     const stored = this.read();
     if (!this.provider.available) return { ...stored, reason: 'Buffer needs BUFFER_API_KEY.' };
     const waiting = readSyncHealth(this.db)?.rateLimitedUntil;

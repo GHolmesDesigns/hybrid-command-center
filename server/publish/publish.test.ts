@@ -2340,6 +2340,24 @@ describe('Buffer publish planning', () => {
     schedulingType: 'automatic',
   };
 
+  it('prefers Buffer over Post Bridge when both list TikTok', () => {
+    const plan = buildPublishPlan(
+      add({ channels: ['tt'], mediaUrls: [] }),
+      [
+        { id: 904, platform: 'tiktok', handle: '@post-bridge', name: 'Post Bridge TikTok' },
+        bufferTikTok,
+      ],
+      'America/New_York',
+      new Date('2026-01-01'),
+    );
+    expect(reportFor(plan, 'tt')).toMatchObject({
+      provider: BUFFER_PROVIDER,
+      handle: '@studio',
+      accountId: 50,
+    });
+    expect(reportFor(plan, 'tt').bufferWire).toBeDefined();
+  });
+
   it('refuses Drive media for Buffer before confirmation', () => {
     const media = driveDescriptor('buffer-drive');
     const plan = buildPublishPlan(
