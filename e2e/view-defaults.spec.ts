@@ -1,9 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { gotoSettled } from './ready';
-import {
-  CANONICAL_VIEW_DEFAULTS,
-  type ViewDefaults,
-} from '../shared/view-defaults';
+import { CANONICAL_VIEW_DEFAULTS, type ViewDefaults } from '../shared/view-defaults';
 
 /**
  * C100 / issue #299: configured default views survive a reload, and an explicit URL still wins.
