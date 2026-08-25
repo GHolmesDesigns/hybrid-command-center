@@ -54,10 +54,10 @@ import { seedSignalPost } from '../signal/test-fixture.ts';
 import { MockDriveMediaProvider } from '../drive/mock-provider.ts';
 import type { SignalPostMedia } from '../../shared/signal-media.ts';
 import { postBridgePlatformConfigurations } from './post-bridge-wire.ts';
-import { BUFFER_PROVIDER } from '../../shared/buffer.ts';
+import { BUFFER_PROVIDER, BUFFER_WRITE_EVIDENCE } from '../../shared/buffer.ts';
 import type { PublishTarget } from './provider.ts';
 import { resolveProviderAccounts } from './accounts.ts';
-import { BufferWriteError } from './buffer/write-provider.ts';
+import { BufferWriteError, UnavailableBufferWriteProvider } from './buffer/write-provider.ts';
 
 let db: Db;
 const targets = [
@@ -2451,6 +2451,124 @@ describe('Buffer confirmed publishing', () => {
       'mock-buffer-1',
       'mock-buffer-2',
     ]);
+  });
+
+  it('refuses Buffer at preview when production writes are closed, and never creates a publication', async () => {
+    const post = add({ channels: ['tt', 'yt'], mediaUrls: [] });
+    const listed = resolveProviderAccounts(db, rawTargets, () => new Date('2026-01-01'));
+    const insert = db.prepare(
+      'INSERT INTO signal_post_publish_targets(post_id,channel,provider_account_id,created_at) VALUES(?,?,?,?)',
+    );
+    insert.run(post.id, 'tt', listed[0]?.id, '2026-01-01T00:00:00.000Z');
+    insert.run(post.id, 'yt', listed[1]?.id, '2026-01-01T00:00:00.000Z');
+    const service = new PublishService(
+      db,
+      new LocalSignalProvider(db),
+      new MockPublishProvider(),
+      'America/New_York',
+      () => new Date('2026-01-01T00:00:00.000Z'),
+      new MockDriveMediaProvider(),
+      'post-bridge',
+      new UnavailableBufferWriteProvider(BUFFER_WRITE_EVIDENCE.reason),
+    );
+
+    const preview = await service.preview(post.id, listed);
+    expect(publishPreviewRefusals(preview)).toEqual(
+      expect.arrayContaining([BUFFER_WRITE_EVIDENCE.reason]),
+    );
+    await expect(service.submit(post.id, preview.planHash, listed)).rejects.toThrow(
+      BUFFER_WRITE_EVIDENCE.reason,
+    );
+    expect(
+      db.prepare('SELECT COUNT(*) AS count FROM signal_publications WHERE post_id=?').get(post.id),
+    ).toEqual({ count: 0 });
+  });
+
+  it('falls back to the evidence reason when a closed Buffer write provider omits one', async () => {
+    const post = add({ channels: ['tt'], mediaUrls: [] });
+    const listed = resolveProviderAccounts(db, [rawTargets[0]!], () => new Date('2026-01-01'));
+    db.prepare(
+      'INSERT INTO signal_post_publish_targets(post_id,channel,provider_account_id,created_at) VALUES(?,?,?,?)',
+    ).run(post.id, 'tt', listed[0]?.id, '2026-01-01T00:00:00.000Z');
+    const closed = {
+      available: false,
+      async create() {
+        throw new BufferWriteError('closed', 'DEFINITE_REFUSAL');
+      },
+      async read() {
+        throw new BufferWriteError('closed', 'DEFINITE_REFUSAL');
+      },
+      async edit() {
+        throw new BufferWriteError('closed', 'DEFINITE_REFUSAL');
+      },
+      async cancel() {
+        throw new BufferWriteError('closed', 'DEFINITE_REFUSAL');
+      },
+    };
+    const service = new PublishService(
+      db,
+      new LocalSignalProvider(db),
+      new MockPublishProvider(),
+      'America/New_York',
+      () => new Date('2026-01-01T00:00:00.000Z'),
+      new MockDriveMediaProvider(),
+      'post-bridge',
+      closed,
+    );
+
+    const preview = await service.preview(post.id, listed);
+    expect(publishPreviewRefusals(preview)).toEqual(
+      expect.arrayContaining([BUFFER_WRITE_EVIDENCE.reason]),
+    );
+    await expect(service.submit(post.id, preview.planHash, listed)).rejects.toThrow(
+      BUFFER_WRITE_EVIDENCE.reason,
+    );
+  });
+
+  it('still confirms a Post Bridge plan when Buffer writes are closed', async () => {
+    const post = add({
+      channels: ['fb'],
+      mediaUrls: ['https://cdn.example.com/a.jpg'],
+    });
+    const listed = resolveProviderAccounts(
+      db,
+      [
+        {
+          id: 2,
+          provider: 'post-bridge',
+          accountRef: '2',
+          platform: 'facebook',
+          handle: 'gholmesdesigns',
+          name: 'G.Holmes Designs',
+        },
+        ...rawTargets,
+      ],
+      () => new Date('2026-01-01'),
+    );
+    const service = new PublishService(
+      db,
+      new LocalSignalProvider(db),
+      new MockPublishProvider([
+        {
+          id: 2,
+          platform: 'facebook',
+          handle: 'gholmesdesigns',
+          name: 'G.Holmes Designs',
+        },
+      ]),
+      'America/New_York',
+      () => new Date('2026-01-01T00:00:00.000Z'),
+      new MockDriveMediaProvider(),
+      'post-bridge',
+      new UnavailableBufferWriteProvider(BUFFER_WRITE_EVIDENCE.reason),
+    );
+
+    const preview = await service.preview(post.id, listed);
+    expect(publishPreviewRefusals(preview)).toEqual([]);
+    expect(preview.targets.every((target) => target.provider !== BUFFER_PROVIDER)).toBe(true);
+    const publication = await service.submit(post.id, preview.planHash, listed);
+    expect(publication.provider).toBe('post-bridge');
+    expect(publication.state).toBe('SUBMITTED');
   });
 
   it('keeps a truthful partial result and never retries an ambiguous create', async () => {
