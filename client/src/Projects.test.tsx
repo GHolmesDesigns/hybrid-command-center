@@ -365,6 +365,23 @@ describe('Projects sorting', () => {
     expect(screen.getByLabelText('Position of Zulu')).toBeEnabled();
   });
 
+  it('keeps Custom order in list mode but explains rearranging is grid-only', async () => {
+    await renderProjects();
+    chooseCustom();
+    fireEvent.click(screen.getByRole('button', { name: 'List' }));
+
+    expect(screen.getByLabelText('Current location')).toHaveTextContent(
+      '/projects?visibility=all&sort=custom&view=list',
+    );
+    expect(
+      screen.getByText(
+        'Custom order is kept, but rearranging by hand is available in Grid view only.',
+      ),
+    ).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Drag Zulu' })).toBeNull();
+    expect(screen.getAllByRole('link', { name: 'Open board' }).length).toBeGreaterThan(0);
+  });
+
   it('leaves the tile link navigable while the grip carries the drag', async () => {
     await renderProjects();
     chooseCustom();
@@ -377,5 +394,149 @@ describe('Projects sorting', () => {
       'aria-roledescription',
       'sortable',
     );
+  });
+});
+
+describe('Projects presentation and live-status filters', () => {
+  const filterProjects: Project[] = [
+    project('filter-planning', 'Planning One', 'PLANNING', {
+      clientId: 'client-one',
+      clientName: 'Acme',
+    }),
+    project('filter-active', 'Active One', 'ACTIVE', {
+      clientId: 'client-one',
+      clientName: 'Acme',
+    }),
+    project('filter-hold', 'Hold One', 'ON_HOLD', {
+      clientId: 'client-two',
+      clientName: 'Bravo',
+    }),
+    project('filter-complete', 'Complete One', 'COMPLETE', {
+      clientId: 'client-two',
+      clientName: 'Bravo',
+    }),
+    project('filter-archived', 'Archived One', 'ARCHIVED', {
+      clientId: 'client-one',
+      clientName: 'Acme',
+    }),
+  ];
+  const filterClients: Client[] = [
+    {
+      id: 'client-one',
+      name: 'Acme',
+      slug: 'acme',
+      status: 'ACTIVE',
+      driveStatus: 'DISCONNECTED',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    },
+    {
+      id: 'client-two',
+      name: 'Bravo',
+      slug: 'bravo',
+      status: 'ACTIVE',
+      driveStatus: 'DISCONNECTED',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    },
+  ];
+
+  const renderFilterProjects = async (entry = '/projects?visibility=all') => {
+    testState.projectsPayload = filterProjects;
+    testState.clientsPayload = filterClients;
+    render(
+      <MemoryRouter initialEntries={[entry]}>
+        <App />
+        <HistoryProbe />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
+  };
+  const gridNames = () =>
+    screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent);
+  const listNames = () =>
+    [...document.querySelectorAll('.project-row-link strong')].map((node) => node.textContent);
+
+  it('shows the same filtered projects in grid and list with matching links', async () => {
+    await renderFilterProjects('/projects?visibility=all&statuses=ACTIVE,PLANNING');
+
+    expect(gridNames()).toEqual(['Active One', 'Planning One']);
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'Active One' }).closest('a'),
+    ).toHaveAttribute('href', '/projects/filter-active');
+
+    fireEvent.click(screen.getByRole('button', { name: 'List' }));
+    expect(screen.getByLabelText('Current location')).toHaveTextContent(
+      '/projects?visibility=all&statuses=PLANNING%2CACTIVE&view=list',
+    );
+    expect(listNames()).toEqual(['Active One', 'Planning One']);
+    expect(screen.getByText('Active One').closest('a')).toHaveAttribute(
+      'href',
+      '/projects/filter-active',
+    );
+    expect(
+      screen.getAllByRole('link', { name: 'Open board' }).map((link) => link.getAttribute('href')),
+    ).toEqual(['/status?project=filter-active', '/status?project=filter-planning']);
+  });
+
+  it('uses OR within statuses and AND with client and search', async () => {
+    await renderFilterProjects(
+      '/projects?visibility=all&statuses=ACTIVE,ON_HOLD&client=client-two',
+    );
+
+    expect(gridNames()).toEqual(['Hold One']);
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search' }), {
+      target: { value: 'complete' },
+    });
+    expect(screen.queryByRole('heading', { level: 2 })).toBeNull();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search' }), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Complete' }));
+    expect(gridNames()).toEqual(['Complete One', 'Hold One']);
+    expect(screen.getByLabelText('Current location')).toHaveTextContent(
+      'statuses=ACTIVE%2CON_HOLD%2CCOMPLETE',
+    );
+  });
+
+  it('clears live-status filters when switching to Archived visibility', async () => {
+    await renderFilterProjects('/projects?visibility=all&statuses=ACTIVE');
+
+    expect(gridNames()).toEqual(['Active One']);
+    fireEvent.click(screen.getByRole('button', { name: 'Archived' }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Current location').textContent).not.toContain('statuses=');
+    });
+    expect(screen.getByRole('button', { name: 'Archived' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.queryByRole('button', { name: 'Active' })).toBeNull();
+    expect(gridNames()).toEqual(['Archived One']);
+    expect(
+      screen.getByText(
+        'Status filters apply to live projects. Switch to Live or All to narrow by planning status.',
+      ),
+    ).toBeVisible();
+  });
+
+  it('loads bookmarked presentation and statuses and drops unknown status tokens', async () => {
+    await renderFilterProjects(
+      '/projects?view=list&statuses=ACTIVE,ARCHIVED,nope&visibility=all&campaign=kept',
+    );
+
+    expect(screen.getByRole('button', { name: 'List' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Active' })).toHaveAttribute('aria-pressed', 'true');
+    expect(listNames()).toEqual(['Active One']);
+    await waitFor(() => {
+      expect(screen.getByLabelText('Current location')).toHaveTextContent(
+        '/projects?view=list&statuses=ACTIVE&visibility=all&campaign=kept',
+      );
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Grid' }));
+    expect(screen.getByLabelText('Current location')).toHaveTextContent(
+      '/projects?statuses=ACTIVE&visibility=all&campaign=kept',
+    );
+    expect(screen.getByLabelText('Current location').textContent).not.toContain('view=');
   });
 });

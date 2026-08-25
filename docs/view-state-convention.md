@@ -53,7 +53,7 @@ resolving even when they contain an unknown or retired value.
 | View | Page type | Default | Durable URL state |
 | --- | --- | --- | --- |
 | Clients | Collection | Active clients | `visibility` for archived or all |
-| Projects | Collection | Live projects by recent activity | `visibility`, `client`, `sort`, and `categories` |
+| Projects | Collection | Live projects by recent activity in grid presentation | `visibility`, `view`, `client`, `sort`, `statuses`, and `categories` |
 | Status | Workflow board | Canonical task-status order | Project, client, priority, type, focus, and tag filters |
 | Calendar | Time view | Current month | View and selected date/month when away from the default |
 | Signal | Time view | Current month | View and selected date/month when away from the default, `post` for an open post, `new` for the shared Add Post form, and `campaigns`, `channels`, `accounts`, `from`, and `to` for the campaign-figures filters |
@@ -63,6 +63,16 @@ Projects uses `live`, `archived`, and `all`; Clients uses its domain term `activ
 `live`. The default live/active value is omitted from the address; choosing Archived or All is
 explicit (unless Settings has made one of those the configured default, in which case the other
 choices are what appear in the URL).
+
+Projects `view` is `grid` or `list` over the same filtered result set. Grid is the canonical
+default and is omitted from the address. List keeps every filter and link; Custom order remains
+a sort in list mode, but rearranging by hand is grid-only.
+
+Projects `statuses` is a multi-value filter over live planning statuses — `PLANNING`, `ACTIVE`,
+`ON_HOLD`, and `COMPLETE` — combined with OR within the dimension and AND with client, category,
+and search. Archive scope stays on `visibility`: choosing Archived clears any `statuses` value
+rather than leaving a bookmark that silently matches nothing. An empty `statuses` list means no
+extra narrowing and is omitted from the address.
 
 Signal's campaign-figures filters are durable for the reason every filter is: a campaign comparison is worth
 linking to, and a reload should land on the same answer. Each is omitted when it is the default — an empty

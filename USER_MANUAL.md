@@ -484,15 +484,36 @@ are shown the current one to confirm again.
 Use Projects to:
 
 - Search projects
+- Switch between grid and list presentations
+- Filter by live planning status
 - Filter by client
 - Filter by category
-- Sort the tiles, or arrange them by hand
+- Sort the tiles, or arrange them by hand in grid view
 - Review task progress and overdue counts
 - Edit project details
 - Open the Project Status board
 - Open the connected Drive folder
 - Archive completed or inactive projects
 - Delete a project and its tasks from the application
+
+#### Grid and list
+
+**Grid** and **List** show the same filtered projects. Grid is the default tile layout. List is a
+compact row for each project with the same links — open the project, open its board, edit, archive,
+or delete. Your choice is kept in the page address as `view`, so a shared link opens the same
+presentation.
+
+#### Filtering by status
+
+The **Status** row filters live projects by planning status — Planning, Active, On hold, and
+Complete. Selecting more than one shows projects that match any of them. The filter combines with
+the client filter, the category filter, the search box, and the sort order. Archive visibility
+stays separate: while **Archived** is selected, the status row is hidden and any status selection
+is cleared from the address, so a bookmark cannot ask for archived and active at once and silently
+show nothing.
+
+Your selection is kept in the page address, so a filtered list survives a reload and can be shared
+as a link.
 
 #### Reading a tile's status
 
@@ -527,7 +548,7 @@ Categories are renamed and deleted in Settings — see [Settings](#settings).
 
 The **Sort by** control offers recently updated, recently created, name A–Z, name Z–A, soonest deadline, highest priority, and **Custom order**.
 
-Custom order is the only mode you can rearrange by hand, because in every other mode a moved tile would immediately jump back to its sorted place. Choose Custom order, then either drag a tile by the grip at the bottom-right of its card, or use the position selector below the card's buttons — the selector is the keyboard-accessible alternative and works the same way. In every other sort mode the grip and the position selector are visibly greyed out.
+Custom order is the only mode you can rearrange by hand, and only in **Grid** view, because in every other mode a moved tile would immediately jump back to its sorted place, and list rows have no drag targets that match the tile grid. Choose Grid and Custom order, then either drag a tile by the grip at the bottom-right of its card, or use the position selector below the card's buttons — the selector is the keyboard-accessible alternative and works the same way. In List view, or in every other sort mode, the grip and the position selector are unavailable; List explains that rearranging stays on Grid.
 
 Your arrangement is saved as soon as you make it. It survives a reload, and switching to another sort mode and back brings it back unchanged. New projects are added to the end of the custom arrangement.
 
