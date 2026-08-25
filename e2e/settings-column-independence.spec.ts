@@ -35,6 +35,7 @@ const READING_ORDER = [
   'Task tags',
   'Signal campaigns',
   'Branding',
+  'Default views',
   'Local timezone',
   'Calendar',
 ];
@@ -74,7 +75,7 @@ const cardBoxes = (page: Page): Promise<CardBox[]> =>
 const openSettings = async (page: Page) => {
   await page.goto('/settings');
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
-  await expect(page.locator('.settings-layout .settings-card')).toHaveCount(7);
+  await expect(page.locator('.settings-layout .settings-card')).toHaveCount(8);
   // Every measurement below is taken across two separate renders and compared to the pixel, so the
   // two have to be laid out in the same font. `client/src/styles.css` fetches DM Sans and Manrope
   // with `display=swap`, which means one render can be measured in the fallback face and its
@@ -126,9 +127,9 @@ test('each Settings column stacks on its own at desktop width', async ({ page })
 
   const cards = await cardBoxes(page);
   expect(cards.map((card) => card.heading)).toEqual(READING_ORDER);
-  // Four cards in the left stack and three in the right, and every card in one — a card left as
+  // Four cards in the left stack and four in the right, and every card in one — a card left as
   // the grid's own child would report column -1 and be back in a shared row track.
-  expect(cards.map((card) => card.column)).toEqual([0, 0, 0, 0, 1, 1, 1]);
+  expect(cards.map((card) => card.column)).toEqual([0, 0, 0, 0, 1, 1, 1, 1]);
 
   const [left, right] = [0, 1].map((column) => cards.filter((card) => card.column === column));
 
@@ -183,7 +184,7 @@ test('a Settings card follows its own column, and no card follows the other one'
 
   // And the neighbouring column did not move at all. This is what leaves no gap: Branding's
   // start has nothing to do with how tall Drive is, in either state.
-  for (const heading of ['Branding', 'Local timezone', 'Calendar']) {
+  for (const heading of ['Branding', 'Default views', 'Local timezone', 'Calendar']) {
     expect(Math.round(find(disconnected, heading).top - find(connected, heading).top)).toBe(0);
   }
 });

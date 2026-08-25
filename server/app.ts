@@ -184,6 +184,13 @@ import {
   brandingIssues,
   type Branding,
 } from '../shared/branding.ts';
+import {
+  CANONICAL_VIEW_DEFAULTS,
+  VIEW_DEFAULTS_SETTING_KEY,
+  isViewDefaults,
+  viewDefaultsIssues,
+  type ViewDefaults,
+} from '../shared/view-defaults.ts';
 import { normalizeHex } from '../shared/contrast.ts';
 import {
   TASK_CHECKLIST_TEMPLATES,
@@ -495,6 +502,23 @@ const brandingInput = z
     for (const issue of brandingIssues(branding))
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: [issue.field], message: issue.message });
   });
+
+/**
+ * View defaults are one bounded object. Unknown pages and values are refused rather than
+ * dropped, so a stale payload cannot leave half a preference applied. `viewDefaultsIssues`
+ * is the same function Settings uses, so the form and the API cannot disagree.
+ */
+const viewDefaultsInput = z
+  .unknown()
+  .superRefine((value, ctx) => {
+    for (const issue of viewDefaultsIssues(value))
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: issue.path ? issue.path.split('.') : [],
+        message: issue.message,
+      });
+  })
+  .transform((value) => value as ViewDefaults);
 
 const normalizedTagName = z.string().transform(normalizeTagName).pipe(z.string().min(1).max(60));
 /** Optional decoration on a tag or category chip. The name always carries the meaning. */
@@ -1490,6 +1514,18 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       next(error);
     }
   });
+  app.get('/api/settings/view-defaults', (_req, res) =>
+    res.json({ viewDefaults: readViewDefaults(db) }),
+  );
+  app.put('/api/settings/view-defaults', (req, res, next) => {
+    try {
+      const data = viewDefaultsInput.parse(req.body);
+      setSetting(db, VIEW_DEFAULTS_SETTING_KEY, JSON.stringify(data));
+      res.json({ viewDefaults: data });
+    } catch (error) {
+      next(error);
+    }
+  });
   /**
    * The sample workbook, downloaded rather than looked up in the repository. One fixed file: the
    * name comes from a constant and never from the request, so the route cannot be asked for a
@@ -2427,5 +2463,20 @@ function readBranding(db: Db): Branding {
     return parsed.success ? parsed.data : { ...DEFAULT_BRANDING };
   } catch {
     return { ...DEFAULT_BRANDING };
+  }
+}
+/**
+ * View defaults as stored. Unlike branding there is no field-by-field completion: a row that
+ * is incomplete, unknown, or unreadable fails closed to the canonical object so a page load
+ * never inherits a half-applied preference.
+ */
+function readViewDefaults(db: Db): ViewDefaults {
+  const raw = getSetting(db, VIEW_DEFAULTS_SETTING_KEY);
+  if (!raw) return { ...CANONICAL_VIEW_DEFAULTS };
+  try {
+    const stored = JSON.parse(raw) as unknown;
+    return isViewDefaults(stored) ? stored : { ...CANONICAL_VIEW_DEFAULTS };
+  } catch {
+    return { ...CANONICAL_VIEW_DEFAULTS };
   }
 }

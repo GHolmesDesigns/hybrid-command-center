@@ -150,7 +150,12 @@ describe('branding settings form', () => {
 
     type('Sidebar background hex value', '#2b0f3a');
     type(/Logo address/, 'https://cdn.example.com/logo.svg');
-    fireEvent.click(screen.getByRole('button', { name: /reset to defaults/i }));
+    fireEvent.click(
+      screen
+        .getByRole('heading', { name: 'Branding' })
+        .closest('.settings-card')!
+        .querySelector('button.secondary')!,
+    );
 
     expect(screen.getByLabelText('Sidebar background hex value')).toHaveValue(
       DEFAULT_BRANDING.background,

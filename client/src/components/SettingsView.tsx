@@ -8,6 +8,7 @@ import {
   ExternalLink,
   FileText,
   FolderKanban,
+  LayoutDashboard,
   Pencil,
   RefreshCw,
   RotateCcw,
@@ -25,7 +26,20 @@ import {
   type Branding,
   type BrandingColorField,
 } from '../../../shared/branding';
+import { CALENDAR_VIEWS } from '../../../shared/calendar';
 import { normalizeHex } from '../../../shared/contrast';
+import {
+  CANONICAL_VIEW_DEFAULTS,
+  CLIENT_VISIBILITIES,
+  CLIENT_VISIBILITY_LABEL,
+  PROJECT_SORTS,
+  PROJECT_SORT_LABEL,
+  PROJECT_VISIBILITIES,
+  PROJECT_VISIBILITY_LABEL,
+  TIME_VIEW_LABEL,
+  viewDefaultsIssues,
+  type ViewDefaults,
+} from '../../../shared/view-defaults';
 import { BrandMark, DriveBadge } from './Primitives';
 import { PageHead } from './Shell';
 import { brandStyle } from './ui-shared';
@@ -41,6 +55,7 @@ const COLOR_LABEL: Record<BrandingColorField, string> = {
 
 export function SettingsView({
   branding,
+  viewDefaults,
   tags,
   tasks,
   categories,
@@ -49,6 +64,7 @@ export function SettingsView({
   flash,
 }: {
   branding: Branding;
+  viewDefaults: ViewDefaults;
   tags: Tag[];
   tasks: Task[];
   categories: Category[];
@@ -64,7 +80,9 @@ export function SettingsView({
     } | null>(null),
     [root, setRoot] = useState(''),
     [brandForm, setBrandForm, brandSaved] = useServerSeeded<Branding>(branding),
+    [viewsForm, setViewsForm, viewsSaved] = useServerSeeded<ViewDefaults>(viewDefaults),
     [brandBusy, setBrandBusy] = useState(false),
+    [viewsBusy, setViewsBusy] = useState(false),
     [driveError, setDriveError] = useState('');
   const load = useCallback(async () => {
     const next = await api<{
@@ -133,6 +151,28 @@ export function SettingsView({
       setBrandBusy(false);
     }
   };
+  const viewsProblems = viewDefaultsIssues(viewsForm);
+  const saveViewDefaults = async (e: FormEvent) => {
+    e.preventDefault();
+    if (viewsProblems.length) return flash(viewsProblems[0].message, 'error');
+    setViewsBusy(true);
+    try {
+      await send('/settings/view-defaults', 'PUT', viewsForm);
+      viewsSaved();
+      await refresh();
+      flash('Default views saved.');
+    } catch (err) {
+      flash((err as Error).message, 'error');
+    } finally {
+      setViewsBusy(false);
+    }
+  };
+  const effectiveViews = [
+    `${CLIENT_VISIBILITY_LABEL[viewsForm.clients.visibility]} clients`,
+    `${PROJECT_VISIBILITY_LABEL[viewsForm.projects.visibility]} projects by ${PROJECT_SORT_LABEL[viewsForm.projects.sort]}`,
+    `Calendar ${TIME_VIEW_LABEL[viewsForm.calendar.view]}`,
+    `Signal ${TIME_VIEW_LABEL[viewsForm.signal.view]}`,
+  ].join(' · ');
   return (
     <>
       <PageHead
@@ -399,6 +439,156 @@ export function SettingsView({
                   Saving is blocked until every reading above passes AA.
                 </p>
               )}
+            </form>
+          </section>
+          <section className="panel settings-card">
+            <div className="settings-icon neutral">
+              <LayoutDashboard />
+            </div>
+            <div className="section-title">
+              <div>
+                <span className="eyebrow">Layout</span>
+                <h2>Default views</h2>
+              </div>
+            </div>
+            <p>
+              Choose how Clients, Projects, Calendar, and Signal open when the address omits that
+              choice. A shared or bookmarked URL still wins; Reset restores the shipped defaults.
+            </p>
+            <form className="form brand-form" onSubmit={saveViewDefaults}>
+              <label>
+                Clients visibility
+                <select
+                  aria-label="Clients visibility default"
+                  value={viewsForm.clients.visibility}
+                  onChange={(e) =>
+                    setViewsForm({
+                      ...viewsForm,
+                      clients: {
+                        visibility: e.target.value as (typeof CLIENT_VISIBILITIES)[number],
+                      },
+                    })
+                  }
+                >
+                  {CLIENT_VISIBILITIES.map((value) => (
+                    <option key={value} value={value}>
+                      {CLIENT_VISIBILITY_LABEL[value]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="form-row">
+                <label>
+                  Projects visibility
+                  <select
+                    aria-label="Projects visibility default"
+                    value={viewsForm.projects.visibility}
+                    onChange={(e) =>
+                      setViewsForm({
+                        ...viewsForm,
+                        projects: {
+                          ...viewsForm.projects,
+                          visibility: e.target.value as (typeof PROJECT_VISIBILITIES)[number],
+                        },
+                      })
+                    }
+                  >
+                    {PROJECT_VISIBILITIES.map((value) => (
+                      <option key={value} value={value}>
+                        {PROJECT_VISIBILITY_LABEL[value]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Projects sort
+                  <select
+                    aria-label="Projects sort default"
+                    value={viewsForm.projects.sort}
+                    onChange={(e) =>
+                      setViewsForm({
+                        ...viewsForm,
+                        projects: {
+                          ...viewsForm.projects,
+                          sort: e.target.value as (typeof PROJECT_SORTS)[number],
+                        },
+                      })
+                    }
+                  >
+                    {PROJECT_SORTS.map((value) => (
+                      <option key={value} value={value}>
+                        {PROJECT_SORT_LABEL[value]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="form-row">
+                <label>
+                  Calendar view
+                  <select
+                    aria-label="Calendar view default"
+                    value={viewsForm.calendar.view}
+                    onChange={(e) =>
+                      setViewsForm({
+                        ...viewsForm,
+                        calendar: {
+                          view: e.target.value as (typeof CALENDAR_VIEWS)[number],
+                        },
+                      })
+                    }
+                  >
+                    {CALENDAR_VIEWS.map((value) => (
+                      <option key={value} value={value}>
+                        {TIME_VIEW_LABEL[value]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Signal view
+                  <select
+                    aria-label="Signal view default"
+                    value={viewsForm.signal.view}
+                    onChange={(e) =>
+                      setViewsForm({
+                        ...viewsForm,
+                        signal: {
+                          view: e.target.value as (typeof CALENDAR_VIEWS)[number],
+                        },
+                      })
+                    }
+                  >
+                    {CALENDAR_VIEWS.map((value) => (
+                      <option key={value} value={value}>
+                        {TIME_VIEW_LABEL[value]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <p className="field-hint" role="status">
+                Effective: {effectiveViews}
+              </p>
+              <div className="brand-actions">
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setViewsForm({ ...CANONICAL_VIEW_DEFAULTS })}
+                  disabled={viewsBusy}
+                >
+                  <RotateCcw /> Reset to defaults
+                </button>
+                <button className="submit" disabled={viewsBusy || viewsProblems.length > 0}>
+                  {viewsBusy ? (
+                    <>
+                      <RefreshCw className="spin" /> Saving…
+                    </>
+                  ) : (
+                    'Save defaults'
+                  )}
+                </button>
+              </div>
             </form>
           </section>
           <section className="panel settings-card">

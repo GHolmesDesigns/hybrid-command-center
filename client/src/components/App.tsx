@@ -28,6 +28,7 @@ import {
 import { api } from '../api';
 import type { Category, Client, DashboardData, Project, Tag, Task } from '../../../shared/types';
 import { APP_VERSION, DEFAULT_BRANDING, type Branding } from '../../../shared/branding';
+import { CANONICAL_VIEW_DEFAULTS, type ViewDefaults } from '../../../shared/view-defaults';
 import { BreadcrumbTrail } from './BreadcrumbTrail';
 import { ClientDetail, Clients } from './Clients';
 import { Dashboard } from './Dashboard';
@@ -111,6 +112,7 @@ export function App() {
     () => localStorage.getItem(LAST_PROJECT_KEY) || '',
   );
   const [branding, setBranding] = useState<Branding>(DEFAULT_BRANDING);
+  const [viewDefaults, setViewDefaults] = useState<ViewDefaults>(CANONICAL_VIEW_DEFAULTS);
   // When the last import wrote its receipt. The Import page reloads its receipts on it, so a
   // modal that finished in front of the page does not leave a stale list behind it.
   const [importedAt, setImportedAt] = useState(0);
@@ -118,7 +120,7 @@ export function App() {
   const refresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      const [c, p, t, d, b, g, k] = await Promise.all([
+      const [c, p, t, d, b, g, k, v] = await Promise.all([
         api<Client[]>('/clients'),
         api<Project[]>('/projects'),
         api<Task[]>('/tasks'),
@@ -126,6 +128,7 @@ export function App() {
         api<{ branding: Branding }>('/settings/branding'),
         api<Tag[]>('/tags'),
         api<Category[]>('/categories'),
+        api<{ viewDefaults: ViewDefaults }>('/settings/view-defaults'),
       ]);
       setClients(c);
       setProjects(p);
@@ -136,6 +139,7 @@ export function App() {
       setBranding(b.branding);
       setTags(g);
       setCategories(k);
+      setViewDefaults(v.viewDefaults);
     } catch (e) {
       const message = (e as Error).message;
       setDashboardRefreshError(message);
@@ -276,6 +280,7 @@ export function App() {
                 <Clients
                   clients={clients}
                   projects={projects}
+                  viewDefaults={viewDefaults}
                   open={setModal}
                   refresh={refresh}
                   flash={flash}
@@ -303,6 +308,7 @@ export function App() {
                   clients={clients}
                   categories={categories}
                   tasks={tasks}
+                  viewDefaults={viewDefaults}
                   open={setModal}
                   refresh={refresh}
                   flash={flash}
@@ -361,13 +367,14 @@ export function App() {
                 />
               }
             />
-            <Route path="/calendar" element={<CalendarView />} />
-            <Route path="/signal" element={<SignalView />} />
+            <Route path="/calendar" element={<CalendarView viewDefaults={viewDefaults} />} />
+            <Route path="/signal" element={<SignalView viewDefaults={viewDefaults} />} />
             <Route
               path="/settings"
               element={
                 <SettingsView
                   branding={branding}
+                  viewDefaults={viewDefaults}
                   tags={tags}
                   tasks={tasks}
                   categories={categories}
