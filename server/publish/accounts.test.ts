@@ -148,7 +148,11 @@ describe('provider-neutral account identities', () => {
     expect(readProviderInventoryPosts(db, 'buffer')[0]?.provider).toBe('buffer');
   });
 
-  it('rolls back a conflicting partial migration and refuses startup use', () => {
+  it('leaves a modern account alone when its own surrogate is referenced by a target', () => {
+    // A Buffer (or any non-legacy) account sitting at an id that a target column also names is
+    // the designed case, not a conflict — C84's whole point is that these columns hold either a
+    // legacy raw Post Bridge id or a modern surrogate of any provider, interchangeably. Confirming
+    // a Buffer account as an explicit publish target reaches exactly this shape on every restart.
     const db = createDb(':memory:');
     db.prepare(
       `INSERT INTO signal_provider_accounts(
@@ -160,10 +164,31 @@ describe('provider-neutral account identities', () => {
       `INSERT INTO signal_post_publish_targets(post_id,channel,provider_account_id,created_at)
        VALUES(?,'tt',55,'x')`,
     ).run(post.id);
-    expect(() => backfillProviderAccounts(db)).toThrow(/already names another identity/);
+    expect(backfillProviderAccounts(db)).toBe(0);
     expect(
       db.prepare('SELECT provider,provider_account_ref FROM signal_provider_accounts').all(),
     ).toEqual([{ provider: 'buffer', provider_account_ref: 'opaque' }]);
+  });
+
+  it('rolls back a conflicting partial legacy migration and refuses startup use', () => {
+    // The genuine risk: a row already claims to *be* the legacy backfill's own prior work, but its
+    // reference no longer matches the raw id — self-inconsistent evidence that a migration or a
+    // hand edit went wrong, which is the one case this guard exists to catch.
+    const db = createDb(':memory:');
+    db.prepare(
+      `INSERT INTO signal_provider_accounts(
+         id,provider,provider_account_ref,platform,resolved_at,created_at,updated_at
+       ) VALUES(55,'post-bridge','not-55','tiktok','x','x','x')`,
+    ).run();
+    const post = seedSignalPost(db);
+    db.prepare(
+      `INSERT INTO signal_post_publish_targets(post_id,channel,provider_account_id,created_at)
+       VALUES(?,'tt',55,'x')`,
+    ).run(post.id);
+    expect(() => backfillProviderAccounts(db)).toThrow(/already names another identity/);
+    expect(
+      db.prepare('SELECT provider,provider_account_ref FROM signal_provider_accounts').all(),
+    ).toEqual([{ provider: 'post-bridge', provider_account_ref: 'not-55' }]);
   });
 
   it('keeps account history delete-restricted', () => {
