@@ -1321,13 +1321,15 @@ post's own date and time in the configured zone beside the instant the provider 
 provider sends it or hands it to the platform's app for you to finish, and that target's own warnings
 and refusals. Move between tabs with the arrow keys or by clicking.
 
-Media in a panel is shown small, because a preview is for checking the order and the crop. An image
-loads with the preview. **A video never starts on its own**: press **Load this video** and it appears
-with ordinary controls. Media that cannot be shown says so and still gives you its address to open,
-which is the honest answer — Command Center never fetches these files on the server, so a preview
-cannot tell you more about one than your own browser can. A Drive file is listed with its name,
-type, size, and last check rather than shown: a Drive link addresses a page for you to open, not the
-file, so there is nothing there to display.
+Media in a panel is shown as labelled addresses first. Loading a public preview asks that host for
+the file and shares your IP address with it, so the panel offers **Show public media previews** and
+**Show text only**. Until you choose the former, nothing remote loads — not even an image. A video
+still never starts on its own after that: press **Load this video** and it appears with ordinary
+controls. Drive files, PDFs, unknown kinds, and signed or expiring addresses stay as text either
+way; media that cannot be shown says so and still gives you its address to open. Command Center
+never fetches these files on the server, so a preview cannot tell you more about one than your own
+browser can. A Drive file is listed with its name, type, size, and last check rather than shown: a
+Drive link addresses a page for you to open, not the file, so there is nothing there to display.
 
 You can also tailor content for one account from inside its tab, under **Override for … only**. Saving
 it re-checks the plan, because what you confirm has to be what you last looked at.

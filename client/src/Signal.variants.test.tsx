@@ -19,14 +19,15 @@ import {
 } from './App.test-setup';
 import type { PublishChannelReport, PublishPreview } from '../../shared/publish';
 import type { PublishVariantScope } from '../../shared/publish-variants';
+import { urlPostMedia } from '../../shared/signal-media';
 
 /**
  * Platform and account content variants in the composer, and the preview they feed.
  *
- * The two claims this file is here to hold: a field exists only where the provider would carry it,
- * and nothing remote is fetched until the preview is asked for. Both are easy to break by accident
- * — the first by adding a control without asking the contract, the second by rendering a thumbnail
- * one component higher — and neither shows up in a type error.
+ * The claims this file is here to hold: a field exists only where the provider would carry it,
+ * nothing remote is fetched until Show preview, and public image/video bytes still need an explicit
+ * opt-in after that because they share the viewer's IP with the media host. Drive, PDF, unknown,
+ * and signed addresses stay text. Easy to break by accident — none of it shows up in a type error.
  */
 
 const openSignal = async (entry = '/signal?month=2026-09') => {
@@ -287,7 +288,7 @@ describe('Signal content variants', () => {
     expect(testState.signalVariantsPayload).toEqual([]);
   });
 
-  it('loads nothing remote until the preview is asked for, and no video until it is played', async () => {
+  it('loads nothing remote until public previews are opted into, and no video until it is played', async () => {
     testState.signalPostsPayload = [
       signalPost('variant-post', 'The post itself', '2026-09-14', {
         channels: ['x'],
@@ -310,18 +311,75 @@ describe('Signal content variants', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Show preview' }));
     const panel = await screen.findByRole('tabpanel');
+    // Show preview still keeps every address as text; the IP note and the text-only choice are the
+    // second gate before any browser request to a media host.
+    expect(panel.querySelectorAll('img')).toHaveLength(0);
+    expect(panel.querySelectorAll('video')).toHaveLength(0);
+    expect(panel).toHaveTextContent('shares your IP address with it');
+    expect(
+      within(panel).getByRole('button', { name: 'Show public media previews' }),
+    ).toHaveAttribute('aria-pressed', 'false');
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'Show public media previews' }));
     const image = panel.querySelector('img') as HTMLImageElement;
     expect(image).toHaveAttribute('src', IMAGE);
-    // The one attribute HTML defines for this, on the element it is defined for.
     expect(image).toHaveAttribute('referrerpolicy', 'no-referrer');
-    // A video is not fetched by the preview at all: it takes its own press, and even then it
-    // arrives with controls rather than playing.
     expect(panel.querySelectorAll('video')).toHaveLength(0);
     fireEvent.click(within(panel).getByRole('button', { name: 'Load this video' }));
     const video = panel.querySelector('video') as HTMLVideoElement;
     expect(video).toHaveAttribute('src', VIDEO);
     expect(video.autoplay).toBe(false);
     expect(video.controls).toBe(true);
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'Show text only' }));
+    expect(panel.querySelectorAll('img')).toHaveLength(0);
+    expect(panel.querySelectorAll('video')).toHaveLength(0);
+  });
+
+  it('keeps Drive, PDF, unknown, and signed addresses as text even after opting in', async () => {
+    const SIGNED = 'https://cdn.example.com/campaign.jpg?token=1';
+    const PDF = 'https://cdn.example.com/brief.pdf';
+    const UNKNOWN = 'https://cdn.example.com/share';
+    const drive = {
+      source: 'DRIVE' as const,
+      url: 'https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/view',
+      driveFileId: '1AbCdEfGhIjKlMnOpQrStUvWxYz012345',
+      driveName: 'launch.jpg',
+      mimeType: 'image/jpeg',
+      sizeBytes: 2048,
+      driveVersion: '3',
+      driveModifiedAt: '2026-03-01T12:00:00.000Z',
+      driveChecksum: null,
+      driveVerifiedAt: '2026-08-20T09:00:00.000Z',
+    };
+    testState.signalPostsPayload = [
+      signalPost('variant-post', 'The post itself', '2026-09-14', {
+        channels: ['x'],
+        media: [drive, urlPostMedia(SIGNED), urlPostMedia(PDF), urlPostMedia(UNKNOWN)],
+      }),
+    ];
+    testState.publishPreviewPayload = preview([
+      report({
+        channel: 'x',
+        accountId: 4,
+        handle: '@gholmes',
+        content: {
+          mediaUrls: [drive.url, SIGNED, PDF, UNKNOWN],
+        } as PublishChannelReport['content'],
+      }),
+    ]);
+    await openSignal();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit The post itself' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Show preview' }));
+    const panel = await screen.findByRole('tabpanel');
+    expect(within(panel).queryByRole('button', { name: 'Show public media previews' })).toBeNull();
+    expect(panel).toHaveTextContent('can be previewed here');
+    expect(panel).toHaveTextContent('Drive file · launch.jpg');
+    expect(panel).toHaveTextContent('signed or time-bounded');
+    expect(panel).toHaveTextContent('A PDF is not shown here');
+    expect(panel).toHaveTextContent('no file extension');
+    expect(panel.querySelectorAll('img')).toHaveLength(0);
+    expect(panel.querySelectorAll('video')).toHaveLength(0);
   });
 
   it('gives broken media a usable fallback rather than a gap', async () => {
@@ -343,6 +401,7 @@ describe('Signal content variants', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Edit The post itself' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Show preview' }));
     const panel = await screen.findByRole('tabpanel');
+    fireEvent.click(within(panel).getByRole('button', { name: 'Show public media previews' }));
     fireEvent.error(panel.querySelector('img') as HTMLImageElement);
     expect(panel).toHaveTextContent('This media could not be shown here.');
     // The address is still readable and still openable, which is what makes the fallback usable.

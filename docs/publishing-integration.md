@@ -502,13 +502,19 @@ reason §3.2 reports per channel rather than as one flat list.
 
 Media rendering, and the rules it keeps:
 
-- Images load with the preview, at a constrained size — a preview is for checking the order and the
-  crop, not for downloading a campaign asset at full resolution.
-- **A video never autoplays.** It is not fetched by the preview at all: it takes its own press, and
+- **Show preview** still shows media as labelled text. Public image and video bytes are a second,
+  optional choice — **Show public media previews** — because loading one is a browser request to
+  that host and shares the viewer's IP with it. **Show text only** returns to addresses alone.
+- When remote previews are on, images load at a constrained size — a preview is for checking the
+  order and the crop, not for downloading a campaign asset at full resolution. At most eight public
+  items load in one panel; the rest stay as text with their open link.
+- **A video never autoplays.** It is not fetched by the opt-in at all: it takes its own press, and
   even then it arrives with controls rather than playing. There is no `autoplay` attribute anywhere
   in the module to be flipped later.
-- Broken media gets a usable fallback — what happened, the address, and a link — rather than a gap.
-- A PDF and an extensionless URL are named as what they are and never embedded.
+- Drive viewer pages, PDFs, unknown kinds, and signed or expiring addresses (query or fragment)
+  stay labelled text and are never embedded.
+- Broken media gets a usable fallback — what happened, the address, and a link — rather than a gap
+  that blocks the rest of the payload preview.
 - `referrerPolicy="no-referrer"` is set on the elements HTML defines it for. A `<video>` cannot
   carry it, so the app's `Referrer-Policy: no-referrer` response header is what covers that request;
   `server/app.test.ts` asserts the header rather than trusting an attribute that would be ignored.

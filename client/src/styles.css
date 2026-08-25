@@ -4773,6 +4773,21 @@ button.tag-chip.toggle.active {
   padding: 0;
   list-style: none;
 }
+.signal-preview-media-block {
+  display: grid;
+  gap: 8px;
+}
+.signal-preview-media-choice {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+.signal-preview-media-privacy {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
 .signal-preview-media {
   display: grid;
   gap: 6px;
@@ -4807,7 +4822,8 @@ button.tag-chip.toggle.active {
   font-size: 10px;
 }
 /* Constrained rather than natural size: a preview is for checking the order and the crop, and a
-   full-resolution campaign image would push every other target's tab off the screen. */
+   full-resolution campaign image would push every other target's tab off the screen. No motion is
+   attached here — reduced-motion users see the same static thumb without a transition to disable. */
 .signal-preview-thumb {
   width: 100%;
   max-width: 260px;
@@ -4816,6 +4832,11 @@ button.tag-chip.toggle.active {
   border: 1px solid var(--line);
   border-radius: 6px;
   background: #f2f4f2;
+}
+@media (max-width: 640px) {
+  .signal-preview-thumb {
+    max-width: 100%;
+  }
 }
 .signal-preview-media-fallback,
 .signal-preview-media-note {
