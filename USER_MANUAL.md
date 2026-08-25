@@ -1116,6 +1116,7 @@ Settings contains, in the order it reads:
 - **Task tags** — every tag in the workspace, with how many tasks carry it, and the only place a tag is deleted
 - **Signal campaigns** — every campaign in the workspace, with how many posts carry it, and the only place a campaign is renamed or deleted
 - Sidebar branding — the mark, title, subtitle, tagline, colours, and logo shown in the left navigation
+- **Default views** — how Clients, Projects, Calendar, and Signal open when the address omits that choice
 - The current application version
 - Detected local timezone
 - A short note on the Calendar, with a link to it
@@ -1131,6 +1132,22 @@ Deleting a tag that is still attached asks first and tells you how many tasks ar
 Categories work the same way, with one addition: **Add** creates a category before any project uses it, and the pencil beside a category renames it. A rename reaches every project carrying that category at once, because the projects point at the category rather than storing its name. Deleting a category that is still attached asks first and tells you how many projects are affected; the projects themselves are never deleted, they simply stop carrying the label. A name another category already holds is refused, whatever its capitalisation.
 
 Branding edits save immediately and apply to the sidebar without a restart. The defaults also live in `shared/branding.ts` if you prefer to change them in code. The version appears both beside the Branding heading and at the bottom of the sidebar.
+
+#### Default views
+
+The **Default views** card chooses the opening visibility, sort, or time view for pages that already
+have a settled vocabulary:
+
+- Clients visibility (Active, Archived, or All)
+- Projects visibility and sort
+- Calendar view (Today, Week, or Month)
+- Signal view (Today, Week, or Month)
+
+A configured default applies only when the address omits that parameter. A shared or bookmarked URL
+with an explicit value always wins. The card shows the effective choices in words under the selects.
+**Reset to defaults** restores the shipped values in the form; press **Save defaults** to apply
+them. Invalid or stale stored settings fall back to those shipped values without breaking a page
+load.
 
 #### Sidebar colours
 

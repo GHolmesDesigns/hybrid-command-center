@@ -3,15 +3,32 @@
 Views should open predictably, survive reloads where that matters, and produce useful links without
 turning every keystroke into navigation history. Use these rules when adding or changing a view.
 
+## Precedence
+
+For every durable view or sort parameter:
+
+1. **Explicit URL** — a present, allowed query value always wins.
+2. **Configured default** — when the URL omits that parameter (or carries an unknown/retired
+   value), Settings' stored default for that page applies.
+3. **Canonical default** — when Settings has nothing stored, or the stored object fails validation,
+   the shipped default in `shared/view-defaults.ts` applies.
+
+Only Clients (visibility), Projects (visibility and sort), Calendar (view), and Signal (view) are
+configurable. Other pages keep hard-coded defaults. A configured value is omitted from the address
+when it matches the *configured* default, so the ordinary view keeps a short URL after someone
+changes Settings.
+
 ## Page-type defaults
 
 - **Collections** open on live records, ordered by meaningful recency. Archived records remain
   explicitly reachable. If a collection offers live, archived, or all scopes, store a non-default
-  scope in `visibility`; the absent/default value means live.
+  scope in `visibility`; the absent/default value means the configured (or canonical) live/active
+  choice.
 - **Workflow boards** retain the canonical workflow order defined by the domain. Filtering a board
   must not reorder its columns or stages.
 - **Time views** open the current period. A URL may select another supported period or presentation
-  such as week or month; invalid values fall back to the current period and default presentation.
+  such as week or month; invalid values fall back to the configured default presentation in the
+  current period.
 - **Context browsers** first honour a valid explicit URL selection, then a valid remembered
   selection, then a deterministic fallback such as the first browsable record. A child selection
   is cleared when its parent context changes.
@@ -20,7 +37,7 @@ turning every keystroke into navigation history. Use these rules when adding or 
 
 Put durable filters, selections, scopes, sorts, and time periods in query parameters. They must
 survive reload, be bookmarkable, and participate in browser Back and Forward navigation. Preserve
-unrelated parameters when one control changes. Omit a parameter when its value is the documented
+unrelated parameters when one control changes. Omit a parameter when its value is the configured
 default so the ordinary view keeps a short, stable address.
 
 Transient text search may remain component-local. It represents typing within the current visit,
@@ -28,8 +45,8 @@ so it need not create history entries or become part of a shared link unless a f
 defines search as durable.
 
 Read parameters defensively. Supported values apply as written; missing or invalid values fall back
-to the documented default without making the page fail. Existing URLs keep resolving even when they
-contain an unknown or retired value.
+to the configured (then canonical) default without making the page fail. Existing URLs keep
+resolving even when they contain an unknown or retired value.
 
 ## Current views
 
@@ -38,13 +55,14 @@ contain an unknown or retired value.
 | Clients | Collection | Active clients | `visibility` for archived or all |
 | Projects | Collection | Live projects by recent activity | `visibility`, `client`, `sort`, and `categories` |
 | Status | Workflow board | Canonical task-status order | Project, client, priority, type, focus, and tag filters |
-| Calendar | Time view | Current week | View and selected date/month when away from the default |
-| Signal | Time view | Current week | View and selected date/month when away from the default, `post` for an open post, `new` for the shared Add Post form, and `campaigns`, `channels`, `accounts`, `from`, and `to` for the campaign-figures filters |
+| Calendar | Time view | Current month | View and selected date/month when away from the default |
+| Signal | Time view | Current month | View and selected date/month when away from the default, `post` for an open post, `new` for the shared Add Post form, and `campaigns`, `channels`, `accounts`, `from`, and `to` for the campaign-figures filters |
 | Files | Context browser | Explicit project, remembered project, then first live project | Project and folder selections |
 
 Projects uses `live`, `archived`, and `all`; Clients uses its domain term `active` in place of
 `live`. The default live/active value is omitted from the address; choosing Archived or All is
-explicit.
+explicit (unless Settings has made one of those the configured default, in which case the other
+choices are what appear in the URL).
 
 Signal's campaign-figures filters are durable for the reason every filter is: a campaign comparison is worth
 linking to, and a reload should land on the same answer. Each is omitted when it is the default — an empty

@@ -22,6 +22,11 @@ import {
   type CalendarViewMode,
 } from '../../../shared/calendar';
 import {
+  isCurrentTimePeriod,
+  resolveViewChoice,
+  type ViewDefaults,
+} from '../../../shared/view-defaults';
+import {
   SIGNAL_FORMAT_LABEL,
   SIGNAL_STATUS_LABEL,
   isSignalDate,
@@ -202,13 +207,10 @@ function DaySection({ day, isToday }: { day: CalendarDay; isToday: boolean }) {
   );
 }
 
-export function CalendarView() {
+export function CalendarView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
   const [params, setParams] = useSearchParams();
   const now = today();
-  const requestedView = params.get('view');
-  const view: CalendarViewMode = CALENDAR_VIEWS.includes(requestedView as CalendarViewMode)
-    ? (requestedView as CalendarViewMode)
-    : 'month';
+  const view = resolveViewChoice(params.get('view'), CALENDAR_VIEWS, viewDefaults.calendar.view);
   const requestedDate = params.get('date');
   const requestedMonth = params.get('month');
   const anchor = isSignalDate(requestedDate ?? '')
@@ -240,16 +242,17 @@ export function CalendarView() {
     void load();
   }, [load]);
 
+  const configuredView = viewDefaults.calendar.view;
   const goto = (nextView: CalendarViewMode, nextAnchor: string) => {
-    if (nextView === 'month' && nextAnchor.slice(0, 7) === now.slice(0, 7)) {
+    // A clean address means the configured default in the ordinary current period — not only
+    // the canonical month view. An explicit URL always wins when someone bookmarks another.
+    if (nextView === configuredView && isCurrentTimePeriod(nextView, nextAnchor, now)) {
       setParams({});
       return;
     }
     const next: Record<string, string> = { month: nextAnchor.slice(0, 7) };
-    if (nextView !== 'month') {
-      next.view = nextView;
-      next.date = nextAnchor;
-    }
+    if (nextView !== configuredView) next.view = nextView;
+    if (nextView !== 'month') next.date = nextAnchor;
     setParams(next);
   };
 

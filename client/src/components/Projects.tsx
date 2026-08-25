@@ -31,6 +31,13 @@ import {
 import { send } from '../api';
 import type { Category, Client, Priority, Project, Task } from '../../../shared/types';
 import { compareProjectActivity, compareProjectNames } from '../../../shared/types';
+import {
+  PROJECT_SORTS,
+  PROJECT_VISIBILITIES,
+  resolveViewChoice,
+  type ProjectSort,
+  type ViewDefaults,
+} from '../../../shared/view-defaults';
 import { type Modal } from './App';
 import { formatDate } from './formatting';
 import { TagChip } from './FormControls';
@@ -38,15 +45,6 @@ import { DriveBadge, Empty, ProjectStatusChip, SearchBox } from './Primitives';
 import { projectStatusStyle } from './project-status';
 import { tagAccent } from './ui-shared';
 import { PageHead } from './Shell';
-
-type ProjectSort =
-  | 'recently-updated'
-  | 'recently-created'
-  | 'name-ascending'
-  | 'name-descending'
-  | 'deadline'
-  | 'priority'
-  | 'custom';
 
 const PROJECT_PRIORITY_ORDER: Record<Priority, number> = {
   URGENT: 0,
@@ -87,6 +85,7 @@ export function Projects({
   clients,
   categories,
   tasks,
+  viewDefaults,
   open,
   refresh,
   flash,
@@ -96,6 +95,7 @@ export function Projects({
   clients: Client[];
   categories: Category[];
   tasks: Task[];
+  viewDefaults: ViewDefaults;
   open: (m: Modal) => void;
   refresh: () => Promise<void>;
   flash: (s: string, t?: 'success' | 'error') => void;
@@ -104,26 +104,13 @@ export function Projects({
   const [params, setParams] = useSearchParams();
   // Durable collection state lives in the address. Search stays local because it is transient
   // text typed for this visit rather than a view someone is likely to bookmark or share.
-  const requestedSort = params.get('sort');
-  const sortBy: ProjectSort = (
-    [
-      'recently-updated',
-      'recently-created',
-      'name-ascending',
-      'name-descending',
-      'deadline',
-      'priority',
-      'custom',
-    ] as const
-  ).includes(requestedSort as ProjectSort)
-    ? (requestedSort as ProjectSort)
-    : 'recently-updated';
+  const sortBy = resolveViewChoice(params.get('sort'), PROJECT_SORTS, viewDefaults.projects.sort);
   const clientFilter = params.get('client') || '';
-  const requestedVisibility = params.get('visibility');
-  const visibility =
-    requestedVisibility === 'archived' || requestedVisibility === 'all'
-      ? requestedVisibility
-      : 'live';
+  const visibility = resolveViewChoice(
+    params.get('visibility'),
+    PROJECT_VISIBILITIES,
+    viewDefaults.projects.visibility,
+  );
   const selectedCategoryIds = (params.get('categories') || '').split(',').filter(Boolean);
   const setParam = (key: string, value: string, defaultValue = '') => {
     const next = new URLSearchParams(params);
@@ -250,7 +237,7 @@ export function Projects({
             type="button"
             key={value}
             aria-pressed={visibility === value}
-            onClick={() => setParam('visibility', value, 'live')}
+            onClick={() => setParam('visibility', value, viewDefaults.projects.visibility)}
           >
             {value[0].toUpperCase() + value.slice(1)}
           </button>
@@ -272,7 +259,7 @@ export function Projects({
         </select>
         <select
           value={sortBy}
-          onChange={(e) => setParam('sort', e.target.value, 'recently-updated')}
+          onChange={(e) => setParam('sort', e.target.value, viewDefaults.projects.sort)}
           aria-label="Sort projects by"
         >
           <option value="recently-updated">Recently updated</option>

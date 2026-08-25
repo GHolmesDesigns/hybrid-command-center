@@ -76,7 +76,11 @@ test('sidebar colours and logo save, survive a reload, and refuse an unreadable 
   expect((await rejected.json()).error).toContain('4.5:1');
 
   await gotoSettled(page, '/settings');
-  await page.getByRole('button', { name: 'Reset to defaults' }).click();
+  await page
+    .locator('.settings-card')
+    .filter({ has: page.getByRole('heading', { name: 'Branding' }) })
+    .getByRole('button', { name: 'Reset to defaults' })
+    .click();
   // Reset only sets form state, and Save is enabled on either palette because both pass AA, so
   // there is no disabled interval to wait through. Saving before the reset reaches the form
   // submits the custom palette instead — valid, accepted, and wrong. The field is where the

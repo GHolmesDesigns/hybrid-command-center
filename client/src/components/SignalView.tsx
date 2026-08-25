@@ -55,6 +55,11 @@ import {
   shiftCalendarAnchor,
   type CalendarViewMode,
 } from '../../../shared/calendar';
+import {
+  isCurrentTimePeriod,
+  resolveViewChoice,
+  type ViewDefaults,
+} from '../../../shared/view-defaults';
 import { signalChannelStyle, type TagDraft } from './ui-shared';
 import { Empty } from './Primitives';
 import { Select, TagChipInput } from './FormControls';
@@ -1902,13 +1907,10 @@ function Editor({
   );
 }
 
-export function SignalView() {
+export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
   const [params, setParams] = useSearchParams();
   const now = today();
-  const requestedView = params.get('view');
-  const view: CalendarViewMode = CALENDAR_VIEWS.includes(requestedView as CalendarViewMode)
-    ? (requestedView as CalendarViewMode)
-    : 'month';
+  const view = resolveViewChoice(params.get('view'), CALENDAR_VIEWS, viewDefaults.signal.view);
   const requestedDate = params.get('date');
   const requestedMonth = params.get('month');
   const anchor = isSignalDate(requestedDate ?? '')
@@ -2107,16 +2109,16 @@ export function SignalView() {
       ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
       : days.map((date) => dayHeading(date, { weekday: 'short' }));
 
+  const configuredView = viewDefaults.signal.view;
   const goto = (nextView: CalendarViewMode, nextAnchor: string) => {
-    if (nextView === 'month' && nextAnchor.slice(0, 7) === now.slice(0, 7)) {
+    // Same rule as Calendar: the configured default in the current period keeps a short address.
+    if (nextView === configuredView && isCurrentTimePeriod(nextView, nextAnchor, now)) {
       setParams({});
       return;
     }
     const next: Record<string, string> = { month: nextAnchor.slice(0, 7) };
-    if (nextView !== 'month') {
-      next.view = nextView;
-      next.date = nextAnchor;
-    }
+    if (nextView !== configuredView) next.view = nextView;
+    if (nextView !== 'month') next.date = nextAnchor;
     setParams(next);
   };
 

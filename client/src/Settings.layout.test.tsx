@@ -49,7 +49,7 @@ describe('the Settings layout', () => {
     // A card left as a direct child of the grid is a card back in a shared row track, taking
     // its starting edge from whatever sits beside it. There is no such card.
     expect(document.querySelectorAll('.settings-layout > .settings-card')).toHaveLength(0);
-    expect(document.querySelectorAll('.settings-layout .settings-card')).toHaveLength(7);
+    expect(document.querySelectorAll('.settings-layout .settings-card')).toHaveLength(8);
   });
 
   it('reads in one order: what the workspace connects to and organises by, then how it looks', async () => {
@@ -62,11 +62,16 @@ describe('the Settings layout', () => {
       'Task tags',
       'Signal campaigns',
     ]);
-    expect(headingsIn(appearance)).toEqual(['Branding', 'Local timezone', 'Calendar']);
+    expect(headingsIn(appearance)).toEqual([
+      'Branding',
+      'Default views',
+      'Local timezone',
+      'Calendar',
+    ]);
 
     // One reading order, and it is the document's. Nothing reorders these in CSS, so this is
     // also the order the cards appear in at both widths, and the order the keyboard walks:
-    // below 1100px the two stacks sit one under the other and the seven cards read straight
+    // below 1100px the two stacks sit one under the other and the eight cards read straight
     // through. `e2e/settings-column-independence.spec.ts` measures that they really do.
     expect(headingsIn(document.querySelector('.settings-layout')!)).toEqual([
       'Google Drive',
@@ -74,6 +79,7 @@ describe('the Settings layout', () => {
       'Task tags',
       'Signal campaigns',
       'Branding',
+      'Default views',
       'Local timezone',
       'Calendar',
     ]);

@@ -25,6 +25,7 @@ import { findSheet, readXlsxWorkbook } from './domain/workbook.ts';
 import { PLAYBOOK_SHEETS } from '../shared/playbook.ts';
 import { TASK_CHECKLIST_TEMPLATES } from '../shared/types.ts';
 import { DEFAULT_BRANDING } from '../shared/branding.ts';
+import { CANONICAL_VIEW_DEFAULTS, type ViewDefaults } from '../shared/view-defaults.ts';
 
 let db: Db;
 beforeEach(() => {
@@ -720,6 +721,48 @@ describe('command center API', () => {
       expect(await stored()).toEqual(DEFAULT_BRANDING);
     });
   });
+
+  describe('default views and sorts', () => {
+    const configured: ViewDefaults = {
+      clients: { visibility: 'archived' },
+      projects: { visibility: 'all', sort: 'name-ascending' },
+      calendar: { view: 'week' },
+      signal: { view: 'today' },
+    };
+    const put = (body: object) =>
+      request(createApp(db)).put('/api/settings/view-defaults').send(body);
+    const stored = async () =>
+      (await request(createApp(db)).get('/api/settings/view-defaults')).body.viewDefaults;
+
+    it('answers with the canonical defaults when nothing is stored', async () => {
+      expect(await stored()).toEqual(CANONICAL_VIEW_DEFAULTS);
+    });
+
+    it('stores a complete allowed object and returns it after a restart', async () => {
+      const saved = await put(configured);
+      expect(saved.status).toBe(200);
+      expect(saved.body.viewDefaults).toEqual(configured);
+      expect(await stored()).toEqual(configured);
+    });
+
+    it('rejects an unknown page or an invalid sort without writing', async () => {
+      expect((await put({ ...configured, status: { view: 'board' } })).status).toBe(400);
+      expect(
+        (await put({ ...configured, projects: { visibility: 'all', sort: 'popularity' } })).status,
+      ).toBe(400);
+      expect(await stored()).toEqual(CANONICAL_VIEW_DEFAULTS);
+    });
+
+    it('falls back to the canonical defaults when the stored row is unreadable', async () => {
+      db.prepare('INSERT OR REPLACE INTO settings(key,value,updated_at) VALUES(?,?,?)').run(
+        'view_defaults',
+        JSON.stringify({ clients: { visibility: 'active' } }),
+        BACKDATED,
+      );
+      expect(await stored()).toEqual(CANONICAL_VIEW_DEFAULTS);
+    });
+  });
+
   it('reports sync blocked when Drive is disconnected', async () => {
     await setup();
     const sync = await request(createApp(db)).post('/api/drive/sync');

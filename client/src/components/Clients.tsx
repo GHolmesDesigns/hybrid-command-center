@@ -11,6 +11,11 @@ import {
 } from 'lucide-react';
 import { send } from '../api';
 import type { Client, Project } from '../../../shared/types';
+import {
+  CLIENT_VISIBILITIES,
+  resolveViewChoice,
+  type ViewDefaults,
+} from '../../../shared/view-defaults';
 import { type Modal } from './App';
 import { formatDate, initials } from './formatting';
 import { DriveBadge, Empty, SearchBox } from './Primitives';
@@ -19,31 +24,33 @@ import { PageHead } from './Shell';
 export function Clients({
   clients,
   projects,
+  viewDefaults,
   open,
   refresh,
   flash,
 }: {
   clients: Client[];
   projects: Project[];
+  viewDefaults: ViewDefaults;
   open: (m: Modal) => void;
   refresh: () => Promise<void>;
   flash: (s: string, t?: 'success' | 'error') => void;
 }) {
   const [query, setQuery] = useState('');
   const [params, setParams] = useSearchParams();
-  const requestedVisibility = params.get('visibility');
-  const visibility =
-    requestedVisibility === 'archived' || requestedVisibility === 'all'
-      ? requestedVisibility
-      : 'active';
+  const visibility = resolveViewChoice(
+    params.get('visibility'),
+    CLIENT_VISIBILITIES,
+    viewDefaults.clients.visibility,
+  );
   const visible = clients.filter(
     (c) =>
       (visibility === 'all' || c.status === visibility.toUpperCase()) &&
       c.name.toLowerCase().includes(query.toLowerCase()),
   );
-  const setVisibility = (next: 'active' | 'archived' | 'all') => {
+  const setVisibility = (next: (typeof CLIENT_VISIBILITIES)[number]) => {
     const updated = new URLSearchParams(params);
-    if (next === 'active') updated.delete('visibility');
+    if (next === viewDefaults.clients.visibility) updated.delete('visibility');
     else updated.set('visibility', next);
     setParams(updated);
   };

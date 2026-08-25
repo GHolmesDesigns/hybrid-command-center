@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { addDays, format } from 'date-fns';
 import { App } from './App';
 import { APP_VERSION, DEFAULT_BRANDING, type Branding } from '../../shared/branding';
+import { CANONICAL_VIEW_DEFAULTS, type ViewDefaults } from '../../shared/view-defaults';
 import type { Category, Client, DashboardData, Project, Tag, Task } from '../../shared/types';
 import { sameTagName } from '../../shared/types';
 import {
@@ -63,6 +64,7 @@ import { ANALYTICS_WINDOW_UNVERIFIED_DETAIL } from '../../shared/publish-analyti
 
 export {
   DEFAULT_BRANDING,
+  CANONICAL_VIEW_DEFAULTS,
   fireEvent,
   render,
   screen,
@@ -83,6 +85,7 @@ export {
   emptySignalImportCounts,
 };
 export type { Branding, Category, Client, DashboardData, Project, Tag, Task };
+export type { ViewDefaults };
 export type { ImportReceipt, PlaybookPreview };
 export type { DriveFile, DriveListing };
 export type { IntegrationEvent };
@@ -114,6 +117,16 @@ export const branding: Branding = {
 /** Lets a suite serve branding of its own without rebuilding the whole fetch stub. */
 export const setBranding = (overrides: Partial<Branding>) => {
   testState.brandingPayload = { ...branding, ...overrides };
+};
+
+/** Lets a suite serve view defaults of its own without rebuilding the whole fetch stub. */
+export const setViewDefaults = (overrides: Partial<ViewDefaults> = {}) => {
+  testState.viewDefaultsPayload = {
+    clients: { ...CANONICAL_VIEW_DEFAULTS.clients, ...overrides.clients },
+    projects: { ...CANONICAL_VIEW_DEFAULTS.projects, ...overrides.projects },
+    calendar: { ...CANONICAL_VIEW_DEFAULTS.calendar, ...overrides.calendar },
+    signal: { ...CANONICAL_VIEW_DEFAULTS.signal, ...overrides.signal },
+  };
 };
 
 export const client = (
@@ -190,6 +203,7 @@ export const testState = {
   categoriesPayload: [] as Category[],
   dashboardPayload: emptyDashboard as DashboardData,
   brandingPayload: null as Branding | null,
+  viewDefaultsPayload: null as ViewDefaults | null,
   taskPatchError: null as string | null,
   taskReorderError: null as string | null,
   dashboardFailures: 0,
@@ -650,6 +664,8 @@ const payloadFor = (url: string) => {
   if (url.endsWith('/api/dashboard')) return testState.dashboardPayload;
   if (url.endsWith('/api/settings/branding'))
     return { branding: testState.brandingPayload ?? branding };
+  if (url.endsWith('/api/settings/view-defaults'))
+    return { viewDefaults: testState.viewDefaultsPayload ?? CANONICAL_VIEW_DEFAULTS };
   if (url.endsWith('/api/projects')) return testState.projectsPayload;
   if (url.endsWith('/api/clients')) return testState.clientsPayload;
   if (url.endsWith('/api/tasks')) return testState.tasksPayload;
@@ -1327,6 +1343,14 @@ const respondTo = (url: string, init?: RequestInit) => {
     );
     return testState.projectsPayload.find((p) => p.id === detachCategory[1]) ?? {};
   }
+  if (url.endsWith('/api/settings/view-defaults') && method === 'PUT') {
+    testState.viewDefaultsPayload = body as ViewDefaults;
+    return { viewDefaults: testState.viewDefaultsPayload };
+  }
+  if (url.endsWith('/api/settings/branding') && method === 'PUT') {
+    testState.brandingPayload = body as Branding;
+    return { branding: testState.brandingPayload };
+  }
   return payloadFor(url);
 };
 
@@ -1482,6 +1506,7 @@ beforeEach(() => {
   testState.categoriesPayload = [];
   testState.dashboardPayload = emptyDashboard;
   testState.brandingPayload = null;
+  testState.viewDefaultsPayload = null;
   testState.taskPatchError = null;
   testState.taskReorderError = null;
   testState.dashboardFailures = 0;
