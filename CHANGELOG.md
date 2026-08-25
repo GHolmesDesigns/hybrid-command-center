@@ -8,6 +8,18 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.1.2] - 2026-08-25
+
+### Fixed
+
+- Live Projects now lists only clients with projects matching the selected visibility. Stale
+  client filters resolve to All clients instead of retaining a hidden selection, while Archived
+  and All views continue to expose their appropriate choices.
+
+### Breaking changes
+
+None.
+
 ## [5.1.1] - 2026-08-25
 
 ### Added
