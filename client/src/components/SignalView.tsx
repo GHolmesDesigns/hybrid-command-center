@@ -574,6 +574,14 @@ function Editor({
   const [presetNotice, setPresetNotice] = useState('');
   const checked = useRef(new Set<string>());
   /**
+   * Guards overlapping **Show preview** presses before React can disable the button.
+   *
+   * `setBusy(true)` is not synchronous with the DOM, so a second click can start another preview
+   * while the first is still in flight — a duplicate account refresh and a race where the first
+   * failure can overwrite a later success. One in-flight promise is the whole of the guard.
+   */
+  const previewInFlight = useRef<Promise<void> | null>(null);
+  /**
    * The content variants, twice: what the server holds and what the form is holding.
    *
    * Two copies rather than a dirty flag, because the preview is gated on them being identical and a
@@ -719,17 +727,23 @@ function Editor({
   };
 
   const previewPublish = async () => {
+    if (previewInFlight.current) return previewInFlight.current;
     setBusy(true);
     setError('');
-    try {
-      setPublishPreview(
-        await send<PublishPreview>(`/signal/posts/${post.id}/publish/preview`, 'POST'),
-      );
-    } catch (reason) {
-      setError((reason as Error).message);
-    } finally {
-      setBusy(false);
-    }
+    const run = (async () => {
+      try {
+        setPublishPreview(
+          await send<PublishPreview>(`/signal/posts/${post.id}/publish/preview`, 'POST', {}),
+        );
+      } catch (reason) {
+        setError((reason as Error).message);
+      } finally {
+        setBusy(false);
+        previewInFlight.current = null;
+      }
+    })();
+    previewInFlight.current = run;
+    return run;
   };
 
   /**
@@ -752,11 +766,14 @@ function Editor({
    * server would then refuse.
    */
   const saveTargets = async (targets: { channel: string; providerAccountIds: number[] }[]) => {
+    if (previewInFlight.current) await previewInFlight.current;
     setBusy(true);
     setError('');
     try {
       await send(`/signal/posts/${post.id}/publish-targets`, 'PUT', { targets });
-      await previewPublish();
+      setPublishPreview(
+        await send<PublishPreview>(`/signal/posts/${post.id}/publish/preview`, 'POST', {}),
+      );
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Could not save the accounts.');
     } finally {

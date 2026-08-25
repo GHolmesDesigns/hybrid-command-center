@@ -378,8 +378,9 @@ function resolveTarget(
             target.handle.toLowerCase().replace(/[^a-z0-9]/g, '') === 'gholmesdesigns',
         )
       : candidates;
-  // Buffer accounts are listed for planning; until Buffer publishing lands, §3.1 stays on Post Bridge
-  // whenever it also lists the platform, so a read-only refresh cannot block an ordinary submit.
+  // When both providers list the same platform, keep Post Bridge for auto-resolve so Buffer's
+  // read-only account refresh cannot steal a Post Bridge submission. Explicit target selection is
+  // how a person chooses Buffer instead; this filter only applies to the §3.1 single-account path.
   const postBridgeOnly = resolved.filter(
     (target) => (target.provider ?? 'post-bridge') === 'post-bridge',
   );

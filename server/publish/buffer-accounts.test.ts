@@ -80,6 +80,31 @@ describe('BufferAccountsService', () => {
     expect(event?.outcome).toBe('SUCCESS');
   });
 
+  it('coalesces overlapping refresh calls into one provider walk', async () => {
+    const provider = new MockBufferReadProvider();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    provider.channels = vi.fn(async () => {
+      await gate;
+      return provider.channelRows;
+    });
+    const service = new BufferAccountsService(db, provider, clock);
+    const first = service.refresh();
+    const second = service.refresh();
+    release();
+    const [a, b] = await Promise.all([first, second]);
+    expect(provider.channels).toHaveBeenCalledTimes(1);
+    expect(a.channels).toHaveLength(3);
+    expect(b.channels).toHaveLength(3);
+    expect(
+      listIntegrationEvents(db).filter(
+        (event) => event.operation === 'signal.buffer-accounts-refresh',
+      ),
+    ).toHaveLength(1);
+  });
+
   it('keeps the prior generation when the provider refuses', async () => {
     const provider = new MockBufferReadProvider();
     const service = new BufferAccountsService(db, provider, clock);
