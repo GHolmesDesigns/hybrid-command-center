@@ -75,6 +75,52 @@ export interface SignalImportResolvedMedia {
   resolvedAt?: string;
 }
 
+/**
+ * Whether a capability finding is a property of the imported content, or a fact about today's
+ * connections. Presenting them identically would teach a caption over a limit as fixable-by-waiting
+ * and a missing account as a property of the copy.
+ */
+export type SignalImportVerdictDurability = 'DURABLE' | 'MOMENTARY';
+
+export const SIGNAL_IMPORT_VERDICT_DURABILITY_LABEL: Record<SignalImportVerdictDurability, string> =
+  {
+    DURABLE: 'About the content — stays true until the copy, media, format, or channels change',
+    MOMENTARY: 'About right now — depends on which accounts are connected today',
+  };
+
+/**
+ * One channel finding from the shared publish capability contract, reported as a warning.
+ *
+ * Import never refuses on these: a caption over Bluesky's limit still imports. `publishWouldRefuse`
+ * records what a later publish preview would do with the same facts, so the UI can say refuses
+ * versus warns without inventing a second rule.
+ */
+export interface SignalImportCapabilityVerdict {
+  postKey: string;
+  row: number;
+  channel: string;
+  durability: SignalImportVerdictDurability;
+  message: string;
+  publishWouldRefuse: boolean;
+}
+
+/** Counts at the top of the preview so a long workbook does not require reading every row. */
+export interface SignalImportCapabilitySummary {
+  postsEvaluated: number;
+  postsClean: number;
+  postsWithWarnings: number;
+  durableCount: number;
+  momentaryCount: number;
+}
+
+export const emptySignalImportCapabilitySummary = (): SignalImportCapabilitySummary => ({
+  postsEvaluated: 0,
+  postsClean: 0,
+  postsWithWarnings: 0,
+  durableCount: 0,
+  momentaryCount: 0,
+});
+
 export interface SignalImportPreview {
   schemaVersion: number;
   ok: boolean;
@@ -92,6 +138,12 @@ export interface SignalImportPreview {
   driveNamed: number;
   /** Drive rows that bound a fingerprint in this dry run. */
   driveResolved: number;
+  /**
+   * Capability findings for what would happen if someone later published. Informational only —
+   * they never flip `ok` or refuse the import.
+   */
+  capabilitySummary: SignalImportCapabilitySummary;
+  capabilityVerdicts: SignalImportCapabilityVerdict[];
   duplicateRule: string[];
   fingerprint: string;
 }
@@ -115,6 +167,9 @@ export interface SignalImportReceipt {
   updated: SignalImportCreation[];
   skipped: SignalImportSkip[];
   issues: SignalImportIssue[];
+  /** What the dry run knew about publishability, recoverable after the import. */
+  capabilitySummary: SignalImportCapabilitySummary;
+  capabilityVerdicts: SignalImportCapabilityVerdict[];
   error?: string;
   createdAt: string;
 }

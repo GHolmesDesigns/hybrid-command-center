@@ -54,6 +54,7 @@ import {
   SIGNAL_IMPORT_SCHEMA_VERSION,
   SIGNAL_IMPORT_SOURCE_NAME,
   SIGNAL_IMPORT_SHEETS,
+  emptySignalImportCapabilitySummary,
   emptySignalImportCounts,
   signalImportTotal,
   type SignalImportCounts,
@@ -65,6 +66,10 @@ import {
   type SignalImportResolvedMedia,
   type SignalImportSkip,
 } from '../../shared/signal-import.ts';
+import {
+  connectedPublishTargetsFromDb,
+  evaluateImportCapabilities,
+} from './import-capabilities.ts';
 
 export const SIGNAL_IMPORT_TEXT_MAX = 4_000_000;
 export const SIGNAL_IMPORT_CONTENT_BASE64_MAX = 12_000_000;
@@ -714,7 +719,11 @@ const counts = (
   return { creates, updates, skips, failures };
 };
 
-export function toSignalImportPreview(plan: Plan, fingerprint: string): SignalImportPreview {
+export function toSignalImportPreview(
+  plan: Plan,
+  fingerprint: string,
+  connected: ReturnType<typeof connectedPublishTargetsFromDb> = [],
+): SignalImportPreview {
   const c = counts(plan);
   const failed = new Set(
     plan.issues.filter((x) => x.row !== undefined).map((x) => `${x.sheet}:${x.row}`),
@@ -726,6 +735,9 @@ export function toSignalImportPreview(plan: Plan, fingerprint: string): SignalIm
   const resolvedMedia = resolvedMediaFromPlan(plan);
   const driveNamed = resolvedMedia.filter((m) => m.source === 'DRIVE').length;
   const driveResolved = resolvedMedia.filter((m) => m.source === 'DRIVE' && m.resolved).length;
+  // Capability findings run even when the workbook has validation errors, so a person sees both
+  // kinds of problem in one preview. They never flip `ok`.
+  const capability = evaluateImportCapabilities(plan.posts, connected);
   return {
     schemaVersion: plan.schemaVersion,
     ok: plan.issues.length === 0,
@@ -737,6 +749,8 @@ export function toSignalImportPreview(plan: Plan, fingerprint: string): SignalIm
     resolvedMedia,
     driveNamed,
     driveResolved,
+    capabilitySummary: capability.summary,
+    capabilityVerdicts: capability.verdicts,
     duplicateRule: SIGNAL_IMPORT_DUPLICATE_RULE,
     fingerprint,
   };
@@ -750,7 +764,7 @@ export async function previewSignalImport(
   const parsed = parseInput(input);
   const plan = await buildPlan(parsed, db, provider);
   previewPlans.set(parsed.fingerprint, plan);
-  return toSignalImportPreview(plan, parsed.fingerprint);
+  return toSignalImportPreview(plan, parsed.fingerprint, connectedPublishTargetsFromDb(db));
 }
 
 function writeReceipt(
@@ -777,6 +791,8 @@ function writeReceipt(
     updated: preview.updated,
     skipped: preview.skipped,
     issues: preview.issues,
+    capabilitySummary: preview.capabilitySummary,
+    capabilityVerdicts: preview.capabilityVerdicts,
     ...(error ? { error } : {}),
     createdAt: now(),
   };
@@ -801,6 +817,8 @@ function writeReceipt(
         updated: receipt.updated,
         skipped: receipt.skipped,
         issues: receipt.issues,
+        capabilitySummary: receipt.capabilitySummary,
+        capabilityVerdicts: receipt.capabilityVerdicts,
       }),
       receipt.error ?? null,
       receipt.createdAt,
@@ -1035,7 +1053,11 @@ export async function commitSignalImport(
       }),
     };
   }
-  const preview = toSignalImportPreview(plan, parsed.fingerprint);
+  const preview = toSignalImportPreview(
+    plan,
+    parsed.fingerprint,
+    connectedPublishTargetsFromDb(db),
+  );
   if (plan.issues.length)
     return { preview, receipt: writeReceipt(db, parsed, 'REJECTED', preview) };
   try {
@@ -1092,6 +1114,8 @@ function receiptFromRow(row: ReceiptRow): SignalImportReceipt {
     updated: detail.updated ?? [],
     skipped: detail.skipped ?? [],
     issues: detail.issues ?? [],
+    capabilitySummary: detail.capabilitySummary ?? emptySignalImportCapabilitySummary(),
+    capabilityVerdicts: detail.capabilityVerdicts ?? [],
     ...(row.error ? { error: row.error } : {}),
     createdAt: row.created_at,
   };
