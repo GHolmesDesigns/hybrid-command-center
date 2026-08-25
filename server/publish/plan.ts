@@ -378,13 +378,13 @@ function resolveTarget(
             target.handle.toLowerCase().replace(/[^a-z0-9]/g, '') === 'gholmesdesigns',
         )
       : candidates;
-  // TikTok and YouTube publish through Buffer; every other platform stays on Post Bridge. When both
-  // providers list the same platform, keep the provider that owns it so a Buffer channel is never
-  // planned as Post Bridge (and the reverse), which is what provider isolation requires.
-  const preferredProvider =
-    platform === 'tiktok' || platform === 'youtube' ? BUFFER_PROVIDER : 'post-bridge';
-  const preferred = resolved.filter((target) => targetProvider(target) === preferredProvider);
-  if (preferred.length) resolved = preferred;
+  // When both providers list the same platform, keep Post Bridge for auto-resolve so Buffer's
+  // read-only account refresh cannot steal a Post Bridge submission. Explicit target selection is
+  // how a person chooses Buffer instead; this filter only applies to the §3.1 single-account path.
+  const postBridgeOnly = resolved.filter(
+    (target) => (target.provider ?? 'post-bridge') === 'post-bridge',
+  );
+  if (postBridgeOnly.length) resolved = postBridgeOnly;
   if (resolved.length === 1) {
     const target = resolved[0] as PublishTarget;
     if (target.unavailable)
