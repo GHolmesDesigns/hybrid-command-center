@@ -426,6 +426,8 @@ describe('the read provider', () => {
     const provider = new UnavailableSignalProvider();
     expect(provider.available).toBe(false);
     await expect(provider.listPosts()).rejects.toThrow('Signal Campaign is unavailable.');
+    await expect(provider.listVariants()).rejects.toThrow('Signal Campaign is unavailable.');
+    await expect(provider.listPublishTargets()).rejects.toThrow('Signal Campaign is unavailable.');
   });
 
   it('flags a range it had to cut short', async () => {

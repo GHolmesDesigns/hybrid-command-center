@@ -327,6 +327,16 @@ describe('an on-demand refresh', () => {
     const summary = await analytics.refresh(post.id);
     expect(summary.refresh.reason).toBe('Analytics needs POST_BRIDGE_API_KEY.');
   });
+
+  it('refuses list and days directly rather than answering with empty figures', async () => {
+    const provider = new UnavailableAnalyticsProvider();
+    await expect(provider.list(['result-tt'])).rejects.toThrow(
+      'Analytics needs POST_BRIDGE_API_KEY.',
+    );
+    await expect(provider.days('analytics-1')).rejects.toThrow(
+      'Analytics needs POST_BRIDGE_API_KEY.',
+    );
+  });
 });
 
 describe('a refresh the provider refuses', () => {

@@ -372,6 +372,12 @@ describe('the two refusals that reach no provider', () => {
     expect(storedIds()).toEqual([]);
   });
 
+  it('refuses a direct page call rather than answering with an empty one', async () => {
+    await expect(new UnavailableProviderInventoryProvider().page(0)).rejects.toThrow(
+      'POST_BRIDGE_API_KEY',
+    );
+  });
+
   it('waits out a rate limit the provider already declared rather than asking again', async () => {
     await service(holding([listed()])).refresh();
     recordSyncHealth(db, { rateLimitedUntil: '2026-08-19T12:30:00.000Z' });
