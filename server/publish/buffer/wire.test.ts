@@ -204,6 +204,7 @@ describe('unavailable Buffer writes', () => {
   it('refuses every write capability without widening into another provider', async () => {
     const provider = new UnavailableBufferWriteProvider('evidence missing');
     expect(provider.available).toBe(false);
+    expect(provider.unavailableReason).toBe('evidence missing');
     await expect(
       provider.create({
         channelId: 'channel',
@@ -218,5 +219,14 @@ describe('unavailable Buffer writes', () => {
     await expect(provider.read('post')).rejects.toThrow('evidence missing');
     await expect(provider.edit({ id: 'post', text: 'next' })).rejects.toThrow('evidence missing');
     await expect(provider.cancel('post')).rejects.toThrow('evidence missing');
+  });
+
+  it('carries a typed retry-after on a rate-limit write error', () => {
+    const error = new BufferWriteError('slow down', 'RATE_LIMIT', { retryAfterSeconds: 30 });
+    expect(error).toMatchObject({
+      rateLimited: true,
+      retryAfterSeconds: 30,
+      ambiguous: false,
+    });
   });
 });

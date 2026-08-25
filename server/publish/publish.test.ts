@@ -2484,6 +2484,47 @@ describe('Buffer confirmed publishing', () => {
     ).toEqual({ count: 0 });
   });
 
+  it('falls back to the evidence reason when a closed Buffer write provider omits one', async () => {
+    const post = add({ channels: ['tt'], mediaUrls: [] });
+    const listed = resolveProviderAccounts(db, [rawTargets[0]!], () => new Date('2026-01-01'));
+    db.prepare(
+      'INSERT INTO signal_post_publish_targets(post_id,channel,provider_account_id,created_at) VALUES(?,?,?,?)',
+    ).run(post.id, 'tt', listed[0]?.id, '2026-01-01T00:00:00.000Z');
+    const closed = {
+      available: false,
+      async create() {
+        throw new BufferWriteError('closed', 'DEFINITE_REFUSAL');
+      },
+      async read() {
+        throw new BufferWriteError('closed', 'DEFINITE_REFUSAL');
+      },
+      async edit() {
+        throw new BufferWriteError('closed', 'DEFINITE_REFUSAL');
+      },
+      async cancel() {
+        throw new BufferWriteError('closed', 'DEFINITE_REFUSAL');
+      },
+    };
+    const service = new PublishService(
+      db,
+      new LocalSignalProvider(db),
+      new MockPublishProvider(),
+      'America/New_York',
+      () => new Date('2026-01-01T00:00:00.000Z'),
+      new MockDriveMediaProvider(),
+      'post-bridge',
+      closed,
+    );
+
+    const preview = await service.preview(post.id, listed);
+    expect(publishPreviewRefusals(preview)).toEqual(
+      expect.arrayContaining([BUFFER_WRITE_EVIDENCE.reason]),
+    );
+    await expect(service.submit(post.id, preview.planHash, listed)).rejects.toThrow(
+      BUFFER_WRITE_EVIDENCE.reason,
+    );
+  });
+
   it('still confirms a Post Bridge plan when Buffer writes are closed', async () => {
     const post = add({
       channels: ['fb'],

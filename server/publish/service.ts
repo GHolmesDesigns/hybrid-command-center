@@ -106,13 +106,13 @@ export class PublishService {
    * write path must refuse.
    */
   private withBufferWriteGate<T extends PublishPreview>(plan: T): T {
-    const hasBufferTarget = plan.targets.some(
-      (target) => (target.provider ?? this.providerId) === BUFFER_PROVIDER,
-    );
-    if (!hasBufferTarget || this.bufferWrite.available) return plan;
-    const reason = this.bufferWriteClosedReason();
-    if (plan.refusals.includes(reason)) return plan;
-    return { ...plan, refusals: [...plan.refusals, reason] };
+    if (
+      this.bufferWrite.available ||
+      !plan.targets.some((target) => (target.provider ?? this.providerId) === BUFFER_PROVIDER)
+    ) {
+      return plan;
+    }
+    return { ...plan, refusals: [...plan.refusals, this.bufferWriteClosedReason()] };
   }
 
   private bufferInputs(
@@ -317,6 +317,11 @@ export class PublishService {
     const bufferOnly =
       plan.targets.length > 0 &&
       plan.targets.every((target) => (target.provider ?? this.providerId) === BUFFER_PROVIDER);
+    // Evidence-closed Buffer writes are named before the generic refusal join so Confirm's error
+    // stays the production-enablement reason rather than a concatenated plan dump — and so the
+    // submit-time gate remains reachable after preview has already refused for the same cause.
+    if (bufferOnly && !this.bufferWrite.available)
+      throw new PublishRequestError(this.bufferWriteClosedReason(), 409);
     if (!plan.available || blockers.length || (!plan.request && !bufferOnly))
       throw new PublishRequestError(blockers.join(' ') || 'Publishing is unavailable.', 400);
     if (plan.planHash !== expectedHash)
@@ -325,8 +330,6 @@ export class PublishService {
         409,
       );
     if (bufferOnly) {
-      if (!this.bufferWrite.available)
-        throw new PublishRequestError(this.bufferWriteClosedReason(), 409);
       if (bufferInputs.length !== plan.targets.length)
         throw new PublishRequestError('A Buffer target has no complete write plan.', 400);
       return this.submitBuffer(postId, plan, bufferInputs);
