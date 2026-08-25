@@ -17,7 +17,9 @@ const favicon = resolve(root, 'client/public/favicon.svg');
 describe('bundled favicon', () => {
   it('declares the icon in client/index.html with the local SVG path and type', () => {
     const html = readFileSync(indexHtml, 'utf8');
-    expect(html).toMatch(/<link\s+rel="icon"\s+href="\/favicon\.svg"\s+type="image\/svg\+xml"\s*\/>/);
+    expect(html).toMatch(
+      /<link\s+rel="icon"\s+href="\/favicon\.svg"\s+type="image\/svg\+xml"\s*\/>/,
+    );
     expect(html).not.toMatch(/https?:\/\/\S*favicon/i);
   });
 
