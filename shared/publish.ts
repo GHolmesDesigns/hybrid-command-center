@@ -133,6 +133,8 @@ export interface PublishChannelTargetReport {
   warnings: string[];
   bufferWire?: BufferWirePreview;
   bufferSchedulingType?: BufferSchedulingType;
+  /** Whether this account has Drive-sourced media the Drive override would affect. */
+  driveOverridable?: boolean;
 }
 
 export interface PublishChannelReport {
@@ -173,6 +175,8 @@ export interface PublishChannelReport {
   warnings: string[];
   bufferWire?: BufferWirePreview;
   bufferSchedulingType?: BufferSchedulingType;
+  /** Whether this channel's resolved account has Drive-sourced media the Drive override would affect. */
+  driveOverridable?: boolean;
 }
 
 export interface PublishPreview {

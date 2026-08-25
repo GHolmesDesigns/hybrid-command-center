@@ -157,6 +157,7 @@ export class PublishService {
   async preview(
     postId: string,
     listedTargets?: readonly PublishTarget[],
+    driveOverride = false,
   ): Promise<PublishPreview & { request?: PublishRequest; mediaSources?: SignalPostMedia[] }> {
     const publishingConfigured = this.provider.available || bufferConfigured();
     if (!publishingConfigured || !this.timezone)
@@ -213,6 +214,7 @@ export class PublishService {
         this.clock(),
         await this.signal.listVariants(postId),
         await this.signal.listPublishTargets(postId),
+        driveOverride,
       ),
     );
   }
@@ -308,8 +310,9 @@ export class PublishService {
     postId: string,
     expectedHash: string,
     listedTargets?: readonly PublishTarget[],
+    driveOverride = false,
   ): Promise<SignalPublication> {
-    const plan = await this.preview(postId, listedTargets);
+    const plan = await this.preview(postId, listedTargets, driveOverride);
     // The gate is every refusal in the plan, per-channel ones included, so a reason the preview
     // showed the user can never be stepped over at commit.
     const blockers = publishPreviewRefusals(plan);
