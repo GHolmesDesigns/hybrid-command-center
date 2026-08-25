@@ -23,6 +23,8 @@ import {
   CalendarDays,
   Check,
   GripVertical,
+  LayoutGrid,
+  List,
   Plus,
   Settings,
   Tags as TagsIcon,
@@ -38,6 +40,16 @@ import {
   type ProjectSort,
   type ViewDefaults,
 } from '../../../shared/view-defaults';
+import {
+  CANONICAL_PROJECT_PRESENTATION,
+  LIVE_PROJECT_STATUSES,
+  LIVE_PROJECT_STATUS_LABEL,
+  PROJECT_PRESENTATIONS,
+  parseLiveProjectStatuses,
+  serializeLiveProjectStatuses,
+  type LiveProjectStatus,
+  type ProjectPresentation,
+} from '../../../shared/project-view';
 import { type Modal } from './App';
 import { formatDate } from './formatting';
 import { TagChip } from './FormControls';
@@ -105,6 +117,11 @@ export function Projects({
   // Durable collection state lives in the address. Search stays local because it is transient
   // text typed for this visit rather than a view someone is likely to bookmark or share.
   const sortBy = resolveViewChoice(params.get('sort'), PROJECT_SORTS, viewDefaults.projects.sort);
+  const presentation = resolveViewChoice(
+    params.get('view'),
+    PROJECT_PRESENTATIONS,
+    CANONICAL_PROJECT_PRESENTATION,
+  );
   const clientFilter = params.get('client') || '';
   const visibility = resolveViewChoice(
     params.get('visibility'),
@@ -112,6 +129,9 @@ export function Projects({
     viewDefaults.projects.visibility,
   );
   const selectedCategoryIds = (params.get('categories') || '').split(',').filter(Boolean);
+  // Live status filters are OR within the dimension and AND with client/category/search. They
+  // never include ARCHIVED — that scope stays on visibility — so the two cannot silently cancel.
+  const selectedStatuses = parseLiveProjectStatuses(params.get('statuses'));
   const setParam = (key: string, value: string, defaultValue = '') => {
     const next = new URLSearchParams(params);
     if (value && value !== defaultValue) next.set(key, value);
@@ -119,6 +139,10 @@ export function Projects({
     setParams(next);
   };
   const setCategoryIds = (ids: string[]) => setParam('categories', ids.join(','));
+  const setStatuses = (statuses: LiveProjectStatus[]) =>
+    setParam('statuses', serializeLiveProjectStatuses(statuses));
+  const setPresentation = (value: ProjectPresentation) =>
+    setParam('view', value, CANONICAL_PROJECT_PRESENTATION);
   // Client choices track the visibility toggle so Live never offers a client whose projects
   // are all hidden, matching the same filter the project list itself applies. This keys off
   // project status rather than the client's own status: an active client with only archived
@@ -143,10 +167,27 @@ export function Projects({
     if (!clientFilterValid) setParam('client', '');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientFilterValid]);
+  // Drop unknown or out-of-order status tokens so a shared link cannot keep ARCHIVED (or
+  // nonsense) beside a live-status filter that never accepts them.
+  useEffect(() => {
+    const raw = params.get('statuses');
+    if (raw === null) return;
+    const cleaned = serializeLiveProjectStatuses(parseLiveProjectStatuses(raw));
+    if (cleaned !== raw) setParam('statuses', cleaned);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params]);
+  // Archived visibility and live-status filters contradict: clearing the statuses from the
+  // address (rather than silently ignoring them) keeps a shared link honest.
+  useEffect(() => {
+    if (visibility === 'archived' && selectedStatuses.length > 0) setStatuses([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibility, selectedStatuses.length]);
+  const statusFilterActive = visibility !== 'archived' && selectedStatuses.length > 0;
   const visible = projects.filter(
     (p) =>
       (visibility === 'all' ||
         (visibility === 'archived' ? p.status === 'ARCHIVED' : p.status !== 'ARCHIVED')) &&
+      (!statusFilterActive || selectedStatuses.includes(p.status as LiveProjectStatus)) &&
       (!effectiveClientFilter || p.clientId === effectiveClientFilter) &&
       // Every selected category must be present, so each chip narrows the list the way the
       // selects beside it do rather than widening it.
@@ -155,8 +196,9 @@ export function Projects({
   );
   const sortedVisible = [...visible].sort(projectComparator(sortBy));
   // Manual order and a sort rule cannot both win, so dragging belongs to Custom alone.
-  // Anywhere else a dropped tile would spring back to its sorted place and read as a bug.
-  const rearrangeable = sortBy === 'custom';
+  // List mode keeps Custom as a sort but explains that rearranging is grid-only — a dropped
+  // row would have nowhere visual to land that matches the tile grid's positions.
+  const rearrangeable = sortBy === 'custom' && presentation === 'grid';
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -215,6 +257,14 @@ export function Projects({
       flash((e as Error).message, 'error');
     }
   };
+  const orderHint =
+    presentation === 'list'
+      ? sortBy === 'custom'
+        ? 'Custom order is kept, but rearranging by hand is available in Grid view only.'
+        : 'Switch to Grid and Custom order to arrange projects by hand.'
+      : rearrangeable
+        ? 'Drag a tile by its grip, or use its position selector, to arrange projects by hand.'
+        : 'Switch to Custom order to arrange tiles by hand.';
   return (
     <>
       <PageHead
@@ -227,21 +277,43 @@ export function Projects({
           </button>
         }
       />
-      <div
-        className="segmented-control project-visibility"
-        role="group"
-        aria-label="Project visibility"
-      >
-        {(['live', 'archived', 'all'] as const).map((value) => (
+      <div className="project-toolbar">
+        <div
+          className="segmented-control project-visibility"
+          role="group"
+          aria-label="Project visibility"
+        >
+          {(['live', 'archived', 'all'] as const).map((value) => (
+            <button
+              type="button"
+              key={value}
+              aria-pressed={visibility === value}
+              onClick={() => setParam('visibility', value, viewDefaults.projects.visibility)}
+            >
+              {value[0].toUpperCase() + value.slice(1)}
+            </button>
+          ))}
+        </div>
+        <div
+          className="segmented-control project-presentation"
+          role="group"
+          aria-label="Project presentation"
+        >
           <button
             type="button"
-            key={value}
-            aria-pressed={visibility === value}
-            onClick={() => setParam('visibility', value, viewDefaults.projects.visibility)}
+            aria-pressed={presentation === 'grid'}
+            onClick={() => setPresentation('grid')}
           >
-            {value[0].toUpperCase() + value.slice(1)}
+            <LayoutGrid aria-hidden="true" /> Grid
           </button>
-        ))}
+          <button
+            type="button"
+            aria-pressed={presentation === 'list'}
+            onClick={() => setPresentation('list')}
+          >
+            <List aria-hidden="true" /> List
+          </button>
+        </div>
       </div>
       <div className="filterbar">
         <SearchBox value={query} set={setQuery} placeholder="Search projects…" />
@@ -271,6 +343,49 @@ export function Projects({
           <option value="custom">Custom order</option>
         </select>
       </div>
+      {visibility !== 'archived' && (
+        <div className="tag-filter">
+          <span className="tag-filter-label" id="status-filter-label">
+            Status
+          </span>
+          <div role="group" aria-labelledby="status-filter-label">
+            {LIVE_PROJECT_STATUSES.map((status) => {
+              const active = selectedStatuses.includes(status);
+              return (
+                <button
+                  key={status}
+                  type="button"
+                  className={`tag-chip toggle status-filter-chip${active ? ' active' : ''}`}
+                  aria-pressed={active}
+                  style={projectStatusStyle(status)}
+                  onClick={() =>
+                    setStatuses(
+                      active
+                        ? selectedStatuses.filter((value) => value !== status)
+                        : [...selectedStatuses, status],
+                    )
+                  }
+                >
+                  {LIVE_PROJECT_STATUS_LABEL[status]}
+                </button>
+              );
+            })}
+          </div>
+          {selectedStatuses.length > 0 && (
+            <button type="button" className="text-btn" onClick={() => setStatuses([])}>
+              Clear statuses
+            </button>
+          )}
+        </div>
+      )}
+      {visibility === 'archived' && (
+        <p className="filterbar-hint">
+          Status filters apply to live projects. Switch to Live or All to narrow by planning status.
+        </p>
+      )}
+      {selectedStatuses.length > 1 && visibility !== 'archived' && (
+        <p className="filterbar-hint">Showing projects that match any selected status.</p>
+      )}
       {categories.length > 0 && (
         <div className="tag-filter">
           <span className="tag-filter-label" id="category-filter-label">
@@ -310,35 +425,147 @@ export function Projects({
       {selectedCategoryIds.length > 1 && (
         <p className="filterbar-hint">Showing projects that carry every selected category.</p>
       )}
-      <p className="filterbar-hint">
-        {rearrangeable
-          ? 'Drag a tile by its grip, or use its position selector, to arrange projects by hand.'
-          : 'Switch to Custom order to arrange tiles by hand.'}
-      </p>
-      <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={dragEnd}>
-        <SortableContext items={sortedVisible.map((p) => p.id)} strategy={rectSortingStrategy}>
-          <div className="project-cards">
-            {sortedVisible.map((p, index) => (
-              <ProjectTile
-                key={p.id}
-                project={p}
-                tasks={tasks}
-                index={index}
-                total={sortedVisible.length}
-                rearrangeable={rearrangeable}
-                open={open}
-                archive={archive}
-                remove={remove}
-                moveToIndex={moveToIndex}
-              />
-            ))}
-          </div>
-        </SortableContext>
-      </DndContext>
+      <p className="filterbar-hint">{orderHint}</p>
+      {presentation === 'grid' ? (
+        <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={dragEnd}>
+          <SortableContext items={sortedVisible.map((p) => p.id)} strategy={rectSortingStrategy}>
+            <div className="project-cards">
+              {sortedVisible.map((p, index) => (
+                <ProjectTile
+                  key={p.id}
+                  project={p}
+                  tasks={tasks}
+                  index={index}
+                  total={sortedVisible.length}
+                  rearrangeable={rearrangeable}
+                  open={open}
+                  archive={archive}
+                  remove={remove}
+                  moveToIndex={moveToIndex}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
+      ) : (
+        <div className="project-rows" role="list">
+          {sortedVisible.map((p) => (
+            <ProjectRow
+              key={p.id}
+              project={p}
+              tasks={tasks}
+              open={open}
+              archive={archive}
+              remove={remove}
+            />
+          ))}
+        </div>
+      )}
       {!visible.length && (
         <Empty title="No projects found" body="Adjust your filters or create a new project." />
       )}
     </>
+  );
+}
+
+function ProjectActions({
+  project,
+  open,
+  archive,
+  remove,
+}: {
+  project: Project;
+  open: (m: Modal) => void;
+  archive: (p: Project) => void;
+  remove: (p: Project) => void;
+}) {
+  return (
+    <div className="card-actions">
+      <Link className="secondary buttonlike" to={`/status?project=${project.id}`}>
+        Open board
+      </Link>
+      <button
+        className="icon-btn"
+        onClick={() => open({ type: 'project', value: project })}
+        aria-label={`Edit ${project.name}`}
+      >
+        <Settings />
+      </button>
+      {project.status !== 'ARCHIVED' && (
+        <button
+          className="icon-btn danger"
+          onClick={() => archive(project)}
+          aria-label={`Archive ${project.name}`}
+        >
+          <Archive />
+        </button>
+      )}
+      <button
+        className="icon-btn danger"
+        onClick={() => remove(project)}
+        aria-label={`Delete ${project.name}`}
+      >
+        <Trash2 />
+      </button>
+    </div>
+  );
+}
+
+function ProjectRow({
+  project,
+  tasks,
+  open,
+  archive,
+  remove,
+}: {
+  project: Project;
+  tasks: Task[];
+  open: (m: Modal) => void;
+  archive: (p: Project) => void;
+  remove: (p: Project) => void;
+}) {
+  const mine = tasks.filter((t) => t.projectId === project.id),
+    done = mine.filter((t) => t.status === 'COMPLETE').length,
+    over = mine.filter((t) => t.overdue).length;
+  return (
+    <article
+      className="project-row"
+      data-status={project.status}
+      style={projectStatusStyle(project.status)}
+      role="listitem"
+    >
+      <div className="project-row-main">
+        <ProjectStatusChip status={project.status} />
+        <Link to={`/projects/${project.id}`} className="project-row-link">
+          <span className="client-name">{project.clientName}</span>
+          <strong>{project.name}</strong>
+        </Link>
+        <DriveBadge status={project.driveStatus} />
+      </div>
+      <div className="project-row-meta">
+        <span>
+          {done}/{mine.length} tasks
+        </span>
+        <span className={over ? 'overdue-text' : ''}>
+          {over ? (
+            <>
+              <AlertCircle />
+              {over} overdue
+            </>
+          ) : (
+            <>
+              <Check />
+              On track
+            </>
+          )}
+        </span>
+        <span>
+          <CalendarDays />
+          {project.targetDeadline ? formatDate(project.targetDeadline) : 'No deadline'}
+        </span>
+      </div>
+      <ProjectActions project={project} open={open} archive={archive} remove={remove} />
+    </article>
   );
 }
 
