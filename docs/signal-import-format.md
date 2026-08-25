@@ -14,7 +14,7 @@ tab grammar, key discipline, and paste-as-tabs alternative; a different hierarch
 ## Purpose and format
 
 A Signal import workbook is an XLSX file that describes planned Signal posts — copy, channels,
-media, optional per-platform variants, and (once Wave 15 lands) publish targets — so a queue
+media, optional per-platform variants, and (in a later schema version) publish targets — so a queue
 authored outside this app can be previewed and written into `signal_posts` in one confirmed action
 rather than retyped post by post.
 
@@ -23,7 +23,7 @@ The hierarchy is split across tabs rather than flattened into one table:
 ```text
 SignalPost -> SignalMedia (ordered)
            \-> SignalVariant (optional, per platform/account layer)
-           \-> SignalTarget (optional — reserved until C84/C87)
+           \-> SignalTarget (optional — reserved; see C93)
 ```
 
 Separate tabs keep parent metadata from repeating on every child row and let validation name an
@@ -139,13 +139,16 @@ a replacement at commit time, not a patch.
 ### Publish targets tab — deferred
 
 `[SignalTargets]` is named in this specification so C90–C92 can cite one document, but **schema
-version 1 workbooks must not include it**. A publish target names a provider-qualified account; that
-identity is not settled until C84 (#258) gives accounts provider-neutral ids and C87 (#261)
-confirms Buffer routing. Importing targets before then would bake a Post Bridge assumption into a
-file format.
+version 1 workbooks must not include it**. A publish target names a provider-qualified account.
+C84 (#258) and C87 (#261) settled that identity and Buffer routing — the reason this wave was
+sequenced after Wave 15 — but Wave 16 still did not ship the tab. Importing targets before those
+identities existed would have baked a Post Bridge assumption into a file format; leaving them out
+afterward kept schema version 1 to content, media, and variants, with targets chosen in the app
+after import.
 
 When the tab ships, it will be documented here in a `schema_version` bump. Until then, targets are
-chosen in the app after import, as they are today.
+chosen in the app after import, as they are today. See
+[What this wave leaves unbuilt](#what-this-wave-leaves-unbuilt-why-and-what-would-reopen-it).
 
 ## Allowed values
 
@@ -319,8 +322,9 @@ POST-001	1	DRIVE	https://drive.google.com/file/d/abc123/view
 
 ## Importer behavior
 
-C90 (#272) shipped the dry-run / confirm shell; C91 (#273) completes Drive media on `[SignalMedia]`.
-Rules settled here that the importer must not re-decide:
+C90 (#272) shipped the dry-run / confirm shell, including `[SignalVariants]`; C91 (#273) completes
+Drive media on `[SignalMedia]` and the same read-only resolution on variant `cover_image` /
+`thumbnail` roles. Rules settled here that the importer must not re-decide:
 
 - Matched posts are **updated**, not duplicated, using the identity rules in C89.
 - Unmatched rows are **created**.
@@ -331,17 +335,131 @@ Rules settled here that the importer must not re-decide:
 - `TRUE`/`FALSE` typed as text is accepted for booleans where noted.
 - Every import writes a receipt — created, updated, skipped, and failed counts with reasons — in the
   same spirit as the campaign playbook importer.
-- Drive resolution for `[SignalVariants]` role media is C93's remaining departure, not this card.
 
-## What this wave leaves unbuilt
+## What this wave leaves unbuilt, why, and what would reopen it
 
-C93 (#275) records declined scope. At this format revision:
+A wave that ships its cards and stops leaves the next reader to work out whether the rest was
+rejected, forgotten, or blocked. This section is that record for Signal import — the same job
+[`publishing-integration.md`](publishing-integration.md) §17 does for the Post Bridge integrations
+plan.
 
-- **Export** — no path from Signal back to a workbook.
-- **`[SignalTargets]`** — deferred until C84 and C87 land; see above.
-- **Playbook union** — no Signal tabs inside the campaign playbook file; two documents, two schema
-  versions.
-- **Publishing and analytics** — named in [What import never does](#what-import-never-does).
+**Every entry has three parts: what it is, why it is not built, and the concrete thing that would
+reopen it.** Naming the reopening condition is enough; this section does not decide whether the
+unbuilt pieces should be built.
+
+### Wave 16 card resolutions
+
+Every preceding card in this wave has a recorded resolution — none negative, none will-not-build,
+none deferred:
+
+| Card | Issue | Resolution |
+| --- | --- | --- |
+| C88 — The Signal import format, and the Drive boundary it has to break | #270 | Merged |
+| C89 — A Signal post's identity survives an edit to its copy | #271 | Merged |
+| C90 — Dry run, confirmation, and one transaction | #272 | Merged |
+| C91 — Drive media resolved in the preview, written with the post | #273 | Merged |
+| C92 — Capability verdicts in the preview, as warnings | #274 | Merged |
+
+### What the card's own list would misread as unbuilt
+
+C93's issue named `[SignalVariants]` and media on variant layers among the unbuilt pieces. Checking
+each entry against the shipped importer rather than transcribing the card found both already land:
+
+- **`[SignalVariants]`.** Optional per-platform / per-account layers — caption, media URL selection,
+  post kind, title, first comment, disclosure — import through C90 (#272). The format's
+  [SignalVariants](#signalvariants) table is the vocabulary; the composer remains the place a person
+  finishes a layer by hand when the workbook did not carry one.
+- **Variant `cover_image` and `thumbnail` roles.** Public URLs and Drive file links on those columns
+  resolve under the same read-only Drive rule as `[SignalMedia]`. C91 (#273)'s card text left variant
+  role media to C93; the importer shipped the resolution anyway, and a register that quietly
+  reclassified working behaviour as unbuilt would be worse than no register.
+
+Those two are **not** in the unbuilt list below.
+
+### The `[SignalTargets]` tab
+
+**What.** Explicit per-account publish targets in the workbook — which provider account each post
+should send to — so a queue authored outside the app can carry the same target selection the planner
+holds today.
+
+**Why not built.** A target names an account, and an account is only unambiguous once it is
+provider-qualified. That is why this wave was sequenced after Wave 15: C84 (#258) and C87 (#261)
+had to land first, or importing targets would bake a Post Bridge assumption into a file format. Those
+cards merged; schema version 1 still omits the tab so the first import release stays content, media,
+and variants, with targets chosen in the app after import.
+
+**Revisit when** a `schema_version` bump documents `[SignalTargets]` here and the importer writes
+provider-qualified target selections without contacting a publishing provider.
+
+### Export
+
+**What.** Signal posts written back out to this workbook format, so the round trip closes and the
+authoring source stops being the only place a queue can be edited.
+
+**Why not built.** Wanted, and deliberately out of Wave 16 — C88 named it and left it. Leaving it
+unnamed would make the absence look like an oversight.
+
+**Revisit when** a card takes export as its scope: the same tabs, the same identity columns, and a
+receipt that says what was written out.
+
+### Scheduling intelligence
+
+**What.** Suggesting, shifting, or resolving collisions among the dates a workbook carries — for
+example packing undated rows into next-open slots, or refusing two posts that share a channel's
+preferred hour.
+
+**Why not built.** The importer takes the dates and times the workbook gives it. The planner already
+offers a next-open-slot suggestion, and that stays a person's press. Import's job is to land the
+queue as authored, not to replan it.
+
+**Revisit when** a card decides the importer may propose schedule changes in the preview and require
+confirmation of those proposals — separate from validating that a date or time is well-formed.
+
+### Playbook union
+
+**What.** Signal tabs inside the campaign playbook workbook, so one file carries both a campaign's
+execution records and its content queue.
+
+**Why not built.** A campaign's projects and its Signal posts have different lifetimes and different
+`schema_version` gates. C88 declined the union: two documents, two files, two versions.
+
+**Revisit when** a card deliberately merges the formats and owns the combined version gate — not as
+a side effect of making import "one place."
+
+### Anything that publishes — permanent boundary
+
+**What.** Submit, update, reschedule, or cancel a provider post; create a publication or target;
+write delivery or analytics state; call Post Bridge, Buffer, or any publishing provider; set
+`signal_posts.status` to `PUBLISHED`.
+
+**Why not built.** Restated from [What import never does](#what-import-never-does) and from C88:
+import writes **planning rows** only. This is a permanent boundary, not a first-release limitation.
+The same read/write split [`publishing-integration.md`](publishing-integration.md) §1 draws for the
+publisher, pointed the other way, is what keeps an import from becoming an unreviewed send.
+
+**Revisit when** never under this format. A path that publishes is a different product surface and
+needs its own confirmation story; it is not a widening of import.
+
+### Deliberate departures from the playbook importer
+
+Two Wave 16 decisions look like omissions against
+[`campaign-playbook-import-format.md`](campaign-playbook-import-format.md) unless their reasoning is
+kept beside the unbuilt list. Both are shipped behaviour, not unfinished work.
+
+**Matched-by-identity rows update rather than skip (C90 / #272).** The playbook importer is
+create-only: a task already created has been worked on, and an import must not overwrite that work.
+A Signal post matched by **identity** is the same post the author edited at the source, and the
+point of re-import is to bring that edit in. Fallback matches (date + text, no identity) stay
+skipped and reported — a weak key is not evidence enough to overwrite. An update rewrites the
+content the workbook is authoritative for and never touches delivery state, publications, queue
+`position`, or per-account target selection.
+
+**Capability verdicts inform rather than refuse (C92 / #274).** The playbook importer has no publish
+capability surface. Signal import previews caption limits, media bounds, unreachable channels, and
+missing connected accounts from the shared publish capability contract, and still commits the row.
+A caption over Bluesky's hard limit imports with a warning; only validation errors refuse the whole
+import. The alternative — refuse on every capability finding — would make import a second publish
+gate and would block landing a queue that the composer is meant to finish.
 
 ## Examples
 
