@@ -8,6 +8,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.0.1] - 2026-08-25
+
+### Fixed
+
+- The server no longer refuses to start once a Buffer account has been used as an explicit
+  publish target or given an account-level variant. `backfillProviderAccounts` was treating any
+  referenced numeric id as needing a legacy Post Bridge identity, with no exception for a modern
+  account (Buffer, or a Post Bridge account resolved with a non-numeric reference) already sitting
+  there — the designed, expected shape of a shared provider-neutral surrogate id space, not a
+  conflict. Only a genuinely inconsistent legacy row is refused now.
+
+### Breaking changes
+
+None.
+
 ## [5.0.0] - 2026-08-25
 
 Version 5.0 turns Signal into a fuller planning and publishing workspace. It brings provider-aware

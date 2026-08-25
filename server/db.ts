@@ -1049,7 +1049,12 @@ export function backfillProviderAccounts(db: Db): number {
       const existing = byId.get(id) as
         { provider: string; provider_account_ref: string } | undefined;
       if (existing) {
-        if (existing.provider !== LEGACY_PROVIDER || existing.provider_account_ref !== ref)
+        // A row already at this id is already resolved, whichever path resolved it. Only a
+        // *legacy* row is this backfill's own prior work, so only a legacy row is checked for
+        // self-consistency; a modern row — Buffer, or a Post Bridge account resolved through
+        // `resolveProviderAccounts` with a non-numeric ref — was never this backfill's to make
+        // and is not evidence of a partial migration.
+        if (existing.provider === LEGACY_PROVIDER && existing.provider_account_ref !== ref)
           throw new Error(`Provider account surrogate ${id} already names another identity.`);
         continue;
       }
