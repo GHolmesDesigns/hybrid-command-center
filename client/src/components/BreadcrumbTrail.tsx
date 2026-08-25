@@ -3,8 +3,8 @@ import { Link, useLocation } from 'react-router-dom';
 import { breadcrumbsFor, type BreadcrumbData } from './breadcrumbs';
 
 export function BreadcrumbTrail({ clients, projects }: BreadcrumbData) {
-  const { pathname } = useLocation();
-  const segments = breadcrumbsFor(pathname, { clients, projects });
+  const { pathname, search } = useLocation();
+  const segments = breadcrumbsFor(pathname, { clients, projects }, undefined, search);
   return (
     <nav className="crumb" aria-label="Breadcrumb">
       <ol>

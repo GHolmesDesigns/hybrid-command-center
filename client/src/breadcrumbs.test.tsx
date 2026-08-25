@@ -12,8 +12,16 @@ import {
 
 const empty: BreadcrumbData = { clients: [], projects: [] };
 const data: BreadcrumbData = {
-  clients: [{ id: 'c1', name: 'Acme' }],
-  projects: [{ id: 'p1', name: 'Website Refresh', clientId: 'c1', clientName: 'Acme' }],
+  clients: [{ id: 'c1', name: 'Acme', status: 'ACTIVE' }],
+  projects: [
+    {
+      id: 'p1',
+      name: 'Website Refresh',
+      clientId: 'c1',
+      clientName: 'Acme',
+      status: 'ACTIVE',
+    },
+  ],
 };
 
 const labels = (
@@ -67,6 +75,60 @@ describe('breadcrumbsFor', () => {
     });
   });
 
+  it('adds a validated project context to Status and preserves all current filters', () => {
+    const trail = breadcrumbsFor(
+      '/status',
+      data,
+      BREADCRUMB_ROUTES,
+      '?project=p1&priority=HIGH%2CURGENT&type=GRAPHICS',
+    );
+
+    expect(trail).toEqual([
+      { label: HOME_CRUMB_LABEL, href: '/', current: false },
+      { label: 'Projects', href: '/projects', current: false },
+      { label: 'Website Refresh', href: '/projects/p1', current: false },
+      {
+        label: 'Status',
+        href: '/status?project=p1&priority=HIGH%2CURGENT&type=GRAPHICS',
+        current: true,
+      },
+    ]);
+  });
+
+  it('keeps Status top-level when the project context is absent or not one exact live project', () => {
+    const archivedProject: BreadcrumbData = {
+      ...data,
+      projects: [{ ...data.projects[0], id: 'archived', status: 'ARCHIVED' }],
+    };
+    const archivedClient: BreadcrumbData = {
+      clients: [{ ...data.clients[0], status: 'ARCHIVED' }],
+      projects: data.projects,
+    };
+    const mergedClient: BreadcrumbData = {
+      clients: [
+        {
+          ...data.clients[0],
+          mergedInto: { id: 'c2', name: 'Survivor', mergedAt: '2026-08-25T12:00:00.000Z' },
+        },
+      ],
+      projects: data.projects,
+    };
+
+    for (const [lookup, search] of [
+      [data, ''],
+      [data, '?project=unknown'],
+      [data, '?project=p1%2Cp2'],
+      [archivedProject, '?project=archived'],
+      [archivedClient, '?project=p1'],
+      [mergedClient, '?project=p1'],
+    ] as const) {
+      expect(breadcrumbsFor('/status', lookup, BREADCRUMB_ROUTES, search)).toEqual([
+        { label: HOME_CRUMB_LABEL, href: '/', current: false },
+        { label: 'Status', href: `/status${search}`, current: true },
+      ]);
+    }
+  });
+
   it('ignores a trailing slash and does not invent a task-detail segment', () => {
     expect(labels('/projects/p1/')).toEqual(labels('/projects/p1'));
     expect(labels('/projects/p1')).not.toContain('Task');
@@ -103,6 +165,20 @@ describe('BreadcrumbTrail', () => {
     renderTrail('/projects/p1');
     fireEvent.click(screen.getByRole('link', { name: 'Projects' }));
     expect(screen.getByTestId('location')).toHaveTextContent('/projects');
+  });
+
+  it('links a filtered Status view back through its named project', () => {
+    renderTrail('/status?project=p1&filter=week');
+    const nav = screen.getByRole('navigation', { name: 'Breadcrumb' });
+    expect(within(nav).getByRole('link', { name: 'Projects' })).toHaveAttribute(
+      'href',
+      '/projects',
+    );
+    expect(within(nav).getByRole('link', { name: 'Website Refresh' })).toHaveAttribute(
+      'href',
+      '/projects/p1',
+    );
+    expect(within(nav).getByText('Status')).toHaveAttribute('aria-current', 'page');
   });
 
   it('puts the full name on hover and focus via title', () => {

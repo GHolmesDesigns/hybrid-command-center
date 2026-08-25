@@ -59,6 +59,27 @@ describe('Breadcrumb trail', () => {
     expect(within(nav).getByText('Site refresh')).toHaveAttribute('aria-current', 'page');
   });
 
+  it('renders a filtered Status trail through the loaded live project', async () => {
+    testState.clientsPayload = [acme];
+    render(
+      <MemoryRouter initialEntries={['/status?project=p1&filter=week']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Project Status' })).toBeVisible();
+    const nav = trail();
+    expect(within(nav).getByRole('link', { name: 'Projects' })).toHaveAttribute(
+      'href',
+      '/projects',
+    );
+    expect(within(nav).getByRole('link', { name: 'Site refresh' })).toHaveAttribute(
+      'href',
+      '/projects/p1',
+    );
+    expect(within(nav).getByText('Status')).toHaveAttribute('aria-current', 'page');
+  });
+
   it('navigates an ancestor by click', async () => {
     testState.clientsPayload = [acme];
     render(

@@ -8,6 +8,18 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.1.1] - 2026-08-25
+
+### Added
+
+- Project-filtered Status views now show their route back through Projects and the named live
+  project while retaining the current Status filters. Missing, stale, archived, or merged project
+  contexts keep the ordinary top-level Status breadcrumb without exposing an unrelated name.
+
+### Breaking changes
+
+None.
+
 ## [5.1.0] - 2026-08-25
 
 ### Added
