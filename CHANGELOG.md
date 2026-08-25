@@ -8,6 +8,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.2.0] - 2026-08-25
+
+### Added
+
+- After **Show preview**, public image and video addresses stay as labelled text until you choose
+  **Show public media previews**. The panel says that loading a remote preview shares your IP with
+  that host, and **Show text only** returns to addresses alone. Drive files, PDFs, unknown kinds,
+  and signed or expiring addresses never embed; failed loads stay isolated; at most eight public
+  items load in one panel at a constrained size. The browser loads those URLs directly — the server
+  still fetches, proxies, and stores no preview bytes.
+
+### Breaking changes
+
+None.
+
 ## [5.1.2] - 2026-08-25
 
 ### Fixed
