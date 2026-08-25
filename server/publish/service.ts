@@ -45,7 +45,7 @@ import type { SignalPostMedia } from '../../shared/signal-media.ts';
 import { resolveProviderAccounts } from './accounts.ts';
 import { bufferConfigured } from '../config.ts';
 import type { PublishTarget } from './provider.ts';
-import { BUFFER_PROVIDER } from '../../shared/buffer.ts';
+import { BUFFER_PROVIDER, BUFFER_WRITE_EVIDENCE } from '../../shared/buffer.ts';
 import type { BufferWirePreview } from '../../shared/buffer-media.ts';
 import {
   BufferWriteError,
@@ -82,7 +82,7 @@ export class PublishService {
     driveMedia: DriveMediaProvider = new DisconnectedDriveMediaProvider(),
     providerId = 'post-bridge',
     bufferWrite: BufferWriteProvider = new UnavailableBufferWriteProvider(
-      'Buffer publishing is not production-enabled.',
+      BUFFER_WRITE_EVIDENCE.reason,
     ),
   ) {
     this.db = db;
@@ -93,6 +93,26 @@ export class PublishService {
     this.driveMedia = driveMedia;
     this.providerId = providerId;
     this.bufferWrite = bufferWrite;
+  }
+
+  /** The reason Buffer writes are closed, when they are — preview and submit share one message. */
+  private bufferWriteClosedReason(): string {
+    return this.bufferWrite.unavailableReason ?? BUFFER_WRITE_EVIDENCE.reason;
+  }
+
+  /**
+   * A Buffer target in the plan cannot be confirmed while production writes stay evidence-gated.
+   * Saying so on the preview (not only at commit) is what keeps Confirm from offering a plan the
+   * write path must refuse.
+   */
+  private withBufferWriteGate<T extends PublishPreview>(plan: T): T {
+    const hasBufferTarget = plan.targets.some(
+      (target) => (target.provider ?? this.providerId) === BUFFER_PROVIDER,
+    );
+    if (!hasBufferTarget || this.bufferWrite.available) return plan;
+    const reason = this.bufferWriteClosedReason();
+    if (plan.refusals.includes(reason)) return plan;
+    return { ...plan, refusals: [...plan.refusals, reason] };
   }
 
   private bufferInputs(
@@ -175,23 +195,25 @@ export class PublishService {
     // Three reads through the same read-only provider: the post, the content overrides that
     // tailor it, and the accounts a person explicitly chose for each channel. None of them can
     // write, which is what keeps the publisher unable to change a schedule it is planning from.
-    return buildPublishPlan(
-      post,
-      listedTargets
-        ? [...listedTargets]
-        : resolveProviderAccounts(
-            this.db,
-            this.provider.available
-              ? (await this.provider.listTargets()).filter(
-                  (target) => (target.provider ?? 'post-bridge') === this.providerId,
-                )
-              : [],
-            this.clock,
-          ),
-      this.timezone,
-      this.clock(),
-      await this.signal.listVariants(postId),
-      await this.signal.listPublishTargets(postId),
+    return this.withBufferWriteGate(
+      buildPublishPlan(
+        post,
+        listedTargets
+          ? [...listedTargets]
+          : resolveProviderAccounts(
+              this.db,
+              this.provider.available
+                ? (await this.provider.listTargets()).filter(
+                    (target) => (target.provider ?? 'post-bridge') === this.providerId,
+                  )
+                : [],
+              this.clock,
+            ),
+        this.timezone,
+        this.clock(),
+        await this.signal.listVariants(postId),
+        await this.signal.listPublishTargets(postId),
+      ),
     );
   }
 
@@ -304,10 +326,7 @@ export class PublishService {
       );
     if (bufferOnly) {
       if (!this.bufferWrite.available)
-        throw new PublishRequestError(
-          'Buffer publishing remains fail-closed until the owner-run C83 write evidence is recorded.',
-          409,
-        );
+        throw new PublishRequestError(this.bufferWriteClosedReason(), 409);
       if (bufferInputs.length !== plan.targets.length)
         throw new PublishRequestError('A Buffer target has no complete write plan.', 400);
       return this.submitBuffer(postId, plan, bufferInputs);

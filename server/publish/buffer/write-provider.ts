@@ -62,6 +62,11 @@ export class BufferWriteError extends Error {
 /** The Buffer write vocabulary. It has no account listing, upload, analytics, or queue method. */
 export interface BufferWriteProvider {
   readonly available: boolean;
+  /**
+   * Why writes are closed, when they are. Preview surfaces this as a plan refusal so Confirm is
+   * never offered for a plan that submit would reject for the same reason.
+   */
+  readonly unavailableReason?: string;
   create(input: BufferCreatePostInput): Promise<BufferWritePost>;
   read(id: string): Promise<BufferWritePost>;
   edit(input: BufferEditPostInput): Promise<BufferWritePost>;
@@ -70,12 +75,12 @@ export interface BufferWriteProvider {
 
 export class UnavailableBufferWriteProvider implements BufferWriteProvider {
   readonly available = false;
-  private readonly reason: string;
+  readonly unavailableReason: string;
   constructor(reason: string) {
-    this.reason = reason;
+    this.unavailableReason = reason;
   }
   private fail(): never {
-    throw new BufferWriteError(this.reason, 'DEFINITE_REFUSAL');
+    throw new BufferWriteError(this.unavailableReason, 'DEFINITE_REFUSAL');
   }
   async create(_input: BufferCreatePostInput): Promise<BufferWritePost> {
     void _input;
