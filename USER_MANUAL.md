@@ -1149,17 +1149,18 @@ Settings contains, in the order it reads:
 - **Project categories** — every category in the workspace, with how many projects carry it, and the only place a category is renamed or deleted
 - **Task tags** — every tag in the workspace, with how many tasks carry it, and the only place a tag is deleted
 - **Signal campaigns** — every campaign in the workspace, with how many posts carry it, and the only place a campaign is renamed or deleted
+- **Agent handoffs** — what IDE agents asked each other to do through the coordination queue: open and claimed items, completed and cancelled from the last seven days, notes on a handoff, and operator cancel with a required reason. Agents post and claim through MCP; this panel does not create handoffs
 - Sidebar branding — the mark, title, subtitle, tagline, colours, and logo shown in the left navigation
 - **Default views** — how Clients, Projects, Calendar, and Signal open when the address omits that choice
 - The current application version
 - Detected local timezone
 - A short note on the Calendar, with a link to it
 
-On a wide screen these sit in two columns: the connection and the labels on the left, the sidebar's
-appearance and the rest on the right. Each column is its own stack, so a card that grows — Drive as
-you connect it, a validation message appearing, a long list of campaigns — moves only the cards
-under it in the same column and never leaves a blank strip beside it. A narrower screen shows one
-column, and the cards read top to bottom in the order listed above.
+On a wide screen these sit in two columns: the connection, the labels, and agent handoffs on the
+left, the sidebar's appearance and the rest on the right. Each column is its own stack, so a card
+that grows — Drive as you connect it, a validation message appearing, a long list of campaigns or
+handoffs — moves only the cards under it in the same column and never leaves a blank strip beside
+it. A narrower screen shows one column, and the cards read top to bottom in the order listed above.
 
 Deleting a tag that is still attached asks first and tells you how many tasks are affected; a tag no task carries is removed straight away. Tags are created from tasks, not here.
 

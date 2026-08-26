@@ -217,6 +217,12 @@ export const testState = {
   /** The integration activity log the Import page reads, or an error in its place. */
   integrationActivityPayload: [] as IntegrationEvent[],
   integrationActivityError: null as string | null,
+  /** Operator coordination inbox (C112). Unset list means empty; detail is answered per open. */
+  agentHandoffsPayload: [] as import('../../shared/agent-coordination').AgentHandoff[],
+  agentHandoffsError: null as string | null,
+  agentHandoffDetailPayload: null as
+    import('../../shared/agent-coordination').AgentHandoffDetail | null,
+  agentHandoffDetailError: null as string | null,
   /**
    * What `GET /api/projects/:id/files` answers, per request, so a suite can vary the page
    * by folder and by cursor the way real Drive does. Unset means a Drive nobody connected.
@@ -1111,6 +1117,36 @@ const respondTo = (url: string, init?: RequestInit) => {
     return testState.integrationActivityError
       ? reply(503, { error: testState.integrationActivityError })
       : testState.integrationActivityPayload;
+  if (url.endsWith('/api/agent-handoffs') && method === 'GET')
+    return testState.agentHandoffsError
+      ? reply(503, { error: testState.agentHandoffsError })
+      : testState.agentHandoffsPayload;
+  const agentHandoffCancel = url.match(/\/api\/agent-handoffs\/([^/?]+)\/cancel$/);
+  if (agentHandoffCancel && method === 'POST') {
+    const target = testState.agentHandoffsPayload.find((row) => row.id === agentHandoffCancel[1]);
+    if (!target) return reply(404, { error: 'Handoff not found.' });
+    const cancelled = {
+      ...target,
+      state: 'CANCELLED' as const,
+      cancelledAt: '2026-08-26T15:30:00.000Z',
+      cancelReason: String(body?.reason ?? ''),
+      updatedAt: '2026-08-26T15:30:00.000Z',
+    };
+    testState.agentHandoffsPayload = testState.agentHandoffsPayload.map((row) =>
+      row.id === cancelled.id ? cancelled : row,
+    );
+    testState.agentHandoffDetailPayload = { ...cancelled, notes: [] };
+    return cancelled;
+  }
+  const agentHandoffDetail = url.match(/\/api\/agent-handoffs\/([^/?]+)$/);
+  if (agentHandoffDetail && method === 'GET') {
+    if (testState.agentHandoffDetailError)
+      return reply(503, { error: testState.agentHandoffDetailError });
+    if (testState.agentHandoffDetailPayload?.id === agentHandoffDetail[1])
+      return testState.agentHandoffDetailPayload;
+    const listed = testState.agentHandoffsPayload.find((row) => row.id === agentHandoffDetail[1]);
+    return listed ? { ...listed, notes: [] } : reply(404, { error: 'Handoff not found.' });
+  }
   // The import routes answer with whatever the case set up: the dry run is a plain 200 even
   // when the playbook is unimportable, and a refused commit is a 409 carrying the reasons.
   if (url.endsWith('/api/import/playbook/preview') && method === 'POST')
@@ -1544,6 +1580,10 @@ beforeEach(() => {
   testState.signalImportCommitPayload = null;
   testState.integrationActivityPayload = [];
   testState.integrationActivityError = null;
+  testState.agentHandoffsPayload = [];
+  testState.agentHandoffsError = null;
+  testState.agentHandoffDetailPayload = null;
+  testState.agentHandoffDetailError = null;
   testState.driveListingPayload = null;
   testState.calendarPayload = null;
   testState.signalPostsPayload = [];

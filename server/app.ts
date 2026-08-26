@@ -181,9 +181,15 @@ import { listIntegrationEvents } from './integration-log.ts';
 import {
   AGENT_HANDOFF_STATES,
   agentHandoffCancelInputSchema,
+  agentHandoffPostInputSchema,
 } from '../shared/agent-coordination.ts';
 import { AgentCoordinationError } from './domain/agent-coordination.ts';
-import { cancelHandoffAsOperator, getHandoff, listHandoffs } from './agent-coordination/service.ts';
+import {
+  cancelHandoffAsOperator,
+  getHandoff,
+  listHandoffs,
+  postHandoff,
+} from './agent-coordination/service.ts';
 import { INTEGRATION_EVENT_PAGE_MAX, INTEGRATION_SOURCES } from '../shared/integration-log.ts';
 import {
   APP_VERSION,
@@ -2312,10 +2318,11 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   });
 
   /**
-   * Agent handoff queue (C110): operator read and cancel over HTTP.
+   * Agent handoff queue (C110/C112): operator HTTP over the same service MCP uses.
    *
-   * Agents post/claim/complete via the service (and later MCP in C111). The browser only lists,
-   * opens, and cancels — never mutates workspace rows, and never writes `integration_events`.
+   * Agents normally post/claim/complete via MCP. The operator inbox lists, opens, and cancels;
+   * POST exists so operators and e2e can seed the queue without an MCP session. Never mutates
+   * workspace rows, and never writes `integration_events`.
    */
   app.get('/api/agent-handoffs', (req, res, next) => {
     try {
@@ -2325,6 +2332,14 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         })
         .parse(req.query);
       res.json(listHandoffs(db, query));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/agent-handoffs', (req, res, next) => {
+    try {
+      const body = agentHandoffPostInputSchema.parse(req.body);
+      res.status(201).json(postHandoff(db, body, clock()));
     } catch (error) {
       next(error);
     }
