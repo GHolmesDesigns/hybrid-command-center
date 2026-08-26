@@ -1,0 +1,26 @@
+[Unit]
+Description=Hybrid Command Center
+After=network-online.target var-lib-hybrid\x2dcommand\x2dcenter.mount
+Wants=network-online.target
+RequiresMountsFor=/var/lib/hybrid-command-center
+
+[Service]
+Type=simple
+User=hcc
+Group=hcc
+WorkingDirectory=/opt/hybrid-command-center/current
+EnvironmentFile=/etc/hybrid-command-center/runtime.env
+ExecStartPre=/usr/bin/npm run db:migrate
+ExecStart=/usr/bin/flock --nonblock /run/hybrid-command-center.writer.lock /usr/bin/npm start
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/hybrid-command-center /run
+
+[Install]
+WantedBy=multi-user.target

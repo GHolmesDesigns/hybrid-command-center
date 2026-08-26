@@ -1,18 +1,32 @@
 ﻿import path from 'node:path';
 import express from 'express';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createApp } from './app.ts';
-import { config } from './config.ts';
+import { assertProductionRuntimeConfig, config } from './config.ts';
 import { getDb } from './db.ts';
 import { configureServerTimeouts } from './budgets.ts';
 import { closeOnSignals } from './shutdown.ts';
 
+const production = process.env.NODE_ENV === 'production' || process.argv.includes('--production');
+let productionRoot: string | undefined;
+if (production) {
+  assertProductionRuntimeConfig();
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../dist/client');
+  const indexPath = path.join(root, 'index.html');
+  if (!fs.existsSync(indexPath)) {
+    throw new Error(
+      `Production client is missing at ${indexPath}. Run npm run build before start.`,
+    );
+  }
+  productionRoot = root;
+}
+
 const db = getDb();
 const app = createApp(db);
-if (process.env.NODE_ENV === 'production' || process.argv.includes('--production')) {
-  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../dist/client');
-  app.use(express.static(root));
-  app.get('/{*splat}', (_req, res) => res.sendFile(path.join(root, 'index.html')));
+if (productionRoot) {
+  app.use(express.static(productionRoot));
+  app.get('/{*splat}', (_req, res) => res.sendFile(path.join(productionRoot, 'index.html')));
 }
 const server = app.listen(config.port, config.host, () =>
   console.log(`Command Center API ready at http://${config.host}:${config.port}`),

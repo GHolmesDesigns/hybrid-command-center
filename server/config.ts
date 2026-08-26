@@ -294,3 +294,65 @@ export const authIsConfigured = () =>
     productionTlsTerminated: config.auth.productionTlsTerminated,
     trustedProxyHopsConfigured: config.auth.trustedProxyHopsConfigured,
   });
+
+export type ProductionRuntimeConfig = Pick<
+  typeof config,
+  'host' | 'databasePath' | 'appOrigin' | 'google' | 'auth'
+>;
+
+/**
+ * The hosted process stays on loopback behind Caddy, so the ordinary bind gate cannot prove that
+ * a production launch is safe. This explicit preflight is run before SQLite is opened or the HTTP
+ * server listens. It reports variable names, never values, and rejects the SSM staging sentinel.
+ */
+export function productionRuntimeIssues(input: ProductionRuntimeConfig): string[] {
+  const issues: string[] = [];
+  const origin = new URL(input.appOrigin);
+  const requiredSecret = (name: string, value: string, minimum = 1) => {
+    if (value === 'UNSET' || value.length < minimum) issues.push(`${name} is missing or unusable`);
+  };
+
+  if (!isLoopbackHost(input.host))
+    issues.push('HOST must remain loopback behind the trusted proxy');
+  if (
+    origin.protocol !== 'https:' ||
+    origin.pathname !== '/' ||
+    origin.search ||
+    origin.hash ||
+    origin.port
+  ) {
+    issues.push('APP_ORIGIN must be an https origin with no path, query, fragment, or port');
+  }
+  if (!path.isAbsolute(input.databasePath)) issues.push('DATABASE_PATH must be absolute');
+  requiredSecret('SESSION_SECRET', input.auth.sessionSecret, ENCRYPTION_KEY_MIN_LENGTH);
+  requiredSecret('OPERATOR_PASSWORD_HASH', input.auth.operatorPasswordHash);
+  if (!input.auth.productionTlsTerminated) issues.push('PRODUCTION_TLS_TERMINATED must be true');
+  if (!input.auth.trustedProxyHopsConfigured || input.auth.trustedProxyHops !== 1)
+    issues.push('TRUSTED_PROXY_HOPS must be explicitly set to 1');
+
+  requiredSecret('GOOGLE_CLIENT_ID', input.google.clientId);
+  requiredSecret('GOOGLE_CLIENT_SECRET', input.google.clientSecret);
+  requiredSecret(
+    'GOOGLE_TOKEN_ENCRYPTION_KEY',
+    input.google.encryptionKey,
+    ENCRYPTION_KEY_MIN_LENGTH,
+  );
+  requiredSecret('GOOGLE_API_KEY', input.google.apiKey);
+  requiredSecret('GOOGLE_APP_ID', input.google.appId);
+  const expectedRedirect = `${origin.origin}/api/drive/oauth/callback`;
+  if (input.google.redirectUri !== expectedRedirect)
+    issues.push('GOOGLE_REDIRECT_URI must use APP_ORIGIN and the fixed OAuth callback path');
+  return issues;
+}
+
+export function assertProductionRuntimeConfig(input: ProductionRuntimeConfig = config): void {
+  const issues = productionRuntimeIssues(input);
+  if (issues.length > 0) {
+    throw new Error(
+      [
+        'Production runtime preflight failed before listen:',
+        ...issues.map((issue) => `  ${issue}`),
+      ].join('\n'),
+    );
+  }
+}
