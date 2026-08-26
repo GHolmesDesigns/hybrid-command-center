@@ -178,6 +178,12 @@ import {
 } from './budgets.ts';
 import { SAMPLE_PLAYBOOK_DOWNLOAD_PATH, SAMPLE_PLAYBOOK_FILENAME } from '../shared/playbook.ts';
 import { listIntegrationEvents } from './integration-log.ts';
+import {
+  AGENT_HANDOFF_STATES,
+  agentHandoffCancelInputSchema,
+} from '../shared/agent-coordination.ts';
+import { AgentCoordinationError } from './domain/agent-coordination.ts';
+import { cancelHandoffAsOperator, getHandoff, listHandoffs } from './agent-coordination/service.ts';
 import { INTEGRATION_EVENT_PAGE_MAX, INTEGRATION_SOURCES } from '../shared/integration-log.ts';
 import {
   APP_VERSION,
@@ -2305,6 +2311,40 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     }
   });
 
+  /**
+   * Agent handoff queue (C110): operator read and cancel over HTTP.
+   *
+   * Agents post/claim/complete via the service (and later MCP in C111). The browser only lists,
+   * opens, and cancels — never mutates workspace rows, and never writes `integration_events`.
+   */
+  app.get('/api/agent-handoffs', (req, res, next) => {
+    try {
+      const query = z
+        .object({
+          state: z.enum(AGENT_HANDOFF_STATES).optional(),
+        })
+        .parse(req.query);
+      res.json(listHandoffs(db, query));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.get('/api/agent-handoffs/:id', (req, res, next) => {
+    try {
+      res.json(getHandoff(db, req.params.id));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/agent-handoffs/:id/cancel', (req, res, next) => {
+    try {
+      const body = agentHandoffCancelInputSchema.parse(req.body);
+      res.json(cancelHandoffAsOperator(db, req.params.id, body, clock()));
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.post('/api/drive/sync', async (req, res, next) => {
     try {
       res.json(await syncAllToDrive(db));
@@ -2428,6 +2468,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
             // that is no longer free is the same kind of refusal.
             error instanceof PublishRequestError ||
               error instanceof ClientMergeError ||
+              error instanceof AgentCoordinationError ||
               error instanceof SignalSlotConflictError ||
               error instanceof SignalPostProtectedError
             ? error.status
