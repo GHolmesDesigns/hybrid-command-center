@@ -81,4 +81,8 @@ test('operator can list a seeded handoff, follow its subject link, and cancel it
     state: 'CANCELLED',
     cancelReason: 'No longer needed for the Wave 23 e2e.',
   });
+
+  // Specs share one database. Kanban reorder posts every BACKLOG id, not only the filtered
+  // project, so a leftover task here breaks critical-flow's exact orderedIds assertion.
+  expect((await page.request.delete(`/api/tasks/${task.id}`)).ok()).toBe(true);
 });
