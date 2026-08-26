@@ -183,3 +183,115 @@ export interface AgentHandoffNote {
 export interface AgentHandoffDetail extends AgentHandoff {
   notes: AgentHandoffNote[];
 }
+
+/** OPEN handoffs older than this surface a stale warning in the operator inbox (C112). */
+export const AGENT_HANDOFF_OPEN_TTL_DAYS = 30;
+
+/** Completed and cancelled rows the operator inbox shows by default (C112). */
+export const AGENT_HANDOFF_HISTORY_DAYS = 7;
+
+export const AGENT_HANDOFF_INBOX_GROUPS = ['open', 'claimed', 'completed', 'cancelled'] as const;
+export type AgentHandoffInboxGroup = (typeof AGENT_HANDOFF_INBOX_GROUPS)[number];
+
+export const AGENT_HANDOFF_INBOX_GROUP_LABEL: Record<AgentHandoffInboxGroup, string> = {
+  open: 'Open',
+  claimed: 'Claimed',
+  completed: 'Completed (7d)',
+  cancelled: 'Cancelled (7d)',
+};
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+const daysBetween = (earlierIso: string, now: Date): number => {
+  const earlier = Date.parse(earlierIso);
+  if (Number.isNaN(earlier)) return 0;
+  return (now.getTime() - earlier) / MS_PER_DAY;
+};
+
+/** True when an OPEN handoff has sat longer than the OPEN TTL without a claim. */
+export function isStaleOpenHandoff(handoff: AgentHandoff, now: Date = new Date()): boolean {
+  return (
+    handoff.state === 'OPEN' && daysBetween(handoff.createdAt, now) > AGENT_HANDOFF_OPEN_TTL_DAYS
+  );
+}
+
+/**
+ * Whether a terminal handoff belongs in the inbox's recent history groups.
+ * OPEN and CLAIMED are always in their live groups; completed/cancelled need a recent stamp.
+ */
+export function handoffInInboxHistory(handoff: AgentHandoff, now: Date = new Date()): boolean {
+  if (handoff.state === 'COMPLETED') {
+    return Boolean(
+      handoff.completedAt && daysBetween(handoff.completedAt, now) <= AGENT_HANDOFF_HISTORY_DAYS,
+    );
+  }
+  if (handoff.state === 'CANCELLED') {
+    return Boolean(
+      handoff.cancelledAt && daysBetween(handoff.cancelledAt, now) <= AGENT_HANDOFF_HISTORY_DAYS,
+    );
+  }
+  return true;
+}
+
+/** Groups handoffs the way the operator inbox lists them — live open/claimed, then 7-day history. */
+export function groupHandoffsForInbox(
+  handoffs: AgentHandoff[],
+  now: Date = new Date(),
+): Record<AgentHandoffInboxGroup, AgentHandoff[]> {
+  const groups: Record<AgentHandoffInboxGroup, AgentHandoff[]> = {
+    open: [],
+    claimed: [],
+    completed: [],
+    cancelled: [],
+  };
+  for (const handoff of handoffs) {
+    if (handoff.state === 'OPEN') groups.open.push(handoff);
+    else if (handoff.state === 'CLAIMED') groups.claimed.push(handoff);
+    else if (handoff.state === 'COMPLETED' && handoffInInboxHistory(handoff, now))
+      groups.completed.push(handoff);
+    else if (handoff.state === 'CANCELLED' && handoffInInboxHistory(handoff, now))
+      groups.cancelled.push(handoff);
+  }
+  return groups;
+}
+
+/** Short message preview for list rows; full text stays on the detail view. */
+export function handoffMessageExcerpt(message: string, max = 140): string {
+  const trimmed = message.trim();
+  if (trimmed.length <= max) return trimmed;
+  return `${trimmed.slice(0, max - 1).trimEnd()}…`;
+}
+
+/**
+ * In-app path for a bound subject, or null when freeform / unbound / unresolved.
+ * Tasks need a project id from the workspace; without one there is nowhere useful to go.
+ */
+export function handoffSubjectPath(
+  handoff: Pick<AgentHandoff, 'subjectType' | 'subjectId'>,
+  tasks: ReadonlyArray<{ id: string; projectId: string }> = [],
+): string | null {
+  const id = handoff.subjectId;
+  if (!id) return null;
+  switch (handoff.subjectType) {
+    case 'client':
+      return `/clients/${id}`;
+    case 'project':
+      return `/projects/${id}`;
+    case 'signal_post':
+      return `/signal?post=${encodeURIComponent(id)}`;
+    case 'task': {
+      const task = tasks.find((candidate) => candidate.id === id);
+      return task ? `/status?project=${encodeURIComponent(task.projectId)}` : null;
+    }
+    case 'freeform':
+      return null;
+  }
+}
+
+export const AGENT_HANDOFF_SUBJECT_TYPE_LABEL: Record<AgentHandoffSubjectType, string> = {
+  task: 'Task',
+  signal_post: 'Signal post',
+  project: 'Project',
+  client: 'Client',
+  freeform: 'Note',
+};

@@ -2034,6 +2034,192 @@ button.tag-chip.toggle.active {
   font-size: 13px;
   line-height: 1.6;
 }
+
+/* Operator coordination inbox (C112) — lives on Settings beside the other workspace cards. */
+.handoff-group {
+  margin-top: 18px;
+}
+.handoff-group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  margin: 0 0 8px;
+}
+.handoff-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  background: #ececea;
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+.handoff-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.handoff-row {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fbfbf9;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+.handoff-row:hover,
+.handoff-row:focus-visible {
+  border-color: var(--green);
+  outline: 2px solid color-mix(in srgb, var(--green) 35%, transparent);
+  outline-offset: 1px;
+}
+.handoff-row.is-selected {
+  border-color: var(--green);
+  background: #f2f7f4;
+}
+.handoff-route {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.handoff-route svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--muted);
+}
+.handoff-excerpt {
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.45;
+}
+.handoff-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.handoff-stale {
+  color: #8d601c;
+  font-weight: 600;
+}
+.handoff-subject a,
+.handoff-subject-block a {
+  color: var(--green);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.handoff-detail {
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.handoff-detail-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+.handoff-state {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #5e6c66;
+  margin-bottom: 4px;
+}
+.handoff-message {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.5;
+  font-size: 14px;
+}
+.handoff-meta {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  font-size: 12px;
+}
+.handoff-meta div {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 8px;
+}
+.handoff-meta dt {
+  color: var(--muted);
+  margin: 0;
+}
+.handoff-meta dd {
+  margin: 0;
+}
+.handoff-notes-title {
+  font-size: 13px;
+  margin: 0;
+}
+.handoff-notes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.handoff-notes li {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f6f6f3;
+  border: 1px solid var(--line);
+}
+.handoff-notes strong {
+  display: block;
+  font-size: 12px;
+}
+.handoff-notes span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.handoff-notes p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.handoff-cancel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.handoff-cancel textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 72px;
+}
+.handoff-group .empty.compact {
+  margin: 0;
+  padding: 12px;
+}
+.muted {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+}
+
 .inline-warning {
   background: #fff3df;
   border: 1px solid #efd6ae;

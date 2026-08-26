@@ -129,8 +129,16 @@ describe('complete, cancel, and notes', () => {
 });
 
 describe('operator HTTP cancel', () => {
-  it('cancels OPEN and CLAIMED, refuses COMPLETED, and lists handoffs', async () => {
+  it('posts, lists, opens, and cancels over HTTP', async () => {
     const app = createApp(db);
+    const seeded = await request(app).post('/api/agent-handoffs').send({
+      fromAgentLabel: 'cursor',
+      subjectType: 'freeform',
+      message: 'Seeded over HTTP for the operator inbox.',
+    });
+    expect(seeded.status).toBe(201);
+    expect(seeded.body).toMatchObject({ state: 'OPEN', fromAgentLabel: 'cursor' });
+
     const open = post();
     const claimed = post({ message: 'Second handoff.' });
     claimHandoff(db, claimed.id, 'claude', NOW);
@@ -140,7 +148,7 @@ describe('operator HTTP cancel', () => {
 
     const listed = await request(app).get('/api/agent-handoffs');
     expect(listed.status).toBe(200);
-    expect(listed.body).toHaveLength(3);
+    expect(listed.body).toHaveLength(4);
 
     const cancelOpen = await request(app)
       .post(`/api/agent-handoffs/${open.id}/cancel`)
