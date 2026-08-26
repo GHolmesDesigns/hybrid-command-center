@@ -8,6 +8,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.3.1] - 2026-08-26
+
+### Added
+
+- Single-operator authentication (C51): Argon2id password, HttpOnly session cookie, CSRF on
+  mutations, login rate limits, bootstrap CLI (`npm run auth:bootstrap`), and a fail-closed
+  non-loopback bind gate that opens only when the §5.1 checklist is complete. Loopback stays
+  passwordless.
+
+### Breaking changes
+
+None.
+
 ## [5.3.0] - 2026-08-26
 
 ### Changed
