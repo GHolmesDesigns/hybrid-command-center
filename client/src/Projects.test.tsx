@@ -370,9 +370,11 @@ describe('Projects sorting', () => {
     chooseCustom();
     fireEvent.click(screen.getByRole('button', { name: 'List' }));
 
-    expect(screen.getByLabelText('Current location')).toHaveTextContent(
-      '/projects?visibility=all&sort=custom&view=list',
-    );
+    await waitFor(() => {
+      expect(screen.getByLabelText('Current location')).toHaveTextContent(
+        '/projects?visibility=all&sort=custom&view=list',
+      );
+    });
     expect(
       screen.getByText(
         'Custom order is kept, but rearranging by hand is available in Grid view only.',
@@ -465,10 +467,17 @@ describe('Projects presentation and live-status filters', () => {
       screen.getByRole('heading', { level: 2, name: 'Active One' }).closest('a'),
     ).toHaveAttribute('href', '/projects/filter-active');
 
+    await waitFor(() => {
+      expect(screen.getByLabelText('Current location')).toHaveTextContent(
+        '/projects?visibility=all&statuses=PLANNING%2CACTIVE',
+      );
+    });
     fireEvent.click(screen.getByRole('button', { name: 'List' }));
-    expect(screen.getByLabelText('Current location')).toHaveTextContent(
-      '/projects?visibility=all&statuses=PLANNING%2CACTIVE&view=list',
-    );
+    await waitFor(() => {
+      expect(screen.getByLabelText('Current location')).toHaveTextContent(
+        '/projects?visibility=all&statuses=PLANNING%2CACTIVE&view=list',
+      );
+    });
     expect(listNames()).toEqual(['Active One', 'Planning One']);
     expect(screen.getByText('Active One').closest('a')).toHaveAttribute(
       'href',
