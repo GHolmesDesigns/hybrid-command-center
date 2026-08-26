@@ -734,8 +734,12 @@ Each row carries two things:
 
 The app checks with the provider on its own after the scheduled time, waiting longer between each
 check and stopping after six, and the section shows when it last checked and when it will next.
-**Refresh delivery** asks immediately and is always available, including after the automatic checks
-have stopped.
+After a clearly answered Confirm and submit (or Confirm publish now), delivery results appear in
+this same panel without another press — the app runs the same bounded read **Refresh delivery**
+would. If the provider never answered, timed out, or left the result ambiguous, that automatic
+read does not run and the unconfirmed instruction stays on screen; do not resend blindly.
+**Refresh delivery** asks immediately and remains available later, including after the automatic
+checks have stopped.
 
 
 #### Figures

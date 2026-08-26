@@ -560,6 +560,7 @@ describe('Signal planner', () => {
         { channel: 'x', platform: 'twitter', accountId: 4, handle: '@gholmes', mode: 'AUTOMATIC' },
       ],
       checkAttempts: 0,
+      checkedAt: '2026-01-01T00:00:00.000Z',
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
     };
@@ -586,6 +587,10 @@ describe('Signal planner', () => {
       ).toBe(true),
     );
     expect(requests.filter((entry) => entry.method === 'PATCH')).toHaveLength(0);
+    // A clearly answered submit already carries the reconcile display; no second create.
+    const delivery = await screen.findByRole('region', { name: 'Delivery' });
+    expect(delivery).toHaveTextContent('Last checked');
+    expect(within(delivery).getByRole('button', { name: 'Refresh delivery' })).toBeInTheDocument();
   });
 
   it('does not offer publishing for blog-only work or unsaved editor changes', async () => {

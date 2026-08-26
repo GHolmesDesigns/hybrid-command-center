@@ -21,6 +21,7 @@ import {
   publishPreviewRefusals,
   reconcileSchedule,
   RECONCILE_MAX_ATTEMPTS,
+  shouldReconcileAfterSubmit,
 } from '../../shared/publish.ts';
 import { buildPublishPlan, planHash, publishInstantFor } from './plan.ts';
 import { buildProviderReconcile, providerRecordNeedsWithdrawal } from './reconcile.ts';
@@ -505,7 +506,7 @@ export class PublishService {
         });
       });
     }
-    return this.get(publicationId) as SignalPublication;
+    return this.reconcileAfterAnsweredSubmit(this.get(publicationId) as SignalPublication);
   }
 
   submitNow(
@@ -631,7 +632,7 @@ export class PublishService {
         correlationId: publicationId,
       });
     });
-    return this.get(publicationId) as SignalPublication;
+    return this.reconcileAfterAnsweredSubmit(this.get(publicationId) as SignalPublication);
   }
 
   private recordBufferAnswer(
@@ -801,6 +802,26 @@ export class PublishService {
           ).toISOString(),
         });
       throw error;
+    }
+  }
+
+  /**
+   * After a clearly answered submit, run the same reconcile path **Refresh delivery** uses.
+   *
+   * This is not a second create and not a provider fallback: it only asks about ids the submit
+   * already stored. Ambiguous or id-less outcomes skip it entirely. A follow-up read that times
+   * out, rate-limits, or malforms leaves the answered submit untouched — inventing certainty here
+   * would be worse than leaving "not checked yet" for a later manual refresh. Each call is its own
+   * operation on the integration log; rate-limit accounting stays on the provider that answered.
+   */
+  private async reconcileAfterAnsweredSubmit(
+    publication: SignalPublication,
+  ): Promise<SignalPublication> {
+    if (!shouldReconcileAfterSubmit(publication)) return publication;
+    try {
+      return await this.reconcile(publication.id, { automatic: false });
+    } catch {
+      return this.get(publication.id) ?? publication;
     }
   }
 

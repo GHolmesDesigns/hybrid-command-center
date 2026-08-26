@@ -1196,6 +1196,13 @@ syncs") and nothing else. Absence of a documented limit is not absence of a limi
   `UNCONFIRMED` by being clicked. Both kinds of check record `checked_at`, because *when was this
   last checked* is one question however it was asked, and the planner shows that time beside the
   delivery along with when the next automatic check is due.
+- **A clearly answered submit enters that same manual path once.** After Confirm, when the create
+  stored exact provider ids and left no ambiguous target, submit runs one reconcile read before
+  returning — the same path **Refresh delivery** uses, bounded the same way, with its own
+  `signal.reconcile` log row and the answering provider's own rate-limit accounting. Ambiguous,
+  id-less, timed-out, or rate-limited outcomes skip it and leave the answered (or unconfirmed)
+  submit untouched; there is never a second create and never a provider fallback. Manual refresh
+  remains available later either way. Planning status is never written here.
 
 ---
 
