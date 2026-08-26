@@ -154,7 +154,7 @@ Required environment variables:
 | Variable | Purpose |
 | --- | --- |
 | `PORT` | Local API port; default `8787`. A port number, 1–65535 |
-| `HOST` | Interface the API binds to; default `127.0.0.1`. Loopback only — `127.0.0.1`, `::1`, or `localhost`. Any other value **stops the boot**, because the app has no authentication and there is no LAN override to opt into; see [Cloud Hosting](docs/cloud-hosting.md) §5.1 |
+| `HOST` | Interface the API binds to; default `127.0.0.1`. Loopback (`127.0.0.1`, `::1`, `localhost`) stays passwordless. Any other value requires the full §5.1 checklist — `SESSION_SECRET`, `OPERATOR_PASSWORD_HASH`, https `APP_ORIGIN`, `PRODUCTION_TLS_TERMINATED=true`, and an explicit `TRUSTED_PROXY_HOPS` — or the boot stops; see [Cloud Hosting](docs/cloud-hosting.md) §5.1 |
 | `DATABASE_PATH` | SQLite path; default `./data/command-center.db` |
 | `APP_ORIGIN` | Vite/browser origin; default `http://localhost:5173`. An http or https URL, scheme included |
 | `GOOGLE_CLIENT_ID` | OAuth web client ID |
@@ -200,12 +200,12 @@ import that arrived while another was running — see [Request budgets](#request
 
 ### Request budgets
 
-The API has no authentication. Every route trusts whichever browser can reach it, which is why the
-bind is loopback and why the boot refuses any other `HOST` rather than trusting a comment to stop
-someone. Within that design nothing here is reachable across a network. `docs/cloud-hosting.md`
-(C20) recommends a private single-instance remote deployment, so the routes that cost real memory,
-CPU, or Google's quota carry a ceiling now rather than acquiring one on the day a listen address
-leaves loopback.
+The API requires an operator session when it binds off loopback. On loopback every route still
+trusts the local browser, which is why day-to-day development stays passwordless. A hosted bind
+must satisfy `docs/cloud-hosting.md` §5.1 before listen, and then every application route needs
+the session cookie (and CSRF on mutations). The routes that cost real memory, CPU, or Google's
+quota also carry a ceiling so a listen address leaving loopback does not publish an unbounded
+import or Drive walk.
 
 There is deliberately **no global limiter**. The board is used interactively — a drag reorders
 several tasks, opening a project reads its tasks and its files — and one bucket over every route
@@ -747,7 +747,11 @@ Schedule `db:backup` the same way if you want unattended snapshots — same comm
 - Integration activity is bounded rather than permanent: the newest 200 records are kept and each lists at most 100 affected records, so it is a diagnostic log, not a compliance archive. Keep a database backup if a longer history matters
 - Checklist reordering is supported by the API/data model; the current UI focuses on add, edit-by-state, and removal
 - Publishing is deliberate and optional: a person presses **Show preview**, reads one tab per target account — the text that account receives, its media in order, its options, the local wall clock beside the provider instant, its delivery mode and its warnings — then confirms. Nothing remote loads before that press; public image and video previews are a further optional choice that warns about sharing the viewer's IP with the media host; a video needs its own press and never autoplays; and the server fetches no preview URL at all. The publisher records delivery separately and never sets `PUBLISHED`; after confirmed delivery, the user may mark the post published
-- Nothing is hosted off loopback, and a `HOST` outside `127.0.0.1`, `::1`, and `localhost` fails the boot rather than publishing the unauthenticated API. How a cloud deploy would be built is decided in [`docs/cloud-hosting.md`](docs/cloud-hosting.md) and nothing else in that document has been implemented — the gate is not that work, and neither is lifting it
+- A non-loopback `HOST` fails the boot unless operator authentication is fully configured
+  (`SESSION_SECRET`, `OPERATOR_PASSWORD_HASH`, https `APP_ORIGIN`, `PRODUCTION_TLS_TERMINATED=true`,
+  explicit `TRUSTED_PROXY_HOPS`). Loopback stays passwordless. Set the password with
+  `npm run auth:bootstrap`. Remaining cloud work (production OAuth redirect, deploy manifests) is
+  still in [`docs/cloud-hosting.md`](docs/cloud-hosting.md).
 
 ## Planned extension points
 
@@ -757,6 +761,10 @@ Schedule `db:backup` the same way if you want unattended snapshots — same comm
 
 Buffer TikTok and YouTube targets use a separate capability table and write adapter. A confirmed Buffer plan pins `customScheduled`, `needsApproval: false`, and the exact UTC instant, then creates one post per explicitly selected channel and stores each opaque remote id immediately. Partial and ambiguous results stay per target; an ambiguous create is never retried. Reconcile, edit, reschedule, and cancel read the exact target again and require a fresh comparison token plus Buffer's `allowedActions`. Notification scheduling sends text only and reminds you to attach media in the platform app; automatic TikTok may carry a direct public HTTPS URL in preview (`bufferWire`) where verified. Drive files and mixed Post Bridge plus Buffer targets refuse before confirmation. Production Buffer writes remain evidence-gated until the owner-run C83 round trip is recorded; automated coverage uses only mocks. **Publishing:** the Post Bridge implementation follows [`docs/publishing-integration.md`](docs/publishing-integration.md). It previews and confirms one scheduled Signal post, preflights its channels and ordered media, records delivery per publication, and blocks ambiguous retries. A post the provider already holds can then be updated, rescheduled, withdrawn, or resubmitted — each from a no-write comparison the user confirms, never as a side effect of a Signal edit, and never against a post the provider has already published (§7.2). `blog` remains outside every provider. Figures are read back against the provider’s own result identity per delivery, captured by reconciliation, through a service beside the publisher rather than inside it (§16). What the provider is holding is read the same way — a third interface that can only list, one snapshot generation replaced whole or not at all, and nothing that can act on a post this app did not send ([`docs/post-bridge-api-surface.md`](docs/post-bridge-api-surface.md) §6).
 
-**Cloud hosting:** recommended, awaiting sign-off, unbuilt. [`docs/cloud-hosting.md`](docs/cloud-hosting.md) names a private single-instance remote deploy for one operator, SQLite on the host as authoritative, password-session authentication before any non-loopback bind, production Drive redirect URIs, and a C10 backup/restore cutover. Read it before opening an Infra 2 implementation card. Its §5.1 bind gate is the one part now enforced in `server/config.ts`, which refuses a non-loopback `HOST` outright; an implementation card widens that check to the full checklist — password hash, session secret, `https:` `APP_ORIGIN`, TLS acknowledgement — rather than removing it.
+**Cloud hosting:** authentication (C51) ships the §5.1 password session, CSRF, and the bind gate
+that opens only when that checklist is complete. Remaining cards cover production OAuth redirect,
+deploy manifests, and backup automation — see [`docs/cloud-hosting.md`](docs/cloud-hosting.md).
+Bootstrap the operator password with `npm run auth:bootstrap`; put the printed hash in
+`OPERATOR_PASSWORD_HASH` for any non-loopback bind.
 
 Recommended order: (1) recent-files and cross-project search over the existing listing, (2) uploads/downloads, (3) guarded move/rename operations, (4) optional Calendar sync, (5) cloud hosting only after `docs/cloud-hosting.md` is signed off.

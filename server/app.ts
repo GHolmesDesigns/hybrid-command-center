@@ -8,7 +8,24 @@ import { isValid, parseISO } from 'date-fns';
 import { z } from 'zod';
 import type { Db } from './db.ts';
 import { getDb, transaction } from './db.ts';
-import { config, publishConfigured, bufferConfigured } from './config.ts';
+import {
+  config,
+  publishConfigured,
+  bufferConfigured,
+  isLoopbackHost,
+  authIsConfigured,
+} from './config.ts';
+import { createAuthMiddleware, type AuthedRequest } from './auth/middleware.ts';
+import {
+  authStatus,
+  changePassword,
+  login as operatorLogin,
+  logout as operatorLogout,
+} from './auth/service.ts';
+import { buildSessionCookie, clearSessionCookie, readSessionToken } from './auth/cookies.ts';
+import { clientAddress } from './auth/client-address.ts';
+import { hashSessionToken, purgeExpiredSessions } from './auth/sessions.ts';
+import { CSRF_HEADER_NAME } from '../shared/auth.ts';
 import {
   getCategory,
   getTag,
@@ -266,6 +283,18 @@ const productionContentSecurityPolicy = {
 export type AppOptions = {
   production?: boolean;
   /**
+   * Force operator auth on loopback (tests). Production derives this from the bind address:
+   * loopback stays passwordless; a non-loopback bind already passed the §5.1 checklist.
+   */
+  enforceAuth?: boolean;
+  /** Override auth config for tests (session secret, password hash, proxy hops, Secure cookies). */
+  auth?: {
+    sessionSecret?: string;
+    operatorPasswordHash?: string;
+    trustedProxyHops?: number;
+    secureCookies?: boolean;
+  };
+  /**
    * The Drive provider the read-only browsing routes use. Tests supply a mock one so a
    * listing can be exercised without credentials and without contacting real Drive; in
    * every other case this resolves to the encrypted-token provider as usual.
@@ -362,7 +391,11 @@ function requestLogger(stream?: DestinationStream) {
     {
       level: config.logLevel,
       redact: {
-        paths: ['req.headers.authorization', 'req.headers.cookie'],
+        paths: [
+          'req.headers.authorization',
+          'req.headers.cookie',
+          `req.headers.${CSRF_HEADER_NAME}`,
+        ],
         censor: '[redacted]',
       },
       serializers: {
@@ -656,7 +689,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       contentSecurityPolicy: production ? productionContentSecurityPolicy : false,
     }),
   );
-  app.use(cors({ origin: config.appOrigin }));
+  app.use(cors({ origin: config.appOrigin, credentials: true }));
   /**
    * The budgets go here — ahead of every parser — because both of the things they protect are
    * spent by the parser. A rate limit that runs after `express.json` has already read a 12 MB
@@ -701,6 +734,119 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   app.use('/api/import', express.json({ limit: IMPORT_BODY_LIMIT_BYTES }));
   app.use(express.json({ limit: '1mb' }));
   app.use(requestLogger(options.logStream));
+
+  /**
+   * Operator authentication (C51). Loopback stays passwordless unless a test sets `enforceAuth`.
+   * A non-loopback bind already satisfied the §5.1 checklist at boot, so every API route needs a
+   * session (and CSRF on mutations) except the public login/status/health surface.
+   */
+  const sessionSecret = options.auth?.sessionSecret ?? config.auth.sessionSecret;
+  const operatorPasswordHash =
+    options.auth?.operatorPasswordHash ?? config.auth.operatorPasswordHash;
+  const trustedProxyHops = options.auth?.trustedProxyHops ?? config.auth.trustedProxyHops;
+  const authRequired = options.enforceAuth ?? (!isLoopbackHost(config.host) && authIsConfigured());
+  const secureCookies =
+    options.auth?.secureCookies ??
+    (authRequired &&
+      (config.auth.productionTlsTerminated || config.appOrigin.startsWith('https:')));
+  const authNowMs = () => clock().getTime();
+
+  app.use(
+    createAuthMiddleware({
+      db,
+      authRequired,
+      sessionSecret,
+      trustedProxyHops,
+      secureCookies,
+      now: authNowMs,
+    }),
+  );
+
+  app.get('/api/auth/status', (req, res) => {
+    const session = (req as AuthedRequest).operatorSession;
+    res.json(authStatus({ authRequired, session }));
+  });
+
+  app.post('/api/auth/login', async (req, res, next) => {
+    try {
+      if (!authRequired) {
+        res.status(400).json({ error: 'Authentication is not required on this host.' });
+        return;
+      }
+      if (!sessionSecret) {
+        res.status(503).json({ error: 'Authentication is not configured.' });
+        return;
+      }
+      const body = z.object({ password: z.string().min(1) }).parse(req.body);
+      const address =
+        (req as AuthedRequest).operatorClientAddress ?? clientAddress(req, trustedProxyHops);
+      const result = await operatorLogin(db, {
+        password: body.password,
+        clientAddress: address,
+        sessionSecret,
+        envHash: operatorPasswordHash,
+        now: authNowMs(),
+      });
+      if (!result.ok) {
+        if (result.retryAfterMs > 0) {
+          res.setHeader('Retry-After', String(Math.ceil(result.retryAfterMs / 1000)));
+          res.status(429).json({ error: result.error });
+          return;
+        }
+        // Generic failure — never distinguish a missing hash from a wrong password.
+        req.log.warn({ event: 'auth.login_failed', clientAddress: address }, 'Login refused');
+        res.status(401).json({ error: result.error });
+        return;
+      }
+      purgeExpiredSessions(db, authNowMs());
+      res.setHeader('Set-Cookie', buildSessionCookie(result.rawToken, { secure: secureCookies }));
+      res.json({ ok: true, csrfToken: result.csrfToken });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post('/api/auth/logout', (req, res) => {
+    const raw = readSessionToken(req.headers.cookie);
+    if (raw && sessionSecret) {
+      operatorLogout(db, {
+        tokenHash: hashSessionToken(raw, sessionSecret),
+        now: authNowMs(),
+      });
+    }
+    res.setHeader('Set-Cookie', clearSessionCookie({ secure: secureCookies }));
+    res.json({ ok: true });
+  });
+
+  app.post('/api/auth/password', async (req, res, next) => {
+    try {
+      if (!authRequired) {
+        res.status(400).json({ error: 'Authentication is not required on this host.' });
+        return;
+      }
+      const body = z
+        .object({
+          currentPassword: z.string().min(1),
+          newPassword: z.string().min(1),
+        })
+        .parse(req.body);
+      const result = await changePassword(db, {
+        currentPassword: body.currentPassword,
+        newPassword: body.newPassword,
+        envHash: operatorPasswordHash,
+        now: authNowMs(),
+      });
+      if (!result.ok) {
+        res.status(401).json({ error: result.error });
+        return;
+      }
+      res.setHeader('Set-Cookie', clearSessionCookie({ secure: secureCookies }));
+      res.json({ ok: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.get('/api/health', (_req, res) => {
     try {
       db.prepare('SELECT 1').get();

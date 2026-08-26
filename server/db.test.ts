@@ -202,6 +202,7 @@ describe('additive schema migration', () => {
         'categories',
         'project_categories',
         'settings',
+        'operator_sessions',
         'drive_steps',
         'import_receipts',
         'integration_events',

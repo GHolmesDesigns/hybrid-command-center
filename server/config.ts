@@ -24,6 +24,9 @@ export type LogLevel = (typeof LOG_LEVELS)[number];
  * looks exactly as encrypted as a strong one — the weakness is invisible everywhere except
  * here. The key stays optional, because Drive is optional and `driveConfigured()` is what
  * reports it, but a key that is present has to be usable.
+ *
+ * The same floor applies to `SESSION_SECRET` when it is set: a short secret would mint session
+ * HMACs that look fine and protect nothing.
  */
 export const ENCRYPTION_KEY_MIN_LENGTH = 32;
 
@@ -37,37 +40,47 @@ export const ENCRYPTION_KEY_MIN_LENGTH = 32;
 const LOOPBACK_HOSTS = ['127.0.0.1', '::1', 'localhost'] as const;
 
 /** Case-insensitive because `HOST=LocalHost` binds loopback and means to. */
-const isLoopbackHost = (host: string) =>
+export const isLoopbackHost = (host: string) =>
   LOOPBACK_HOSTS.some((loopback) => loopback === host.trim().toLowerCase());
 
 /**
- * Whether the operator-password session from `docs/cloud-hosting.md` §5 is configured. It is not
- * built — there is no password hash, no session secret, and no CSRF — so the answer is `false`
- * for every environment, and the bind gate below therefore refuses every non-loopback `HOST`.
- *
- * This is annotated `boolean` rather than left to infer `false` on purpose: the type is the
- * contract the gate is written against, and the value is what today's implementation can honestly
- * report. When Infra 2 ships §5, this becomes the full §5.1 checklist — password hash and session
- * secret present, `APP_ORIGIN` an `https:` URL, and a production flag acknowledging TLS
- * termination — read from the parsed environment. There is no weaker interim mode: a LAN bind
- * without authentication publishes every write path and both Drive OAuth routes.
+ * The §5.1 checklist from `docs/cloud-hosting.md`: a non-loopback bind is allowed only when
+ * every item is true. `OPERATOR_PASSWORD_HASH` must come from the environment for this gate —
+ * a settings-row hash is enough for loopback testing later, not for publishing the API.
+ * `TRUSTED_PROXY_HOPS` must be set explicitly (even to `0`) so a hosted deploy cannot silently
+ * inherit the loopback default and then trust a forged `X-Forwarded-For`.
  */
-const AUTHENTICATION_CONFIGURED: boolean = false;
+export type AuthenticationChecklist = {
+  sessionSecret: string;
+  operatorPasswordHash: string;
+  appOrigin: string;
+  productionTlsTerminated: boolean;
+  trustedProxyHopsConfigured: boolean;
+};
+
+export const authenticationConfigured = (input: AuthenticationChecklist): boolean =>
+  input.sessionSecret.length >= ENCRYPTION_KEY_MIN_LENGTH &&
+  input.operatorPasswordHash.length > 0 &&
+  input.appOrigin.startsWith('https:') &&
+  input.productionTlsTerminated &&
+  input.trustedProxyHopsConfigured;
 
 /**
  * Named so the message and the test read the same rule. It names the variable and the fix and
  * quotes no value, which matters because the same error list carries secrets' variables.
  */
 const BIND_GATE_MESSAGE =
-  `must be a loopback address — ${LOOPBACK_HOSTS.join(', ')} — while this app has no ` +
-  'authentication. Any other value publishes every API route, Drive OAuth and every write ' +
-  'path included, to whoever can reach the interface. See docs/cloud-hosting.md §5.1 and the ' +
+  `must be a loopback address — ${LOOPBACK_HOSTS.join(', ')} — while operator authentication ` +
+  'is incomplete. A non-loopback bind requires SESSION_SECRET (at least 32 characters), ' +
+  'OPERATOR_PASSWORD_HASH, an https APP_ORIGIN, PRODUCTION_TLS_TERMINATED=true, and ' +
+  'TRUSTED_PROXY_HOPS set explicitly (even to 0). See docs/cloud-hosting.md §5.1 and the ' +
   'HOST row in README.md';
 
 /**
  * What each variable falls back to when it is unset. These are the values `.env.example`
  * documents, and `config.test.ts` reads that file to keep the two from drifting. Variables
- * with no entry here — the Google trio — are optional and default to nothing.
+ * with no entry here — the Google trio, session secret, operator hash, TLS flag — are optional
+ * and default to nothing.
  */
 export const ENVIRONMENT_DEFAULTS = {
   PORT: '8787',
@@ -76,6 +89,7 @@ export const ENVIRONMENT_DEFAULTS = {
   APP_ORIGIN: 'http://localhost:5173',
   GOOGLE_REDIRECT_URI: 'http://localhost:8787/api/drive/oauth/callback',
   LOG_LEVEL: 'info',
+  TRUSTED_PROXY_HOPS: '0',
 } as const;
 
 /**
@@ -100,15 +114,41 @@ const absoluteUrl = z.url({
   error: 'must be an http or https URL, scheme included',
 });
 
+const nonNegativeInt = z
+  .string()
+  .regex(/^\d+$/, 'must be a non-negative integer')
+  .transform(Number);
+
+/** `.env` files quote nothing, so an unset variable and a blank one mean the same thing. */
+const read = (name: string) => process.env[name]?.trim() || undefined;
+
+/**
+ * Whether `TRUSTED_PROXY_HOPS` was present in the environment before the default applied.
+ * An explicit `0` counts — the checklist needs the operator to have decided, not inherited.
+ */
+const trustedProxyHopsConfigured = read('TRUSTED_PROXY_HOPS') !== undefined;
+
 const environment = z.object({
   PORT: portNumber,
   // The bind gate from `docs/cloud-hosting.md` §5.1, enforced here rather than only in the
-  // README: refuse to start on an address other machines can reach while nothing authenticates
-  // them. It is a field rule rather than an object-level one so that a bad `HOST` is still
+  // README: refuse to start on an address other machines can reach while authentication is
+  // incomplete. It is a field rule rather than an object-level one so that a bad `HOST` is still
   // reported alongside a bad `PORT` — Zod skips object refinements once the shape has failed.
-  HOST: z
-    .string()
-    .refine((value) => isLoopbackHost(value) || AUTHENTICATION_CONFIGURED, BIND_GATE_MESSAGE),
+  // The checklist is evaluated from the same raw reads the schema is about to parse, so a short
+  // SESSION_SECRET still fails its own field rule and does not quietly open the bind.
+  HOST: z.string().refine((value) => {
+    if (isLoopbackHost(value)) return true;
+    const sessionSecret = read('SESSION_SECRET') ?? '';
+    const operatorPasswordHash = read('OPERATOR_PASSWORD_HASH') ?? '';
+    const appOrigin = read('APP_ORIGIN') ?? ENVIRONMENT_DEFAULTS.APP_ORIGIN;
+    return authenticationConfigured({
+      sessionSecret,
+      operatorPasswordHash,
+      appOrigin,
+      productionTlsTerminated: read('PRODUCTION_TLS_TERMINATED') === 'true',
+      trustedProxyHopsConfigured,
+    });
+  }, BIND_GATE_MESSAGE),
   DATABASE_PATH: z.string(),
   APP_ORIGIN: absoluteUrl,
   // Drive is optional, so its three variables are too. What is refused is a value that is
@@ -136,14 +176,24 @@ const environment = z.object({
   // A typo in a log level should not stop the app, so this one is the schema's single
   // forgiving field: an unrecognized value falls back rather than failing the boot.
   LOG_LEVEL: z.enum(LOG_LEVELS).catch(ENVIRONMENT_DEFAULTS.LOG_LEVEL),
+  // Operator auth (C51). Optional on loopback; required together for a non-loopback bind.
+  SESSION_SECRET: z
+    .string()
+    .min(ENCRYPTION_KEY_MIN_LENGTH, `must be at least ${ENCRYPTION_KEY_MIN_LENGTH} characters`)
+    .optional(),
+  OPERATOR_PASSWORD_HASH: z.string().optional(),
+  // Only the exact token `true` acknowledges TLS termination; any other non-empty value is a
+  // misconfiguration rather than a silent false.
+  PRODUCTION_TLS_TERMINATED: z
+    .string()
+    .optional()
+    .refine((value) => value === undefined || value === 'true', "must be exactly 'true' when set"),
+  TRUSTED_PROXY_HOPS: nonNegativeInt,
 });
 
 type EnvironmentVariable = keyof typeof environment.shape;
 /** Every variable the schema reads, so `.env.example` can be checked against it. */
 export const ENVIRONMENT_VARIABLES = Object.keys(environment.shape) as EnvironmentVariable[];
-
-/** `.env` files quote nothing, so an unset variable and a blank one mean the same thing. */
-const read = (name: EnvironmentVariable) => process.env[name]?.trim() || undefined;
 
 const parsed = environment.safeParse({
   PORT: read('PORT') ?? ENVIRONMENT_DEFAULTS.PORT,
@@ -160,6 +210,10 @@ const parsed = environment.safeParse({
   BUFFER_ORGANIZATION_ID: read('BUFFER_ORGANIZATION_ID'),
   PUBLISH_TIMEZONE: read('PUBLISH_TIMEZONE'),
   LOG_LEVEL: read('LOG_LEVEL')?.toLowerCase() ?? ENVIRONMENT_DEFAULTS.LOG_LEVEL,
+  SESSION_SECRET: read('SESSION_SECRET'),
+  OPERATOR_PASSWORD_HASH: read('OPERATOR_PASSWORD_HASH'),
+  PRODUCTION_TLS_TERMINATED: read('PRODUCTION_TLS_TERMINATED'),
+  TRUSTED_PROXY_HOPS: read('TRUSTED_PROXY_HOPS') ?? ENVIRONMENT_DEFAULTS.TRUSTED_PROXY_HOPS,
 });
 
 if (!parsed.success) {
@@ -199,6 +253,14 @@ export const config = {
     apiKey: env.BUFFER_API_KEY ?? env.BUFFER_KEY ?? '',
     organizationId: env.BUFFER_ORGANIZATION_ID ?? '',
   },
+  auth: {
+    sessionSecret: env.SESSION_SECRET ?? '',
+    operatorPasswordHash: env.OPERATOR_PASSWORD_HASH ?? '',
+    productionTlsTerminated: env.PRODUCTION_TLS_TERMINATED === 'true',
+    trustedProxyHops: env.TRUSTED_PROXY_HOPS,
+    /** Whether hops was explicitly set (for bind checklist). */
+    trustedProxyHopsConfigured,
+  },
 };
 
 /** Publishing is optional, but half-configuration never counts as available. */
@@ -206,3 +268,13 @@ export const publishConfigured = () => Boolean(config.publish.apiKey && config.p
 
 /** Buffer read access is optional and independent of Post Bridge publishing. */
 export const bufferConfigured = () => Boolean(config.buffer.apiKey);
+
+/** Runtime view of the §5.1 checklist against the loaded config. */
+export const authIsConfigured = () =>
+  authenticationConfigured({
+    sessionSecret: config.auth.sessionSecret,
+    operatorPasswordHash: config.auth.operatorPasswordHash,
+    appOrigin: config.appOrigin,
+    productionTlsTerminated: config.auth.productionTlsTerminated,
+    trustedProxyHopsConfigured: config.auth.trustedProxyHopsConfigured,
+  });
