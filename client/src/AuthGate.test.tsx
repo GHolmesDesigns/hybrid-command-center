@@ -28,7 +28,9 @@ describe('AuthGate', () => {
     );
 
     expect(await screen.findByText('Workspace open')).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: /Command Center|Operator/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: /Command Center|Operator/i }),
+    ).not.toBeInTheDocument();
   });
 
   it('shows the login screen when a session is required and missing', async () => {
@@ -123,11 +125,12 @@ describe('api CSRF helpers', () => {
     api.setCsrfToken(null);
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () =>
-        new Response(JSON.stringify({ ok: true }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
       ),
     );
   });
