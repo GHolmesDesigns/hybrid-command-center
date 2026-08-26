@@ -82,7 +82,8 @@ export const DRIVE_SYNC_BUDGET: Budget = {
 /**
  * Login attempts across one address. Progressive delay in `server/auth/login-rate-limit.ts`
  * still gates wrong passwords; this ceiling is the Express-visible budget CodeQL and operators
- * read, and it also caps successful logins so a stolen password cannot mint sessions unboundedly.
+ * read (via `express-rate-limit` in `app.ts`), and it also caps successful logins so a stolen
+ * password cannot mint sessions unboundedly.
  */
 export const AUTH_LOGIN_BUDGET: Budget = {
   limit: 30,
@@ -93,9 +94,13 @@ export const AUTH_LOGIN_BUDGET: Budget = {
 /**
  * Status / logout / password-change under `/api/auth`. Separate from login so a spent login
  * window does not block logout or the status poll the AuthGate needs after sign-in.
+ *
+ * Six hundred a minute is far above a person (AuthGate asks once per load) and leaves headroom
+ * for the e2e suite, which shares one address and remounts AuthGate on every navigation — React
+ * Strict Mode doubles the status call, and a tight window was starving later specs with 429s.
  */
 export const AUTH_ROUTE_BUDGET: Budget = {
-  limit: 120,
+  limit: 600,
   windowMs: 60_000,
   message: 'Too many authentication requests. Wait a moment and try again.',
 };

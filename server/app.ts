@@ -23,7 +23,7 @@ import {
   logout as operatorLogout,
 } from './auth/service.ts';
 import { buildSessionCookie, clearSessionCookie } from './auth/cookies.ts';
-import { clientAddress } from './auth/client-address.ts';
+import { clientAddress, type AddressRequest } from './auth/client-address.ts';
 import { purgeExpiredSessions } from './auth/sessions.ts';
 import { CSRF_HEADER_NAME } from '../shared/auth.ts';
 import {
@@ -195,6 +195,7 @@ import {
   postsOnly,
   requestBudget,
 } from './budgets.ts';
+import { rateLimit } from 'express-rate-limit';
 import { SAMPLE_PLAYBOOK_DOWNLOAD_PATH, SAMPLE_PLAYBOOK_FILENAME } from '../shared/playbook.ts';
 import { listIntegrationEvents } from './integration-log.ts';
 import {
@@ -753,10 +754,39 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       (config.auth.productionTlsTerminated || config.appOrigin.startsWith('https:')));
   const authNowMs = () => clock().getTime();
 
-  // Rate limits sit ahead of the session middleware so every authorization path CodeQL sees is
-  // also budgeted. Login has its own tighter window; the rest of `/api/auth` shares one bucket.
-  app.use('/api/auth/login', requestBudget(AUTH_LOGIN_BUDGET, { now: clock, applies: postsOnly }));
-  app.use('/api/auth', requestBudget(AUTH_ROUTE_BUDGET, { now: clock }));
+  // Auth uses express-rate-limit (not requestBudget) so CodeQL's missing-rate-limiting query can
+  // see the limiter. Login has its own tighter window; the rest of `/api/auth` shares one bucket.
+  // Numbers live in `AUTH_*_BUDGET` so operators and tests read one place. Keying follows the same
+  // `TRUSTED_PROXY_HOPS` rule as login progressive delay — not Express `trust proxy`.
+  const authKey = (req: {
+    socket: { remoteAddress?: string | null };
+    headers: AddressRequest['headers'];
+  }) => clientAddress(req, trustedProxyHops);
+  app.use(
+    '/api/auth/login',
+    rateLimit({
+      windowMs: AUTH_LOGIN_BUDGET.windowMs,
+      limit: AUTH_LOGIN_BUDGET.limit,
+      standardHeaders: 'draft-7',
+      legacyHeaders: false,
+      message: { error: AUTH_LOGIN_BUDGET.message },
+      keyGenerator: (req) => authKey(req),
+      skip: (req) => req.method !== 'POST',
+      validate: { xForwardedForHeader: false },
+    }),
+  );
+  app.use(
+    '/api/auth',
+    rateLimit({
+      windowMs: AUTH_ROUTE_BUDGET.windowMs,
+      limit: AUTH_ROUTE_BUDGET.limit,
+      standardHeaders: 'draft-7',
+      legacyHeaders: false,
+      message: { error: AUTH_ROUTE_BUDGET.message },
+      keyGenerator: (req) => authKey(req),
+      validate: { xForwardedForHeader: false },
+    }),
+  );
 
   app.use(
     '/api',
