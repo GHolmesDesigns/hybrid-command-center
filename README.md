@@ -12,7 +12,7 @@ The Import module's versioned XLSX contract, pasted text form, and example campa
 
 Signal Campaign can tailor a post per platform and per account, preview what each target would receive, and explicitly submit scheduled social posts through an optional Post Bridge integration. [Publishing Integration](docs/publishing-integration.md) records its provider boundary, the content-variant inheritance, the scheduling conversion, and why delivery state remains separate from `PUBLISHED`.
 
-Nothing in this app is reachable off loopback by design, and the server enforces that itself: a `HOST` outside `127.0.0.1`, `::1`, and `localhost` fails the boot while there is no authentication to put in front of it. The decision record that a cloud deployment would be built from — access model, source of truth, authentication, Drive OAuth continuity, and migration — is [Cloud Hosting](docs/cloud-hosting.md).
+Nothing in this app is reachable off loopback by design, and the server enforces that itself: a `HOST` outside `127.0.0.1`, `::1`, and `localhost` fails the boot while there is no authentication to put in front of it. The cloud decision and **AWS production runtime contract** — access model, EC2+Caddy+EBS shape, trusted proxy hops, SSM secret names, S3 backups, and staged account prerequisites — are in [Cloud Hosting](docs/cloud-hosting.md). Remote access itself is still unbuilt (C51–C55).
 
 If IDE agents should plan Signal and workspace work through MCP, read [Multi-Agent MCP](docs/multi-agent-mcp-decision.md) first. It chooses a local stdio server over Signal — not a provider MCP wrapper — keeps provider publishing on the human-confirmed UI path, and defers any network MCP endpoint until operator authentication ships. For agents handing work to each other through the workspace, see [Agent Coordination Hub](docs/agent-coordination-plan.md) (C109 decided; C110–C112 implement handoffs). Coordination tools ship via `npm run mcp` (set `MCP_AGENT_LABEL` for writes); operators cancel stuck handoffs under **Settings → Agent handoffs**. The broader workspace/Signal MCP surface remains MCP-C106–C108.
 
@@ -750,9 +750,9 @@ Schedule `db:backup` the same way if you want unattended snapshots — same comm
 - A non-loopback `HOST` fails the boot unless operator authentication is fully configured
   (`SESSION_SECRET`, `OPERATOR_PASSWORD_HASH`, https `APP_ORIGIN`, `PRODUCTION_TLS_TERMINATED=true`,
   explicit `TRUSTED_PROXY_HOPS`). Loopback stays passwordless. Set the password with
-  `npm run auth:bootstrap`. Remaining cloud work (production OAuth redirect, deploy manifests) is
-  still in [`docs/cloud-hosting.md`](docs/cloud-hosting.md).
-
+  `npm run auth:bootstrap`. The AWS runtime contract is in [`docs/cloud-hosting.md`](docs/cloud-hosting.md)
+  §11 (`TRUSTED_PROXY_HOPS=1` behind Caddy); account prerequisites are named in §12. Remaining cloud
+  work is production OAuth redirect, deploy manifests, and backup automation.
 ## Planned extension points
 
 **Calendar:** `/calendar` has shipped read-only — `readCalendarRange` in `server/calendar.ts` over `SignalProvider` and the deadline domain functions, behind `GET /api/calendar`. Week and month-grid views would be further clients of that same range, not new reads. Editing stays in the Signal planner beside `server/signal/service.ts`; the calendar remains a window onto the schedule. Optional Google Calendar sync belongs in a separate provider beside Drive, not in task components. Every sync attempt should record to `integration_events` through `recordIntegrationEvent` — a sync that reads some sources and fails on one is the `PARTIAL` case the log was shaped for.
@@ -761,10 +761,14 @@ Schedule `db:backup` the same way if you want unattended snapshots — same comm
 
 Buffer TikTok and YouTube targets use a separate capability table and write adapter. A confirmed Buffer plan pins `customScheduled`, `needsApproval: false`, and the exact UTC instant, then creates one post per explicitly selected channel and stores each opaque remote id immediately. Partial and ambiguous results stay per target; an ambiguous create is never retried. Reconcile, edit, reschedule, and cancel read the exact target again and require a fresh comparison token plus Buffer's `allowedActions`. Notification scheduling sends text only and reminds you to attach media in the platform app; automatic TikTok may carry a direct public HTTPS URL in preview (`bufferWire`) where verified. Drive files and mixed Post Bridge plus Buffer targets refuse before confirmation. Production Buffer writes remain evidence-gated until the owner-run C83 round trip is recorded; automated coverage uses only mocks. **Publishing:** the Post Bridge implementation follows [`docs/publishing-integration.md`](docs/publishing-integration.md). It previews and confirms one scheduled Signal post, preflights its channels and ordered media, records delivery per publication, and blocks ambiguous retries. A post the provider already holds can then be updated, rescheduled, withdrawn, or resubmitted — each from a no-write comparison the user confirms, never as a side effect of a Signal edit, and never against a post the provider has already published (§7.2). `blog` remains outside every provider. Figures are read back against the provider’s own result identity per delivery, captured by reconciliation, through a service beside the publisher rather than inside it (§16). What the provider is holding is read the same way — a third interface that can only list, one snapshot generation replaced whole or not at all, and nothing that can act on a post this app did not send ([`docs/post-bridge-api-surface.md`](docs/post-bridge-api-surface.md) §6).
 
-**Cloud hosting:** authentication (C51) ships the §5.1 password session, CSRF, and the bind gate
-that opens only when that checklist is complete. Remaining cards cover production OAuth redirect,
-deploy manifests, and backup automation — see [`docs/cloud-hosting.md`](docs/cloud-hosting.md).
-Bootstrap the operator password with `npm run auth:bootstrap`; put the printed hash in
-`OPERATOR_PASSWORD_HASH` for any non-loopback bind.
-
-Recommended order: (1) recent-files and cross-project search over the existing listing, (2) uploads/downloads, (3) guarded move/rename operations, (4) optional Calendar sync, (5) cloud hosting only after `docs/cloud-hosting.md` is signed off.
+**Cloud hosting:** AWS contract settled (C50 / #176); authentication shipped (C51).
+[`docs/cloud-hosting.md`](docs/cloud-hosting.md) §§1–8 keep the product shape. **§11** is the
+production contract — EC2 + Caddy on loopback `HOST`, `TRUSTED_PROXY_HOPS=1`, EBS path
+`/var/lib/hybrid-command-center/command-center.db`, SSM names under `/hcc/production/`, S3
+off-site backups, `/api/health`, $20/month budget ceiling, RPO ≤24h / RTO ≤4h. **§12** names the
+inert account resources (IAM role, sentinel SSM parameters, backup bucket, SNS, budget); none are
+attached to compute yet. C51 ships the §5.1 password session, CSRF, and the bind gate that opens
+only when that checklist is complete — bootstrap with `npm run auth:bootstrap` and put the printed
+hash in `OPERATOR_PASSWORD_HASH` for any non-loopback bind. Remaining cards: C52–C55 (OAuth
+redirect, deploy, backup automation).
+Recommended order for Files extensions: (1) recent-files and cross-project search over the existing listing, (2) uploads/downloads, (3) guarded move/rename operations, (4) optional Calendar sync. Cloud implementation order is C51 → C52 → C53, with C54 parallel after C50.

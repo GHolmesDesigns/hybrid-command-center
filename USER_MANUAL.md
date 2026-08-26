@@ -1263,6 +1263,10 @@ npm run db:backup:rehearse
 
 That backs up the live database, copies the backup, runs migrations against the copy only, and reports whether clients, projects, tasks, and Drive folder references are still intact. The live database is not modified.
 
+### Cloud hosting (not available yet)
+
+Day-to-day use is still local-only on this computer. A future hosted deploy is decided on **AWS** and described for operators in [Cloud Hosting](docs/cloud-hosting.md) §§11–12: one small server, HTTPS in front, the same SQLite file on a durable disk, secrets in AWS Parameter Store, and off-site backups in a private S3 bucket kept separate from the Drive encryption key. Nothing in that plan is running today, and this manual’s local backup steps remain the ones you use until a later release walks through cutover.
+
 ## 11. Troubleshooting
 
 ### `node` or `npm` is not recognized
