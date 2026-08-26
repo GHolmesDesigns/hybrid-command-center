@@ -26,6 +26,10 @@ describe('Drive OAuth redirect URI', () => {
     expect(isAllowedGoogleRedirectUri('http://example.com/api/drive/oauth/callback')).toBe(false);
     expect(isAllowedGoogleRedirectUri('https://example.com/elsewhere')).toBe(false);
     expect(isAllowedGoogleRedirectUri('not-a-url')).toBe(false);
+    expect(
+      isAllowedGoogleRedirectUri('http://user:pass@localhost:8787/api/drive/oauth/callback'),
+    ).toBe(false);
+    expect(isAllowedGoogleRedirectUri('ftp://localhost/api/drive/oauth/callback')).toBe(false);
   });
 
   it('names the drive.file scope', () => {

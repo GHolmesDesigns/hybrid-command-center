@@ -106,6 +106,17 @@ export const AUTH_ROUTE_BUDGET: Budget = {
 };
 
 /**
+ * Drive OAuth start/callback. Uses `express-rate-limit` in `app.ts` (like auth) so CodeQL's
+ * missing-rate-limiting query can see the limiter. Twenty in fifteen minutes is above a person
+ * reconnecting after a failed consent screen and far below a connect-loop hammering Google.
+ */
+export const DRIVE_OAUTH_BUDGET: Budget = {
+  limit: 20,
+  windowMs: 15 * 60_000,
+  message: 'Too many Drive connection attempts. Wait a few minutes and try again.',
+};
+
+/**
  * How many import requests may be in flight at once. One, because the point of the cap is that a
  * caller cannot hold several multi-megabyte bodies in memory simultaneously — and it only holds
  * if the gate runs *before* the body parser, which is where `app.ts` mounts it.

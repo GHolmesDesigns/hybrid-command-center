@@ -193,6 +193,7 @@ import {
   AUTH_LOGIN_BUDGET,
   AUTH_ROUTE_BUDGET,
   DRIVE_BUDGET,
+  DRIVE_OAUTH_BUDGET,
   DRIVE_SYNC_BUDGET,
   IMPORT_BUDGET,
   IMPORT_BUSY_MESSAGE,
@@ -797,6 +798,21 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       standardHeaders: 'draft-7',
       legacyHeaders: false,
       message: { error: AUTH_ROUTE_BUDGET.message },
+      keyGenerator: (req) => authKey(req),
+      validate: { xForwardedForHeader: false },
+    }),
+  );
+  // Drive OAuth start/callback: same express-rate-limit shape as auth so CodeQL sees the budget.
+  // Still sits under the broader `/api/drive` requestBudget for Google quota; this window is for
+  // connect/callback abuse (minting pending states and exchanging codes).
+  app.use(
+    '/api/drive/oauth',
+    rateLimit({
+      windowMs: DRIVE_OAUTH_BUDGET.windowMs,
+      limit: DRIVE_OAUTH_BUDGET.limit,
+      standardHeaders: 'draft-7',
+      legacyHeaders: false,
+      message: { error: DRIVE_OAUTH_BUDGET.message },
       keyGenerator: (req) => authKey(req),
       validate: { xForwardedForHeader: false },
     }),

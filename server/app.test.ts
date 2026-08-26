@@ -16,6 +16,7 @@ import { DRIVE_OAUTH_SCOPE } from '../shared/drive-oauth.ts';
 import { getSetting, provisionProject, setSetting } from './drive/service.ts';
 import {
   DRIVE_BUDGET,
+  DRIVE_OAUTH_BUDGET,
   DRIVE_SYNC_BUDGET,
   IMPORT_BUDGET,
   IMPORT_BUSY_MESSAGE,
@@ -1556,6 +1557,15 @@ describe('Drive OAuth connect', () => {
     await request(app).get('/api/drive/oauth/callback').query({ state, code: CODE }).expect(302);
 
     expect(logs.lines).toEqual([]);
+  });
+
+  it('rate-limits Drive OAuth start under the oauth budget', async () => {
+    const { app } = connect();
+    for (let i = 0; i < DRIVE_OAUTH_BUDGET.limit; i += 1) {
+      await request(app).get('/api/drive/oauth/start').expect(200);
+    }
+    const refused = await request(app).get('/api/drive/oauth/start').expect(429);
+    expect(refused.body).toEqual({ error: DRIVE_OAUTH_BUDGET.message });
   });
 
   it('requests drive.file on the authorization URL', async () => {
