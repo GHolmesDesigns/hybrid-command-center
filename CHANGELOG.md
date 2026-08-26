@@ -8,6 +8,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.3.0] - 2026-08-26
+
+### Changed
+
+- Cloud hosting (C50): chose **AWS** as the production target and settled the runtime contract in
+  `docs/cloud-hosting.md` §11 — EC2 + Caddy (loopback `HOST`), `TRUSTED_PROXY_HOPS=1`, EBS
+  `DATABASE_PATH`, SSM secret names, S3 backups, health/alerts, cost ceiling, RPO/RTO — and staged
+  the inert account prerequisites in §12 / `docs/aws/c50-account-prerequisites.yaml` (IAM role,
+  SSM sentinels, backup bucket, SNS, $20 budget; no compute attached). README and the user manual
+  point at the decided contract; the app stays loopback-only.
+
+### Breaking changes
+
+None.
+
 ## [5.2.2] - 2026-08-25
 
 ### Added
