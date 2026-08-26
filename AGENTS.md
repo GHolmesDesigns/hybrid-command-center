@@ -17,6 +17,10 @@
   re-hosted here, and `archive.ts` imports it idempotently.
 - `server/calendar.ts`: the read-only calendar — Signal's schedule and task due dates over one
   range, composed rather than joined, and degrading to tasks alone when the schedule cannot be read.
+- `server/agent-coordination/`: agent handoff queue beside the workspace. Domain rules in
+  `server/domain/agent-coordination.ts`; persistence in `service.ts`. Claim/complete never mutate
+  tasks, Signal posts, or any provider path; audit is the handoff row and notes, not
+  `integration_events`. MCP tools are C111; operator inbox UI is C112.
 - `server/import.ts`: campaign playbook import — workspace snapshot, transactional commit, receipts.
 - `server/integration-log.ts`: the append-only integration activity records every integration writes.
 - `server/app.ts`: validated HTTP boundary; keep data writes transaction-safe.

@@ -508,6 +508,39 @@ CREATE TABLE IF NOT EXISTS signal_analytics_window_metrics (
   refreshed_at TEXT NOT NULL,
   PRIMARY KEY(platform, timeframe, post_result_id)
 );
+-- Agent handoff queue (C110). Coordination metadata beside the workspace: claim and complete never
+-- mutate tasks, signal_posts, or any other workspace row, and never call publish, Drive, or import.
+--
+-- to_agent_label NULL is the open pool (first atomic claim wins); a set label is a directed handoff.
+-- client_request_id is optional post idempotency keyed with from_agent_label (partial unique index).
+-- Length bounds on message and cancel_reason match shared/agent-coordination.ts; triggers below
+-- restate them so a raw INSERT cannot walk around the Zod boundary.
+CREATE TABLE IF NOT EXISTS agent_handoffs (
+  id TEXT PRIMARY KEY,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  from_agent_label TEXT NOT NULL,
+  to_agent_label TEXT,
+  subject_type TEXT NOT NULL
+    CHECK(subject_type IN ('task','signal_post','project','client','freeform')),
+  subject_id TEXT,
+  message TEXT NOT NULL CHECK(length(message) BETWEEN 1 AND 2000),
+  state TEXT NOT NULL CHECK(state IN ('OPEN','CLAIMED','COMPLETED','CANCELLED')),
+  claimed_by TEXT,
+  claimed_at TEXT,
+  completed_at TEXT,
+  cancelled_at TEXT,
+  cancel_reason TEXT CHECK(cancel_reason IS NULL OR length(cancel_reason) BETWEEN 1 AND 500),
+  client_request_id TEXT
+);
+-- Append-only comments on a handoff. Never change handoff state; refused on CANCELLED in the service.
+CREATE TABLE IF NOT EXISTS agent_handoff_notes (
+  id TEXT PRIMARY KEY,
+  handoff_id TEXT NOT NULL REFERENCES agent_handoffs(id) ON DELETE CASCADE,
+  agent_label TEXT NOT NULL,
+  body TEXT NOT NULL CHECK(length(body) BETWEEN 1 AND 2000),
+  at TEXT NOT NULL
+);
 `;
 
 /**
@@ -581,6 +614,17 @@ CREATE INDEX IF NOT EXISTS idx_signal_provider_posts_scheduled
   ON signal_provider_posts(scheduled_instant);
 CREATE INDEX IF NOT EXISTS idx_signal_provider_inventory_scheduled
   ON signal_provider_inventory_posts(provider, scheduled_instant);
+-- Handoff inbox: open/claimed by age, and directed work for one label.
+CREATE INDEX IF NOT EXISTS idx_agent_handoffs_state_created
+  ON agent_handoffs(state, created_at);
+CREATE INDEX IF NOT EXISTS idx_agent_handoffs_to_state
+  ON agent_handoffs(to_agent_label, state);
+-- Post idempotency: duplicate (from_agent_label, client_request_id) returns the existing row.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_handoffs_client_request
+  ON agent_handoffs(from_agent_label, client_request_id)
+  WHERE client_request_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_agent_handoff_notes_handoff
+  ON agent_handoff_notes(handoff_id, at);
 `;
 
 /**
@@ -640,6 +684,33 @@ END;`,
 export const triggerSchema = `${mediaSourceTriggers('signal_post_media')}${mediaSourceTriggers(
   'signal_post_variant_media',
 )}
+`;
+
+const handoffLengthTriggers = `
+CREATE TRIGGER IF NOT EXISTS agent_handoffs_message_length_insert
+BEFORE INSERT ON agent_handoffs FOR EACH ROW
+WHEN length(NEW.message) < 1 OR length(NEW.message) > 2000
+BEGIN
+  SELECT RAISE(ABORT, 'agent_handoffs: message must be between 1 and 2000 characters.');
+END;
+CREATE TRIGGER IF NOT EXISTS agent_handoffs_message_length_update
+BEFORE UPDATE ON agent_handoffs FOR EACH ROW
+WHEN length(NEW.message) < 1 OR length(NEW.message) > 2000
+BEGIN
+  SELECT RAISE(ABORT, 'agent_handoffs: message must be between 1 and 2000 characters.');
+END;
+CREATE TRIGGER IF NOT EXISTS agent_handoff_notes_body_length_insert
+BEFORE INSERT ON agent_handoff_notes FOR EACH ROW
+WHEN length(NEW.body) < 1 OR length(NEW.body) > 2000
+BEGIN
+  SELECT RAISE(ABORT, 'agent_handoff_notes: body must be between 1 and 2000 characters.');
+END;
+CREATE TRIGGER IF NOT EXISTS agent_handoff_notes_body_length_update
+BEFORE UPDATE ON agent_handoff_notes FOR EACH ROW
+WHEN length(NEW.body) < 1 OR length(NEW.body) > 2000
+BEGIN
+  SELECT RAISE(ABORT, 'agent_handoff_notes: body must be between 1 and 2000 characters.');
+END;
 `;
 
 const providerAccountTriggers = `
@@ -1210,6 +1281,7 @@ export function createDb(
   db.exec(indexSchema);
   db.exec(triggerSchema);
   db.exec(providerAccountTriggers);
+  db.exec(handoffLengthTriggers);
   // After the index and the triggers, and deliberately: the role rows it writes go through the
   // same uniqueness and the same cross-field rule every later write does, so the migration cannot
   // put a row in that an ordinary INSERT would have been refused.

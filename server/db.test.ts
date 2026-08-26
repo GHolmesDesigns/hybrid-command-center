@@ -215,6 +215,8 @@ describe('additive schema migration', () => {
         'client_merges',
         'client_import_aliases',
         'signal_post_import_aliases',
+        'agent_handoffs',
+        'agent_handoff_notes',
       ]),
     );
     // The integration activity log arrives empty: a migration invents no history.
@@ -236,6 +238,9 @@ describe('additive schema migration', () => {
     // And no alert is acknowledged on arrival: the summary is derived, so an upgrade cannot know
     // which of the lines it is about to show have already been seen.
     expect(rows(db, 'SELECT COUNT(*) AS total FROM signal_alert_acks')).toEqual([{ total: 0 }]);
+    // Agent handoffs arrive empty: a migration invents no coordination history.
+    expect(rows(db, 'SELECT COUNT(*) AS total FROM agent_handoffs')).toEqual([{ total: 0 }]);
+    expect(rows(db, 'SELECT COUNT(*) AS total FROM agent_handoff_notes')).toEqual([{ total: 0 }]);
     // Figures arrive empty as well, and the delivery rows gain the provider result identity as a
     // nullable column: a migration cannot know what the provider called a delivery it never asked
     // about, and inventing an id would be inventing something to ask analytics for.
