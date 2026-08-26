@@ -541,8 +541,19 @@ CREATE TABLE IF NOT EXISTS agent_handoff_notes (
   body TEXT NOT NULL CHECK(length(body) BETWEEN 1 AND 2000),
   at TEXT NOT NULL
 );
+-- MCP local-write audit (MCP-C106 contract; first writers are C111 coordination tools).
+-- Append-only: one INSERT in server/mcp/events.ts, retention deletes oldest rows, nothing updates.
+CREATE TABLE IF NOT EXISTS mcp_agent_events (
+  id TEXT PRIMARY KEY,
+  at TEXT NOT NULL,
+  agent_label TEXT,
+  tool TEXT NOT NULL,
+  outcome TEXT NOT NULL CHECK(outcome IN ('SUCCESS','REFUSED','FAILURE')),
+  entity_type TEXT,
+  entity_id TEXT,
+  summary TEXT NOT NULL
+);
 `;
-
 /**
  * Indexes, applied after the additive migration so that an index over a
  * newly added column is created against a table that already has it.
@@ -625,8 +636,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_handoffs_client_request
   WHERE client_request_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_agent_handoff_notes_handoff
   ON agent_handoff_notes(handoff_id, at);
+-- Retention over MCP audit keeps the newest rows and prunes the rest.
+CREATE INDEX IF NOT EXISTS idx_mcp_agent_events_at ON mcp_agent_events(at);
 `;
-
 /**
  * The cross-field rule on `signal_post_media` and `signal_post_variant_media`, in the strongest
  * form SQLite can be given *additively*.

@@ -26,6 +26,7 @@
     "probe:post-bridge": "node --experimental-strip-types scripts/probe-post-bridge.ts",
     "probe:buffer": "node --experimental-strip-types scripts/probe-buffer.ts",
     "signal:import": "node --experimental-strip-types server/scripts/import-signal-archive.ts",
+    "mcp": "node --experimental-strip-types server/scripts/mcp.ts",
     "db:backup": "node --experimental-strip-types server/scripts/backup.ts",
     "db:restore": "node --experimental-strip-types server/scripts/restore.ts",
     "db:backup:rehearse": "node --experimental-strip-types server/scripts/rehearse-backup.ts"

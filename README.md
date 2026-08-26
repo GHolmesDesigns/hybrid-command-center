@@ -14,7 +14,7 @@ Signal Campaign can tailor a post per platform and per account, preview what eac
 
 Nothing in this app is reachable off loopback by design, and the server enforces that itself: a `HOST` outside `127.0.0.1`, `::1`, and `localhost` fails the boot while there is no authentication to put in front of it. The decision record that a cloud deployment would be built from — access model, source of truth, authentication, Drive OAuth continuity, and migration — is [Cloud Hosting](docs/cloud-hosting.md).
 
-If IDE agents should plan Signal and workspace work through MCP, read [Multi-Agent MCP](docs/multi-agent-mcp-decision.md) first. It chooses a local stdio server over Signal — not a provider MCP wrapper — keeps provider publishing on the human-confirmed UI path, and defers any network MCP endpoint until operator authentication ships. For agents handing work to each other through the workspace, see [Agent Coordination Hub](docs/agent-coordination-plan.md) (C109 decided; C110–C112 implement handoffs).
+If IDE agents should plan Signal and workspace work through MCP, read [Multi-Agent MCP](docs/multi-agent-mcp-decision.md) first. It chooses a local stdio server over Signal — not a provider MCP wrapper — keeps provider publishing on the human-confirmed UI path, and defers any network MCP endpoint until operator authentication ships. For agents handing work to each other through the workspace, see [Agent Coordination Hub](docs/agent-coordination-plan.md) (C109 decided; C110–C112 implement handoffs). Coordination tools ship now via `npm run mcp` (set `MCP_AGENT_LABEL` for writes); the broader workspace/Signal MCP surface remains MCP-C106–C108.
 
 ## What is included
 
@@ -108,6 +108,7 @@ npm run typecheck
 npm run lint
 npm test
 npm run test:e2e
+npm run mcp                 # local stdio MCP (coordination tools; set MCP_AGENT_LABEL for writes)
 npm run db:migrate
 npm run db:seed
 npm run db:backup             # add -- --keep <n> to prune older snapshots
