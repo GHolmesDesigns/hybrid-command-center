@@ -143,8 +143,7 @@ test('an unverified thumbnail role is stored, version-bound, and not sent', asyn
   // Windows runner the round trip can outlast a bare click-and-expect.
   await Promise.all([
     page.waitForResponse(
-      (response) =>
-        response.url().includes('/variants/media/recheck') && response.status() === 200,
+      (response) => response.url().includes('/variants/media/recheck') && response.status() === 200,
     ),
     thumbnail.getByRole('button', { name: 'Recheck thumbnail' }).click(),
   ]);
