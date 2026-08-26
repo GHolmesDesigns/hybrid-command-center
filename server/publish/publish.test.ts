@@ -1095,6 +1095,13 @@ describe('bounded reconciliation', () => {
     ).toBe(true);
     expect(
       shouldReconcileAfterSubmit({
+        state: 'SUBMITTED',
+        providerPostId: undefined,
+        targets: [],
+      }),
+    ).toBe(false);
+    expect(
+      shouldReconcileAfterSubmit({
         state: 'UNCONFIRMED',
         providerPostId: undefined,
         targets: [],
@@ -1105,6 +1112,22 @@ describe('bounded reconciliation', () => {
         state: 'FAILED',
         providerPostId: undefined,
         targets: [],
+      }),
+    ).toBe(false);
+    expect(
+      shouldReconcileAfterSubmit({
+        state: 'SUBMITTED',
+        providerPostId: 'provider-1',
+        targets: [
+          {
+            channel: 'tt',
+            platform: 'tiktok',
+            accountId: 1,
+            handle: '@a',
+            mode: 'AUTOMATIC',
+            error: 'connection ended without an answer',
+          },
+        ],
       }),
     ).toBe(false);
     expect(
