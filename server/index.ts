@@ -9,7 +9,7 @@ import { configureServerTimeouts } from './budgets.ts';
 import { closeOnSignals } from './shutdown.ts';
 
 const production = process.env.NODE_ENV === 'production' || process.argv.includes('--production');
-let productionRoot: string | undefined;
+let productionClient: { root: string; indexHtml: string } | undefined;
 if (production) {
   assertProductionRuntimeConfig();
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../dist/client');
@@ -19,14 +19,14 @@ if (production) {
       `Production client is missing at ${indexPath}. Run npm run build before start.`,
     );
   }
-  productionRoot = root;
+  productionClient = { root, indexHtml: fs.readFileSync(indexPath, 'utf8') };
 }
 
 const db = getDb();
 const app = createApp(db);
-if (productionRoot) {
-  app.use(express.static(productionRoot));
-  app.get('/{*splat}', (_req, res) => res.sendFile(path.join(productionRoot, 'index.html')));
+if (productionClient) {
+  app.use(express.static(productionClient.root));
+  app.get('/{*splat}', (_req, res) => res.type('html').send(productionClient.indexHtml));
 }
 const server = app.listen(config.port, config.host, () =>
   console.log(`Command Center API ready at http://${config.host}:${config.port}`),
