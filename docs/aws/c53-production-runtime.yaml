@@ -1,0 +1,165 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Single-instance Hybrid Command Center runtime (C53). No secrets or production data.
+
+Parameters:
+  Arm64AmiId:
+    Type: AWS::EC2::Image::Id
+    Description: Pinned Amazon Linux 2023 arm64 AMI reviewed for this deploy.
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  PublicSubnetId:
+    Type: AWS::EC2::Subnet::Id
+  AvailabilityZone:
+    Type: AWS::EC2::AvailabilityZone::Name
+  InstanceProfileName:
+    Type: String
+    Default: hcc-production-ec2
+  AlertTopicArn:
+    Type: String
+    Default: arn:aws:sns:us-east-1:233171357361:hcc-production-alerts
+  RootVolumeGiB:
+    Type: Number
+    Default: 12
+    MinValue: 8
+  DataVolumeGiB:
+    Type: Number
+    Default: 30
+    MinValue: 20
+    MaxValue: 40
+
+Resources:
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: hcc-production-sg
+      GroupDescription: HTTPS only; administration uses SSM, never SSH.
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: udp
+          FromPort: 53
+          ToPort: 53
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 53
+          ToPort: 53
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: hcc-production-sg
+
+  DataVolume:
+    Type: AWS::EC2::Volume
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      AvailabilityZone: !Ref AvailabilityZone
+      Encrypted: true
+      Size: !Ref DataVolumeGiB
+      VolumeType: gp3
+      Tags:
+        - Key: Name
+          Value: hcc-production-data
+
+  Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      AvailabilityZone: !Ref AvailabilityZone
+      ImageId: !Ref Arm64AmiId
+      InstanceType: t4g.small
+      IamInstanceProfile: !Ref InstanceProfileName
+      Monitoring: true
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: false
+          DeleteOnTermination: true
+          DeviceIndex: '0'
+          GroupSet:
+            - !Ref SecurityGroup
+          SubnetId: !Ref PublicSubnetId
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            DeleteOnTermination: true
+            Encrypted: true
+            VolumeSize: !Ref RootVolumeGiB
+            VolumeType: gp3
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euo pipefail
+          install -d -m 0750 /var/lib/hybrid-command-center
+          volume_id="$(echo '${DataVolume}' | tr -d '-')"
+          for attempt in $(seq 1 60); do
+            device="$(readlink -f /dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_$volume_id 2>/dev/null || true)"
+            test -n "$device" && break
+            sleep 2
+          done
+          test -n "$device" || exit 1
+          blkid "$device" >/dev/null 2>&1 || mkfs.ext4 "$device"
+          uuid="$(blkid -s UUID -o value "$device")"
+          grep -q "UUID=$uuid" /etc/fstab || echo "UUID=$uuid /var/lib/hybrid-command-center ext4 defaults,nofail 0 2" >> /etc/fstab
+          mount /var/lib/hybrid-command-center
+      Tags:
+        - Key: Name
+          Value: hcc-production
+
+  DataVolumeAttachment:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      Device: /dev/sdf
+      InstanceId: !Ref Instance
+      VolumeId: !Ref DataVolume
+
+  ElasticIp:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: hcc-production
+
+  ElasticIpAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt ElasticIp.AllocationId
+      InstanceId: !Ref Instance
+
+  InstanceStatusAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: hcc-production-instance-status
+      AlarmActions:
+        - !Ref AlertTopicArn
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref Instance
+      EvaluationPeriods: 2
+      MetricName: StatusCheckFailed
+      Namespace: AWS/EC2
+      Period: 60
+      Statistic: Maximum
+      Threshold: 1
+      TreatMissingData: breaching
+
+Outputs:
+  InstanceId:
+    Value: !Ref Instance
+  ElasticIp:
+    Value: !Ref ElasticIp
+  DataVolumeId:
+    Value: !Ref DataVolume
+  SecurityGroupId:
+    Value: !Ref SecurityGroup

@@ -753,8 +753,9 @@ Schedule `db:backup` the same way if you want unattended snapshots — same comm
   (`SESSION_SECRET`, `OPERATOR_PASSWORD_HASH`, https `APP_ORIGIN`, `PRODUCTION_TLS_TERMINATED=true`,
   explicit `TRUSTED_PROXY_HOPS`). Loopback stays passwordless. Set the password with
   `npm run auth:bootstrap`. The AWS runtime contract is in [`docs/cloud-hosting.md`](docs/cloud-hosting.md)
-  §11 (`TRUSTED_PROXY_HOPS=1` behind Caddy); account prerequisites are named in §12. Remaining cloud
-  work is production OAuth redirect, deploy manifests, and backup automation.
+  §11 (`TRUSTED_PROXY_HOPS=1` behind Caddy); account prerequisites are named in §12. C53's runtime
+  files are in [`deploy/aws`](deploy/aws/README.md) and its secret-free payload is built with
+  `npm run build:production-artifact`; C54 and C55 own hosted backups and owner-run cutover.
 ## Planned extension points
 
 **Calendar:** `/calendar` has shipped read-only — `readCalendarRange` in `server/calendar.ts` over `SignalProvider` and the deadline domain functions, behind `GET /api/calendar`. Week and month-grid views would be further clients of that same range, not new reads. Editing stays in the Signal planner beside `server/signal/service.ts`; the calendar remains a window onto the schedule. Optional Google Calendar sync belongs in a separate provider beside Drive, not in task components. Every sync attempt should record to `integration_events` through `recordIntegrationEvent` — a sync that reads some sources and fails on one is the `PARTIAL` case the log was shaped for.
@@ -768,9 +769,13 @@ Buffer TikTok and YouTube targets use a separate capability table and write adap
 production contract — EC2 + Caddy on loopback `HOST`, `TRUSTED_PROXY_HOPS=1`, EBS path
 `/var/lib/hybrid-command-center/command-center.db`, SSM names under `/hcc/production/`, S3
 off-site backups, `/api/health`, $20/month budget ceiling, RPO ≤24h / RTO ≤4h. **§12** names the
-inert account resources (IAM role, sentinel SSM parameters, backup bucket, SNS, budget); none are
-attached to compute yet. C51 ships the §5.1 password session, CSRF, and the bind gate that opens
+inert account resources (IAM role, sentinel SSM parameters, backup bucket, SNS, budget). C51 ships
+the §5.1 password session, CSRF, and the bind gate that opens
 only when that checklist is complete — bootstrap with `npm run auth:bootstrap` and put the printed
-hash in `OPERATOR_PASSWORD_HASH` for any non-loopback bind. Remaining cards: C53–C55 (OAuth
-redirect host cutover, deploy, backup automation). C52 (`drive.file` + Picker) is this track.
+hash in `OPERATOR_PASSWORD_HASH` for any non-loopback bind. C53 packages the supported EC2 runtime
+under [`deploy/aws`](deploy/aws/README.md): same-origin Caddy proxying, pre-traffic migration,
+single-writer locking, retained EBS storage, and fail-closed production preflight. The manifest is
+inert until an owner deploys it and contains no production credentials, DNS changes, or data.
+C54 and C55 remain responsible for hosted backup automation and cutover. C52 (`drive.file` + Picker)
+is this track.
 Recommended order for Files extensions: (1) recent-files and cross-project search over the existing listing, (2) uploads/downloads, (3) guarded move/rename operations, (4) optional Calendar sync. Cloud implementation order is C51 → C52 → C53, with C54 parallel after C50.

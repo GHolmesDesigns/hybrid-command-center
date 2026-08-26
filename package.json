@@ -1,6 +1,6 @@
 {
   "name": "hybrid-command-center",
-  "version": "5.3.2",
+  "version": "5.3.3",
   "private": true,
   "type": "module",
   "engines": {
@@ -11,6 +11,7 @@
     "dev:server": "node --watch --experimental-strip-types server/index.ts",
     "dev:client": "vite",
     "build": "npm run typecheck && vite build",
+    "build:production-artifact": "npm run build && node --experimental-strip-types scripts/build-production-artifact.ts",
     "start": "node --experimental-strip-types server/index.ts --production",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",

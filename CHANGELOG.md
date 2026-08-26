@@ -8,6 +8,20 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.3.3] - 2026-08-26
+
+### Added
+
+- Package an AWS EC2 production runtime with same-origin Caddy proxying, persistent SQLite volume
+  wiring, deliberate migrations, single-writer enforcement, health checks, and fail-closed startup
+  validation.
+- Document a staging verification path for restart persistence, readiness, graceful shutdown,
+  responsive layouts, and secret-free artifacts.
+
+### Breaking changes
+
+None.
+
 ## [5.3.2] - 2026-08-26
 
 ### Changed

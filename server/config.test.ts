@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -351,6 +352,72 @@ describe('operator authentication config', () => {
     const { isLoopbackHost } = await import('./config.ts');
     expect(isLoopbackHost('LocalHost')).toBe(true);
     expect(isLoopbackHost('0.0.0.0')).toBe(false);
+  });
+});
+
+describe('production runtime preflight', () => {
+  const complete = () => ({
+    host: '127.0.0.1',
+    databasePath: path.resolve('persistent/command-center.db'),
+    appOrigin: 'https://command-center.example',
+    google: {
+      clientId: 'client-id',
+      clientSecret: 'client-secret',
+      redirectUri: 'https://command-center.example/api/drive/oauth/callback',
+      encryptionKey: 'g'.repeat(32),
+      apiKey: 'picker-key',
+      appId: '123456',
+    },
+    auth: {
+      sessionSecret: 's'.repeat(32),
+      operatorPasswordHash: '$argon2id$placeholder',
+      productionTlsTerminated: true,
+      trustedProxyHops: 1,
+      trustedProxyHopsConfigured: true,
+    },
+  });
+
+  it('accepts the exact one-origin, one-proxy, persistent-path contract', async () => {
+    const { productionRuntimeIssues } = await import('./config.ts');
+    expect(productionRuntimeIssues(complete())).toEqual([]);
+  });
+
+  it('refuses every incomplete or mismatched production boundary before listen', async () => {
+    const { productionRuntimeIssues } = await import('./config.ts');
+    const input = complete();
+    input.host = '0.0.0.0';
+    input.databasePath = './data/command-center.db';
+    input.appOrigin = 'https://command-center.example/path';
+    input.google.clientSecret = 'UNSET';
+    input.google.redirectUri = 'https://other.example/api/drive/oauth/callback';
+    input.auth.sessionSecret = 'UNSET';
+    input.auth.productionTlsTerminated = false;
+    input.auth.trustedProxyHops = 2;
+
+    expect(productionRuntimeIssues(input)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('HOST'),
+        expect.stringContaining('DATABASE_PATH'),
+        expect.stringContaining('APP_ORIGIN'),
+        expect.stringContaining('GOOGLE_CLIENT_SECRET'),
+        expect.stringContaining('GOOGLE_REDIRECT_URI'),
+        expect.stringContaining('SESSION_SECRET'),
+        expect.stringContaining('PRODUCTION_TLS_TERMINATED'),
+        expect.stringContaining('TRUSTED_PROXY_HOPS'),
+      ]),
+    );
+  });
+
+  it('does not include rejected secret values in the startup error', async () => {
+    const { assertProductionRuntimeConfig } = await import('./config.ts');
+    const input = complete();
+    input.google.clientSecret = 'UNSET';
+    expect(() => assertProductionRuntimeConfig(input)).toThrow(/GOOGLE_CLIENT_SECRET/);
+    expect(() => assertProductionRuntimeConfig(input)).toThrow(
+      expect.objectContaining({
+        message: expect.not.stringContaining('UNSET') as unknown as string,
+      }),
+    );
   });
 });
 
