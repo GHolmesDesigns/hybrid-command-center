@@ -44,6 +44,8 @@ export const AUTH_PUBLIC_API_PREFIXES = [
   '/api/auth/login',
   '/api/auth/logout',
   '/api/auth/status',
+  // Google's redirect must reach the handler; session binding is enforced inside consumeAuthorization.
+  '/api/drive/oauth/callback',
 ] as const;
 
 export type AuthPublicApiPrefix = (typeof AUTH_PUBLIC_API_PREFIXES)[number];

@@ -208,6 +208,19 @@ export const testState = {
   taskReorderError: null as string | null,
   dashboardFailures: 0,
   driveSettingsError: null as string | null,
+  driveSettingsPayload: null as {
+    configured: boolean;
+    pickerConfigured: boolean;
+    connected: boolean;
+    rootFolderId?: string;
+    rootFolderUrl?: string;
+    picker: {
+      clientId: string;
+      apiKey: string;
+      appId: string;
+      scope: string;
+    } | null;
+  } | null,
   /** Receipts the Import page lists, and what its two writes answer with. */
   importReceiptsPayload: [] as ImportReceipt[],
   importPreviewPayload: null as PlaybookPreview | null,
@@ -675,6 +688,15 @@ const payloadFor = (url: string) => {
     return { branding: testState.brandingPayload ?? branding };
   if (url.endsWith('/api/settings/view-defaults'))
     return { viewDefaults: testState.viewDefaultsPayload ?? CANONICAL_VIEW_DEFAULTS };
+  if (url.endsWith('/api/settings/drive'))
+    return (
+      testState.driveSettingsPayload ?? {
+        configured: false,
+        pickerConfigured: false,
+        connected: false,
+        picker: null,
+      }
+    );
   if (url.endsWith('/api/projects')) return testState.projectsPayload;
   if (url.endsWith('/api/clients')) return testState.clientsPayload;
   if (url.endsWith('/api/tasks')) return testState.tasksPayload;
@@ -721,6 +743,36 @@ const respondTo = (url: string, init?: RequestInit) => {
   }
   if (url.endsWith('/api/settings/drive') && testState.driveSettingsError)
     return reply(503, { error: testState.driveSettingsError });
+  if (url.endsWith('/api/settings/drive/root') && method === 'POST') {
+    const current = testState.driveSettingsPayload ?? {
+      configured: true,
+      pickerConfigured: true,
+      connected: true,
+      picker: null,
+    };
+    testState.driveSettingsPayload = {
+      ...current,
+      rootFolderId: body.folderId,
+      rootFolderUrl: `https://drive.test/folder/${body.folderId}`,
+    };
+    return {
+      rootFolderId: body.folderId,
+      rootFolderUrl: `https://drive.test/folder/${body.folderId}`,
+    };
+  }
+  if (url.endsWith('/api/settings/drive/disconnect') && method === 'POST') {
+    testState.driveSettingsPayload = {
+      configured: true,
+      pickerConfigured: Boolean(testState.driveSettingsPayload?.pickerConfigured),
+      connected: false,
+      picker: testState.driveSettingsPayload?.picker ?? null,
+    };
+    return {
+      ok: true,
+      googleRevocationRequired: true,
+      googlePermissionsUrl: 'https://myaccount.google.com/permissions',
+    };
+  }
   if (url.includes('/api/calendar')) {
     const query = new URLSearchParams(url.split('?')[1] ?? '');
     const from = query.get('from') ?? '';
@@ -1573,6 +1625,7 @@ beforeEach(() => {
   testState.taskReorderError = null;
   testState.dashboardFailures = 0;
   testState.driveSettingsError = null;
+  testState.driveSettingsPayload = null;
   testState.importReceiptsPayload = [];
   testState.importPreviewPayload = null;
   testState.importCommitPayload = null;

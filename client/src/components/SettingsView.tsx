@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { api, send } from '../api';
 import { useServerSeeded } from '../useServerSeeded';
+import { DrivePickerCancelled, pickDriveFolder, type DrivePickerConfig } from '../drivePicker';
 import type { Category, Project, Tag, Task } from '../../../shared/types';
 import {
   APP_VERSION,
@@ -54,6 +55,15 @@ const COLOR_LABEL: Record<BrandingColorField, string> = {
   accent: 'Accent',
 };
 
+type DriveSettingsState = {
+  configured: boolean;
+  pickerConfigured: boolean;
+  connected: boolean;
+  rootFolderId?: string;
+  rootFolderUrl?: string;
+  picker: DrivePickerConfig | null;
+};
+
 export function SettingsView({
   branding,
   viewDefaults,
@@ -73,25 +83,15 @@ export function SettingsView({
   refresh: () => Promise<void>;
   flash: (s: string, t?: 'success' | 'error') => void;
 }) {
-  const [state, setState] = useState<{
-      configured: boolean;
-      connected: boolean;
-      rootFolderId?: string;
-      rootFolderUrl?: string;
-    } | null>(null),
-    [root, setRoot] = useState(''),
+  const [state, setState] = useState<DriveSettingsState | null>(null),
     [brandForm, setBrandForm, brandSaved] = useServerSeeded<Branding>(branding),
     [viewsForm, setViewsForm, viewsSaved] = useServerSeeded<ViewDefaults>(viewDefaults),
     [brandBusy, setBrandBusy] = useState(false),
     [viewsBusy, setViewsBusy] = useState(false),
+    [pickerBusy, setPickerBusy] = useState(false),
     [driveError, setDriveError] = useState('');
   const load = useCallback(async () => {
-    const next = await api<{
-      configured: boolean;
-      connected: boolean;
-      rootFolderId?: string;
-      rootFolderUrl?: string;
-    }>('/settings/drive');
+    const next = await api<DriveSettingsState>('/settings/drive');
     setState(next);
     setDriveError('');
   }, []);
@@ -106,27 +106,45 @@ export function SettingsView({
       flash((e as Error).message, 'error');
     }
   };
-  const saveRoot = async (e: FormEvent) => {
-    e.preventDefault();
+  const chooseRoot = async () => {
+    if (!state?.picker) {
+      flash('Add GOOGLE_API_KEY and GOOGLE_APP_ID to .env, then restart.', 'error');
+      return;
+    }
+    setPickerBusy(true);
     try {
-      await send('/settings/drive/root', 'POST', { folderId: root });
+      const folder = await pickDriveFolder(state.picker);
+      await send('/settings/drive/root', 'POST', { folderId: folder.id });
       await load();
       await refresh();
       flash('Command Center root folder saved.');
     } catch (err) {
+      if (err instanceof DrivePickerCancelled) return;
       flash((err as Error).message, 'error');
+    } finally {
+      setPickerBusy(false);
     }
   };
   const disconnect = async () => {
     if (
       !confirm(
-        'Disconnect Google Drive? Local project data will remain, and no Drive files will be deleted.',
+        'Disconnect Google Drive? Local project data will remain, and no Drive files will be deleted.\n\nThis only removes credentials stored here. Revoke the app separately in Google Account → Third-party access if you are cutting over from the old full-Drive grant or after a suspected exposure.',
       )
     )
       return;
-    await send('/settings/drive/disconnect', 'POST');
+    const result = await send<{
+      ok: true;
+      googleRevocationRequired?: boolean;
+      googlePermissionsUrl?: string;
+    }>('/settings/drive/disconnect', 'POST');
     await load();
-    flash('Google Drive disconnected.');
+    if (result.googleRevocationRequired && result.googlePermissionsUrl) {
+      flash(
+        `Google Drive disconnected locally. To revoke the Google grant (required after a full-Drive cutover), open ${result.googlePermissionsUrl}`,
+      );
+    } else {
+      flash('Google Drive disconnected.');
+    }
   };
   const brandProblems = brandingIssues(brandForm),
     contrast = brandingContrastReadings(brandForm),
@@ -208,8 +226,9 @@ export function SettingsView({
             </div>
             <p>
               Drive stores project files. Clients and projects are owned by Command Center — folder
-              names never create projects. OAuth tokens stay encrypted locally and never reach the
-              browser.
+              names never create projects. OAuth uses the limited <code>drive.file</code> scope;
+              existing folders are granted only through Google Picker. Tokens stay encrypted on the
+              server and never reach the browser.
             </p>
             {driveError && (
               <div className="inline-warning" role="alert">
@@ -234,18 +253,27 @@ export function SettingsView({
             )}
             {state?.connected ? (
               <>
-                <form onSubmit={saveRoot} className="root-form">
-                  <label>
-                    Command Center root folder URL or ID
-                    <input
-                      value={root}
-                      onChange={(e) => setRoot(e.target.value)}
-                      placeholder={state.rootFolderId || 'Paste a Google Drive folder URL'}
-                      required
-                    />
-                  </label>
-                  <button type="submit">Verify & save root</button>
-                </form>
+                {state.pickerConfigured ? (
+                  <button type="button" onClick={chooseRoot} disabled={pickerBusy}>
+                    {pickerBusy
+                      ? 'Opening Google Picker…'
+                      : state.rootFolderId
+                        ? 'Change root folder with Google Picker'
+                        : 'Choose root folder with Google Picker'}
+                  </button>
+                ) : (
+                  <div className="inline-warning">
+                    <AlertCircle />
+                    <div>
+                      <strong>Picker not configured</strong>
+                      <span>
+                        Add <code>GOOGLE_API_KEY</code> and <code>GOOGLE_APP_ID</code> (Cloud
+                        project number) to <code>.env</code>, enable the Google Picker API, then
+                        restart.
+                      </span>
+                    </div>
+                  </div>
+                )}
                 {state.rootFolderUrl && (
                   <a
                     className="drive-root"
@@ -266,6 +294,18 @@ export function SettingsView({
                 <button className="text-btn danger-text" onClick={disconnect}>
                   Disconnect Google Drive
                 </button>
+                <p className="muted">
+                  Disconnect removes credentials stored here only. After a cutover from the old
+                  full-Drive grant, also revoke the app in{' '}
+                  <a
+                    href="https://myaccount.google.com/permissions"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Google Account permissions
+                  </a>
+                  , then reconnect with <code>drive.file</code>.
+                </p>
               </>
             ) : (
               <button onClick={connect} disabled={!state?.configured}>

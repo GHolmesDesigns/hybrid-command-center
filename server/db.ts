@@ -96,6 +96,15 @@ CREATE TABLE IF NOT EXISTS operator_sessions (
   revoked_at TEXT,
   client_address TEXT
 );
+-- Drive OAuth pending states (C52): one row per connect attempt, bound to a session when auth is on.
+-- Keep in sync with OAUTH_PENDING_STATES_TABLE_SQL in server/drive/oauth.ts.
+CREATE TABLE IF NOT EXISTS oauth_pending_states (
+  state TEXT PRIMARY KEY,
+  verifier TEXT NOT NULL,
+  session_token_hash TEXT,
+  issued_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS import_receipts (
   id TEXT PRIMARY KEY, source TEXT NOT NULL, input_kind TEXT NOT NULL, filename TEXT,
   fingerprint TEXT NOT NULL, outcome TEXT NOT NULL, created_count INTEGER NOT NULL DEFAULT 0,
@@ -588,6 +597,8 @@ CREATE INDEX IF NOT EXISTS idx_project_categories_category ON project_categories
 CREATE INDEX IF NOT EXISTS idx_import_receipts_created ON import_receipts(created_at DESC);
 -- Purge walks idle expiry; absolute and revoked rows are filtered in the same DELETE.
 CREATE INDEX IF NOT EXISTS idx_operator_sessions_idle ON operator_sessions(idle_expires_at);
+-- Expired OAuth pending rows are deleted by expires_at on begin/consume and on a periodic purge.
+CREATE INDEX IF NOT EXISTS idx_oauth_pending_expires ON oauth_pending_states(expires_at);
 CREATE INDEX IF NOT EXISTS idx_integration_events_created ON integration_events(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_integration_events_correlation ON integration_events(correlation_id);
 -- The calendar reads a date range; the planner reads the queue. Both are this one index:

@@ -185,8 +185,9 @@ https://<public-host>/api/drive/oauth/callback
 ```
 
 `GOOGLE_REDIRECT_URI` on the host is that HTTPS value, byte-for-byte. The localhost URI stays on
-the client for local development. The existing single-use `state` handling in
-`server/drive/oauth.ts` does not change shape; only the configured redirect and `APP_ORIGIN` do.
+the client for local development. Boot validation accepts only those shapes on the fixed path
+`/api/drive/oauth/callback` (no query or hash). Pending OAuth state lives in
+`oauth_pending_states` (C52), not a single settings row.
 
 After cutover the operator reconnects Drive once on the host (or restores a database whose
 ciphertext was encrypted with the same `GOOGLE_TOKEN_ENCRYPTION_KEY`). Old localhost-issued
@@ -202,16 +203,17 @@ which holds the encrypted refresh token in SQLite. The laptop is not in the path
 
 | Threat | Mitigation |
 | --- | --- |
-| Browser XSS reading tokens | Tokens never leave the server; client never sees them (`AGENTS.md`). |
+| Browser XSS reading tokens | Tokens never leave the server; client never sees stored refresh/access tokens (`AGENTS.md`). Picker uses a separate short-lived GIS token. |
 | Attacker with the SQLite file | Ciphertext only without `GOOGLE_TOKEN_ENCRYPTION_KEY`; key lives in the secret store, not in the database, and is backed up separately (C10 / user manual §10). |
-| Attacker with the running host | Full Drive grant for the connected account. Mitigate with HTTPS, the §5 session, minimal existing Drive scope, platform firewall / private deployment, and a one-click disconnect + Google revoke path that already exists in spirit via Settings reconnect. |
+| Attacker with the running host | `drive.file` grant for files the app created or the operator selected in Picker. Mitigate with HTTPS, the §5 session, platform firewall / private deployment, and disconnect + Google revoke. |
 | Stolen backup | Same as stolen SQLite file — useless without the encryption key. Keep key and backup in different places. |
-| Open redirect / callback replay | Existing single-use `state` delete-before-exchange; production callback is HTTPS-only. |
+| Open redirect / callback replay | Single-use, expiring, session-bound pending states deleted before exchange; production callback is HTTPS-only on a fixed path. |
 | Token used after operator leaves the product | Disconnect in Settings; revoke the app in Google Account permissions. |
 
-**Cost of this choice.** One extra redirect URI to maintain, one reconnect (or keyed restore) at
-cutover, and an explicit acceptance that host compromise equals Drive compromise for that Google
-account — which is already true of any server that stores a refresh token.
+**Cost of this choice.** One extra redirect URI to maintain, Picker API key + project number, one
+reconnect (with Google revoke) at cutover from any prior full-Drive grant, and an explicit
+acceptance that host compromise equals Drive compromise for selected content — which is already
+true of any server that stores a refresh token.
 
 ---
 

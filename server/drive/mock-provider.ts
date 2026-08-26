@@ -1,5 +1,6 @@
 import type { DriveFile } from '../../shared/drive.ts';
 import type { OAuthAuthorizationClient } from './oauth.ts';
+import { DRIVE_OAUTH_SCOPE } from '../../shared/drive-oauth.ts';
 import type { DriveFilePage, DriveFolder, DriveProvider } from './provider.ts';
 import type { DriveMediaFile, DriveMediaProvider } from './media.ts';
 
@@ -177,6 +178,7 @@ export class MockOAuthClient implements OAuthAuthorizationClient {
       state: input.state,
       code_challenge: input.challenge,
       code_challenge_method: 'S256',
+      scope: DRIVE_OAUTH_SCOPE,
     });
     return `https://accounts.test/authorize?${query.toString()}`;
   }

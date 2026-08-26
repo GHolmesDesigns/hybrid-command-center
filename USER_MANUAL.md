@@ -161,8 +161,10 @@ Google may label this area **Google Auth Platform**. The exact menu arrangement 
 6. In the data-access or scopes area, add the Google Drive scope requested by the application:
 
    ```text
-   https://www.googleapis.com/auth/drive
+   https://www.googleapis.com/auth/drive.file
    ```
+
+7. Enable the **Google Drive API** and the **Google Picker API** for the same Cloud project.
 
 An External app in Testing status can issue refresh tokens that expire after seven days when it requests Drive access. If Drive disconnects after about a week, reconnect it in Settings. This limitation does not normally apply to an Internal Workspace app, and Google’s publishing or verification requirements may apply if you move an External app beyond personal testing.
 
@@ -218,7 +220,13 @@ GOOGLE_CLIENT_ID=your-client-id
 GOOGLE_CLIENT_SECRET=your-client-secret
 GOOGLE_REDIRECT_URI=http://localhost:8787/api/drive/oauth/callback
 GOOGLE_TOKEN_ENCRYPTION_KEY=your-generated-encryption-key
+GOOGLE_API_KEY=your-browser-api-key
+GOOGLE_APP_ID=your-numeric-cloud-project-number
 ```
+
+Create an API key under **APIs & Services → Credentials**, restrict it to your app’s HTTP
+referrers, and enable the Google Picker API. `GOOGLE_APP_ID` is the numeric project number from
+the Cloud project’s settings — not the OAuth client ID.
 
 Leave the other default values unchanged unless you know they need to be different. Save the file, then restart the application.
 
@@ -238,10 +246,13 @@ If Google displays an unverified-app warning for your private Testing app, confi
 ### 6.7 Choose the Command Center root folder
 
 1. In Google Drive, create or select one folder to contain all managed clients. A name such as `Hybrid Command Center` works well.
-2. Open that folder and copy its browser URL.
-3. Return to **Settings → Google Drive**.
-4. Paste the folder URL or folder ID into **Command Center root folder URL or ID**.
-5. Select **Verify & save root**.
+2. Return to **Settings → Google Drive**.
+3. Select **Choose root folder with Google Picker** (or **Change root folder…** if one is already set).
+4. Sign in to Google if prompted, select that folder, and confirm. The app stores the folder’s
+   stable Drive id — never the name alone.
+
+Under `drive.file`, pasting a folder URL is not enough to grant access to a folder the app did
+not create. Picker is the grant path.
 
 New folders will follow this pattern:
 
@@ -283,16 +294,18 @@ and revoking the Google grant are separate actions.
 2. Open [Google Account permissions](https://myaccount.google.com/permissions) while signed in to
    the connected account. Find the OAuth application you configured for Hybrid Command Center and
    remove its access. This revokes the grant at Google and invalidates the application's tokens.
+   **Required on cutover from the old full-Drive scope** — reconnecting alone does not shrink a
+   previously issued broad grant.
 3. Generate a new `GOOGLE_TOKEN_ENCRYPTION_KEY` using the command in
    [Create a local encryption key](#64-create-a-local-encryption-key). Stop the application, replace
    the old value in `.env`, and update the private backup of the key. Do not reuse the exposed key.
 4. Start the application, return to **Settings → Google Drive**, and select **Connect Google
-   Drive**. Approve access again only after confirming the expected Google account and application.
-5. Paste the Command Center root folder's URL or ID again and select **Verify & save root**.
+   Drive**. Approve the `drive.file` access only after confirming the expected Google account and
+   application.
+5. Choose the Command Center root again with **Google Picker**.
 
-The application currently requests full Drive read and write access, even though its own Files
-page browses only recorded project folders. Revoking at Google is therefore the step that ends a
-stolen token's access to files anywhere in the connected account; rotating only the local
+The application requests only `drive.file`. Revoking at Google is still the step that ends a
+stolen token’s access to every folder the operator previously selected; rotating only the local
 encryption key does not revoke an already-issued token.
 
 ## 7. Your first working session

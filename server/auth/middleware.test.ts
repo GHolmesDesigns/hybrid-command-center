@@ -92,6 +92,24 @@ describe('createAuthMiddleware', () => {
     expect(res.body).toEqual({ error: 'Authentication required.' });
   });
 
+  it('allows the Drive OAuth callback without a session when auth is required (public redirect)', async () => {
+    const middleware = createAuthMiddleware({
+      db,
+      authRequired: true,
+      sessionSecret: SECRET,
+      trustedProxyHops: 0,
+      secureCookies: false,
+      now: () => 1_001,
+    });
+    const { next, res } = await run(middleware, {
+      method: 'GET',
+      url: '/api/drive/oauth/callback?code=x',
+      headers: {},
+    });
+    expect(next).toHaveBeenCalledOnce();
+    expect(res.statusCode).toBe(200);
+  });
+
   it('allows an authenticated GET and attaches the session', async () => {
     const session = createSession(db, {
       sessionSecret: SECRET,
