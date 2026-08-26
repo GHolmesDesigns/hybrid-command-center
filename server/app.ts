@@ -22,9 +22,9 @@ import {
   login as operatorLogin,
   logout as operatorLogout,
 } from './auth/service.ts';
-import { buildSessionCookie, clearSessionCookie, readSessionToken } from './auth/cookies.ts';
+import { buildSessionCookie, clearSessionCookie } from './auth/cookies.ts';
 import { clientAddress } from './auth/client-address.ts';
-import { hashSessionToken, purgeExpiredSessions } from './auth/sessions.ts';
+import { purgeExpiredSessions } from './auth/sessions.ts';
 import { CSRF_HEADER_NAME } from '../shared/auth.ts';
 import {
   getCategory,
@@ -183,6 +183,8 @@ import {
   previewSignalImport,
 } from './signal/import.ts';
 import {
+  AUTH_LOGIN_BUDGET,
+  AUTH_ROUTE_BUDGET,
   DRIVE_BUDGET,
   DRIVE_SYNC_BUDGET,
   IMPORT_BUDGET,
@@ -751,7 +753,13 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       (config.auth.productionTlsTerminated || config.appOrigin.startsWith('https:')));
   const authNowMs = () => clock().getTime();
 
+  // Rate limits sit ahead of the session middleware so every authorization path CodeQL sees is
+  // also budgeted. Login has its own tighter window; the rest of `/api/auth` shares one bucket.
+  app.use('/api/auth/login', requestBudget(AUTH_LOGIN_BUDGET, { now: clock, applies: postsOnly }));
+  app.use('/api/auth', requestBudget(AUTH_ROUTE_BUDGET, { now: clock }));
+
   app.use(
+    '/api',
     createAuthMiddleware({
       db,
       authRequired,
@@ -807,13 +815,13 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   });
 
   app.post('/api/auth/logout', (req, res) => {
-    const raw = readSessionToken(req.headers.cookie);
-    if (raw && sessionSecret) {
-      operatorLogout(db, {
-        tokenHash: hashSessionToken(raw, sessionSecret),
-        now: authNowMs(),
-      });
-    }
+    // Revoke from the middleware's validated session row, not from a raw Cookie parse — a
+    // user-supplied cookie value must not be the condition that gates the revoke.
+    const session = (req as AuthedRequest).operatorSession;
+    operatorLogout(db, {
+      tokenHash: session?.tokenHash ?? null,
+      now: authNowMs(),
+    });
     res.setHeader('Set-Cookie', clearSessionCookie({ secure: secureCookies }));
     res.json({ ok: true });
   });

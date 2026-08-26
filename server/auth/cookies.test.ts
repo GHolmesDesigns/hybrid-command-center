@@ -8,8 +8,14 @@ import {
 } from './cookies.ts';
 
 describe('cookie helpers', () => {
-  it('parseCookieHeader splits name/value pairs and keeps the last duplicate', () => {
-    expect(parseCookieHeader('a=1; b=two; a=3')).toEqual({ a: '3', b: 'two' });
+  it('parseCookieHeader keeps only the session cookie and ignores other names', () => {
+    expect(parseCookieHeader(`a=1; ${SESSION_COOKIE_NAME}=tok; b=two`)).toEqual({
+      [SESSION_COOKIE_NAME]: 'tok',
+    });
+    expect(
+      parseCookieHeader(`${SESSION_COOKIE_NAME}=first; ${SESSION_COOKIE_NAME}=second`),
+    ).toEqual({ [SESSION_COOKIE_NAME]: 'second' });
+    expect(parseCookieHeader('a=1; b=two')).toEqual({});
     expect(parseCookieHeader(undefined)).toEqual({});
     expect(parseCookieHeader('')).toEqual({});
   });

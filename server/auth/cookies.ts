@@ -6,10 +6,15 @@
  */
 import { SESSION_ABSOLUTE_TIMEOUT_MS, SESSION_COOKIE_NAME } from '../../shared/auth.ts';
 
-/** Parse a Cookie header into name → value. Last occurrence wins for a repeated name. */
+/**
+ * Read Cookie pairs, keeping only the operator session cookie.
+ *
+ * Arbitrary Cookie names are ignored rather than written onto a plain object — a user-supplied
+ * name must not become a property key (remote property injection / prototype pollution).
+ */
 export function parseCookieHeader(header: string | undefined | null): Record<string, string> {
   if (!header) return {};
-  const out: Record<string, string> = {};
+  const out: Record<string, string> = Object.create(null);
   for (const part of header.split(';')) {
     const trimmed = part.trim();
     if (!trimmed) continue;
@@ -17,8 +22,8 @@ export function parseCookieHeader(header: string | undefined | null): Record<str
     if (eq <= 0) continue;
     const name = trimmed.slice(0, eq).trim();
     const value = trimmed.slice(eq + 1).trim();
-    if (!name) continue;
-    out[name] = value;
+    if (name !== SESSION_COOKIE_NAME) continue;
+    out[SESSION_COOKIE_NAME] = value;
   }
   return out;
 }
