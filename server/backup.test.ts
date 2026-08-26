@@ -570,6 +570,28 @@ describe('restoreDatabase', () => {
     expect(inspectDatabase(destination).clients).toBe(1);
   });
 
+  it('revokes every authenticated browser session restored from a snapshot', async () => {
+    const backup = scratch('backup.db');
+    seedCurrentDatabase(backup);
+    const snapshot = createDb(backup);
+    snapshot
+      .prepare(
+        `INSERT INTO operator_sessions (
+        token_hash, csrf_token, issued_at, last_seen_at, idle_expires_at, absolute_expires_at
+      ) VALUES ('hash', 'csrf', ?, ?, ?, ?)`,
+      )
+      .run(NOW, NOW, '2026-08-12T00:00:00.000Z', '2026-08-13T00:00:00.000Z');
+    snapshot.close();
+
+    const destination = scratch('restored.db');
+    await restoreDatabase({ backupPath: backup, destinationPath: destination, now: STAMP });
+
+    const restored = track(new DatabaseSync(destination, { readOnly: true }));
+    expect(
+      restored.prepare(`SELECT revoked_at FROM operator_sessions WHERE token_hash = 'hash'`).get(),
+    ).toEqual({ revoked_at: STAMP.toISOString() });
+  });
+
   it('deletes leftover WAL, SHM, and journal files', () => {
     const destination = scratch('live.db');
     fs.writeFileSync(destination, 'placeholder');

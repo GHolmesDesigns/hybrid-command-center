@@ -1,0 +1,11 @@
+[Unit]
+Description=Hourly Hybrid Command Center backup and disk health check
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=5m
+Unit=hcc-backup-health.service
+
+[Install]
+WantedBy=timers.target

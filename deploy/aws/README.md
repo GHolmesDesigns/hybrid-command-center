@@ -48,3 +48,9 @@ sentinels before SQLite opens or the HTTP listener starts.
 
 Do not register the production Google redirect, populate real credentials, restore production data,
 or change Wix DNS as part of this PR. Those are cutover actions owned by C55.
+# Backup timers
+
+Copy and enable `hcc-offsite-backup.timer`, `hcc-backup-rehearsal.timer`, and
+`hcc-backup-health.timer` with their matching services. See
+`docs/offsite-backup-operations.md` for IAM scope, configuration, monitoring, and the restore
+runbook. The services use the instance role; never place AWS credentials in `runtime.env`.

@@ -31,7 +31,10 @@
     "mcp": "node --experimental-strip-types server/scripts/mcp.ts",
     "db:backup": "node --experimental-strip-types server/scripts/backup.ts",
     "db:restore": "node --experimental-strip-types server/scripts/restore.ts",
-    "db:backup:rehearse": "node --experimental-strip-types server/scripts/rehearse-backup.ts"
+    "db:backup:rehearse": "node --experimental-strip-types server/scripts/rehearse-backup.ts",
+    "db:backup:offsite": "node --experimental-strip-types server/scripts/offsite-backup.ts backup",
+    "db:backup:offsite:rehearse": "node --experimental-strip-types server/scripts/offsite-backup.ts rehearse",
+    "db:backup:health": "node --experimental-strip-types server/scripts/offsite-backup.ts health"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
