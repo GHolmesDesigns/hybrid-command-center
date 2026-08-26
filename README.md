@@ -128,26 +128,20 @@ npm run db:backup:rehearse
 6. Copy `.env.example` to `.env`, then add the client ID and secret.
 7. Generate a long random encryption secret (at least 32 random bytes) and set `GOOGLE_TOKEN_ENCRYPTION_KEY`. This key protects OAuth tokens at rest; back it up separately.
 8. Restart the app. Open **Settings → Google Drive → Connect Google Drive** and approve access.
-9. Create or choose one existing Drive folder, paste its URL or ID into **Command Center root folder**, and save.
+9. Select **Choose root folder with Google Picker** and pick the Command Center root. The
+   folder id Google returns is stored; names alone are never enough.
 
 ### Drive OAuth scope and exposure
 
-The connection requests `https://www.googleapis.com/auth/drive`, which grants read and write
-access across the connected account's Drive. The application itself behaves more narrowly: it
-creates folders beneath the configured Command Center root, and Files refuses to browse outside a
-project folder or its recorded subfolders. Those application checks do not narrow what an OAuth
-token can do. Anyone who steals the stored token — for example from the SQLite database or a
-backup together with a weak or exposed `GOOGLE_TOKEN_ENCRYPTION_KEY` — can use the full grant
-against files outside the Command Center root.
+The connection requests `https://www.googleapis.com/auth/drive.file`, which grants access only
+to files and folders the app created or the operator explicitly selected in Google Picker.
+Files browsing remains restricted further to a project's own Drive folder and its recorded
+subfolders. Anyone who steals the stored token still cannot reach arbitrary Drive content the
+operator never selected.
 
-The broader scope is required by the current setup because the root is an existing, user-named
-folder selected by pasting its URL or ID. The least-privilege replacement is a **size M** migration
-to `drive.file` together with Google Picker: `drive.file` limits the app to files it created or the
-user explicitly selected, and Picker would make the existing root an explicit selection. That is
-feature work, not a scope-only configuration change, and is an input to
-[C20's Drive-token threat model](https://github.com/GHolmesDesigns/hybrid-command-center/issues/77).
-For incident response, follow the complete revocation procedure in
-[the user manual](USER_MANUAL.md#68-revoke-drive-access-after-a-suspected-token-exposure).
+Production cutover from an earlier full-Drive grant: disconnect in Settings, revoke the app in
+[Google Account permissions](https://myaccount.google.com/permissions), then reconnect and
+re-select the root with Picker. Restoring an old token ciphertext is not a scope migration.
 
 Required environment variables:
 
@@ -159,8 +153,10 @@ Required environment variables:
 | `APP_ORIGIN` | Vite/browser origin; default `http://localhost:5173`. An http or https URL, scheme included |
 | `GOOGLE_CLIENT_ID` | OAuth web client ID |
 | `GOOGLE_CLIENT_SECRET` | OAuth web client secret |
-| `GOOGLE_REDIRECT_URI` | Must match the Cloud Console URI exactly. An http or https URL |
+| `GOOGLE_REDIRECT_URI` | Must match the Cloud Console URI exactly. `http://localhost` or `127.0.0.1` on `/api/drive/oauth/callback`, or `https://…` on that same path — no query or hash |
 | `GOOGLE_TOKEN_ENCRYPTION_KEY` | Local token-encryption secret; at least 32 characters |
+| `GOOGLE_API_KEY` | Browser Picker developer key; restrict by HTTP referrer in Cloud Console |
+| `GOOGLE_APP_ID` | Numeric Google Cloud project number (Picker `setAppId`) |
 | `POST_BRIDGE_API_KEY` | Optional Post Bridge API key; server-side only |
 | `PUBLISH_TIMEZONE` | Required with publishing; an explicit IANA zone such as `America/New_York` |
 | `BUFFER_API_KEY` | Optional Buffer GraphQL API key; server-side only; refreshes TikTok and YouTube account metadata. Runtime writes remain fail-closed until the dated owner-run C83 round trip is recorded |
@@ -245,18 +241,21 @@ remains the only supported deployment.
 ### OAuth callback security
 
 `GET /api/drive/oauth/callback` is single-use. Connecting Drive mints a `state` and stores it
-with the moment it was issued; the callback consumes it by **deleting** the stored row before it
-exchanges anything. A consumed state is therefore absent rather than marked, so replaying a
-callback that already succeeded is refused — and so is any invented value, because there is
-nothing left for it to match. A state is also refused once it is more than ten minutes old.
+in `oauth_pending_states` with the PKCE verifier, an expiry, and — when operator authentication
+is on — the session that started the connect. The callback consumes the row by **deleting** it
+before it exchanges anything. A consumed state is therefore absent rather than marked, so
+replaying a callback that already succeeded is refused. Two devices can hold independent pending
+rows; a state cannot complete from a session other than the one that minted it. A state is also
+refused once it is more than ten minutes old.
 
 The exchange uses PKCE (`S256`). The verifier is minted beside the state, never leaves the
 server, and is sent with the authorization code, so a code on its own cannot be redeemed.
+Stored refresh and access tokens never reach the browser; Google Picker uses a separate
+short-lived GIS token for folder selection only.
 
 Every refusal answers with the same bare `400` and names nothing about why; the reason goes to
-the server log. Refusing does not disturb a connect already in flight — a callback whose state
-does not match leaves the pending authorization alone, so a stray request cannot cancel the one
-the browser is still coming back from.
+the server log. Refusing does not disturb other connects in flight — a callback whose state does
+not match leaves every other pending row alone.
 
 Request logs carry no credentials. The authorization code arrives in a query string, so requests
 are logged by path only, with the query dropped rather than redacted, and the `Authorization` and
@@ -266,12 +265,15 @@ separately — see [Integration activity](#integration-activity).
 ### Production Content Security Policy
 
 Production responses include a Content Security Policy. Scripts, API connections, images, media,
-manifests, and workers are restricted to the application's own origin; objects and frames are
-disabled. The two external sources are limited to the existing Google Fonts stylesheet
-(`fonts.googleapis.com`) and font files (`fonts.gstatic.com`). Inline script is forbidden. Inline
-style attributes remain allowed because React renders the task-progress width, the drag-and-drop
-transform, and the sidebar palette as element styles. Automatic HTTP-to-HTTPS upgrading is disabled
-because the packaged app is served on loopback HTTP by default.
+manifests, and workers are restricted to the application's own origin by default; objects are
+disabled. Inline script is forbidden. The Google Fonts stylesheet (`fonts.googleapis.com`) and
+font files (`fonts.gstatic.com`) remain allowed. Google Identity Services and Picker (C52) add
+`apis.google.com` / `accounts.google.com` to scripts and connects, and
+`docs.google.com` / `drive.google.com` / `accounts.google.com` to frames, so Settings can open
+folder selection without widening arbitrary script hosts. Inline style attributes remain allowed
+because React renders the task-progress width, the drag-and-drop transform, and the sidebar
+palette as element styles. Automatic HTTP-to-HTTPS upgrading is disabled because the packaged
+app is served on loopback HTTP by default.
 
 Images and media are the two directives that accept a remote origin
 (`img-src 'self' data: https:` and `media-src 'self' https:`), because both are referenced by
@@ -769,6 +771,6 @@ off-site backups, `/api/health`, $20/month budget ceiling, RPO ≤24h / RTO ≤4
 inert account resources (IAM role, sentinel SSM parameters, backup bucket, SNS, budget); none are
 attached to compute yet. C51 ships the §5.1 password session, CSRF, and the bind gate that opens
 only when that checklist is complete — bootstrap with `npm run auth:bootstrap` and put the printed
-hash in `OPERATOR_PASSWORD_HASH` for any non-loopback bind. Remaining cards: C52–C55 (OAuth
-redirect, deploy, backup automation).
+hash in `OPERATOR_PASSWORD_HASH` for any non-loopback bind. Remaining cards: C53–C55 (OAuth
+redirect host cutover, deploy, backup automation). C52 (`drive.file` + Picker) is this track.
 Recommended order for Files extensions: (1) recent-files and cross-project search over the existing listing, (2) uploads/downloads, (3) guarded move/rename operations, (4) optional Calendar sync. Cloud implementation order is C51 → C52 → C53, with C54 parallel after C50.

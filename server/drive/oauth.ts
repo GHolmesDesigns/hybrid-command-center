@@ -2,33 +2,40 @@
  * The authorization half of a Drive connection: minting the `state` a connect starts with,
  * and consuming it exactly once when Google sends the browser back to the callback.
  *
- * This module exists because a consumed state has to be *absent*, not a sentinel. An earlier
- * build overwrote the stored value with the literal string `used` once a connect succeeded,
- * which left `?state=used` a permanently valid callback. The callback is a `GET` on loopback,
- * so any page the user visits could navigate the browser to it carrying someone else's
- * authorization code — and the callback writes `google_tokens`, so the app would quietly end
- * up provisioning client and project folders into that other account. Deleting the row is what
- * closes it: after a connect there is no stored value left to match, guessable or not.
+ * Pending authorizations live in `oauth_pending_states`, one row per connect attempt — not a
+ * single settings value. Two authenticated devices can therefore hold independent pending
+ * states without overwriting each other. Each row carries the PKCE verifier and, when operator
+ * authentication is on, the session token hash that started it; the callback must present that
+ * same session, and the row is deleted before the code is exchanged so a replay finds nothing.
  *
- * Two further properties come with the rewrite:
- *
- * - **A pending authorization ages out.** It carries the time it was issued and is refused
- *   past `OAUTH_STATE_TTL_MS`, so a state minted and abandoned weeks ago is not still live.
- * - **The exchange is bound to the request that started it.** A PKCE verifier is minted beside
- *   the state and kept in the same row, so the authorization code is no longer the only secret
- *   in the token exchange — a code intercepted on its own cannot be redeemed.
- *
- * Both live in the single `oauth_state` settings row, so consuming an authorization drops the
- * state and its verifier in one write and neither can outlive the other.
+ * Scope is `drive.file` only. Existing folders the app did not create become reachable only
+ * after the operator selects them in Google Picker (Settings), which attaches them to this
+ * grant. Restoring an old full-Drive token ciphertext is not a scope migration — reconnect.
  */
 import crypto from 'node:crypto';
-import { z } from 'zod';
 import { google, type Auth } from 'googleapis';
+import { DRIVE_OAUTH_SCOPE } from '../../shared/drive-oauth.ts';
 import type { Db } from '../db.ts';
-import { deleteSetting, getSetting, setSetting } from './service.ts';
 
-/** The one settings row a pending authorization lives in. Absent means nothing is pending. */
-export const OAUTH_STATE_KEY = 'oauth_state';
+export { DRIVE_OAUTH_SCOPE };
+
+/**
+ * Fresh-install / additive CREATE. Exported so `server/db.ts` can paste the same SQL into
+ * `tableSchema` without a second definition drifting.
+ */
+export const OAUTH_PENDING_STATES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS oauth_pending_states (
+  state TEXT PRIMARY KEY,
+  verifier TEXT NOT NULL,
+  session_token_hash TEXT,
+  issued_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+)`;
+
+/**
+ * The obsolete single settings row from before C52. Boot deletes it so a leftover value cannot
+ * be mistaken for a live pending authorization.
+ */
+export const OAUTH_STATE_SETTINGS_KEY = 'oauth_state';
 
 /**
  * How long a minted state stays usable. Long enough for a consent screen the user reads,
@@ -45,18 +52,21 @@ export class OAuthStateError extends Error {
   }
 }
 
-/**
- * Parsed rather than trusted. This module writes the row, but it is a `settings` value like any
- * other: a hand-edited one, or the `used` sentinel an older build left behind, has to fail as a
- * rejected callback rather than as a crash.
- */
-const pendingAuthorization = z.object({
-  state: z.string().min(1).max(200),
-  // RFC 7636 §4.1 bounds a verifier at 43–128 characters.
-  verifier: z.string().min(43).max(128),
-  issuedAt: z.iso.datetime(),
-});
-export type PendingAuthorization = z.infer<typeof pendingAuthorization>;
+export type PendingAuthorization = {
+  state: string;
+  verifier: string;
+  sessionTokenHash: string | null;
+  issuedAt: string;
+  expiresAt: string;
+};
+
+type PendingRow = {
+  state: string;
+  verifier: string;
+  session_token_hash: string | null;
+  issued_at: string;
+  expires_at: string;
+};
 
 /** 32 random bytes as base64url — 43 characters, the shortest verifier RFC 7636 allows. */
 const mintVerifier = () => crypto.randomBytes(32).toString('base64url');
@@ -65,14 +75,6 @@ const mintVerifier = () => crypto.randomBytes(32).toString('base64url');
 const challengeFor = (verifier: string) =>
   crypto.createHash('sha256').update(verifier).digest('base64url');
 
-const safeJson = (raw: string): unknown => {
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-};
-
 /** Constant-time comparison, so a mismatch does not leak where it stopped matching. */
 function sameSecret(a: string, b: string) {
   const left = Buffer.from(a, 'utf8');
@@ -80,15 +82,44 @@ function sameSecret(a: string, b: string) {
   return left.length === right.length && crypto.timingSafeEqual(left, right);
 }
 
+const toPending = (row: PendingRow): PendingAuthorization => ({
+  state: row.state,
+  verifier: row.verifier,
+  sessionTokenHash: row.session_token_hash,
+  issuedAt: row.issued_at,
+  expiresAt: row.expires_at,
+});
+
+/** Drop expired (and the obsolete settings key) so abandoned connects do not accumulate. */
+export function purgeExpiredAuthorizations(db: Db, now: Date = new Date()): number {
+  db.prepare('DELETE FROM settings WHERE key = ?').run(OAUTH_STATE_SETTINGS_KEY);
+  const result = db
+    .prepare('DELETE FROM oauth_pending_states WHERE expires_at <= ?')
+    .run(now.toISOString());
+  return Number(result.changes ?? 0);
+}
+
 /**
- * Mints a state and a PKCE verifier for one connect attempt and stores them, replacing whatever
- * was pending. Returns the two values the authorization URL carries; the verifier stays here.
+ * Mints a state and a PKCE verifier for one connect attempt and stores them as their own row.
+ * When `sessionTokenHash` is set, only that session may complete the callback.
  */
-export function beginAuthorization(db: Db, now: Date) {
+export function beginAuthorization(
+  db: Db,
+  now: Date,
+  options: { sessionTokenHash?: string | null } = {},
+) {
+  purgeExpiredAuthorizations(db, now);
   const state = crypto.randomUUID();
   const verifier = mintVerifier();
-  const pending: PendingAuthorization = { state, verifier, issuedAt: now.toISOString() };
-  setSetting(db, OAUTH_STATE_KEY, JSON.stringify(pending));
+  const issuedAt = now.toISOString();
+  const expiresAt = new Date(now.getTime() + OAUTH_STATE_TTL_MS).toISOString();
+  const sessionTokenHash = options.sessionTokenHash ?? null;
+
+  db.prepare(
+    `INSERT INTO oauth_pending_states (state, verifier, session_token_hash, issued_at, expires_at)
+     VALUES (?, ?, ?, ?, ?)`,
+  ).run(state, verifier, sessionTokenHash, issuedAt, expiresAt);
+
   return { state, challenge: challengeFor(verifier) };
 }
 
@@ -96,40 +127,59 @@ export function beginAuthorization(db: Db, now: Date) {
  * Consumes the pending authorization for `state`, or throws `OAuthStateError`.
  *
  * On a match the row is deleted before the caller exchanges anything, which is what makes the
- * callback single-use: a replay of a state that already succeeded finds nothing stored, and so
- * does a callback carrying `used`, `undefined`, or any other invented value.
- *
- * A state that does *not* match deliberately leaves the row alone. The pending authorization
- * belongs to a browser that has not come back yet, and a stray callback must not be able to
- * cancel the connect the user is in the middle of.
+ * callback single-use. A state bound to a session refuses any other session (or none). A state
+ * that does not match deliberately leaves every other pending row alone.
  */
-export function consumeAuthorization(db: Db, state: unknown, now: Date): PendingAuthorization {
-  const stored = getSetting(db, OAUTH_STATE_KEY);
-  if (stored === undefined) throw new OAuthStateError('no authorization is pending');
+export function consumeAuthorization(
+  db: Db,
+  state: unknown,
+  now: Date,
+  options: { sessionTokenHash?: string | null } = {},
+): PendingAuthorization {
+  if (typeof state !== 'string' || !state)
+    throw new OAuthStateError('the state does not match a pending authorization');
 
-  const parsed = pendingAuthorization.safeParse(safeJson(stored));
-  if (!parsed.success) {
-    // Nothing this module wrote, so nothing can ever match it. Drop it rather than leave it.
-    deleteSetting(db, OAUTH_STATE_KEY);
-    throw new OAuthStateError('the pending authorization is unreadable');
+  const row = db
+    .prepare(
+      'SELECT state, verifier, session_token_hash, issued_at, expires_at FROM oauth_pending_states WHERE state = ?',
+    )
+    .get(state) as PendingRow | undefined;
+
+  if (!row) throw new OAuthStateError('no authorization is pending for that state');
+
+  const callerHash = options.sessionTokenHash ?? null;
+  if (row.session_token_hash !== null) {
+    if (callerHash === null || !sameSecret(callerHash, row.session_token_hash)) {
+      throw new OAuthStateError('the pending authorization belongs to another session');
+    }
   }
 
-  const pending = parsed.data;
-  if (typeof state !== 'string' || !sameSecret(state, pending.state))
-    throw new OAuthStateError('the state does not match the pending authorization');
+  // Delete before expiry checks so an expired or replayed state cannot be retried.
+  db.prepare('DELETE FROM oauth_pending_states WHERE state = ?').run(state);
 
-  deleteSetting(db, OAUTH_STATE_KEY);
-
+  const nowMs = now.getTime();
+  const issuedMs = Date.parse(row.issued_at);
+  const expiresMs = Date.parse(row.expires_at);
   /**
    * A negative age means the clock moved backwards between minting and the callback, which
    * leaves the age unusable rather than small. Refusing costs the user one more click on
    * Connect; accepting would mean a stamp in the future never expires at all.
    */
-  const age = now.getTime() - Date.parse(pending.issuedAt);
-  if (age < 0 || age > OAUTH_STATE_TTL_MS)
+  if (Number.isNaN(issuedMs) || Number.isNaN(expiresMs) || nowMs < issuedMs || nowMs > expiresMs) {
     throw new OAuthStateError('the pending authorization has expired');
+  }
 
-  return pending;
+  return toPending(row);
+}
+
+/** Look up a pending row by state without consuming it (tests). */
+export function readPendingAuthorization(db: Db, state: string): PendingAuthorization | undefined {
+  const row = db
+    .prepare(
+      'SELECT state, verifier, session_token_hash, issued_at, expires_at FROM oauth_pending_states WHERE state = ?',
+    )
+    .get(state) as PendingRow | undefined;
+  return row ? toPending(row) : undefined;
 }
 
 export interface OAuthCredentials {
@@ -161,7 +211,7 @@ export function createGoogleOAuthClient(credentials: OAuthCredentials): OAuthAut
       oauth.generateAuthUrl({
         access_type: 'offline',
         prompt: 'consent',
-        scope: ['https://www.googleapis.com/auth/drive'],
+        scope: [DRIVE_OAUTH_SCOPE],
         state,
         code_challenge_method: 'S256' as Auth.CodeChallengeMethod,
         code_challenge: challenge,

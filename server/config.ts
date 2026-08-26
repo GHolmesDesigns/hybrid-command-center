@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import path from 'node:path';
 import { z } from 'zod';
+import { isAllowedGoogleRedirectUri } from '../shared/drive-oauth.ts';
 
 export const PROJECT_SUBFOLDERS = [
   '01_Admin',
@@ -155,10 +156,21 @@ const environment = z.object({
   // present and unusable.
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
-  GOOGLE_REDIRECT_URI: absoluteUrl,
+  GOOGLE_REDIRECT_URI: absoluteUrl.refine(
+    isAllowedGoogleRedirectUri,
+    'must be http://localhost|127.0.0.1…/api/drive/oauth/callback or https://…/api/drive/oauth/callback with no query or hash',
+  ),
   GOOGLE_TOKEN_ENCRYPTION_KEY: z
     .string()
     .min(ENCRYPTION_KEY_MIN_LENGTH, `must be at least ${ENCRYPTION_KEY_MIN_LENGTH} characters`)
+    .optional(),
+  // Browser Picker developer key and Cloud project number (C52). Optional with Drive; required
+  // together before Settings can open Picker. Never a secret with Drive scopes — restrict by
+  // HTTP referrer in Cloud Console.
+  GOOGLE_API_KEY: z.string().optional(),
+  GOOGLE_APP_ID: z
+    .string()
+    .regex(/^\d+$/, 'must be the numeric Google Cloud project number')
     .optional(),
   POST_BRIDGE_API_KEY: z.string().optional(),
   BUFFER_API_KEY: z.string().optional(),
@@ -204,6 +216,8 @@ const parsed = environment.safeParse({
   GOOGLE_CLIENT_SECRET: read('GOOGLE_CLIENT_SECRET'),
   GOOGLE_REDIRECT_URI: read('GOOGLE_REDIRECT_URI') ?? ENVIRONMENT_DEFAULTS.GOOGLE_REDIRECT_URI,
   GOOGLE_TOKEN_ENCRYPTION_KEY: read('GOOGLE_TOKEN_ENCRYPTION_KEY'),
+  GOOGLE_API_KEY: read('GOOGLE_API_KEY'),
+  GOOGLE_APP_ID: read('GOOGLE_APP_ID'),
   POST_BRIDGE_API_KEY: read('POST_BRIDGE_API_KEY'),
   BUFFER_API_KEY: read('BUFFER_API_KEY'),
   BUFFER_KEY: read('BUFFER_KEY'),
@@ -244,6 +258,8 @@ export const config = {
     clientSecret: env.GOOGLE_CLIENT_SECRET ?? '',
     redirectUri: env.GOOGLE_REDIRECT_URI,
     encryptionKey: env.GOOGLE_TOKEN_ENCRYPTION_KEY ?? '',
+    apiKey: env.GOOGLE_API_KEY ?? '',
+    appId: env.GOOGLE_APP_ID ?? '',
   },
   publish: {
     apiKey: env.POST_BRIDGE_API_KEY ?? '',

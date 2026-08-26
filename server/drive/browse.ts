@@ -31,6 +31,13 @@ export const driveConfigured = () =>
   Boolean(config.google.clientId && config.google.clientSecret && config.google.encryptionKey);
 
 /**
+ * True when Settings can open Google Picker for root-folder selection. The developer key and
+ * Cloud project number are browser-facing; restrict the key by HTTP referrer in Cloud Console.
+ */
+export const drivePickerConfigured = () =>
+  Boolean(driveConfigured() && config.google.apiKey && config.google.appId);
+
+/**
  * Where this project may be browsed, project folder first and then its subfolders in the
  * order they were provisioned. Empty until the project has a Drive folder at all.
  */

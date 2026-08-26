@@ -11,7 +11,8 @@ import { SERVER_ERROR_MESSAGE, createApp, type AppOptions } from './app.ts';
 import { PROJECT_SUBFOLDERS, config } from './config.ts';
 import { projectScopes } from './drive/browse.ts';
 import { MockDriveProvider, MockOAuthClient, mockDriveFile } from './drive/mock-provider.ts';
-import { OAUTH_STATE_KEY, OAUTH_STATE_TTL_MS } from './drive/oauth.ts';
+import { OAUTH_STATE_TTL_MS, purgeExpiredAuthorizations } from './drive/oauth.ts';
+import { DRIVE_OAUTH_SCOPE } from '../shared/drive-oauth.ts';
 import { getSetting, provisionProject, setSetting } from './drive/service.ts';
 import {
   DRIVE_BUDGET,
@@ -83,7 +84,9 @@ describe('command center API', () => {
     const production = await request(createApp(db, { production: true })).get('/api/health');
     const policy = production.headers['content-security-policy'];
     expect(policy).toContain("default-src 'self'");
-    expect(policy).toContain("script-src 'self'");
+    expect(policy).toContain(
+      "script-src 'self' https://apis.google.com https://accounts.google.com",
+    );
     expect(policy).toContain("script-src-attr 'none'");
     expect(policy).toContain("style-src 'self' https://fonts.googleapis.com");
     expect(policy).toContain("style-src-attr 'unsafe-inline'");
@@ -92,7 +95,12 @@ describe('command center API', () => {
     // which the publishing preview renders. Neither host can be known when this is written.
     expect(policy).toContain("img-src 'self' data: https:");
     expect(policy).toContain("media-src 'self' https:");
-    expect(policy).toContain("connect-src 'self'");
+    expect(policy).toContain(
+      "connect-src 'self' https://accounts.google.com https://www.googleapis.com",
+    );
+    expect(policy).toContain(
+      'frame-src https://docs.google.com https://drive.google.com https://accounts.google.com',
+    );
     expect(policy).not.toContain('upgrade-insecure-requests');
     // What keeps a media host from learning which page asked for it. `referrerpolicy` is an
     // attribute HTML defines for images and links and not for a `<video>`, so the preview's video
@@ -1550,6 +1558,72 @@ describe('Drive OAuth connect', () => {
     expect(logs.lines).toEqual([]);
   });
 
+  it('requests drive.file on the authorization URL', async () => {
+    const { app } = connect();
+    const { url } = (await request(app).get('/api/drive/oauth/start').expect(200)).body as {
+      url: string;
+    };
+    const scopes = new URL(url).searchParams.getAll('scope').flatMap((s) => s.split(/\s+/));
+    expect(scopes).toEqual([DRIVE_OAUTH_SCOPE]);
+  });
+
+  it('keeps concurrent pending states and binds each callback to its session', async () => {
+    const SECRET = 'test-session-secret-at-least-32-chars!!';
+    const { createSession } = await import('./auth/sessions.ts');
+    const { SESSION_COOKIE_NAME } = await import('../shared/auth.ts');
+
+    const sessionA = createSession(db, {
+      sessionSecret: SECRET,
+      clientAddress: 'a',
+      now: MINTED_AT.getTime(),
+    });
+    const sessionB = createSession(db, {
+      sessionSecret: SECRET,
+      clientAddress: 'b',
+      now: MINTED_AT.getTime(),
+    });
+
+    const oauth = new MockOAuthClient();
+    const app = createApp(db, {
+      oauth: () => oauth,
+      now: () => MINTED_AT,
+      enforceAuth: true,
+      auth: { sessionSecret: SECRET, operatorPasswordHash: 'unused', trustedProxyHops: 0 },
+    });
+
+    const startA = await request(app)
+      .get('/api/drive/oauth/start')
+      .set('Cookie', `${SESSION_COOKIE_NAME}=${sessionA.rawToken}`)
+      .expect(200);
+    const startB = await request(app)
+      .get('/api/drive/oauth/start')
+      .set('Cookie', `${SESSION_COOKIE_NAME}=${sessionB.rawToken}`)
+      .expect(200);
+    const stateA = String(new URL(startA.body.url).searchParams.get('state'));
+    const stateB = String(new URL(startB.body.url).searchParams.get('state'));
+    expect(stateA).not.toBe(stateB);
+
+    await request(app)
+      .get('/api/drive/oauth/callback')
+      .query({ state: stateA, code: CODE })
+      .set('Cookie', `${SESSION_COOKIE_NAME}=${sessionB.rawToken}`)
+      .expect(400);
+
+    await request(app)
+      .get('/api/drive/oauth/callback')
+      .query({ state: stateA, code: CODE })
+      .set('Cookie', `${SESSION_COOKIE_NAME}=${sessionA.rawToken}`)
+      .expect(302);
+
+    await request(app)
+      .get('/api/drive/oauth/callback')
+      .query({ state: stateB, code: 'second-code' })
+      .set('Cookie', `${SESSION_COOKIE_NAME}=${sessionB.rawToken}`)
+      .expect(302);
+
+    expect(oauth.exchanges).toHaveLength(2);
+  });
+
   it('refuses to start a connect before credentials are configured', async () => {
     Object.assign(config.google, { clientId: '', clientSecret: '', encryptionKey: '' });
     const { app } = connect();
@@ -1557,7 +1631,10 @@ describe('Drive OAuth connect', () => {
     await request(app).get('/api/drive/oauth/start').expect(500);
 
     // Nothing pending, so a callback invented against it has nothing to match either.
-    expect(getSetting(db, OAUTH_STATE_KEY)).toBeUndefined();
+    purgeExpiredAuthorizations(db, MINTED_AT);
+    expect(
+      db.prepare('SELECT COUNT(*) AS n FROM oauth_pending_states').get() as { n: number },
+    ).toEqual({ n: 0 });
   });
 });
 

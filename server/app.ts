@@ -26,6 +26,7 @@ import { buildSessionCookie, clearSessionCookie } from './auth/cookies.ts';
 import { clientAddress, type AddressRequest } from './auth/client-address.ts';
 import { purgeExpiredSessions } from './auth/sessions.ts';
 import { CSRF_HEADER_NAME } from '../shared/auth.ts';
+import { DRIVE_OAUTH_SCOPE } from '../shared/drive-oauth.ts';
 import {
   getCategory,
   getTag,
@@ -51,7 +52,12 @@ import {
   setSetting,
   syncAllToDrive,
 } from './drive/service.ts';
-import { DriveScopeError, driveConfigured, listProjectFiles } from './drive/browse.ts';
+import {
+  DriveScopeError,
+  driveConfigured,
+  drivePickerConfigured,
+  listProjectFiles,
+} from './drive/browse.ts';
 import {
   DriveMediaError,
   driveMediaProvider,
@@ -159,6 +165,7 @@ import {
   beginAuthorization,
   consumeAuthorization,
   createGoogleOAuthClient,
+  purgeExpiredAuthorizations,
   type OAuthAuthorizationClient,
   type OAuthCredentials,
 } from './drive/oauth.ts';
@@ -251,15 +258,21 @@ const productionContentSecurityPolicy = {
   directives: {
     defaultSrc: ["'self'"],
     baseUri: ["'self'"],
-    connectSrc: ["'self'"],
+    // GIS token client and Picker talk to Google from the browser; stored refresh tokens never do.
+    connectSrc: ["'self'", 'https://accounts.google.com', 'https://www.googleapis.com'],
     fontSrc: ["'self'", 'https://fonts.gstatic.com'],
     formAction: ["'self'"],
     frameAncestors: ["'none'"],
-    frameSrc: ["'none'"],
+    // Google Picker opens in an iframe on docs.google.com / drive.google.com.
+    frameSrc: [
+      'https://docs.google.com',
+      'https://drive.google.com',
+      'https://accounts.google.com',
+    ],
     // `https:` is what makes a Settings-supplied logo load. Branding references a logo by
     // address rather than storing an uploaded file (README, "Sidebar branding"), so the
     // policy has to permit the host the user names, and the host is not known in advance.
-    // Only images widen: no other directive accepts a remote origin.
+    // Only images widen: no other directive accepts a remote origin for arbitrary hosts.
     imgSrc: ["'self'", 'data:', 'https:'],
     manifestSrc: ["'self'"],
     // Media widens for the same reason images do, and for one screen: the publishing preview
@@ -273,7 +286,8 @@ const productionContentSecurityPolicy = {
     // and no browser request is involved, so no directive here changes for it.
     mediaSrc: ["'self'", 'https:'],
     objectSrc: ["'none'"],
-    scriptSrc: ["'self'"],
+    // Google Identity Services + Picker loader (C52). Inline script stays forbidden.
+    scriptSrc: ["'self'", 'https://apis.google.com', 'https://accounts.google.com'],
     scriptSrcAttr: ["'none'"],
     styleSrc: ["'self'", 'https://fonts.googleapis.com'],
     styleSrcAttr: ["'unsafe-inline'"],
@@ -837,6 +851,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         return;
       }
       purgeExpiredSessions(db, authNowMs());
+      purgeExpiredAuthorizations(db, clock());
       res.setHeader('Set-Cookie', buildSessionCookie(result.rawToken, { secure: secureCookies }));
       res.json({ ok: true, csrfToken: result.csrfToken });
     } catch (error) {
@@ -2555,16 +2570,33 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   app.get('/api/settings/drive', (_req, res) =>
     res.json({
       configured: driveConfigured(),
+      pickerConfigured: drivePickerConfigured(),
       connected: driveProvider(db).connected,
       rootFolderId: getSetting(db, 'drive_root_id'),
       rootFolderUrl: getSetting(db, 'drive_root_url'),
+      // Browser-facing Picker config only — never access or refresh tokens.
+      picker: drivePickerConfigured()
+        ? {
+            clientId: config.google.clientId,
+            apiKey: config.google.apiKey,
+            appId: config.google.appId,
+            scope: DRIVE_OAUTH_SCOPE,
+          }
+        : null,
     }),
   );
-  app.get('/api/drive/oauth/start', (_req, res, next) => {
+  app.get('/api/drive/oauth/start', (req, res, next) => {
     try {
       if (!config.google.clientId || !config.google.clientSecret || !config.google.encryptionKey)
         throw new Error('Add Google OAuth credentials and an encryption key to .env first.');
-      const { state, challenge } = beginAuthorization(db, clock());
+      const session = (req as AuthedRequest).operatorSession;
+      if (authRequired && !session) {
+        res.status(401).json({ error: 'Authentication required.' });
+        return;
+      }
+      const { state, challenge } = beginAuthorization(db, clock(), {
+        sessionTokenHash: session?.tokenHash ?? null,
+      });
       res.json({ url: oauthClient(config.google).authorizationUrl({ state, challenge }) });
     } catch (e) {
       next(e);
@@ -2580,7 +2612,10 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
        */
       let verifier: string;
       try {
-        ({ verifier } = consumeAuthorization(db, req.query.state, clock()));
+        const session = (req as AuthedRequest).operatorSession;
+        ({ verifier } = consumeAuthorization(db, req.query.state, clock(), {
+          sessionTokenHash: session?.tokenHash ?? null,
+        }));
       } catch (error) {
         if (!(error instanceof OAuthStateError)) throw error;
         req.log.warn({ reason: error.message }, 'Rejected a Drive OAuth callback');
@@ -2589,18 +2624,20 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       const code = z.string().min(1).max(2048).parse(req.query.code);
       const tokens = await oauthClient(config.google).exchange({ code, verifier });
       setSetting(db, 'google_tokens', encryptJson(tokens, config.google.encryptionKey));
-      const returnOrigin = process.argv.includes('--production')
-        ? `http://localhost:${config.port}`
-        : config.appOrigin;
-      res.redirect(`${returnOrigin}/settings?drive=connected`);
+      res.redirect(`${config.appOrigin}/settings?drive=connected`);
     } catch (e) {
       next(e);
     }
   });
   app.post('/api/settings/drive/root', async (req, res, next) => {
     try {
+      // Picker returns a stable Drive folder id. URLs are still accepted for reconnect aids,
+      // but selection in Settings goes through Picker so drive.file can attach the folder.
       const data = z.object({ folderId: z.string().trim().min(5).max(200) }).parse(req.body);
       const folderId = parseFolderId(data.folderId);
+      if (!/^[a-zA-Z0-9_-]+$/.test(folderId)) {
+        throw new Error('Choose a folder with Google Picker, or paste a Drive folder id.');
+      }
       const folder = await driveProvider(db).getFolder(folderId);
       setSetting(db, 'drive_root_id', folder.id);
       setSetting(db, 'drive_root_url', folder.url);
@@ -2613,7 +2650,11 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     db.prepare(
       "DELETE FROM settings WHERE key IN ('google_tokens','drive_root_id','drive_root_url')",
     ).run();
-    res.json({ ok: true });
+    res.json({
+      ok: true,
+      googleRevocationRequired: true,
+      googlePermissionsUrl: 'https://myaccount.google.com/permissions',
+    });
   });
 
   /**

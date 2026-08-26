@@ -171,6 +171,18 @@ describe('origins', () => {
     await expect(loadConfig()).rejects.toThrow(/GOOGLE_REDIRECT_URI: must be an http or https URL/);
   });
 
+  it('refuses a GOOGLE_REDIRECT_URI that would open a redirect', async () => {
+    setEnv('GOOGLE_REDIRECT_URI', 'http://example.com/api/drive/oauth/callback');
+    await expect(loadConfig()).rejects.toThrow(/GOOGLE_REDIRECT_URI:/);
+  });
+
+  it('accepts a production https GOOGLE_REDIRECT_URI on the fixed path', async () => {
+    setEnv('GOOGLE_REDIRECT_URI', 'https://command.example.com/api/drive/oauth/callback');
+    expect((await loadConfig()).google.redirectUri).toBe(
+      'https://command.example.com/api/drive/oauth/callback',
+    );
+  });
+
   it('reports every bad variable at once, rather than one restart at a time', async () => {
     setEnv('PORT', 'abc');
     setEnv('APP_ORIGIN', 'localhost:5173');
