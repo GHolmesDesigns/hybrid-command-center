@@ -1,24 +1,24 @@
 /**
- * Local stdio MCP entry for coordination tools (C111).
+ * Local stdio MCP JSON-RPC adapter for coordination tools (C111).
  *
- * Minimal JSON-RPC 2.0 / MCP subset over newline-delimited stdin/stdout: initialize, tools/*,
- * resources/*, and ping. Workspace and Signal tools remain MCP-C106–C108. Spawn with
- * `npm run mcp` and set `MCP_AGENT_LABEL` (or pass `_meta.agent_label` on initialize) for writes.
+ * Minimal MCP subset: initialize, tools/*, resources/*, and ping. Workspace and Signal tools
+ * remain MCP-C106–C108. The stdin loop lives in `server/scripts/mcp.ts` (`npm run mcp`); set
+ * `MCP_AGENT_LABEL` (or pass `_meta.agent_label` on initialize) for writes.
  */
 import { getDb, type Db } from '../db.ts';
 import { APP_VERSION } from '../../shared/branding.ts';
 import { callCoordinationTool, COORDINATION_TOOL_DEFINITIONS } from './coordination.ts';
 import { COORDINATION_RESOURCE_DEFINITIONS, readCoordinationResource } from './resources.ts';
-import { createMcpSession, setMcpSessionAgentLabel, type McpSession } from './session.ts';
+import { setMcpSessionAgentLabel, type McpSession } from './session.ts';
 
-interface JsonRpcRequest {
+export interface JsonRpcRequest {
   jsonrpc?: string;
   id?: string | number | null;
   method?: string;
   params?: unknown;
 }
 
-interface JsonRpcResponse {
+export interface JsonRpcResponse {
   jsonrpc: '2.0';
   id: string | number | null;
   result?: unknown;
@@ -26,10 +26,6 @@ interface JsonRpcResponse {
 }
 
 const PROTOCOL_VERSION = '2024-11-05';
-
-function writeMessage(message: JsonRpcResponse): void {
-  process.stdout.write(`${JSON.stringify(message)}\n`);
-}
 
 function agentLabelFromInitialize(params: unknown): string | null {
   if (!params || typeof params !== 'object') return null;
@@ -50,7 +46,9 @@ function agentLabelFromInitialize(params: unknown): string | null {
 export async function handleMcpJsonRpc(
   session: McpSession,
   request: JsonRpcRequest,
-  write: (message: JsonRpcResponse) => void = (message) => writeMessage(message),
+  write: (message: JsonRpcResponse) => void = (message) => {
+    process.stdout.write(`${JSON.stringify(message)}\n`);
+  },
   db: Db = getDb(),
 ): Promise<void> {
   const { id, method, params } = request;
@@ -150,29 +148,5 @@ export async function handleMcpJsonRpc(
     }
   } catch (error) {
     fail(-32603, error instanceof Error ? error.message : 'Internal error.');
-  }
-}
-
-/** Read newline-delimited JSON-RPC from stdin until EOF. */
-export async function runMcpStdio(
-  session: McpSession = createMcpSession({ agentLabel: process.env.MCP_AGENT_LABEL }),
-): Promise<void> {
-  const { createInterface } = await import('node:readline');
-  const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
-  for await (const line of rl) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    let request: JsonRpcRequest;
-    try {
-      request = JSON.parse(trimmed) as JsonRpcRequest;
-    } catch {
-      writeMessage({
-        jsonrpc: '2.0',
-        id: null,
-        error: { code: -32700, message: 'Parse error' },
-      });
-      continue;
-    }
-    await handleMcpJsonRpc(session, request);
   }
 }

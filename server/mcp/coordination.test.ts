@@ -232,6 +232,39 @@ describe('coordination MCP tools', () => {
     expect(result.error).toMatch(/from_agent_label/);
   });
 
+  it('reports FAILURE for unknown tools, bad args, and missing handoffs', () => {
+    const session = labeled('cursor');
+    expect(callCoordinationTool(db, session, 'coordination_nope', {}, NOW).outcome).toBe('FAILURE');
+    expect(
+      callCoordinationTool(db, session, 'coordination_list_handoffs', { state: 'NOPE' }, NOW)
+        .outcome,
+    ).toBe('FAILURE');
+    expect(
+      callCoordinationTool(db, session, 'coordination_get_handoff', { handoffId: 'missing' }, NOW)
+        .outcome,
+    ).toBe('FAILURE');
+    expect(
+      callCoordinationTool(db, session, 'coordination_list_handoffs', { state: 'OPEN' }, NOW).data,
+    ).toEqual([]);
+  });
+
+  it('accepts a matching fromAgentLabel on post', () => {
+    const session = labeled('cursor');
+    const result = callCoordinationTool(
+      db,
+      session,
+      'coordination_post_handoff',
+      {
+        fromAgentLabel: 'cursor',
+        subjectType: 'freeform',
+        message: 'Explicit matching label.',
+      },
+      NOW,
+    );
+    expect(result.outcome).toBe('SUCCESS');
+    expect(result.data).toMatchObject({ fromAgentLabel: 'cursor' });
+  });
+
   it('completes, cancels, notes, and serves the inbox resource', () => {
     const poster = labeled('cursor');
     const posted = callCoordinationTool(
