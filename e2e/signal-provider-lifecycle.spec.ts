@@ -46,6 +46,7 @@ test('a Signal edit asks for a provider update, previews the difference, and res
 
   const delivery = editor.getByRole('region', { name: 'Delivery' });
   await expect(delivery).toContainText('Accepted, not out yet');
+  await expect(delivery).toContainText('Last checked');
   // Nothing is out of date yet, so the planner says nothing about a provider update.
   await expect(delivery).not.toContainText('Provider update required');
 

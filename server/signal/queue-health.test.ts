@@ -261,7 +261,9 @@ describe('the synchronisation record', () => {
     );
     const preview = await service.preview(post.id);
     const publication = await service.submit(post.id, preview.planHash);
-    expect(readSyncHealth(db)).toBeUndefined();
+    // A clearly answered submit stamps sync health via the same check path Refresh delivery uses.
+    expect(readSyncHealth(db)).toEqual({ lastSyncedAt: NOW.toISOString() });
+    expect(publication.checkedAt).toBe(NOW.toISOString());
 
     provider.result = { providerPostId: 'mock-publication', state: 'CONFIRMED' };
     const checked = await service.reconcile(publication.id);

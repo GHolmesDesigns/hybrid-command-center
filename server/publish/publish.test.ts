@@ -28,6 +28,7 @@ import {
   PROVIDER_ACTIONS,
   RECONCILE_INTERVALS_MINUTES,
   RECONCILE_MAX_ATTEMPTS,
+  shouldReconcileAfterSubmit,
   type DeliveryMode,
   type ProviderAction,
   type PublishChannelContent,
@@ -781,7 +782,9 @@ describe('publish planning and submission', () => {
     expect(db.prepare('SELECT status FROM signal_posts WHERE id=?').get(post.id)).toEqual({
       status: 'DRAFT',
     });
-    expect(listIntegrationEvents(db, { correlationId: publication.id })).toHaveLength(1);
+    const events = listIntegrationEvents(db, { correlationId: publication.id });
+    expect(events.filter((event) => event.operation === 'signal.publish')).toHaveLength(1);
+    expect(events.filter((event) => event.operation === 'signal.reconcile')).toHaveLength(1);
     provider.result = {
       providerPostId: 'mock-publication',
       state: 'CONFIRMED',
@@ -809,6 +812,7 @@ describe('publish planning and submission', () => {
     const publication = await service.submit(post.id, preview.planHash);
     expect(publication.state).toBe('UNCONFIRMED');
     expect(provider.submissions).toHaveLength(1);
+    expect(provider.checks).toHaveLength(0);
     expect(publication.error).not.toContain('do-not-store');
   });
 
@@ -825,9 +829,63 @@ describe('publish planning and submission', () => {
     );
     const failed = await service.submit(post.id, (await service.preview(post.id)).planHash);
     expect(failed.state).toBe('FAILED');
+    expect(provider.checks).toHaveLength(0);
     expect(() => deletePost(db, post.id)).toThrow(/history protects/);
     expect(getPost(db, post.id)?.lifecycle).toBe('ACTIVE');
     await expect(service.reconcile('missing')).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('reconciles automatically after an answered submit and leaves a rate-limited follow-up alone', async () => {
+    const post = add();
+    const provider = new MockPublishProvider(targets);
+    provider.checkResult = {
+      providerPostId: 'mock-publication',
+      state: 'CONFIRMED',
+      targets: [{ accountId: 1, outcome: 'SUCCESS', permalink: 'https://example.com/post' }],
+    };
+    const service = new PublishService(
+      db,
+      new LocalSignalProvider(db),
+      provider,
+      'America/New_York',
+      () => new Date('2026-01-01'),
+    );
+    const answered = await service.submit(post.id, (await service.preview(post.id)).planHash);
+    expect(answered.state).toBe('CONFIRMED');
+    expect(answered.checkedAt).toBe('2026-01-01T00:00:00.000Z');
+    expect(answered.targets[0]).toMatchObject({
+      outcome: 'SUCCESS',
+      permalink: 'https://example.com/post',
+    });
+    expect(provider.checks).toEqual(['mock-publication']);
+    expect(db.prepare('SELECT status FROM signal_posts WHERE id=?').get(post.id)).toEqual({
+      status: 'DRAFT',
+    });
+
+    const rateLimited = add({ text: 'Rate limited follow-up' });
+    const limited = new MockPublishProvider(targets);
+    limited.check = async (providerPostId: string) => {
+      limited.checks.push(providerPostId);
+      throw new PublishProviderError('slow down', false, {
+        rateLimited: true,
+        retryAfterSeconds: 30,
+      });
+    };
+    const limitedService = new PublishService(
+      db,
+      new LocalSignalProvider(db),
+      limited,
+      'America/New_York',
+      () => new Date('2026-01-01'),
+    );
+    const held = await limitedService.submit(
+      rateLimited.id,
+      (await limitedService.preview(rateLimited.id)).planHash,
+    );
+    expect(held.state).toBe('SUBMITTED');
+    expect(held.checkedAt).toBeUndefined();
+    expect(limited.checks).toEqual(['mock-publication']);
+    expect(limited.submissions).toHaveLength(1);
   });
 
   it('exposes preview, submit, list and reconcile only through a mock provider in HTTP tests', async () => {
@@ -1027,6 +1085,121 @@ describe('bounded reconciliation', () => {
     ).toEqual({ dueAt: undefined, due: true, exhausted: false });
   });
 
+  it('admits a clearly answered submit into reconcile and refuses ambiguous ones', () => {
+    expect(
+      shouldReconcileAfterSubmit({
+        state: 'SUBMITTED',
+        providerPostId: 'provider-1',
+        targets: [],
+      }),
+    ).toBe(true);
+    expect(
+      shouldReconcileAfterSubmit({
+        state: 'SUBMITTED',
+        providerPostId: undefined,
+        targets: [],
+      }),
+    ).toBe(false);
+    expect(
+      shouldReconcileAfterSubmit({
+        state: 'UNCONFIRMED',
+        providerPostId: undefined,
+        targets: [],
+      }),
+    ).toBe(false);
+    expect(
+      shouldReconcileAfterSubmit({
+        state: 'FAILED',
+        providerPostId: undefined,
+        targets: [],
+      }),
+    ).toBe(false);
+    expect(
+      shouldReconcileAfterSubmit({
+        state: 'SUBMITTED',
+        providerPostId: 'provider-1',
+        targets: [
+          {
+            channel: 'tt',
+            platform: 'tiktok',
+            accountId: 1,
+            handle: '@a',
+            mode: 'AUTOMATIC',
+            error: 'connection ended without an answer',
+          },
+        ],
+      }),
+    ).toBe(false);
+    expect(
+      shouldReconcileAfterSubmit({
+        state: 'PARTIAL',
+        providerPostId: undefined,
+        targets: [
+          {
+            channel: 'tt',
+            platform: 'tiktok',
+            accountId: 1,
+            handle: '@a',
+            mode: 'AUTOMATIC',
+            outcome: 'SUCCESS',
+            remotePostId: 'buf-1',
+          },
+          {
+            channel: 'yt',
+            platform: 'youtube',
+            accountId: 2,
+            handle: '@b',
+            mode: 'AUTOMATIC',
+            error: 'connection ended without an answer',
+          },
+        ],
+      }),
+    ).toBe(false);
+    expect(
+      shouldReconcileAfterSubmit({
+        state: 'PARTIAL',
+        providerPostId: undefined,
+        targets: [
+          {
+            channel: 'tt',
+            platform: 'tiktok',
+            accountId: 1,
+            handle: '@a',
+            mode: 'AUTOMATIC',
+            outcome: 'SUCCESS',
+            remotePostId: 'buf-1',
+          },
+          {
+            channel: 'yt',
+            platform: 'youtube',
+            accountId: 2,
+            handle: '@b',
+            mode: 'AUTOMATIC',
+            outcome: 'FAILURE',
+            error: 'refused',
+          },
+        ],
+      }),
+    ).toBe(false);
+    expect(
+      shouldReconcileAfterSubmit({
+        state: 'SUBMITTED',
+        providerPostId: undefined,
+        targets: [
+          {
+            channel: 'tt',
+            platform: 'tiktok',
+            accountId: 1,
+            handle: '@a',
+            mode: 'AUTOMATIC',
+            outcome: 'SUCCESS',
+            remotePostId: 'buf-1',
+          },
+        ],
+      }),
+    ).toBe(true);
+  });
+
   it('never schedules a check there is no answer left to ask for', () => {
     for (const state of PUBLICATION_STATES)
       expect(reconcileSchedule(publication({ state }), new Date('2030-01-01')).due).toBe(
@@ -1082,7 +1255,8 @@ describe('planning status and delivery stay apart end to end', () => {
       },
     ]);
     expect(publication.checkAttempts).toBe(0);
-    expect(publication.checkedAt).toBeUndefined();
+    expect(publication.checkedAt).toBe('2026-01-01T00:00:00.000Z');
+    expect(provider.checks).toEqual(['mock-publication']);
 
     // The provider confirming is the strongest result there is, and it still does not touch the
     // planning status: that column has one writer, and it is the person.
@@ -1138,15 +1312,16 @@ describe('planning status and delivery stay apart end to end', () => {
       () => now,
     );
     const publication = await service.submit(post.id, (await service.preview(post.id)).planHash);
+    expect(provider.checks).toEqual(['mock-publication']);
 
-    // Before the publishing instant an automatic check is answered from storage, with no call.
+    // Before the publishing instant an automatic check is answered from storage, with no further call.
     const early = await service.reconcile(publication.id, { automatic: true });
-    expect(provider.checks).toHaveLength(0);
+    expect(provider.checks).toEqual(['mock-publication']);
     expect(early.checkAttempts).toBe(0);
 
     // A person asking is never held to that schedule, and never spends an attempt either.
     const manual = await service.reconcile(publication.id);
-    expect(provider.checks).toHaveLength(1);
+    expect(provider.checks).toEqual(['mock-publication', 'mock-publication']);
     expect(manual.checkAttempts).toBe(0);
     expect(manual.checkedAt).toBe('2026-01-01T00:00:00.000Z');
 
@@ -1215,12 +1390,13 @@ describe('planning status and delivery stay apart end to end', () => {
       .send({ planHash: preview.body.planHash })
       .expect(201);
 
-    // An automatic check that is not due costs the provider nothing.
+    // An automatic check that is not due costs the provider nothing beyond the post-submit read.
     await request(app)
       .post(`/api/signal/publications/${submitted.body.id}/reconcile`)
       .send({ automatic: true })
       .expect(200);
-    expect(provider.checks).toHaveLength(0);
+    expect(provider.checks).toEqual(['mock-publication']);
+    expect(submitted.body.checkedAt).toBeTruthy();
 
     await request(app)
       .post(`/api/signal/publications/${submitted.body.id}/targets/1/finish`)
@@ -2519,6 +2695,8 @@ describe('Buffer confirmed publishing', () => {
       'mock-buffer-1',
       'mock-buffer-2',
     ]);
+    expect(buffer.reads).toEqual(['mock-buffer-1', 'mock-buffer-2']);
+    expect(publication.checkedAt).toBe('2026-01-01T00:00:00.000Z');
   });
 
   it('refuses Buffer at preview when production writes are closed, and never creates a publication', async () => {
@@ -2654,6 +2832,7 @@ describe('Buffer confirmed publishing', () => {
     });
     expect(publication.targets[1]?.outcome).toBeUndefined();
     expect(publication.targets[1]?.error).toMatch(/without an answer/);
+    expect(buffer.reads).toEqual([]);
   });
 
   it('rechecks exact remote state, edits one target, cancels another, and never moves Signal', async () => {
@@ -2866,9 +3045,11 @@ describe('provider-qualified delivery identity', () => {
     const service = serviceAt(provider, '2026-01-01T00:00:00.000Z');
     const plan = await service.preview(post.id);
     const publication = await service.submit(post.id, plan.planHash);
+    const checksAfterSubmit = [...provider.checks];
+    expect(checksAfterSubmit).toEqual(['mock-publication']);
     db.prepare("UPDATE signal_publications SET provider='buffer' WHERE id=?").run(publication.id);
     await expect(service.reconcile(publication.id)).rejects.toThrow(/cannot be queried through/);
-    expect(provider.checks).toEqual([]);
+    expect(provider.checks).toEqual(checksAfterSubmit);
   });
 });
 

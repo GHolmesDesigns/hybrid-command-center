@@ -527,6 +527,29 @@ export function reconcileSchedule(
 }
 
 /**
+ * Whether a just-finished submit may enter the existing reconcile path without another press.
+ *
+ * Only a fully answered `SUBMITTED` create qualifies: it has exact provider ids to ask about and
+ * has not left a mixed or ambiguous outcome that reconcile would have to invent a summary for.
+ * `PARTIAL`, `UNCONFIRMED`, and id-less failures stay exactly as submit wrote them — auto-refreshing
+ * those would collapse per-target truth or invent certainty, and a second create is never the
+ * answer. Manual **Refresh delivery** remains available either way.
+ */
+export function shouldReconcileAfterSubmit(
+  publication: Pick<SignalPublication, 'state' | 'providerPostId' | 'targets'>,
+): boolean {
+  if (publication.state !== 'SUBMITTED') return false;
+  if (
+    publication.targets.some(
+      (target) => Boolean(target.error) && !target.outcome && !target.remotePostId,
+    )
+  )
+    return false;
+  if (publication.targets.some((target) => Boolean(target.remotePostId))) return true;
+  return Boolean(publication.providerPostId);
+}
+
+/**
  * One provider account this publication went to, and what became of it.
  *
  * Per target rather than per publication because Post Bridge answers per account: two of four

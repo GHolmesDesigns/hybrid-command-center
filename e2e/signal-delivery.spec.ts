@@ -42,13 +42,13 @@ test('delivery is reported per target beside a planning status the provider neve
   await expect(preview).toContainText('X → @gholmes · Ready to send');
   await preview.getByRole('button', { name: 'Confirm and submit' }).click();
 
-  // The submission is reported in the provider's words, grouped and said, per account.
+  // A clearly answered submit enters the existing reconcile path without another press.
   await expect(delivery).toContainText('Accepted, not out yet');
   await expect(delivery).toContainText('@gholmes');
   await expect(delivery).toContainText('Automatic publishing');
-  await expect(delivery).toContainText('Not checked with the provider yet.');
+  await expect(delivery).toContainText('Last checked');
 
-  // Manual refresh is always available and records when it last asked.
+  // Manual refresh remains available later while the provider still holds it as accepted.
   await delivery.getByRole('button', { name: 'Refresh delivery' }).click();
   await expect(delivery).toContainText('Last checked');
 

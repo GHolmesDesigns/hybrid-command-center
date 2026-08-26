@@ -67,13 +67,13 @@ const publish = new MockPublishProvider([
  * What a check reports, set here rather than left to the submission.
  *
  * A delivery only has a provider result identity once the provider has tried to deliver it, so this
- * is what lets an end-to-end run reach the figures at all: the delivery refresh captures the id, and
- * the figures refresh asks about it. The submission itself is untouched, so every earlier spec still
- * sees a post the provider has merely accepted.
+ * is what lets an end-to-end run reach the figures at all: the delivery check captures the id, and
+ * the figures refresh asks about it. The state stays `SUBMITTED` so specs that still need Compare /
+ * Refresh delivery after submit keep those controls; only the per-target result id is filled in.
  */
 publish.checkResult = {
   providerPostId: 'mock-publication',
-  state: 'CONFIRMED',
+  state: 'SUBMITTED',
   targets: [{ accountId: 904, outcome: 'SUCCESS', resultId: 'e2e-result-tt' }],
 };
 

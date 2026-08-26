@@ -56,8 +56,9 @@ test('figures arrive only when asked, and an unmeasured channel says so rather t
   const editor = page.getByRole('dialog');
   const figures = editor.getByRole('region', { name: 'Figures' });
 
-  // Nothing has been synchronised, and the panel says which of the reasons applies to each channel
-  // rather than showing a count of nothing.
+  // Nothing has been synchronised for figures, and the panel says which of the reasons applies
+  // rather than showing a count of nothing. Post-submit reconcile already captured the delivery
+  // result id, so TikTok is ready to ask about figures rather than waiting on Refresh delivery.
   await expect(figures).toContainText('Not synchronised with the provider yet.');
   await expect(figures).toContainText('Figures refresh only when you ask.');
   // Filtered on the row's own channel name rather than on its text: the sentence an unmeasured row
@@ -68,14 +69,9 @@ test('figures arrive only when asked, and an unmeasured channel says so rather t
       .filter({ has: page.getByText(channel, { exact: true }) });
   const tiktok = rowFor('TikTok');
   const x = rowFor('X');
-  await expect(tiktok).toContainText('No delivery result to ask about');
-  await expect(x).toContainText('Not available from this provider');
-
-  // The delivery refresh is what captures the provider's identity for this delivery — the only thing
-  // the analytics endpoints will answer a question about.
-  await editor.getByRole('button', { name: 'Refresh delivery' }).click();
-  await expect(editor.getByRole('region', { name: 'Delivery' })).toContainText('Delivered');
   await expect(tiktok).toContainText('No figures yet');
+  await expect(x).toContainText('Not available from this provider');
+  await expect(editor.getByRole('region', { name: 'Delivery' })).toContainText('Last checked');
 
   // One press, and the platform's own counts appear.
   await figures.getByRole('button', { name: 'Refresh figures' }).click();
