@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Hybrid Command Center off-site backup
+
+[Timer]
+OnCalendar=*-*-* 02:15:00 UTC
+Persistent=true
+RandomizedDelaySec=15m
+Unit=hcc-offsite-backup.service
+
+[Install]
+WantedBy=timers.target

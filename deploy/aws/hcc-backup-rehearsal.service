@@ -1,0 +1,15 @@
+[Unit]
+Description=Hybrid Command Center disposable restore rehearsal
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=hcc
+Group=hcc
+WorkingDirectory=/opt/hybrid-command-center/current
+EnvironmentFile=/etc/hybrid-command-center/runtime.env
+ExecStart=/usr/bin/node --experimental-strip-types server/scripts/offsite-backup.ts rehearse
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/hybrid-command-center

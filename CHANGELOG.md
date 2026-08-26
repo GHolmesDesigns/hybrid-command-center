@@ -8,6 +8,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.3.4] - 2026-08-26
+
+### Added
+
+- Automated encrypted off-site backup transfer, safe 14-snapshot retention, scheduled restore
+  rehearsals, and redacted operational health signals for the AWS host.
+
+### Breaking changes
+
+None.
+
 ## [5.3.3] - 2026-08-26
 
 ### Added

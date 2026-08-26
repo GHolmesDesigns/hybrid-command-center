@@ -492,28 +492,17 @@ export async function restoreDatabase(options: {
   const removedSidecars = await writeSnapshotFile(backupPath, destinationPath);
 
   // A restored workspace may carry session rows from another host or an older password.
-  // Revoke them so a stolen backup cookie cannot reopen the operator session after restore.
+  // Migration creates the table for pre-C51 backups; revocation is mandatory before a restored
+  // database may be accepted, because best-effort cleanup could resurrect a copied browser cookie.
+  const restored = createDb(destinationPath);
   try {
-    const restored = createDb(destinationPath);
-    try {
-      if (
-        restored
-          .prepare(
-            `SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = 'operator_sessions'`,
-          )
-          .get()
-      ) {
-        restored
-          .prepare(
-            `UPDATE operator_sessions SET revoked_at = COALESCE(revoked_at, ?) WHERE revoked_at IS NULL`,
-          )
-          .run((options.now ?? new Date()).toISOString());
-      }
-    } finally {
-      restored.close();
-    }
-  } catch {
-    // Restore already succeeded; session cleanup is best-effort for pre-C51 backups.
+    restored
+      .prepare(
+        `UPDATE operator_sessions SET revoked_at = COALESCE(revoked_at, ?) WHERE revoked_at IS NULL`,
+      )
+      .run((options.now ?? new Date()).toISOString());
+  } finally {
+    restored.close();
   }
 
   return { backupPath, destinationPath, safetyBackupPath, removedSidecars };

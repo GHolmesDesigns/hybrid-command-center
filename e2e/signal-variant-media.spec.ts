@@ -139,7 +139,14 @@ test('an unverified thumbnail role is stored, version-bound, and not sent', asyn
   await expect(panel).toContainText('has not verified that it is accepted');
 
   // And the recheck a person asks for goes through the ordinary edit, so the confirmation it was
-  // shown beside stops being current.
-  await thumbnail.getByRole('button', { name: 'Recheck thumbnail' }).click();
+  // shown beside stops being current. Wait for the recheck response before asserting: on a loaded
+  // Windows runner the round trip can outlast a bare click-and-expect.
+  await Promise.all([
+    page.waitForResponse(
+      (response) => response.url().includes('/variants/media/recheck') && response.status() === 200,
+    ),
+    thumbnail.getByRole('button', { name: 'Recheck thumbnail' }).click(),
+  ]);
+  await expect(editor.getByRole('region', { name: 'Publish confirmation' })).toBeHidden();
   await expect(editor.getByRole('button', { name: 'Show preview' })).toBeVisible();
 });
