@@ -41,7 +41,7 @@ import {
   type PublishVariantBase,
   type PublishVariantRecord,
 } from '../../shared/publish-variants.ts';
-import { replacePostVariants } from '../signal/service.ts';
+import { replacePostVariants, deletePost, getPost } from '../signal/service.ts';
 import { SIGNAL_CHANNELS, type SignalChannel, type SignalPost } from '../../shared/signal.ts';
 import {
   publishPlatformFor,
@@ -812,7 +812,7 @@ describe('publish planning and submission', () => {
     expect(publication.error).not.toContain('do-not-store');
   });
 
-  it('records an answered provider failure as FAILED and protects publication history on delete', async () => {
+  it('records an answered provider failure as FAILED and keeps publication history on hard-delete refusal', async () => {
     const post = add();
     const provider = new MockPublishProvider(targets);
     provider.failure = new PublishProviderError('request rejected', false);
@@ -825,7 +825,8 @@ describe('publish planning and submission', () => {
     );
     const failed = await service.submit(post.id, (await service.preview(post.id)).planHash);
     expect(failed.state).toBe('FAILED');
-    await expect(service.cancelLiveForPost(post.id)).rejects.toThrow(/history protects/);
+    expect(() => deletePost(db, post.id)).toThrow(/history protects/);
+    expect(getPost(db, post.id)?.lifecycle).toBe('ACTIVE');
     await expect(service.reconcile('missing')).rejects.toMatchObject({ status: 404 });
   });
 

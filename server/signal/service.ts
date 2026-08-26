@@ -6,13 +6,16 @@ import {
   SIGNAL_CTAS,
   SIGNAL_DATE_PATTERN,
   SIGNAL_DEFAULT_TIME,
+  SIGNAL_DELIVERY_PROVENANCES,
   SIGNAL_FORMATS,
+  SIGNAL_LIFECYCLE_FILTERS,
   SIGNAL_STATUSES,
   SIGNAL_TIME_PATTERN,
   isSignalDate,
   signalSlotOccupied,
   suggestNextOpenSignalSlot,
   type SignalChannel,
+  type SignalLifecycleFilter,
   type SignalPost,
   type SignalSlot,
 } from '../../shared/signal.ts';
@@ -22,6 +25,7 @@ import {
   toSignalPosts,
   channelsByPost,
   mediaByPost,
+  signalLifecycleSql,
   variantLayerKey,
   variantMediaByPost,
   type SignalPostRow,
@@ -209,6 +213,12 @@ const postFields = {
   format: z.enum(SIGNAL_FORMATS).default('TEXT'),
   status: z.enum(SIGNAL_STATUSES).default('DRAFT'),
   /**
+   * Provenance only — never a planning status. Defaults to in-Signal so historical behaviour is
+   * preserved; the person may mark Outside of Signal when content went out without a provider
+   * submission from this app.
+   */
+  deliveryProvenance: z.enum(SIGNAL_DELIVERY_PROVENANCES).default('IN_SIGNAL'),
+  /**
    * The campaigns this post belongs to, by name.
    *
    * Names rather than ids: the editor saves a whole draft in one press, so a campaign typed into
@@ -254,6 +264,14 @@ export type SignalPostPatch = z.output<typeof signalPostPatch>;
 export const signalRangeQuery = z.object({
   from: date,
   to: date,
+  /**
+   * Lifecycle scope for the list — not planning status, not delivery. Default active plans only.
+   */
+  lifecycle: z.enum(SIGNAL_LIFECYCLE_FILTERS).default('active'),
+});
+
+export const signalQueueQuery = z.object({
+  lifecycle: z.enum(SIGNAL_LIFECYCLE_FILTERS).default('active'),
 });
 
 /** The local day the planner is looking from. The server never derives this from an instant. */
@@ -405,10 +423,16 @@ export function getPost(db: Db, postId: string): SignalPost | undefined {
 /**
  * The unscheduled queue, in its manual order. Dated posts are read through the provider, by
  * range; this is the other half of the planner's view and the only place these appear.
+ *
+ * Lifecycle defaults to active plans — a retired undated idea stays out of the queue unless the
+ * operator asks for retired or all.
  */
-export function listQueue(db: Db): SignalPost[] {
+export function listQueue(db: Db, lifecycle: SignalLifecycleFilter = 'active'): SignalPost[] {
+  const lifecycleClause = signalLifecycleSql(lifecycle);
   const rows = db
-    .prepare('SELECT * FROM signal_posts WHERE date IS NULL ORDER BY position, created_at, id')
+    .prepare(
+      `SELECT * FROM signal_posts WHERE date IS NULL${lifecycleClause.sql} ORDER BY position, created_at, id`,
+    )
     .all() as unknown as SignalPostRow[];
   return toSignalPosts(db, rows);
 }
@@ -429,9 +453,11 @@ function insertPost(db: Db, input: SignalPostInput, media: SignalPostMedia[]): S
   try {
     // `campaign`, the frozen free-text column, is deliberately not in this statement: it is left
     // NULL on every post written from now on, and what a post belongs to lives in the join below.
+    // lifecycle / delivery_provenance take their table defaults (ACTIVE / IN_SIGNAL) so every new
+    // plan preserves the historical meaning of an ordinary in-Signal post.
     db.prepare(
-      `INSERT INTO signal_posts(id,text,date,time,format,status,cta,position,created_at,updated_at)
-       VALUES(?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO signal_posts(id,text,date,time,format,status,cta,position,delivery_provenance,created_at,updated_at)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
     ).run(
       postId,
       input.text,
@@ -441,6 +467,7 @@ function insertPost(db: Db, input: SignalPostInput, media: SignalPostMedia[]): S
       input.status,
       input.cta,
       input.date === null ? nextQueuePosition(db) : 0,
+      input.deliveryProvenance,
       timestamp,
       timestamp,
     );
@@ -495,6 +522,7 @@ function writePost(
     format: patch.format ?? existing.format,
     status: patch.status ?? existing.status,
     cta: patch.cta ?? existing.cta,
+    deliveryProvenance: patch.deliveryProvenance ?? existing.delivery_provenance,
   };
   // A post returning to the queue joins the end of it; one leaving keeps a position nothing
   // reads. Position only ever means something for an undated post.
@@ -504,7 +532,7 @@ function writePost(
   db.exec('BEGIN');
   try {
     db.prepare(
-      `UPDATE signal_posts SET text=?,date=?,time=?,format=?,status=?,cta=?,position=?,updated_at=?
+      `UPDATE signal_posts SET text=?,date=?,time=?,format=?,status=?,cta=?,position=?,delivery_provenance=?,updated_at=?
        WHERE id=?`,
     ).run(
       next.text,
@@ -514,6 +542,7 @@ function writePost(
       next.status,
       next.cta,
       position,
+      next.deliveryProvenance,
       now(),
       postId,
     );
@@ -582,12 +611,68 @@ export async function recheckPostMedia(
 }
 
 /**
- * Removes a post outright. Signal posts are plans rather than records of work, so there is
- * nothing here to archive; the channel and media rows go with it by cascade.
+ * Removes a post that has never had a publication row.
+ *
+ * Posts with publication history must be retired instead — hard-delete would either cascade-fail
+ * on `ON DELETE RESTRICT` or erase audit history. This path never withdraws a provider submission;
+ * that stays on the reconcile panel alone (`docs/published-deletion-decision.md`).
  */
 export function deletePost(db: Db, postId: string): void {
+  const existing = readRow(db, postId);
+  if (!existing) throw new SignalPostNotFoundError(`No Signal post ${postId}.`);
+  const historical = db
+    .prepare('SELECT 1 FROM signal_publications WHERE post_id=? LIMIT 1')
+    .get(postId);
+  if (historical) {
+    throw new SignalPostProtectedError(
+      'Publication history protects this post from deletion. Retire the plan instead — that keeps delivery history and does not unpublish platform content.',
+    );
+  }
   const result = db.prepare('DELETE FROM signal_posts WHERE id=?').run(postId);
   if (result.changes === 0) throw new SignalPostNotFoundError(`No Signal post ${postId}.`);
+}
+
+/** A retire or hard-delete that the current publication state forbids. */
+export class SignalPostProtectedError extends Error {
+  readonly status = 409;
+  constructor(message: string) {
+    super(message);
+    this.name = 'SignalPostProtectedError';
+  }
+}
+
+/**
+ * Hides a plan from ordinary planning views while keeping the row and every linked publication,
+ * target, metric, and integration event.
+ *
+ * Does not call the provider, does not change planning status, and does not touch Drive. Refuses
+ * while a publication is still in flight (`SUBMITTING` / `SUBMITTED` / `UNCONFIRMED`) — withdraw
+ * or reconcile first. Already-retired is a no-op success. Audit: `retired_at` only — Signal-local
+ * writes do not write `integration_events` (see AGENTS.md); retire is local data like archive.
+ */
+export function retirePost(db: Db, postId: string): SignalPost {
+  const existing = readRow(db, postId);
+  if (!existing) throw new SignalPostNotFoundError(`No Signal post ${postId}.`);
+  if (existing.lifecycle === 'RETIRED') {
+    return getPost(db, postId) as SignalPost;
+  }
+  const inFlight = db
+    .prepare(
+      `SELECT 1 FROM signal_publications
+       WHERE post_id=? AND state IN ('SUBMITTING','SUBMITTED','UNCONFIRMED')
+       LIMIT 1`,
+    )
+    .get(postId);
+  if (inFlight) {
+    throw new SignalPostProtectedError(
+      'A provider submission is still live for this plan. Withdraw or reconcile it first, then retire. Retiring does not cancel a provider post and does not unpublish platform content.',
+    );
+  }
+  const timestamp = now();
+  db.prepare(
+    `UPDATE signal_posts SET lifecycle='RETIRED', retired_at=?, updated_at=? WHERE id=?`,
+  ).run(timestamp, timestamp, postId);
+  return getPost(db, postId) as SignalPost;
 }
 
 /**
@@ -1024,6 +1109,7 @@ export function duplicatePost(db: Db, postId: string): SignalPost {
       time: source.time,
       format: source.format,
       status: 'DRAFT',
+      deliveryProvenance: source.deliveryProvenance,
       // The names, not the ids: they already exist, so the duplicate joins the same campaigns
       // rather than creating second rows with the same names.
       campaigns: source.campaigns.map((campaign) => campaign.name),
@@ -1035,7 +1121,10 @@ export function duplicatePost(db: Db, postId: string): SignalPost {
 
 function occupiedSlots(db: Db, exceptPostId: string): SignalSlot[] {
   return db
-    .prepare('SELECT date, time FROM signal_posts WHERE date IS NOT NULL AND id != ?')
+    .prepare(
+      `SELECT date, time FROM signal_posts
+       WHERE date IS NOT NULL AND id != ? AND lifecycle = 'ACTIVE'`,
+    )
     .all(exceptPostId) as unknown as SignalSlot[];
 }
 

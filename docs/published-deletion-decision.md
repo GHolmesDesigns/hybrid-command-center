@@ -1,9 +1,9 @@
 # Published Deletion — Decision Record
 
-Status: **decided, not implemented.** This document settles what “delete a published post” can mean
+Status: **decided and implemented (C107 / #306).** This document settles what “delete a published post” can mean
 in Hybrid Command Center — the vocabulary, provider evidence, invariants, and which operations
-may be built. It adds no application code, makes no live provider call, and does not change runtime
-behaviour.
+may be built. C106 added no application code; C107 implements Retire plan, Outside-of-Signal
+provenance, and the separation from withdraw.
 
 Card: C106 (#305). Wave 20 — provider lifecycle. **Release prerequisite:** version 5.0.0 complete.
 Builds on the publication model in [`publishing-integration.md`](publishing-integration.md) §6–§7

@@ -1607,44 +1607,4 @@ export class PublishService {
     };
     return this.commitProviderUpdate(publication, action, outgoing, storedConfigurations, prepared);
   }
-
-  async cancelLiveForPost(postId: string): Promise<void> {
-    const row = this.db
-      .prepare(
-        "SELECT * FROM signal_publications WHERE post_id=? AND state IN ('SUBMITTING','SUBMITTED','UNCONFIRMED') LIMIT 1",
-      )
-      .get(postId) as PublicationRow | undefined;
-    if (!row) {
-      const historical = this.db
-        .prepare('SELECT 1 FROM signal_publications WHERE post_id=? LIMIT 1')
-        .get(postId);
-      if (historical)
-        throw new PublishRequestError('Publication history protects this post from deletion.', 409);
-      return;
-    }
-    if (!row.provider_post_id)
-      throw new PublishRequestError(
-        'This post has a live publication whose provider id is unknown. Resolve it before deleting the post.',
-        409,
-      );
-    this.assertProviderRoute(row.provider);
-    await this.provider.cancel(row.provider_post_id);
-    transaction(this.db, () => {
-      this.db
-        .prepare("UPDATE signal_publications SET state='CANCELLED',updated_at=? WHERE id=?")
-        .run(this.clock().toISOString(), row.id);
-      recordIntegrationEvent(this.db, {
-        source: 'signal-campaign',
-        operation: 'signal.reconcile',
-        outcome: 'SUCCESS',
-        summary: 'Cancelled the live provider submission when deletion was requested.',
-        entities: [{ type: 'signalPost', id: row.post_id, label: row.sent_caption.slice(0, 80) }],
-        correlationId: row.id,
-      });
-    });
-    throw new PublishRequestError(
-      'The provider submission was cancelled. Publication history protects this post from deletion.',
-      409,
-    );
-  }
 }

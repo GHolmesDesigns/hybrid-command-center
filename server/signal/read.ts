@@ -1,11 +1,12 @@
 import type { Db } from '../db.ts';
-import { SIGNAL_RANGE_LIMIT } from '../../shared/signal.ts';
+import { SIGNAL_RANGE_LIMIT, type SignalLifecycleFilter } from '../../shared/signal.ts';
 import type { SignalProvider, SignalPostRange } from './provider.ts';
 import type { PublishVariantRecord } from '../../shared/publish-variants.ts';
 import type { PublishTargetSelection } from '../../shared/publish.ts';
 import {
   listPostPublishTargets,
   listPostVariants,
+  signalLifecycleSql,
   toSignalPosts,
   type SignalPostRow,
 } from './rows.ts';
@@ -28,12 +29,22 @@ import {
  *
  * `date IS NOT NULL` is implied by the range, and stated anyway: the unscheduled queue must
  * never leak into a calendar, and saying so here means a later edit to the bounds cannot let it.
+ *
+ * Lifecycle defaults to active plans only — retired plans stay out of the calendar and planner
+ * grid unless the caller asks for `retired` or `all`. That filter is lifecycle, not planning
+ * status and not delivery state.
  */
-export function listPostsInRange(db: Db, from: string, to: string): SignalPostRange {
+export function listPostsInRange(
+  db: Db,
+  from: string,
+  to: string,
+  lifecycle: SignalLifecycleFilter = 'active',
+): SignalPostRange {
+  const lifecycleClause = signalLifecycleSql(lifecycle);
   const rows = db
     .prepare(
       `SELECT * FROM signal_posts
-       WHERE date IS NOT NULL AND date >= ? AND date <= ?
+       WHERE date IS NOT NULL AND date >= ? AND date <= ?${lifecycleClause.sql}
        ORDER BY date, time, created_at, id
        LIMIT ?`,
     )
@@ -58,7 +69,8 @@ export class LocalSignalProvider implements SignalProvider {
     this.db = db;
   }
   async listPosts(input: { from: string; to: string }): Promise<SignalPostRange> {
-    return listPostsInRange(this.db, input.from, input.to);
+    // Calendar composition stays on active plans: a retired plan is not a cell the month owes.
+    return listPostsInRange(this.db, input.from, input.to, 'active');
   }
   async listVariants(postId: string): Promise<PublishVariantRecord[]> {
     return listPostVariants(this.db, postId);

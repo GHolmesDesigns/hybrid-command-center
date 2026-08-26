@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEven
 import { useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
+  Archive,
   ArrowDown,
   ArrowUp,
   CalendarClock,
@@ -25,8 +26,12 @@ import {
   SIGNAL_CTA_LABEL,
   SIGNAL_CTAS,
   SIGNAL_DEFAULT_TIME,
+  SIGNAL_DELIVERY_PROVENANCE_LABEL,
+  SIGNAL_DELIVERY_PROVENANCES,
   SIGNAL_FORMAT_LABEL,
   SIGNAL_FORMATS,
+  SIGNAL_LIFECYCLE_FILTER_LABEL,
+  SIGNAL_LIFECYCLE_FILTERS,
   SIGNAL_STATUS_LABEL,
   SIGNAL_STATUSES,
   isSignalDate,
@@ -38,7 +43,9 @@ import {
   type SignalCampaignSummary,
   type SignalChannel,
   type SignalCta,
+  type SignalDeliveryProvenance,
   type SignalFormat,
+  type SignalLifecycleFilter,
   type SignalPost,
   type SignalSlot,
   type SignalStatus,
@@ -141,6 +148,7 @@ type Draft = {
   time: string;
   format: SignalFormat;
   status: SignalStatus;
+  deliveryProvenance: SignalDeliveryProvenance;
   /**
    * The campaigns the draft carries, as chips.
    *
@@ -191,6 +199,7 @@ const draftFor = (post: SignalPost): Draft => ({
   time: post.time,
   format: post.format,
   status: post.status,
+  deliveryProvenance: post.deliveryProvenance,
   campaigns: post.campaigns,
   cta: post.cta,
 });
@@ -209,6 +218,7 @@ const blankDraft = (date: string | null): Draft => ({
   time: SIGNAL_DEFAULT_TIME,
   format: 'TEXT',
   status: 'DRAFT',
+  deliveryProvenance: 'IN_SIGNAL',
   campaigns: [],
   cta: 'NONE',
 });
@@ -283,11 +293,11 @@ function ChannelChip({ channel, labelled = true }: { channel: SignalChannel; lab
 }
 
 /**
- * Planning status and delivery status, named separately on the card.
+ * Planning status, delivery, and lifecycle/provenance cues — each named separately.
  *
- * Planning is the user's own claim (`SignalPost.status`). Delivery is the derived answer from
- * stored publication/target rows. They share a row so a glance sees both, and each carries its
- * own label prefix so neither is only a colour.
+ * Planning is the user's Draft/Scheduled/Published claim. Delivery is what a provider did.
+ * Lifecycle (Retired) and Outside of Signal provenance are third and fourth facts; neither
+ * reuses a planning-status word.
  */
 function PostMeta({ post, delivery }: { post: SignalPost; delivery: CardDelivery }) {
   return (
@@ -302,6 +312,20 @@ function PostMeta({ post, delivery }: { post: SignalPost; delivery: CardDelivery
         <span className="sr-only">Delivery: </span>
         {delivery.label}
       </span>
+      {post.lifecycle === 'RETIRED' && (
+        <span className="signal-lifecycle lifecycle-retired">
+          <Archive aria-hidden="true" />
+          <span className="sr-only">Lifecycle: </span>
+          Retired
+        </span>
+      )}
+      {post.deliveryProvenance === 'OUTSIDE_SIGNAL' && (
+        <span className="signal-provenance provenance-outside">
+          <AlertTriangle aria-hidden="true" />
+          <span className="sr-only">Provenance: </span>
+          Outside of Signal
+        </span>
+      )}
       {post.channels.map((channel) => (
         <ChannelChip channel={channel} key={channel} />
       ))}
@@ -1155,11 +1179,16 @@ function Editor({
 
   const remove = async () => {
     if (!post) return;
-    if (!window.confirm('Delete this Signal post? This cannot be undone.')) return;
+    if (
+      !window.confirm(
+        'Retire this Signal plan?\n\nIt will leave the ordinary planner, calendar, and queue-health counts. Publication history stays. This does not withdraw a provider submission and does not unpublish platform content. There is no undelete in this version.',
+      )
+    )
+      return;
     setBusy(true);
     setError('');
     try {
-      await send(`/signal/posts/${post.id}`, 'DELETE');
+      await send(`/signal/posts/${post.id}/retire`, 'POST');
       await removed(post.id);
     } catch (reason) {
       setError((reason as Error).message);
@@ -1670,6 +1699,31 @@ function Editor({
               onChange={(event) => setDraft({ ...draft, cta: event.target.value as SignalCta })}
             />
           </div>
+          <Select
+            label="Delivery provenance"
+            name="deliveryProvenance"
+            value={draft.deliveryProvenance}
+            options={SIGNAL_DELIVERY_PROVENANCES}
+            labels={SIGNAL_DELIVERY_PROVENANCE_LABEL}
+            onChange={(event) =>
+              setDraft({
+                ...draft,
+                deliveryProvenance: event.target.value as SignalDeliveryProvenance,
+              })
+            }
+          />
+          <p className="signal-provenance-note">
+            Provenance is not planning status and not provider delivery. Choose Outside of Signal
+            only when the content went out in a platform app or another tool without a submission
+            from this planner.
+          </p>
+          {post?.lifecycle === 'RETIRED' && (
+            <p className="signal-lifecycle-note" role="status">
+              This plan is retired. It stays out of ordinary planner and calendar views. Planning
+              status above is unchanged.
+              {post.retiredAt ? ` Retired ${new Date(post.retiredAt).toLocaleString()}.` : ''}
+            </p>
+          )}
           {/* Campaigns are chips from the shared list, not free text: a post belongs to a campaign
               and to the week inside it, and the same run typed twice has to be the same campaign or
               nothing can be grouped by it. Typing a new name creates it when the post is saved. */}
@@ -1919,14 +1973,14 @@ function Editor({
             {error}
           </div>
           <div className="signal-editor-actions">
-            {post && (
+            {post && post.lifecycle !== 'RETIRED' && (
               <button
                 type="button"
                 className="secondary danger-text"
                 disabled={busy}
                 onClick={remove}
               >
-                <Trash2 /> Delete
+                <Archive /> Retire plan
               </button>
             )}
             <button className="submit" disabled={busy}>
@@ -2022,6 +2076,15 @@ export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
    */
   const requestedPost = params.get('post');
   /**
+   * Lifecycle filter for the planner lists — active / retired / all. Separate from planning
+   * status filters and from delivery. Default active is omitted from the address.
+   */
+  const lifecycleFilter: SignalLifecycleFilter = SIGNAL_LIFECYCLE_FILTERS.includes(
+    params.get('lifecycle') as SignalLifecycleFilter,
+  )
+    ? (params.get('lifecycle') as SignalLifecycleFilter)
+    : 'active';
+  /**
    * Shared Add Post creation state. Day cells, the queue action, and the top navigation all set
    * `new`; the editor itself is the same form used for edits. A named `post` wins over `new` so an
    * alert link still opens the post it named.
@@ -2034,10 +2097,14 @@ export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
     setLoading(true);
     setError('');
     const { from, to } = bounds;
+    const lifecycleQuery =
+      lifecycleFilter === 'active' ? '' : `&lifecycle=${encodeURIComponent(lifecycleFilter)}`;
+    const queueQuery =
+      lifecycleFilter === 'active' ? '' : `?lifecycle=${encodeURIComponent(lifecycleFilter)}`;
     try {
       const [range, nextQueue, nextCampaigns, nextDeliveries] = await Promise.all([
-        api<SignalRange>(`/signal/posts?from=${from}&to=${to}`),
-        api<SignalPost[]>('/signal/queue'),
+        api<SignalRange>(`/signal/posts?from=${from}&to=${to}${lifecycleQuery}`),
+        api<SignalPost[]>(`/signal/queue${queueQuery}`),
         api<SignalCampaignSummary[]>('/signal/campaigns'),
         api<CardDeliverySnapshot>(`/signal/card-delivery?from=${from}&to=${to}`),
       ]);
@@ -2051,7 +2118,7 @@ export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
     } finally {
       setLoading(false);
     }
-  }, [bounds]);
+  }, [bounds, lifecycleFilter]);
 
   const deliveryFor = useCallback(
     (postId: string): CardDelivery =>
@@ -2176,15 +2243,30 @@ export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
       : days.map((date) => dayHeading(date, { weekday: 'short' }));
 
   const configuredView = viewDefaults.signal.view;
+  const setLifecycleFilter = (next: SignalLifecycleFilter) => {
+    setParams((current) => {
+      const params = new URLSearchParams(current);
+      if (next === 'active') params.delete('lifecycle');
+      else params.set('lifecycle', next);
+      return params;
+    });
+  };
   const goto = (nextView: CalendarViewMode, nextAnchor: string) => {
     // Same rule as Calendar: the configured default in the current period keeps a short address.
+    // Lifecycle is a separate dimension and survives navigation when it is not the active default.
     if (nextView === configuredView && isCurrentTimePeriod(nextView, nextAnchor, now)) {
-      setParams({});
+      setParams((current) => {
+        const params = new URLSearchParams();
+        const lifecycle = current.get('lifecycle');
+        if (lifecycle && lifecycle !== 'active') params.set('lifecycle', lifecycle);
+        return params;
+      });
       return;
     }
     const next: Record<string, string> = { month: nextAnchor.slice(0, 7) };
     if (nextView !== configuredView) next.view = nextView;
     if (nextView !== 'month') next.date = nextAnchor;
+    if (lifecycleFilter !== 'active') next.lifecycle = lifecycleFilter;
     setParams(next);
   };
 
@@ -2227,8 +2309,13 @@ export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
             <div>
               <span className="eyebrow">Ideas</span>
               <h2 id="signal-queue-title">Unscheduled queue</h2>
+              <p className="signal-filter-caption">
+                {SIGNAL_LIFECYCLE_FILTER_LABEL[lifecycleFilter]}
+              </p>
             </div>
-            <span className="signal-count">{queue.length}</span>
+            <span className="signal-count" title="Count of plans matching the lifecycle filter">
+              {queue.length}
+            </span>
           </div>
           <button
             type="button"
@@ -2260,6 +2347,18 @@ export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
                 onClick={() => goto(option, anchor)}
               >
                 {option === 'today' ? 'Today' : option[0]!.toUpperCase() + option.slice(1)}
+              </button>
+            ))}
+          </div>
+          <div className="segmented-control signal-lifecycle-filter" aria-label="Plan lifecycle">
+            {SIGNAL_LIFECYCLE_FILTERS.map((option) => (
+              <button
+                key={option}
+                type="button"
+                aria-pressed={lifecycleFilter === option}
+                onClick={() => setLifecycleFilter(option)}
+              >
+                {option === 'active' ? 'Active' : option === 'retired' ? 'Retired' : 'All plans'}
               </button>
             ))}
           </div>

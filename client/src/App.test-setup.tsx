@@ -637,6 +637,9 @@ export const signalPost = (
     time: SIGNAL_DEFAULT_TIME,
     format: 'TEXT',
     status: 'SCHEDULED',
+    lifecycle: 'ACTIVE',
+    retiredAt: null,
+    deliveryProvenance: 'IN_SIGNAL',
     campaigns: [],
     cta: 'NONE',
     position: 0,
@@ -858,12 +861,16 @@ const respondTo = (url: string, init?: RequestInit) => {
     const query = new URLSearchParams(url.split('?')[1] ?? '');
     const from = query.get('from') ?? '';
     const to = query.get('to') ?? '';
+    const lifecycle = query.get('lifecycle') ?? 'active';
     return {
       from,
       to,
-      posts: testState.signalPostsPayload.filter(
-        (post) => post.date !== null && post.date >= from && post.date <= to,
-      ),
+      posts: testState.signalPostsPayload.filter((post) => {
+        if (post.date === null || post.date < from || post.date > to) return false;
+        if (lifecycle === 'all') return true;
+        if (lifecycle === 'retired') return post.lifecycle === 'RETIRED';
+        return post.lifecycle === 'ACTIVE';
+      }),
       truncated: testState.signalPostsTruncated,
     };
   }
@@ -893,8 +900,16 @@ const respondTo = (url: string, init?: RequestInit) => {
     });
     return testState.signalPostsPayload.find((post) => post.id === recheckPath[1]) ?? {};
   }
-  if (url.endsWith('/api/signal/queue') && method === 'GET')
-    return testState.signalPostsPayload.filter((post) => post.date === null);
+  if (url.endsWith('/api/signal/queue') && method === 'GET') {
+    const query = new URLSearchParams(url.split('?')[1] ?? '');
+    const lifecycle = query.get('lifecycle') ?? 'active';
+    return testState.signalPostsPayload.filter((post) => {
+      if (post.date !== null) return false;
+      if (lifecycle === 'all') return true;
+      if (lifecycle === 'retired') return post.lifecycle === 'RETIRED';
+      return post.lifecycle === 'ACTIVE';
+    });
+  }
   if (url.endsWith('/api/signal/posts') && method === 'POST') {
     if (testState.signalMutationError) return reply(400, { error: testState.signalMutationError });
     const created = signalPost('created-signal-post', body.text, body.date ?? null, {
@@ -1080,6 +1095,17 @@ const respondTo = (url: string, init?: RequestInit) => {
       (post) => post.id !== signalPostPath[1],
     );
     return { ok: true };
+  }
+  const retirePath = url.match(/\/api\/signal\/posts\/([^/?]+)\/retire$/);
+  if (retirePath && method === 'POST') {
+    if (testState.signalMutationError) return reply(400, { error: testState.signalMutationError });
+    const retiredAt = '2026-08-20T12:00:00.000Z';
+    testState.signalPostsPayload = testState.signalPostsPayload.map((post) =>
+      post.id === retirePath[1]
+        ? { ...post, lifecycle: 'RETIRED' as const, retiredAt, updatedAt: retiredAt }
+        : post,
+    );
+    return testState.signalPostsPayload.find((post) => post.id === retirePath[1]) ?? {};
   }
   if (url.includes('/api/integrations/activity'))
     return testState.integrationActivityError
