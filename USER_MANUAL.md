@@ -1276,9 +1276,15 @@ npm run db:backup:rehearse
 
 That backs up the live database, copies the backup, runs migrations against the copy only, and reports whether clients, projects, tasks, and Drive folder references are still intact. The live database is not modified.
 
-### Cloud hosting (not available yet)
+### Cloud hosting (rehearsal runbook; production cutover is operator-owned)
 
-Day-to-day use is still local-only on this computer. A future hosted deploy is decided on **AWS** and described for operators in [Cloud Hosting](docs/cloud-hosting.md) §§11–12: one small server, HTTPS in front, the same SQLite file on a durable disk, secrets in AWS Parameter Store, and off-site backups in a private S3 bucket kept separate from the Drive encryption key. Nothing in that plan is running today, and this manual’s local backup steps remain the ones you use until a later release walks through cutover.
+Day-to-day use remains local-only on this computer until you complete a cutover. The supported hosted
+shape is **AWS** — one small server, HTTPS in front, the same SQLite file on a durable disk, secrets
+in AWS Parameter Store, and off-site backups in a private S3 bucket kept separate from the Drive
+encryption key. C51–C54 shipped operator authentication, the runtime package, and hosted backups;
+**C55** adds the [cutover rehearsal runbook](docs/cloud-cutover-rehearsal.md) for proving migration
+and rollback on disposable staging. This manual’s local backup steps are what you use until that
+rehearsal passes and you approve production cutover separately.
 
 ## 11. Troubleshooting
 

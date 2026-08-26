@@ -47,7 +47,9 @@ sentinels before SQLite opens or the HTTP listener starts.
   same HTTPS origin with the existing Playwright suite.
 
 Do not register the production Google redirect, populate real credentials, restore production data,
-or change Wix DNS as part of this PR. Those are cutover actions owned by C55.
+or change Wix DNS as part of this PR. Those are cutover actions owned by the operator; see
+[`docs/cloud-cutover-rehearsal.md`](../../docs/cloud-cutover-rehearsal.md) for the disposable staging
+rehearsal and production cutover checklist (C55).
 # Backup timers
 
 Copy and enable `hcc-offsite-backup.timer`, `hcc-backup-rehearsal.timer`, and
