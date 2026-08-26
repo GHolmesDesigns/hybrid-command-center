@@ -124,6 +124,7 @@ const postsInWindow = (db: Db, from: string, to: string) => {
     .prepare(
       `SELECT * FROM signal_posts
        WHERE date IS NOT NULL AND date >= ? AND date <= ?
+         AND lifecycle = 'ACTIVE'
        ORDER BY date, time, created_at, id`,
     )
     .all(from, to) as unknown as SignalPostRow[];

@@ -1,5 +1,12 @@
 import type { Db } from '../db.ts';
-import type { SignalCampaign, SignalChannel, SignalPost } from '../../shared/signal.ts';
+import type {
+  SignalCampaign,
+  SignalChannel,
+  SignalDeliveryProvenance,
+  SignalLifecycle,
+  SignalLifecycleFilter,
+  SignalPost,
+} from '../../shared/signal.ts';
 import type { SignalPostMedia } from '../../shared/signal-media.ts';
 import { campaignsByPost } from './campaigns.ts';
 import type { PublishPlatform, PublishPostKind } from '../../shared/publish-capabilities.ts';
@@ -35,8 +42,26 @@ export interface SignalPostRow {
    */
   cta: string;
   position: number;
+  lifecycle: string;
+  retired_at: string | null;
+  delivery_provenance: string;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * SQL fragment for the lifecycle filter a list or count applies.
+ *
+ * Named separately from planning status and delivery state so every caller states which dimension
+ * it is narrowing. Default `active` matches ordinary planner / calendar / queue-health behaviour.
+ */
+export function signalLifecycleSql(filter: SignalLifecycleFilter = 'active'): {
+  sql: string;
+  params: string[];
+} {
+  if (filter === 'all') return { sql: '', params: [] };
+  if (filter === 'retired') return { sql: " AND lifecycle = 'RETIRED'", params: [] };
+  return { sql: " AND lifecycle = 'ACTIVE'", params: [] };
 }
 
 /**
@@ -152,6 +177,9 @@ export function toSignalPost(
     time: row.time,
     format: row.format as SignalPost['format'],
     status: row.status as SignalPost['status'],
+    lifecycle: row.lifecycle as SignalLifecycle,
+    retiredAt: row.retired_at,
+    deliveryProvenance: row.delivery_provenance as SignalDeliveryProvenance,
     // Empty for a post in no campaign, for the same reason: **No campaign** is a group a reader can
     // see rather than an absence a caller has to test for.
     campaigns,

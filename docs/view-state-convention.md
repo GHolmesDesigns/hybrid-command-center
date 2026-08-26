@@ -56,7 +56,7 @@ resolving even when they contain an unknown or retired value.
 | Projects | Collection | Live projects by recent activity in grid presentation | `visibility`, `view`, `client`, `sort`, `statuses`, and `categories` |
 | Status | Workflow board | Canonical task-status order | Project, client, priority, type, focus, and tag filters |
 | Calendar | Time view | Current month | View and selected date/month when away from the default |
-| Signal | Time view | Current month | View and selected date/month when away from the default, `post` for an open post, `new` for the shared Add Post form, and `campaigns`, `channels`, `accounts`, `from`, and `to` for the campaign-figures filters |
+| Signal | Time view | Current month | View and selected date/month when away from the default, `post` for an open post, `new` for the shared Add Post form, `lifecycle` for active / retired / all plans (lifecycle dimension, not planning status), and `campaigns`, `channels`, `accounts`, `from`, and `to` for the campaign-figures filters |
 | Files | Context browser | Explicit project, remembered project, then first live project | Project and folder selections |
 
 Projects uses `live`, `archived`, and `all`; Clients uses its domain term `active` in place of

@@ -420,6 +420,64 @@ export const SIGNAL_STATUS_LABEL: Record<SignalStatus, string> = {
   PUBLISHED: 'Published',
 };
 
+/**
+ * Whether the plan still belongs in ordinary planning views.
+ *
+ * Separate from `SignalStatus` on purpose: retiring a plan is a lifecycle outcome, not a fourth
+ * planning status. `ACTIVE` (default) appears in the planner, calendar, and queue-health counts;
+ * `RETIRED` is hidden unless the operator asks for retired or all plans. Publication history,
+ * metrics, and integration events stay linked — retire is not a hard delete.
+ *
+ * Who writes: the person, through an explicit Retire plan confirmation. The publisher never sets
+ * this. Reversible in v1: no — there is no undelete; `retiredAt` records when it happened.
+ */
+export const SIGNAL_LIFECYCLES = ['ACTIVE', 'RETIRED'] as const;
+export type SignalLifecycle = (typeof SIGNAL_LIFECYCLES)[number];
+
+export const SIGNAL_LIFECYCLE_LABEL: Record<SignalLifecycle, string> = {
+  ACTIVE: 'Active',
+  RETIRED: 'Retired',
+};
+
+/**
+ * Which plans a Signal list or count includes — a filter over lifecycle, never over planning
+ * status or delivery state. Named so filters and counts say which dimension they use.
+ *
+ * - `active` — ordinary planner / calendar / queue (default).
+ * - `retired` — only retired plans.
+ * - `all` — both.
+ */
+export const SIGNAL_LIFECYCLE_FILTERS = ['active', 'retired', 'all'] as const;
+export type SignalLifecycleFilter = (typeof SIGNAL_LIFECYCLE_FILTERS)[number];
+
+export const SIGNAL_LIFECYCLE_FILTER_LABEL: Record<SignalLifecycleFilter, string> = {
+  active: 'Active plans',
+  retired: 'Retired plans',
+  all: 'All plans (lifecycle)',
+};
+
+/**
+ * Where the content went out relative to this app — provenance, not planning status and not
+ * provider delivery.
+ *
+ * `IN_SIGNAL` (default): the plan lives here; any provider submission is recorded on publications.
+ * `OUTSIDE_SIGNAL`: the operator published manually outside Signal (platform apps, another tool)
+ * without a provider submission from this app. That fact cannot masquerade as delivery state: it
+ * does not create a publication row, does not invent analytics, and does not change
+ * Draft / Scheduled / Published.
+ *
+ * Who writes: the person, through an ordinary edit. Reversible: yes — clearing it back to
+ * `IN_SIGNAL` is an ordinary save. The publisher never sets it. Import defaults to `IN_SIGNAL`
+ * and never invents outside-Signal provenance.
+ */
+export const SIGNAL_DELIVERY_PROVENANCES = ['IN_SIGNAL', 'OUTSIDE_SIGNAL'] as const;
+export type SignalDeliveryProvenance = (typeof SIGNAL_DELIVERY_PROVENANCES)[number];
+
+export const SIGNAL_DELIVERY_PROVENANCE_LABEL: Record<SignalDeliveryProvenance, string> = {
+  IN_SIGNAL: 'In Signal',
+  OUTSIDE_SIGNAL: 'Outside of Signal',
+};
+
 /** What the post asks the reader to do. */
 export const SIGNAL_CTAS = ['NONE', 'SOFT', 'CONVERSION'] as const;
 export type SignalCta = (typeof SIGNAL_CTAS)[number];
@@ -506,6 +564,15 @@ export interface SignalPost {
   time: string;
   format: SignalFormat;
   status: SignalStatus;
+  /** Active in ordinary views, or retired from them. Never a planning-status value. */
+  lifecycle: SignalLifecycle;
+  /** When the plan was retired, UTC ISO; null while active. */
+  retiredAt: string | null;
+  /**
+   * Whether the content went out through this app's plan or outside it. Never a planning-status
+   * value and never a substitute for a publication row.
+   */
+  deliveryProvenance: SignalDeliveryProvenance;
   /**
    * The campaigns this post belongs to, name-ordered. Zero or more, from the shared workspace
    * list, so the same campaign on two posts is the same row and renaming it renames it on both.

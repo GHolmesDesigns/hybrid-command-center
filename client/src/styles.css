@@ -3897,6 +3897,36 @@ button.tag-chip.toggle.active {
 .signal-status.status-scheduled {
   color: var(--blue);
 }
+.signal-lifecycle,
+.signal-provenance {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.signal-lifecycle svg,
+.signal-provenance svg {
+  width: 11px;
+  height: 11px;
+}
+.signal-lifecycle.lifecycle-retired {
+  color: var(--muted);
+}
+.signal-provenance.provenance-outside {
+  color: var(--amber, #b45309);
+}
+.signal-provenance-note,
+.signal-lifecycle-note,
+.signal-filter-caption {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.signal-lifecycle-filter {
+  margin-top: 0.5rem;
+}
 /* Delivery beside planning on a planner card. Named in text and given its own icon shape —
    colour is a second cue, never the first. Compact enough for month cells and the queue. */
 .signal-card-delivery {

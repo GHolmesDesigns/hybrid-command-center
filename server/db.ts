@@ -115,18 +115,27 @@ CREATE TABLE IF NOT EXISTS drive_steps (
 -- (see applyAdditiveMigrations), so removing a column means a full table rebuild and is its own
 -- decision; and while it is here the backfill stays auditable and reversible, because what each
 -- post used to say is still on the row that says it.
+--
+-- lifecycle and delivery_provenance are separate from status on purpose (C107). status stays the
+-- person's Draft / Scheduled / Published claim. lifecycle = RETIRED hides a plan from ordinary
+-- views while keeping publication history; delivery_provenance = OUTSIDE_SIGNAL records that the
+-- content went out outside this app and is never a substitute for a publication row. Neutral
+-- defaults preserve every historical row as an active in-Signal plan.
 CREATE TABLE IF NOT EXISTS signal_posts (
   id TEXT PRIMARY KEY, text TEXT NOT NULL, date TEXT, time TEXT NOT NULL DEFAULT '09:00',
   format TEXT NOT NULL DEFAULT 'TEXT', status TEXT NOT NULL DEFAULT 'DRAFT', campaign TEXT,
   cta TEXT NOT NULL DEFAULT 'NONE', position INTEGER NOT NULL DEFAULT 0,
+  lifecycle TEXT NOT NULL DEFAULT 'ACTIVE',
+  retired_at TEXT,
+  delivery_provenance TEXT NOT NULL DEFAULT 'IN_SIGNAL',
   created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
 -- One row per stable identity a Signal post carries at an authoring source. Copy and schedule are
 -- deliberately absent from this key: both are ordinary edits, so neither can identify the post
 -- across imports. The namespace is signal-import:<stable-source-uuid>; the external id is opaque
 -- and case-sensitive. One pair can name exactly one post, while one post may have identities from
--- several sources. Deleting a post removes its aliases because Signal posts, unlike clients, may
--- be hard-deleted after confirmation.
+-- several sources. Retiring a post keeps its aliases; hard-delete (only when no publication
+-- history exists) removes them by cascade.
 CREATE TABLE IF NOT EXISTS signal_post_import_aliases (
   source_namespace TEXT NOT NULL,
   external_id      TEXT NOT NULL,
@@ -526,6 +535,8 @@ CREATE INDEX IF NOT EXISTS idx_integration_events_correlation ON integration_eve
 -- The calendar reads a date range; the planner reads the queue. Both are this one index:
 -- dated rows order by day, and the NULL dates group together at the front.
 CREATE INDEX IF NOT EXISTS idx_signal_posts_date ON signal_posts(date, time);
+-- Lifecycle filter for planner / calendar / queue lists that default to active plans only.
+CREATE INDEX IF NOT EXISTS idx_signal_posts_lifecycle ON signal_posts(lifecycle);
 -- Imports resolve an alias by its unique pair. This reverse index serves post deletion and any
 -- later inspection of the identities one post is known by.
 CREATE INDEX IF NOT EXISTS idx_signal_post_import_aliases_post

@@ -41,11 +41,10 @@ import {
   resolveDriveMedia,
   type DriveMediaProvider,
 } from './drive/media.ts';
-import { signalProvider } from './signal/read.ts';
-import { readCalendarRange } from './calendar.ts';
 import {
   SignalMediaError,
   SignalPostNotFoundError,
+  SignalPostProtectedError,
   SignalPublishTargetError,
   SignalVariantError,
   SignalSlotConflictError,
@@ -61,8 +60,10 @@ import {
   recheckVariantMedia,
   replacePostPublishTargets,
   replacePostVariants,
+  retirePost,
   signalPostInput,
   signalPostPatch,
+  signalQueueQuery,
   signalRangeQuery,
   signalVariantMediaRecheckInput,
   signalPublishTargetsInput,
@@ -72,6 +73,8 @@ import {
   suggestPostSlot,
   updatePost,
 } from './signal/service.ts';
+import { listPostsInRange, signalProvider } from './signal/read.ts';
+import { readCalendarRange } from './calendar.ts';
 import {
   QueueAlertNotFoundError,
   acknowledgeQueueAlert,
@@ -1638,15 +1641,15 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
    * Signal Campaign's schedule. Signal is authoritative for what is scheduled (decision §5.7),
    * so these routes are the only way it changes and nothing else in the app keeps a second copy.
    *
-   * The range read goes through `SignalProvider` rather than straight to the query behind it.
-   * That is the boundary the calendar consumes, and routing this endpoint through it too means
-   * the interface is exercised by the app rather than only by its tests.
+   * The range read goes through `listPostsInRange` with an explicit lifecycle filter — default
+   * active plans — so retired plans stay out of the planner unless asked for. The calendar route
+   * above still goes through `SignalProvider`, which is active-only by construction.
    */
-  app.get('/api/signal/posts', async (req, res, next) => {
+  app.get('/api/signal/posts', (req, res, next) => {
     try {
-      const { from, to } = signalRangeQuery.parse(req.query);
+      const { from, to, lifecycle } = signalRangeQuery.parse(req.query);
       if (from > to) return res.status(400).json({ error: 'The range ends before it starts.' });
-      res.json(await signalProvider(db).listPosts({ from, to }));
+      res.json(listPostsInRange(db, from, to, lifecycle));
     } catch (error) {
       next(error);
     }
@@ -1871,9 +1874,10 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     }
   });
   /** The unscheduled queue — posts with no date, which belong to no range and no calendar cell. */
-  app.get('/api/signal/queue', (_req, res, next) => {
+  app.get('/api/signal/queue', (req, res, next) => {
     try {
-      res.json(listQueue(db));
+      const { lifecycle } = signalQueueQuery.parse(req.query);
+      res.json(listQueue(db, lifecycle));
     } catch (error) {
       next(error);
     }
@@ -2255,9 +2259,24 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       next(error);
     }
   });
-  app.delete('/api/signal/posts/:id', async (req, res, next) => {
+  /**
+   * Retire a local Signal plan: hide it from ordinary planning views, keep the row and every
+   * linked publication / target / metric. Does not withdraw a provider submission and does not
+   * unpublish platform content (`docs/published-deletion-decision.md`).
+   */
+  app.post('/api/signal/posts/:id/retire', (req, res, next) => {
     try {
-      await publisher.cancelLiveForPost(req.params.id);
+      res.json(retirePost(db, req.params.id));
+    } catch (error) {
+      next(error);
+    }
+  });
+  /**
+   * Hard-delete a plan that has never had a publication row. Posts with publication history must
+   * be retired instead. Never calls the provider — withdraw stays on the reconcile panel alone.
+   */
+  app.delete('/api/signal/posts/:id', (req, res, next) => {
+    try {
       deletePost(db, req.params.id);
       res.json({ ok: true });
     } catch (error) {
@@ -2409,7 +2428,8 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
             // that is no longer free is the same kind of refusal.
             error instanceof PublishRequestError ||
               error instanceof ClientMergeError ||
-              error instanceof SignalSlotConflictError
+              error instanceof SignalSlotConflictError ||
+              error instanceof SignalPostProtectedError
             ? error.status
             : // A rename onto a name another campaign holds, and a deletion that would detach
               // posts before the caller has confirmed it: both are the same *this needs an answer

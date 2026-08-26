@@ -34,7 +34,7 @@ If IDE agents should plan Signal and workspace work through MCP, read [Multi-Age
 - **Campaign playbook import** — an .xlsx workbook or pasted tabs creating a client, its projects, their tasks, checklists, and dependencies in one confirmed transaction, previewed first, duplicates skipped and reported, with a persisted receipt and no Drive side effect
 - **Files** — read-only browsing of a project's Drive folder and its provisioned subfolders: paginated listing, type/size/modified for every item, and "Open in Drive" on every row. It uploads, downloads, moves, renames, and deletes nothing, and every Drive failure mode has its own state and next step
 - **Integration activity** — an append-only record of what each integration changed, when, and how it ended, naming the affected clients, projects, and tasks by id, bounded to the most recent 200 rows, credential-scrubbed, and shown on the Import page beside the receipt it belongs to
-- **Signal Campaign** — the authoritative store and operable planner for content: month grid, unscheduled queue, quick idea capture, and a full editor for content, channels, ordered media references — public URLs and version-bound Drive files — date, time, format, status, campaigns, and CTA, with duplicate-to-queue, next-open-slot suggestion, and confirmed deletion
+- **Signal Campaign** — the authoritative store and operable planner for content: month grid, unscheduled queue, quick idea capture, and a full editor for content, channels, ordered media references — public URLs and version-bound Drive files — date, time, format, planning status, lifecycle, delivery provenance, campaigns, and CTA, with duplicate-to-queue, next-open-slot suggestion, and confirmed Retire plan
 - **Queue health** — an in-app summary above the planner deriving seven alerts from your own posts, deliveries, and the last inventory read: a failed or partly delivered post, a manual finish waiting on you, a scheduled slot approaching with nothing submitted, a provider answer that moved at the last check, a channel with nothing planned inside a configurable window, a provider synchronisation that is rate-limited or behind, and posts at the provider that this app did not send. Each line links to the post it is about, and acknowledging one changes no planning or delivery state. In-app only — no email, SMS, or push service
 - **Figures** — the platforms’ own counts for a post that went out: provider-reported views, likes, comments, and shares per delivery, with the daily snapshots behind them shown as per-day gains, the time of the last synchronisation, and a refresh that runs only when you press it. A channel this provider does not measure says **Not available from this provider** rather than showing a zero, a rate-limited provider is waited out rather than hammered, and a refresh that fails leaves the last known good figures on screen. Where the provider says how it matched a record to the content on the platform, that is shown as **Provider match** beside the platform’s own identifier — provenance about *which content was measured*, with a sentence saying it neither qualifies nor discounts the counts, and nothing at all where the provider said nothing
 - **Provider inventory** — a read-only panel below the planner listing what Post Bridge is holding, marking each row as sent from here or not: its state, when it goes out, which accounts it names, and a link out where the provider supplies one. It refreshes only when you press it, reads every page before it stores anything, and replaces the whole inventory in one step or replaces nothing and says why. It cannot adopt, edit, reschedule, or withdraw a post the app did not send — the point is that such a post stops being invisible before it collides with a slot the planner shows as empty
@@ -586,10 +586,14 @@ it and never writes.
 real content rather than demo data, which is why it is not part of `db:seed`; it is idempotent by
 post id and never overwrites a post that is already there.
 
-A post's status — `DRAFT`, `SCHEDULED`, `PUBLISHED` — describes its own progress and nothing about
-the publishing integration: `PUBLISHED` is the user saying the post went out, while provider
-delivery has its own publication state. That meaning is settled rather than provisional, and
-[`docs/publishing-integration.md`](docs/publishing-integration.md) is where it was settled.
+A post's planning status — `DRAFT`, `SCHEDULED`, `PUBLISHED` — describes its own progress and
+nothing about the publishing integration: `PUBLISHED` is the user saying the post went out, while
+provider delivery has its own publication state. Lifecycle (`ACTIVE` / `RETIRED`) and delivery
+provenance (`IN_SIGNAL` / `OUTSIDE_SIGNAL`) are separate columns so Deleted and Outside of Signal
+never overload that select — see [`docs/published-deletion-decision.md`](docs/published-deletion-decision.md).
+That meaning is settled rather than provisional, and
+[`docs/publishing-integration.md`](docs/publishing-integration.md) is where planning vs delivery was
+settled.
 
 ### Drive provisioning behavior
 

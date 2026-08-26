@@ -688,17 +688,26 @@ Overrides are saved with **Save per-platform content**, separately from the post
 back until both are saved, because a preview of unsaved content is a preview of something that is not
 going out.
 
-**Delete** asks for confirmation and then removes a post that has no publication history
-permanently. There is no in-app undo; restore a database backup to recover it. A planning status of
-**Published** is your own record that the post went out. Provider delivery uses a separate
-publication record and never changes that status automatically.
+**Retire plan** asks for confirmation and then hides the post from ordinary planner, calendar, and
+queue-health views. Publication history, metrics, and integration events stay. Retiring does **not**
+withdraw a provider submission and does **not** unpublish platform content — use the reconcile
+panel's **Cancel provider post** for a scheduled provider submission. There is no undelete in this
+version. Drafts that have never had a publication row can still be hard-deleted through the API when
+needed; the editor offers Retire plan instead of Delete.
+
+A planning status of **Published** is your own record that the post went out. **Delivery
+provenance** is a separate fact: choose **Outside of Signal** only when content went out in a
+platform app or another tool without a submission from this planner. That choice is not provider
+delivery and does not create a publication row. Provider delivery uses its own publication record
+and never changes planning status automatically.
 
 #### Planning status and Delivery
 
-The editor keeps two different facts apart, and it says which is which.
+The editor keeps different facts apart, and it says which is which.
 
 **Planning status** — Draft, Scheduled, Published — is yours. It is what you say about the post,
-and nothing the app or a provider does ever writes it.
+and nothing the app or a provider does ever writes it. Lifecycle (Active / Retired) and Outside of
+Signal provenance are separate controls; neither appears on the planning-status select.
 
 For Buffer targets, confirmation creates one separate remote post for each selected TikTok or
 YouTube channel. The delivery rows keep the exact Buffer id and may disagree: one can be accepted
@@ -1349,8 +1358,10 @@ Figures change nothing at all: reading them writes only the figures themselves, 
 platform reports can move a post, a schedule, or a delivery answer.
 Reading what the provider is holding changes nothing either: it writes that list and the record of
 when it was read, and never a post, a schedule, or a delivery answer.
-Deleting a post with a live provider submission cancels it first; publication history then protects
-the Signal post from deletion so the audit record stays readable.
+Retiring a plan never withdraws a provider submission and never unpublishes platform content.
+Withdraw a scheduled provider post from the reconcile panel first if one is still live; then use
+**Retire plan** to hide the local plan while keeping publication history. Hard-delete is refused
+when any publication row exists.
 
 ### The root folder is rejected
 

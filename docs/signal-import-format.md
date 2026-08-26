@@ -89,7 +89,7 @@ blank and is ignored once a post has a date, matching `signal_posts.position` to
 | `date` | `signal_posts.date` | No | Real `YYYY-MM-DD` date, or blank for the unscheduled queue. Default blank. |
 | `time` | `signal_posts.time` | No | `HH:MM` 24-hour label. Default `09:00` (`SIGNAL_DEFAULT_TIME`). |
 | `format` | `signal_posts.format` | No | Default `TEXT`; use an allowed [format](#allowed-formats) value. |
-| `status` | `signal_posts.status` | No | Default `DRAFT`; use `DRAFT` or `SCHEDULED` only. `PUBLISHED` is refused — import writes planning rows, not delivery claims. |
+| `status` | `signal_posts.status` | No | Default `DRAFT`; use `DRAFT` or `SCHEDULED` only. `PUBLISHED` is refused — import writes planning rows, not delivery claims. Lifecycle stays `ACTIVE` and delivery provenance stays `IN_SIGNAL` on every imported row — import does not retire plans and does not invent Outside of Signal. |
 | `campaigns` | `signal_post_campaigns` join | No | Zero or more campaign names from the shared workspace list, separated by `\|`. Names are trimmed, matched case-insensitively, and created when new inside the import transaction — the same rule `signalPostInput` uses today. Default none (**No campaign**). At most 12 names per post. |
 | `cta` | `signal_posts.cta` | No | Default `NONE`; use an allowed [CTA](#allowed-ctas) value. |
 | `position` | `signal_posts.position` | No | Non-negative integer for queue ordering when `date` is blank. Default is the next queue position at commit time. |
@@ -177,7 +177,9 @@ Values below are the shipped vocabulary in `shared/signal.ts`, `shared/publish-c
 ### Allowed statuses
 
 `DRAFT`, `SCHEDULED` — planning states only. `PUBLISHED` exists in the app as a user-declared
-label but is **not** importable; see [What import never does](#what-import-never-does).
+planning claim and is refused on import; see [What import never does](#what-import-never-does).
+Lifecycle `RETIRED` and provenance `OUTSIDE_SIGNAL` are not planning statuses and are not set by
+import: every imported row lands as an active in-Signal plan.
 
 ### Allowed CTAs
 
@@ -260,6 +262,8 @@ An importer must **never**:
 - write delivery or analytics state;
 - call Post Bridge, Buffer, or any publishing provider;
 - set `signal_posts.status` to `PUBLISHED`;
+- set `signal_posts.lifecycle` to `RETIRED` or `delivery_provenance` to `OUTSIDE_SIGNAL`
+  (those are explicit in-app decisions, not import claims);
 - read or write Drive bytes, rename or move Drive files, or provision Drive folders;
 - download arbitrary URLs to discover media.
 
