@@ -8,6 +8,25 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.3.2] - 2026-08-26
+
+### Changed
+
+- Drive OAuth now requests only `drive.file`. Existing folders are granted through Google
+  Picker in Settings (stable Drive ids), not by pasting a URL alone.
+- Pending OAuth state is stored as independent, expiring, single-use rows bound to the
+  operator session that started them, so concurrent devices no longer overwrite each other.
+- Disconnect and cutover guidance state clearly that Google Account revocation is separate
+  from removing local credentials — required when leaving the old full-Drive grant.
+
+### Breaking changes
+
+- Full `https://www.googleapis.com/auth/drive` is no longer requested. Operators must revoke
+  the previous grant in Google Account permissions and reconnect; restoring an old token
+  ciphertext is not a scope migration.
+- Root-folder selection requires Google Picker (`GOOGLE_API_KEY` and `GOOGLE_APP_ID`) instead
+  of pasting a folder URL as the only path.
+
 ## [5.3.1] - 2026-08-26
 
 ### Added
