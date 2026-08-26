@@ -462,27 +462,28 @@ The AWS Budget `hcc-production-monthly` (§12) alerts at **80%** and **100%** of
 
 All of the following are **inert**: none is attached to compute, and the workspace stays unreachable
 off loopback. Template: [`docs/aws/c50-account-prerequisites.yaml`](aws/c50-account-prerequisites.yaml).
-Stack name: **`hcc-c50-account-prerequisites`**. Region: **`us-east-1`**.
+Stack name: **`hcc-c50-account-prerequisites`**. Region: **`us-east-1`**. Account:
+**`233171357361`**. Stack status after this card: **`CREATE_COMPLETE`**.
 
 | Resource | Name / identity | State after C50 |
 | --- | --- | --- |
-| IAM role | `hcc-production-ec2` | Exists; **not** attached to any instance. |
+| IAM role | `hcc-production-ec2` (`arn:aws:iam::233171357361:role/hcc-production-ec2`) | Exists; **not** attached to any instance (0 EC2 reservations use the profile). |
 | Instance profile | `hcc-production-ec2` | Exists; unused until C53. |
-| S3 bucket | `hcc-production-backups-<account-id>` | Versioned, SSE-S3, public access blocked, lifecycle as §11.6; **zero objects**. |
+| S3 bucket | `hcc-production-backups-233171357361` | Versioned, SSE-S3, public access blocked, lifecycle as §11.6; **zero objects**. |
 | SSM parameters | `/hcc/production/SESSION_SECRET`, `OPERATOR_PASSWORD_HASH`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_TOKEN_ENCRYPTION_KEY`, `POST_BRIDGE_API_KEY`, `BUFFER_API_KEY` | Names reserved; value **`UNSET`**. |
-| SNS topic | `hcc-production-alerts` | Exists; operator email subscribed (confirm the SNS opt-in mail). |
+| SNS topic | `hcc-production-alerts` (`arn:aws:sns:us-east-1:233171357361:hcc-production-alerts`) | Exists; operator email `gholmesdesigns@gmail.com` subscribed (confirm the SNS opt-in mail). |
 | AWS Budget | `hcc-production-monthly` | Ceiling **$20**; email at 80% and 100% actual. |
 | Security group / VPC | Documented in §11.9 only | **Not** created here — attaching a SG without an instance invites drift; C53 creates `hcc-production-sg` with the instance. |
 | Route 53 | — | **Not** created; Wix DNS remains authoritative (§11.5). |
 
-Apply (owner only, never CI), after `aws` credentials for the production account are available:
+Re-apply (owner only, never CI), if the stack must be updated:
 
 ```bash
 aws cloudformation deploy \
   --stack-name hcc-c50-account-prerequisites \
   --template-file docs/aws/c50-account-prerequisites.yaml \
   --capabilities CAPABILITY_NAMED_IAM \
-  --parameter-overrides OperatorAlertEmail=YOU@EXAMPLE.com \
+  --parameter-overrides OperatorAlertEmail=gholmesdesigns@gmail.com \
   --region us-east-1
 ```
 
