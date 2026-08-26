@@ -1,9 +1,12 @@
 # Agent Coordination Hub — Plan
 
-Status: **proposed, not implemented.** This plan extends the MCP work from
+Status: **decided (C109 / #336), not implemented.** This plan extends the MCP work from
 [`multi-agent-mcp-decision.md`](multi-agent-mcp-decision.md) (C105) with a coordination layer so
 multiple IDE agents can **hand work to each other through HCC** rather than relying on accidental
 reads of the same SQLite rows.
+
+**Decision date:** 25 August 2026. Card C109 finalizes §4–§8 below. Runtime, schema, UI, and MCP
+tools ship in C110–C112; this document adds no application code.
 
 Card C105 settled the **shared workspace hub** — every platform reads and writes one source of
 truth. This plan settles the **coordination hub** — platforms leave structured messages, claims,
@@ -11,7 +14,7 @@ and completion records the others can act on.
 
 Nothing here reopens C105's transport choice, provider MCP consumption, or provider-write policy.
 Provider publishing remains human-confirmed in the UI unless a later explicit security decision
-changes it.
+changes it. Completing a handoff never calls publish, Drive, or import paths.
 
 ---
 
@@ -68,16 +71,17 @@ Sizes are the repository label scale, not calendar days: `size-s` under 1 hour, 
 [`multi-agent-mcp-decision.md`](multi-agent-mcp-decision.md) §10. They are **not** publishing-wave
 C106–C108 (#305–#307).
 
-Wave 22 must land before Wave 23 starts implementation work beyond C109 (docs). C109 may merge as
-soon as MCP-C106 lands `agent_label` and `mcp_agent_events`. Wave 24 stays **deferred** until C51
-(#177), C53 (#179), and C55 (#181) merge; it may share the Cloud Hosting milestone rather than
-ship as a code-only Wave 24.
+Wave 22 must land before Wave 23 starts **implementation** work (C110+). C109 (this docs
+settlement) binds to MCP-C106's `agent_label` and `mcp_agent_events` **contracts** from
+[`multi-agent-mcp-decision.md`](multi-agent-mcp-decision.md) and does not require that runtime to
+exist before the decision merges. Wave 24 stays **deferred** until C51 (#177), C53 (#179), and C55
+(#181) merge; it may share the Cloud Hosting milestone rather than ship as a code-only Wave 24.
 
 ### Card index (coordination and network)
 
 | Card | Type | Size | Estimate | Wave | Issue | Depends on |
 | --- | --- | --- | --- | --- | --- | --- |
-| C109 | `docs` | M | 1–3 h | 23 | #336 | C105 (#304), MCP-C106 |
+| C109 | `docs` | M | 1–3 h | 23 | #336 | C105 (#304); MCP-C106 contracts |
 | C110 | `feat` | L | 4–8 h | 23 | #337 | C109, MCP-C107 |
 | C111 | `feat` | M | 1–3 h | 23 | #338 | C110, MCP-C108 |
 | C112 | `feat` | M | 1–3 h | 23 | #339 | C110 |
@@ -87,12 +91,14 @@ ship as a code-only Wave 24.
 
 ## 3. Cards
 
-### C109 — Decide the agent coordination hub model
+### C109 — Decide the agent coordination hub model (shipped)
 
-**Type / branch:** `docs/<issue>-agent-coordination-decision`
+**Type / branch:** `docs/336-agent-coordination-decision`
 **Size:** M · **Estimate:** 1–3 hours · **Wave / milestone:** 23 — Agent coordination hub · **Labels:** `enhancement` `tier-1-security` `docs`
 **Issue:** #336
-**Depends on:** C105 (#304), C106 (MCP scaffold landed — needs `agent_label` and `mcp_agent_events`).
+**Depends on:** C105 (#304). Binds to MCP-C106's `agent_label` and `mcp_agent_events` contracts as
+named in [`multi-agent-mcp-decision.md`](multi-agent-mcp-decision.md); does not wait on MCP runtime
+code for this docs settlement.
 **Blocks:** C110, C111, C112.
 
 #### Problem
@@ -107,7 +113,7 @@ so.
 
 #### Scope
 
-Produce a dated decision amendment (this document's §4–§8, finalized in the card PR) that settles:
+Produce a dated decision amendment (this document's §4–§8) that settles:
 
 - coordination **primitives** (handoff, note, broadcast) and which ship in v1;
 - **identity**: `agent_label` as the sole agent principal in v1; operator as override;
@@ -129,12 +135,12 @@ Produce a dated decision amendment (this document's §4–§8, finalized in the 
 
 #### Acceptance criteria
 
-- [ ] Handoff is chosen as the v1 primitive; chat and broadcast are rejected or deferred with reasons.
-- [ ] Every coordination action has an owner module, authorization rule, and audit rule.
-- [ ] Claim semantics are defined for directed handoffs vs open-pool handoffs.
-- [ ] Provider publishing cannot be triggered by completing a handoff.
-- [ ] C110–C112 can be implemented without reopening C105 transport or provider-write policy.
-- [ ] Threat-model checklist (§8) is included.
+- [x] Handoff is chosen as the v1 primitive; chat and broadcast are rejected or deferred with reasons.
+- [x] Every coordination action has an owner module, authorization rule, and audit rule.
+- [x] Claim semantics are defined for directed handoffs vs open-pool handoffs.
+- [x] Provider publishing cannot be triggered by completing a handoff.
+- [x] C110–C112 can be implemented without reopening C105 transport or provider-write policy.
+- [x] Threat-model checklist (§8) is included.
 
 #### Verification
 
@@ -361,17 +367,71 @@ all required quality gates. No production launch in the PR.
 
 ## 4. Coordination primitives (C109 settlement)
 
+**The decision:** v1 ships a **claimable handoff** with optional **notes**. Everything else is
+deferred or rejected. The product is a structured work queue beside the workspace — not chat, not
+GitHub Issues in SQLite, and not an autonomous workflow engine.
+
 | Primitive | v1 verdict | Reason |
 | --- | --- | --- |
-| **Handoff** | **Ship** | Structured “please do X on Y”; claimable; completes with audit trail |
-| **Note** | **Ship** | Thread on a handoff without state change |
-| **Broadcast** | **Defer** | Operator announcements without a subject duplicate dashboard noise; revisit if inbox proves insufficient |
+| **Handoff** | **Ship** | Structured “please do X on Y”; claimable; completes with an audit trail |
+| **Note** | **Ship** | Thread on a handoff without changing its state |
+| **Broadcast** | **Defer** | Operator announcements without a subject duplicate dashboard noise; revisit if the inbox proves insufficient |
 | **Chat / DM** | **Reject** | Unbounded conversation belongs in IDE threads, not SQLite |
-| **Workflow engine** | **Defer** | Multi-step DAGs (A→B→C mandatory) need a second decision; v1 is single hop |
+| **Workflow engine** | **Defer** | Multi-step DAGs (A→B→C mandatory) need a second decision; v1 is a single hop |
+
+### 4.1 Table and field names (fixed)
+
+| Name | Role |
+| --- | --- |
+| `agent_handoffs` | One row per handoff; state machine lives here |
+| `agent_handoff_notes` | Append-only comments on a handoff; never change handoff state |
+
+A handoff carries: `id`, `created_at`, `updated_at`, `from_agent_label`, optional `to_agent_label`
+(null = open pool), `subject_type`, optional `subject_id`, bounded `message`, `state`, optional
+`claimed_by`, `claimed_at`, optional `completed_at`, optional `cancelled_at`, `cancel_reason`,
+optional `client_request_id`.
+
+**`subject_type` enum (v1):** `task`, `signal_post`, `project`, `client`, `freeform`. When
+`subject_id` is set, the handoff binds to that workspace row; `freeform` is for requests with no
+entity. Binding is a pointer for the inbox UI — claim and complete **never** mutate the subject.
+
+### 4.2 Bounds
+
+| Field | Limit |
+| --- | --- |
+| `message` | 2000 Unicode characters |
+| Note body | 2000 Unicode characters |
+| `agent_label` / `from_agent_label` / `to_agent_label` / `claimed_by` | Non-empty, trimmed, max 64 chars; charset and init validation are MCP-C106's to ship and C110 reuses |
+| `client_request_id` | Max 64 chars; optional |
+| `cancel_reason` | Required on cancel; 1–500 Unicode characters |
+
+Bodies pass through `redactSecrets` on write. Credential-shaped substrings are refused or scrubbed
+at the Zod boundary before insert; URLs without credentials remain allowed.
+
+### 4.3 Explicit non-goals tied to primitives
+
+- Completing a handoff **must not** invoke `server/publish/*`, Drive write paths, playbook import
+  commit, or any provider adapter.
+- A handoff is **not** a second schedule: Signal dates and times stay in `signal_posts` only.
+- Agents still edit workspace rows through ordinary MCP workspace/Signal tools (C105 surface). The
+  handoff only records who was asked to do that work and whether they finished.
 
 ---
 
-## 5. Handoff lifecycle
+## 5. Identity, lifecycle, claims, and timeouts
+
+### 5.1 Identity
+
+| Principal | Role in v1 |
+| --- | --- |
+| **Operator** | Workspace owner. May cancel any handoff over HTTP (C112). Implicit on loopback until C51; session-bound afterward. |
+| **`agent_label`** | **Sole agent principal for coordination.** Supplied at MCP init (contract from MCP-C106). Required for coordination **writes**; optional/forensic for ordinary workspace tools per C105 §4.1. |
+
+This does **not** reopen C105: for workspace and Signal tools, `agent_label` remains forensic. For
+coordination claim/complete/cancel among agents, the label is the authorization principal so a
+directed handoff means something. Agents are still not tenants — one operator workspace.
+
+### 5.2 Lifecycle
 
 ```
                     ┌─────────────┐
@@ -392,50 +452,137 @@ all required quality gates. No production launch in the PR.
        └──────────┘  └──────────┘  └──────────┘
 ```
 
-- **Complete** only from `CLAIMED`; must match `claimed_by` unless operator HTTP cancel path.
-- **Cancel** allowed from `OPEN` or `CLAIMED`.
-- **Re-open** is **declined** in v1 — post a new handoff instead.
+| Transition | From | Rule |
+| --- | --- | --- |
+| Post | — → `OPEN` | Creates the row; does not claim |
+| Claim | `OPEN` → `CLAIMED` | Atomic; sets `claimed_by` / `claimed_at` |
+| Complete | `CLAIMED` → `COMPLETED` | Only `claimed_by` (MCP) or refused |
+| Cancel | `OPEN` or `CLAIMED` → `CANCELLED` | Poster, claimer, or operator; requires `cancel_reason` |
+| Re-open | any → `OPEN` | **Declined** — post a new handoff |
+
+Terminal states (`COMPLETED`, `CANCELLED`) are immutable except for append-only notes on
+`COMPLETED` (notes on `CANCELLED` are refused).
+
+### 5.3 Claim semantics
+
+| Kind | `to_agent_label` | Who may claim | Conflict |
+| --- | --- | --- | --- |
+| **Directed** | Non-null | Only the matching label | Any other label receives `REFUSED` |
+| **Open pool** | Null | Any non-empty label | First successful claim wins; second concurrent claim in the same transaction sees `CLAIMED` and receives `REFUSED` |
+
+Claim is one SQLite transaction that reads state, checks authorization, and updates — never
+read-then-write across separate statements at the service boundary. There is no soft lease or
+heartbeat in v1: a stuck `CLAIMED` handoff is cancelled by the operator or the claimer, not expired
+automatically.
+
+### 5.4 Timeouts and staleness
+
+| Rule | Behaviour |
+| --- | --- |
+| **OPEN TTL** | `OPEN` handoffs older than **30 days** surface a stale-handoff warning in C112 (queue-health style). Not auto-deleted in v1. |
+| **CLAIMED TTL** | No automatic expiry in v1. Operator cancel is the escape hatch. |
+| **Completed / cancelled retention** | Rows kept; UI shows last 7 days by default (C112). |
+
+### 5.5 Idempotency and duplicates
+
+| Concern | Rule |
+| --- | --- |
+| **Post idempotency** | Optional `client_request_id`. Duplicate `(from_agent_label, client_request_id)` returns the existing row; no second insert. |
+| **Without client_request_id** | Each post creates a new handoff — intentional retries without an id are new work. |
+| **Claim / complete / cancel** | Idempotent on already-terminal or already-claimed-by-self states: return the current row (or a clear `REFUSED` when unauthorized), never a second state flip. |
+| **Notes** | Always append; no client-request idempotency in v1. |
+
+### 5.6 Rate limits
+
+| Scope | Limit |
+| --- | --- |
+| Coordination writes per MCP session | At most **10** per rolling minute (post, claim, complete, cancel, note combined) |
+| Message / note size | §4.2 |
+
+Exceeding the rate limit returns `REFUSED` and records `mcp_agent_events` with that outcome. C105's
+integration-write budget (6/min) is separate and unchanged.
 
 ---
 
-## 6. Authorization rules
-
-| Action | Who |
-| --- | --- |
-| Post handoff | Any MCP client with valid `agent_label` |
-| Claim | Directed: matching label only. Open pool: any label not already claimer |
-| Complete | Current claimer only |
-| Cancel | Original poster, current claimer, or operator (HTTP) |
-| Add note | Any agent with valid `agent_label` on an non-cancelled handoff |
-| List / get | Operator session (UI or MCP reads) |
+## 6. Authorization and owner modules
 
 There is still **one operator workspace** — agents are not tenants. Labels distinguish platforms for
-coordination; they do not grant different permissions in v1.
+coordination; they do not grant different workspace permissions in v1.
+
+### 6.1 Action matrix
+
+Every coordination action has exactly one owner module, one authorization rule, and one audit rule:
+
+| Action | Owner module | Authorization | Audit |
+| --- | --- | --- | --- |
+| Post handoff | `server/domain/agent-coordination.ts` → `server/agent-coordination/service.ts` | MCP: non-empty init `agent_label`; `from_agent_label` must equal it | Handoff row + `mcp_agent_events` |
+| Claim handoff | same | Directed: label = `to_agent_label`. Open pool: any valid label. Atomic. | Handoff columns + `mcp_agent_events` |
+| Complete handoff | same | MCP: only `claimed_by`. Never triggers publish/Drive/import. | Handoff columns + `mcp_agent_events` |
+| Cancel handoff (agent) | same | Poster or current claimer; `OPEN` or `CLAIMED` only | Handoff columns + `mcp_agent_events` |
+| Cancel handoff (operator) | same service; HTTP in C112 | Operator session / loopback; any non-`COMPLETED` state | Handoff columns (no MCP event when UI-only) |
+| Add note | same | Valid `agent_label`; handoff not `CANCELLED` | Note row + `mcp_agent_events` |
+| List / get handoffs | `server/agent-coordination/service.ts` (read) | Operator (UI) or MCP reads | — (no mutation audit) |
+| Inbox resource | MCP resource adapter (C111) | Same as list | — |
+
+Domain rules live only in `server/domain/agent-coordination.ts`. The MCP layer (C111) and HTTP
+routes (C112) call the service; they do not re-implement claim or complete checks.
+
+### 6.2 Provider-publish rejection (non-negotiable)
+
+| Path | Allowed to publish? |
+| --- | --- |
+| Complete handoff | **No** — state flip only |
+| Cancel handoff | **No** |
+| Add note | **No** |
+| Operator inbox UI | **No** — cancel and view only in v1; publish stays on existing Signal confirm flows |
+
+C110–C112 acceptance criteria must keep this boundary. A future card that wants publish-on-complete
+needs its own security decision and does not amend this one quietly.
 
 ---
 
 ## 7. Audit
 
-| Event | Stored in |
-| --- | --- |
-| Handoff row created / state change | `agent_handoffs` columns |
-| Note added | `agent_handoff_notes` |
-| MCP tool invocation | `mcp_agent_events` (tool name, outcome, handoff id) |
+| Event | Stored in | Notes |
+| --- | --- | --- |
+| Handoff created / state change | `agent_handoffs` columns | `updated_at` on every transition; terminal timestamps set once |
+| Note added | `agent_handoff_notes` | Append-only; `agent_label`, `at`, bounded body |
+| MCP tool invocation | `mcp_agent_events` | Tool name, outcome (`SUCCESS` / `REFUSED` / `FAILURE`), handoff id in structured detail; inherits C105 retention |
 
-No `integration_events` row — coordination does not call externals.
+**No `integration_events` row** — coordination does not call externals. Adding an integration-log
+source for handoffs would imply an external side effect that does not exist.
+
+Secrets never appear in handoff messages, notes, MCP tool results, or `mcp_agent_events` free-text
+fields: validate length, refuse credential patterns, run `redactSecrets` on the free-text path.
 
 ---
 
 ## 8. Threat-model checklist (C109)
 
-- [ ] Handoff messages cannot contain API keys or OAuth tokens (validation + redaction).
-- [ ] Rate limits prevent handoff spam from a runaway agent loop.
-- [ ] Claim is atomic — two agents cannot claim the same open-pool handoff.
-- [ ] Directed handoff cannot be claimed by wrong label.
-- [ ] Completing a handoff does not call publish, Drive, or import paths.
-- [ ] Operator can cancel abusive or stuck handoffs without MCP access.
-- [ ] Network phase (C113) inherits C51 session revocation.
-- [ ] Implementation cards do not reopen C105 provider-write or transport decisions.
+Use this checklist in documentation review before C110–C112 merge. Mitigations are settled here;
+implementation cards prove them with tests.
+
+| ID | Threat | Mitigation |
+| --- | --- | --- |
+| H1 | API keys / OAuth tokens in handoff or note bodies | Length bounds + credential-pattern refusal + `redactSecrets` on write (§4.2, §7) |
+| H2 | Runaway agent loops spam the queue | 10 coordination writes / rolling minute / MCP session (§5.6) |
+| H3 | Two agents claim the same open-pool handoff | Atomic claim transaction; second sees `REFUSED` (§5.3) |
+| H4 | Wrong label claims a directed handoff | Directed claim requires exact `to_agent_label` match (§5.3, §6.1) |
+| H5 | Completing a handoff publishes or syncs Drive | Complete is a local state flip only; no publish/Drive/import imports (§4.3, §6.2) |
+| H6 | Stuck or abusive handoffs with no MCP access | Operator HTTP cancel with required reason (C112) (§5.2, §6.1) |
+| H7 | Network MCP exposes coordination without session | C113 inherits C51 session revocation + CSRF + required label header |
+| H8 | Implementation reopens C105 transport or provider-write policy | C110–C112 scoped to handoff domain/tools/UI only; stdio remains; provider writes stay UI-confirmed |
+
+Verification checklist:
+
+- [x] Handoff messages cannot contain API keys or OAuth tokens (validation + redaction).
+- [x] Rate limits prevent handoff spam from a runaway agent loop.
+- [x] Claim is atomic — two agents cannot claim the same open-pool handoff.
+- [x] Directed handoff cannot be claimed by wrong label.
+- [x] Completing a handoff does not call publish, Drive, or import paths.
+- [x] Operator can cancel abusive or stuck handoffs without MCP access.
+- [x] Network phase (C113) inherits C51 session revocation.
+- [x] Implementation cards do not reopen C105 provider-write or transport decisions.
 
 ---
 
@@ -455,14 +602,16 @@ Provider publish never runs inside steps 1–4.
 ## 10. Cross-references
 
 - [`multi-agent-mcp-decision.md`](multi-agent-mcp-decision.md) — MCP trust boundary (C105), tool
-  surface C106–C108, network C113.
+  surface MCP-C106–MCP-C108, network C113.
 - [`cloud-hosting.md`](cloud-hosting.md) §5 — operator auth prerequisite for C113.
 - [`AGENTS.md`](../AGENTS.md) — Signal authority, integration log rules.
 
 ---
 
-## 11. Verification (plan document)
+## 11. Verification (this card)
 
-- [ ] Cards C109–C113 are bounded and ordered.
-- [ ] Provider publishing stays UI-confirmed throughout.
-- [ ] `npm run format:check` when merged into repo.
+- [x] Cards C109–C113 are bounded and ordered.
+- [x] Provider publishing stays UI-confirmed throughout.
+- [x] §4–§8 settle primitives, identity, auth, lifecycle, claims, idempotency, rate limits, audit, and threats.
+- [x] `npm run format:check` when merged into repo.
+- [x] No runtime, schema, or dependency change in this PR.

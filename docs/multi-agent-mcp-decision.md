@@ -142,7 +142,7 @@ Use this checklist in documentation review before any implementation card merges
 | Field | Rule |
 | --- | --- |
 | **Operator identity** | Implicit: the OS user who spawned the MCP process owns the workspace file. Same as today's HTTP API on loopback. |
-| **Agent label** | Optional string the IDE supplies (`clientInfo.name` / MCP initialization metadata). Stored on MCP audit rows for forensics only; **not** an authorization principal in v1. |
+| **Agent label** | Optional string the IDE supplies (`clientInfo.name` / MCP initialization metadata). Stored on MCP audit rows for forensics only for workspace/Signal tools; **not** an authorization principal for those tools in v1. Coordination tools (C109+) treat a non-empty label as the agent principal for claim/complete/cancel — see [`agent-coordination-plan.md`](agent-coordination-plan.md) §5.1. |
 | **Session binding** | None on stdio. Every tool call is authorized as the operator. |
 
 ### 4.2 Agent identity (deferred — network MCP)
@@ -434,11 +434,12 @@ campaign management, alert ack, settings updates. Confirm flags on destructive o
 integration refresh tools with rate limits and `integration_events`.
 **Out of scope:** Provider submit/apply/cancel/publish-now.
 
-### C109 — Agent coordination hub decision
+### C109 — Agent coordination hub decision (shipped)
 
-**Branch:** `docs/<issue>-agent-coordination-decision`
+**Branch:** `docs/336-agent-coordination-decision`
 **Size:** M · **Estimate:** 1–3 hours · **Wave / milestone:** 23 — Agent coordination hub
-**Issue:** #336 · **Depends on:** C105 (#304), MCP-C106 (MCP scaffold with `agent_label`).
+**Issue:** #336 · **Depends on:** C105 (#304); binds to MCP-C106 `agent_label` / `mcp_agent_events`
+contracts without requiring that runtime first.
 **Scope:** Finalize [`agent-coordination-plan.md`](agent-coordination-plan.md) §4–§8 — handoff
 primitive, lifecycle, authorization, audit, threat-model checklist. No runtime change.
 **Blocks:** C110, C111, C112.

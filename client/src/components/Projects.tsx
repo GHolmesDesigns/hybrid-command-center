@@ -133,10 +133,14 @@ export function Projects({
   // never include ARCHIVED — that scope stays on visibility — so the two cannot silently cancel.
   const selectedStatuses = parseLiveProjectStatuses(params.get('statuses'));
   const setParam = (key: string, value: string, defaultValue = '') => {
-    const next = new URLSearchParams(params);
-    if (value && value !== defaultValue) next.set(key, value);
-    else next.delete(key);
-    setParams(next);
+    // Functional updater so a status-canonicalization effect and a presentation click cannot
+    // each snapshot the same params and overwrite the other's key.
+    setParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (value && value !== defaultValue) next.set(key, value);
+      else next.delete(key);
+      return next;
+    });
   };
   const setCategoryIds = (ids: string[]) => setParam('categories', ids.join(','));
   const setStatuses = (statuses: LiveProjectStatus[]) =>
