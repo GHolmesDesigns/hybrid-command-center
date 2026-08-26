@@ -1,0 +1,308 @@
+# C50 — inert AWS account prerequisites for Hybrid Command Center.
+# Creates IAM role (unattached), SSM parameter *names* with empty String values,
+# versioned private S3 backup bucket, SNS topic + email subscription, and a
+# monthly budget alert. Does not launch compute, attach the role, or open a
+# security group against a running host.
+#
+# Apply (owner only, never CI):
+#   aws cloudformation deploy \
+#     --stack-name hcc-c50-account-prerequisites \
+#     --template-file docs/aws/c50-account-prerequisites.yaml \
+#     --capabilities CAPABILITY_NAMED_IAM \
+#     --parameter-overrides OperatorAlertEmail=you@example.com \
+#     --region us-east-1
+#
+# Values for SecureString secrets are written later by the operator (C51/C53);
+# this stack only reserves the names as empty String parameters so the contract
+# and the account agree before compute exists.
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Hybrid Command Center C50 — inert account prerequisites (IAM role, SSM names,
+  S3 backups, SNS alerts, budget). No EC2, no attached role, no live traffic.
+
+Parameters:
+  OperatorAlertEmail:
+    Type: String
+    Description: Operator email subscribed to the production SNS alert topic.
+    AllowedPattern: '.+@.+\..+'
+  MonthlyBudgetUsd:
+    Type: Number
+    Default: 20
+    MinValue: 5
+    MaxValue: 100
+    Description: AWS Budgets ceiling matching docs/cloud-hosting.md §11 cost row.
+  NamePrefix:
+    Type: String
+    Default: hcc-production
+    AllowedPattern: '^[a-z0-9-]+$'
+    Description: Shared name prefix for role, bucket, topic, and budget.
+
+Resources:
+  ProductionInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${NamePrefix}-ec2'
+      Description: >-
+        Instance role for the future C53 EC2 host. Not attached to any instance
+        by this stack. SSM Session Manager + named Parameter Store reads +
+        writes to the single backup bucket.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: hcc-production-secrets-and-backups
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: ReadNamedParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource:
+                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/hcc/production/*'
+              - Sid: DecryptSecureStringParameters
+                Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    kms:ViaService: !Sub 'ssm.${AWS::Region}.amazonaws.com'
+              - Sid: WriteBackupBucket
+                Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:AbortMultipartUpload
+                  - s3:ListBucket
+                  - s3:GetBucketLocation
+                  - s3:GetObject
+                  - s3:DeleteObject
+                Resource:
+                  - !GetAtt BackupBucket.Arn
+                  - !Sub '${BackupBucket.Arn}/*'
+
+  ProductionInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub '${NamePrefix}-ec2'
+      Roles:
+        - !Ref ProductionInstanceRole
+
+  BackupBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub '${NamePrefix}-backups-${AWS::AccountId}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireNoncurrentAndAbortIncomplete
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 90
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+            # Current objects are retained by application retention (C54); this
+            # rule only cleans incomplete uploads and old versions.
+      Tags:
+        - Key: app
+          Value: hybrid-command-center
+        - Key: purpose
+          Value: offsite-sqlite-backups
+
+  BackupBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref BackupBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource:
+              - !GetAtt BackupBucket.Arn
+              - !Sub '${BackupBucket.Arn}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+  # Name reservations only. SSM refuses a truly empty Value, so each parameter
+  # holds the sentinel UNSET (not a secret). The operator replaces these with
+  # real values — preferably as SecureString overlays — before C53 boots; the
+  # production checklist must refuse UNSET for every required secret.
+  ParamSessionSecret:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /hcc/production/SESSION_SECRET
+      Type: String
+      Value: UNSET
+      Description: 'Reserved for C51 session HMAC secret. Sentinel UNSET until the operator writes a real value.'
+      Tags:
+        app: hybrid-command-center
+
+  ParamOperatorPasswordHash:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /hcc/production/OPERATOR_PASSWORD_HASH
+      Type: String
+      Value: UNSET
+      Description: 'Reserved for C51 argon2id password hash. Sentinel UNSET until the operator writes a real value.'
+      Tags:
+        app: hybrid-command-center
+
+  ParamGoogleClientId:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /hcc/production/GOOGLE_CLIENT_ID
+      Type: String
+      Value: UNSET
+      Description: 'Reserved Google OAuth client id. Sentinel UNSET until the operator writes a real value.'
+      Tags:
+        app: hybrid-command-center
+
+  ParamGoogleClientSecret:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /hcc/production/GOOGLE_CLIENT_SECRET
+      Type: String
+      Value: UNSET
+      Description: 'Reserved Google OAuth client secret. Sentinel UNSET until the operator writes a real value.'
+      Tags:
+        app: hybrid-command-center
+
+  ParamGoogleTokenEncryptionKey:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /hcc/production/GOOGLE_TOKEN_ENCRYPTION_KEY
+      Type: String
+      Value: UNSET
+      Description: >-
+        Reserved Drive-token encryption key. Stored only here — never in the
+        backup bucket and never beside a db:backup snapshot. Sentinel UNSET
+        until the operator writes a real value.
+      Tags:
+        app: hybrid-command-center
+
+  ParamPostBridgeApiKey:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /hcc/production/POST_BRIDGE_API_KEY
+      Type: String
+      Value: UNSET
+      Description: 'Optional Post Bridge key. Sentinel UNSET until needed.'
+      Tags:
+        app: hybrid-command-center
+
+  ParamBufferApiKey:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /hcc/production/BUFFER_API_KEY
+      Type: String
+      Value: UNSET
+      Description: 'Optional Buffer key. Sentinel UNSET until needed.'
+      Tags:
+        app: hybrid-command-center
+
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub '${NamePrefix}-alerts'
+      DisplayName: Hybrid Command Center production alerts
+      Tags:
+        - Key: app
+          Value: hybrid-command-center
+
+  AlertEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref AlertTopic
+      Protocol: email
+      Endpoint: !Ref OperatorAlertEmail
+
+  MonthlyBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: !Sub '${NamePrefix}-monthly'
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit:
+          Amount: !Ref MonthlyBudgetUsd
+          Unit: USD
+        CostTypes:
+          IncludeCredit: false
+          IncludeDiscount: true
+          IncludeOtherSubscription: true
+          IncludeRecurring: true
+          IncludeRefund: false
+          IncludeSubscription: true
+          IncludeSupport: true
+          IncludeTax: true
+          IncludeUpfront: true
+          UseAmortized: false
+          UseBlended: false
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 80
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref OperatorAlertEmail
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 100
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref OperatorAlertEmail
+
+Outputs:
+  RoleName:
+    Description: IAM role name (unattached).
+    Value: !Ref ProductionInstanceRole
+  RoleArn:
+    Description: IAM role ARN (unattached).
+    Value: !GetAtt ProductionInstanceRole.Arn
+  InstanceProfileArn:
+    Description: Instance profile ARN (unused until C53 attaches it to EC2).
+    Value: !GetAtt ProductionInstanceProfile.Arn
+  BackupBucketName:
+    Description: Versioned private S3 backup bucket (must stay empty until C54).
+    Value: !Ref BackupBucket
+  AlertTopicArn:
+    Description: SNS topic for CloudWatch alarms (C51/C53/C54).
+    Value: !Ref AlertTopic
+  ParameterPath:
+    Description: SSM parameter path reserved for production secrets.
+    Value: /hcc/production/
+  BudgetName:
+    Description: AWS Budgets name at the contract monthly ceiling.
+    Value: !Sub '${NamePrefix}-monthly'
+  Region:
+    Description: Stack region.
+    Value: !Ref AWS::Region
