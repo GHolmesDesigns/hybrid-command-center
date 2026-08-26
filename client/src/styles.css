@@ -5667,3 +5667,66 @@ button.tag-chip.toggle.active {
   color: var(--muted);
   font-size: 11px;
 }
+
+/* Operator login (C51). Shown only when the API requires a session. */
+.login-screen {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at top left, rgba(215, 197, 162, 0.35), transparent 42%),
+    linear-gradient(160deg, #f4f3ef 0%, #e8ebe7 100%);
+}
+.login-panel {
+  width: min(420px, 100%);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 28px;
+  display: grid;
+  gap: 24px;
+}
+.login-brand {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.login-brand h1 {
+  margin: 4px 0 8px;
+  font:
+    700 28px Manrope,
+    sans-serif;
+  color: var(--ink);
+}
+.login-brand p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.login-form {
+  display: grid;
+  gap: 14px;
+}
+.login-form label {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.login-form input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 12px 14px;
+  background: #fff;
+}
+.login-form button {
+  width: 100%;
+}
+@media (max-width: 520px) {
+  .login-brand {
+    flex-direction: column;
+  }
+}

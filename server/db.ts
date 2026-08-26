@@ -84,6 +84,18 @@ CREATE TABLE IF NOT EXISTS project_categories (
   PRIMARY KEY (project_id, category_id)
 );
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL);
+-- Operator sessions (C51): cookie holds the raw token; this table stores the HMAC hash + CSRF.
+-- Keep in sync with OPERATOR_SESSIONS_TABLE_SQL in server/auth/sessions.ts.
+CREATE TABLE IF NOT EXISTS operator_sessions (
+  token_hash TEXT PRIMARY KEY,
+  csrf_token TEXT NOT NULL,
+  issued_at TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL,
+  idle_expires_at TEXT NOT NULL,
+  absolute_expires_at TEXT NOT NULL,
+  revoked_at TEXT,
+  client_address TEXT
+);
 CREATE TABLE IF NOT EXISTS import_receipts (
   id TEXT PRIMARY KEY, source TEXT NOT NULL, input_kind TEXT NOT NULL, filename TEXT,
   fingerprint TEXT NOT NULL, outcome TEXT NOT NULL, created_count INTEGER NOT NULL DEFAULT 0,
@@ -574,6 +586,8 @@ CREATE INDEX IF NOT EXISTS idx_dependencies_task ON task_dependencies(task_id);
 CREATE INDEX IF NOT EXISTS idx_task_tags_tag ON task_tags(tag_id);
 CREATE INDEX IF NOT EXISTS idx_project_categories_category ON project_categories(category_id);
 CREATE INDEX IF NOT EXISTS idx_import_receipts_created ON import_receipts(created_at DESC);
+-- Purge walks idle expiry; absolute and revoked rows are filtered in the same DELETE.
+CREATE INDEX IF NOT EXISTS idx_operator_sessions_idle ON operator_sessions(idle_expires_at);
 CREATE INDEX IF NOT EXISTS idx_integration_events_created ON integration_events(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_integration_events_correlation ON integration_events(correlation_id);
 -- The calendar reads a date range; the planner reads the queue. Both are this one index:

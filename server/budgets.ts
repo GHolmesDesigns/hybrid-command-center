@@ -80,6 +80,32 @@ export const DRIVE_SYNC_BUDGET: Budget = {
 };
 
 /**
+ * Login attempts across one address. Progressive delay in `server/auth/login-rate-limit.ts`
+ * still gates wrong passwords; this ceiling is the Express-visible budget CodeQL and operators
+ * read (via `express-rate-limit` in `app.ts`), and it also caps successful logins so a stolen
+ * password cannot mint sessions unboundedly.
+ */
+export const AUTH_LOGIN_BUDGET: Budget = {
+  limit: 30,
+  windowMs: 15 * 60_000,
+  message: 'Too many login attempts. Wait a few minutes and try again.',
+};
+
+/**
+ * Status / logout / password-change under `/api/auth`. Separate from login so a spent login
+ * window does not block logout or the status poll the AuthGate needs after sign-in.
+ *
+ * Six hundred a minute is far above a person (AuthGate asks once per load) and leaves headroom
+ * for the e2e suite, which shares one address and remounts AuthGate on every navigation — React
+ * Strict Mode doubles the status call, and a tight window was starving later specs with 429s.
+ */
+export const AUTH_ROUTE_BUDGET: Budget = {
+  limit: 600,
+  windowMs: 60_000,
+  message: 'Too many authentication requests. Wait a moment and try again.',
+};
+
+/**
  * How many import requests may be in flight at once. One, because the point of the cap is that a
  * caller cannot hold several multi-megabyte bodies in memory simultaneously — and it only holds
  * if the gate runs *before* the body parser, which is where `app.ts` mounts it.

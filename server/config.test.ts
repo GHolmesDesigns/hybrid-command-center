@@ -48,20 +48,33 @@ describe('API host binding', () => {
   /**
    * The bind gate from `docs/cloud-hosting.md` §5.1. `0.0.0.0` used to be honored, on the theory
    * that a documented foot-gun is a deliberate choice; it is not, because nothing in the app
-   * authenticates the LAN it would then be answering. Until §5's operator password ships, the
-   * only deliberate choice available is loopback.
+   * authenticates the LAN it would then be answering. Until the full §5 checklist is satisfied,
+   * the only deliberate choice available is loopback.
    */
   it.each(['0.0.0.0', '::', '192.168.1.20', 'command-center.local'])(
-    'refuses HOST=%s while nothing authenticates the API, naming the variable',
+    'refuses HOST=%s while operator authentication is incomplete, naming the variable',
     async (host) => {
       process.env.HOST = host;
+      setEnv('SESSION_SECRET', undefined);
+      setEnv('OPERATOR_PASSWORD_HASH', undefined);
+      setEnv('PRODUCTION_TLS_TERMINATED', undefined);
+      setEnv('TRUSTED_PROXY_HOPS', undefined);
+      setEnv('APP_ORIGIN', undefined);
       await expect(loadConfig()).rejects.toThrow(/HOST: must be a loopback address/);
     },
   );
 
-  it('points a refused bind at the decision record rather than only failing', async () => {
+  it('points a refused bind at the decision record and the auth checklist', async () => {
     process.env.HOST = '0.0.0.0';
+    setEnv('SESSION_SECRET', undefined);
+    setEnv('OPERATOR_PASSWORD_HASH', undefined);
+    setEnv('PRODUCTION_TLS_TERMINATED', undefined);
+    setEnv('TRUSTED_PROXY_HOPS', undefined);
     await expect(loadConfig()).rejects.toThrow(/docs\/cloud-hosting\.md §5\.1/);
+    await expect(loadConfig()).rejects.toThrow(/SESSION_SECRET/);
+    await expect(loadConfig()).rejects.toThrow(/OPERATOR_PASSWORD_HASH/);
+    await expect(loadConfig()).rejects.toThrow(/PRODUCTION_TLS_TERMINATED/);
+    await expect(loadConfig()).rejects.toThrow(/TRUSTED_PROXY_HOPS/);
   });
 
   it.each(['127.0.0.1', '::1', 'localhost', 'LocalHost'])(
@@ -71,6 +84,26 @@ describe('API host binding', () => {
       expect((await loadConfig()).host).toBe(host);
     },
   );
+
+  it('accepts a non-loopback HOST when the full §5.1 checklist is satisfied', async () => {
+    setEnv('HOST', '0.0.0.0');
+    setEnv('SESSION_SECRET', 's'.repeat(32));
+    setEnv('OPERATOR_PASSWORD_HASH', '$argon2id$v=19$m=65536,t=3,p=4$placeholder');
+    setEnv('APP_ORIGIN', 'https://command-center.example');
+    setEnv('PRODUCTION_TLS_TERMINATED', 'true');
+    setEnv('TRUSTED_PROXY_HOPS', '1');
+    expect((await loadConfig()).host).toBe('0.0.0.0');
+  });
+
+  it('still refuses a non-loopback HOST when TRUSTED_PROXY_HOPS is only the default', async () => {
+    setEnv('HOST', '0.0.0.0');
+    setEnv('SESSION_SECRET', 's'.repeat(32));
+    setEnv('OPERATOR_PASSWORD_HASH', '$argon2id$v=19$m=65536,t=3,p=4$placeholder');
+    setEnv('APP_ORIGIN', 'https://command-center.example');
+    setEnv('PRODUCTION_TLS_TERMINATED', 'true');
+    setEnv('TRUSTED_PROXY_HOPS', undefined);
+    await expect(loadConfig()).rejects.toThrow(/HOST: must be a loopback address/);
+  });
 });
 
 describe('log level', () => {
@@ -229,6 +262,83 @@ describe('Buffer credential migration', () => {
     vi.resetModules();
     const { bufferConfigured: withoutKey } = await import('./config.ts');
     expect(withoutKey()).toBe(false);
+  });
+});
+
+describe('operator authentication config', () => {
+  const SESSION = 's'.repeat(32);
+
+  it('defaults auth fields to empty / false / zero hops on loopback', async () => {
+    setEnv('SESSION_SECRET', undefined);
+    setEnv('OPERATOR_PASSWORD_HASH', undefined);
+    setEnv('PRODUCTION_TLS_TERMINATED', undefined);
+    setEnv('TRUSTED_PROXY_HOPS', undefined);
+    vi.resetModules();
+    const { config, authIsConfigured } = await import('./config.ts');
+    expect(config.auth).toEqual({
+      sessionSecret: '',
+      operatorPasswordHash: '',
+      productionTlsTerminated: false,
+      trustedProxyHops: 0,
+      trustedProxyHopsConfigured: false,
+    });
+    expect(authIsConfigured()).toBe(false);
+  });
+
+  it('refuses a SESSION_SECRET that is too short, naming the variable', async () => {
+    setEnv('SESSION_SECRET', 'short');
+    await expect(loadConfig()).rejects.toThrow(/SESSION_SECRET: must be at least 32 characters/);
+  });
+
+  it('does not print the rejected session secret', async () => {
+    setEnv('SESSION_SECRET', 'short-but-real-session-secret');
+    await expect(loadConfig()).rejects.toThrow(
+      expect.objectContaining({
+        message: expect.not.stringContaining('short-but-real-session-secret') as unknown as string,
+      }),
+    );
+  });
+
+  it('refuses PRODUCTION_TLS_TERMINATED values other than the exact token true', async () => {
+    setEnv('PRODUCTION_TLS_TERMINATED', 'yes');
+    await expect(loadConfig()).rejects.toThrow(
+      /PRODUCTION_TLS_TERMINATED: must be exactly 'true' when set/,
+    );
+  });
+
+  it('treats an explicit TRUSTED_PROXY_HOPS=0 as configured', async () => {
+    setEnv('TRUSTED_PROXY_HOPS', '0');
+    vi.resetModules();
+    const { config } = await import('./config.ts');
+    expect(config.auth.trustedProxyHops).toBe(0);
+    expect(config.auth.trustedProxyHopsConfigured).toBe(true);
+  });
+
+  it('authenticationConfigured requires every checklist item', async () => {
+    vi.resetModules();
+    const { authenticationConfigured } = await import('./config.ts');
+    const complete = {
+      sessionSecret: SESSION,
+      operatorPasswordHash: '$argon2id$placeholder',
+      appOrigin: 'https://example.com',
+      productionTlsTerminated: true,
+      trustedProxyHopsConfigured: true,
+    };
+    expect(authenticationConfigured(complete)).toBe(true);
+    expect(authenticationConfigured({ ...complete, sessionSecret: 'short' })).toBe(false);
+    expect(authenticationConfigured({ ...complete, operatorPasswordHash: '' })).toBe(false);
+    expect(authenticationConfigured({ ...complete, appOrigin: 'http://example.com' })).toBe(false);
+    expect(authenticationConfigured({ ...complete, productionTlsTerminated: false })).toBe(false);
+    expect(authenticationConfigured({ ...complete, trustedProxyHopsConfigured: false })).toBe(
+      false,
+    );
+  });
+
+  it('isLoopbackHost is case-insensitive and limited to the allowlist', async () => {
+    vi.resetModules();
+    const { isLoopbackHost } = await import('./config.ts');
+    expect(isLoopbackHost('LocalHost')).toBe(true);
+    expect(isLoopbackHost('0.0.0.0')).toBe(false);
   });
 });
 
