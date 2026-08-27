@@ -1,0 +1,2909 @@
+<title>Hybrid Command Center Manual</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..700&family=JetBrains+Mono:wght@400;500;700&family=Source+Serif+4:opsz,wght@8..60,400..600&display=swap"
+/>
+
+<style>
+  /* ============================================================
+   G.Holmes Designs - Hybrid Command Center operating manual
+   Palette derives from shared/branding.ts DEFAULT_BRANDING.
+   ============================================================ */
+
+  :root {
+    --ground: #eef0ec;
+    --surface: #f8f9f6;
+    --surface-2: #e3e7de;
+    --line: #ccd2c6;
+    --line-soft: #dee3d7;
+    --text: #1b231f;
+    --text-2: #4b5650;
+    --text-3: #6e7a72;
+    --accent: #7d6224;
+    --accent-soft: #e9dfc7;
+    --ok: #2f6b4a;
+    --warn: #8a5f14;
+    --crit: #96382f;
+    --lane-op: #7d6224;
+    --lane-eng: #2c5a6b;
+    --lane-agt: #8a4a35;
+    --lane-op-soft: #eae0c8;
+    --lane-eng-soft: #d8e6ec;
+    --lane-agt-soft: #f0ddd5;
+    --code-bg: #e8ebe4;
+
+    --rail-bg: #18201d;
+    --rail-fg: #ffffff;
+    --rail-dim: #98a69e;
+    --rail-accent: #d7c5a2;
+    --rail-line: #2b3630;
+
+    --shadow: 0 1px 2px rgba(24, 32, 29, 0.06), 0 8px 24px -16px rgba(24, 32, 29, 0.3);
+
+    --f-display: 'Archivo', 'Helvetica Neue', Arial, sans-serif;
+    --f-body: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+    --f-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Consolas, monospace;
+
+    --step-0: 1rem;
+    --step-1: 1.1875rem;
+    --step-3: 1.8125rem;
+    --step-4: 2.375rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      --ground: #121815;
+      --surface: #18201d;
+      --surface-2: #1f2926;
+      --line: #313d37;
+      --line-soft: #26302c;
+      --text: #f0f2ee;
+      --text-2: #b2bcb5;
+      --text-3: #87928b;
+      --accent: #d7c5a2;
+      --accent-soft: #2c3730;
+      --ok: #7fc39a;
+      --warn: #dfb35f;
+      --crit: #e58a7e;
+      --lane-op: #d7c5a2;
+      --lane-eng: #8fc4d8;
+      --lane-agt: #d99b80;
+      --lane-op-soft: #2e3229;
+      --lane-eng-soft: #1e2e34;
+      --lane-agt-soft: #33261f;
+      --code-bg: #111815;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px -16px rgba(0, 0, 0, 0.8);
+    }
+  }
+
+  :root[data-theme='dark'] {
+    --ground: #121815;
+    --surface: #18201d;
+    --surface-2: #1f2926;
+    --line: #313d37;
+    --line-soft: #26302c;
+    --text: #f0f2ee;
+    --text-2: #b2bcb5;
+    --text-3: #87928b;
+    --accent: #d7c5a2;
+    --accent-soft: #2c3730;
+    --ok: #7fc39a;
+    --warn: #dfb35f;
+    --crit: #e58a7e;
+    --lane-op: #d7c5a2;
+    --lane-eng: #8fc4d8;
+    --lane-agt: #d99b80;
+    --lane-op-soft: #2e3229;
+    --lane-eng-soft: #1e2e34;
+    --lane-agt-soft: #33261f;
+    --code-bg: #111815;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px -16px rgba(0, 0, 0, 0.8);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--text);
+    font-family: var(--f-body);
+    font-size: var(--step-0);
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: var(--accent-soft);
+    color: var(--text);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  /* ---------- shell ---------- */
+
+  .page {
+    display: grid;
+    grid-template-columns: 264px minmax(0, 1fr);
+    min-height: 100vh;
+  }
+
+  .rail {
+    background: var(--rail-bg);
+    color: var(--rail-fg);
+    border-right: 1px solid var(--rail-line);
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 26px 0 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 26px;
+  }
+
+  .brand {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding: 0 22px;
+  }
+
+  .brand .mark {
+    width: 38px;
+    height: 38px;
+    flex: 0 0 38px;
+    display: grid;
+    place-items: center;
+    background: var(--rail-accent);
+    color: var(--rail-bg);
+    font-family: var(--f-display);
+    font-variation-settings:
+      'wdth' 118,
+      'wght' 700;
+    font-size: 0.9375rem;
+    letter-spacing: 0.02em;
+    border-radius: 3px;
+  }
+
+  .brand .who {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.25;
+  }
+  .brand .who b {
+    font-family: var(--f-display);
+    font-variation-settings:
+      'wdth' 112,
+      'wght' 600;
+    font-size: 0.9375rem;
+    letter-spacing: 0.01em;
+  }
+  .brand .who span {
+    font-family: var(--f-display);
+    font-size: 0.75rem;
+    color: var(--rail-dim);
+    font-variation-settings:
+      'wdth' 100,
+      'wght' 400;
+  }
+
+  .rail nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0 12px;
+  }
+
+  .rail .navlabel {
+    font-family: var(--f-display);
+    font-size: 0.6875rem;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--rail-dim);
+    padding: 0 10px 8px;
+  }
+
+  .rail nav a {
+    display: flex;
+    align-items: baseline;
+    gap: 9px;
+    padding: 7px 10px;
+    border-radius: 4px;
+    color: var(--rail-fg);
+    text-decoration: none;
+    font-family: var(--f-display);
+    font-size: 0.8125rem;
+    font-variation-settings:
+      'wdth' 100,
+      'wght' 400;
+    border-left: 2px solid transparent;
+    transition:
+      background 0.14s ease,
+      border-color 0.14s ease;
+  }
+  .rail nav a .n {
+    font-family: var(--f-mono);
+    font-size: 0.6875rem;
+    color: var(--rail-dim);
+    font-variant-numeric: tabular-nums;
+  }
+  .rail nav a:hover {
+    background: rgba(215, 197, 162, 0.09);
+  }
+  .rail nav a.on {
+    background: rgba(215, 197, 162, 0.14);
+    border-left-color: var(--rail-accent);
+  }
+  .rail nav a.on .n {
+    color: var(--rail-accent);
+  }
+  .rail nav a[hidden] {
+    display: none;
+  }
+
+  .railfoot {
+    margin-top: auto;
+    padding: 16px 22px 0;
+    font-family: var(--f-display);
+    font-size: 0.6875rem;
+    color: var(--rail-dim);
+    line-height: 1.7;
+    border-top: 1px solid var(--rail-line);
+  }
+  .railfoot b {
+    color: var(--rail-accent);
+    font-variation-settings: 'wght' 600;
+  }
+
+  /* ---------- main ---------- */
+
+  .main {
+    min-width: 0;
+    padding: 0 0 96px;
+  }
+  .wrap {
+    max-width: 940px;
+    padding: 0 40px;
+  }
+
+  .masthead {
+    padding: 44px 40px 30px;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+  }
+  .masthead .inner {
+    max-width: 940px;
+  }
+
+  .eyebrow {
+    font-family: var(--f-display);
+    font-size: 0.6875rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    margin: 0 0 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .eyebrow .draft {
+    color: var(--warn);
+    border: 1px solid currentColor;
+    border-radius: 2px;
+    padding: 1px 6px;
+    letter-spacing: 0.1em;
+  }
+
+  h1 {
+    font-family: var(--f-display);
+    font-variation-settings:
+      'wdth' 116,
+      'wght' 600;
+    font-size: var(--step-4);
+    line-height: 1.06;
+    letter-spacing: -0.015em;
+    margin: 0 0 14px;
+    text-wrap: balance;
+  }
+
+  .deck {
+    font-size: var(--step-1);
+    color: var(--text-2);
+    margin: 0;
+    max-width: 60ch;
+  }
+
+  /* ---------- stat strip ---------- */
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    overflow: hidden;
+    margin: 30px 0 0;
+  }
+  .stat {
+    background: var(--surface);
+    padding: 14px 16px;
+  }
+  .stat dt {
+    font-family: var(--f-display);
+    font-size: 0.6875rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    margin: 0 0 5px;
+  }
+  .stat dd {
+    margin: 0;
+    font-family: var(--f-display);
+    font-variation-settings:
+      'wdth' 108,
+      'wght' 600;
+    font-size: 1.0625rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.3;
+  }
+  .stat dd small {
+    display: block;
+    font-family: var(--f-body);
+    font-size: 0.8125rem;
+    color: var(--text-3);
+    font-variation-settings: normal;
+    line-height: 1.45;
+    margin-top: 2px;
+  }
+  .stat.is-ok dd {
+    color: var(--ok);
+  }
+  .stat.is-warn dd {
+    color: var(--warn);
+  }
+
+  /* ---------- lane switcher ---------- */
+
+  .switcher {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: var(--ground);
+    border-bottom: 1px solid var(--line);
+    padding: 14px 40px;
+    margin-bottom: 8px;
+  }
+  .switcher .inner {
+    max-width: 940px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .switcher .lede {
+    font-family: var(--f-display);
+    font-size: 0.6875rem;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+
+  .seg {
+    display: flex;
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    overflow: hidden;
+  }
+  .seg button {
+    appearance: none;
+    border: 0;
+    background: var(--surface);
+    color: var(--text-2);
+    font-family: var(--f-display);
+    font-size: 0.8125rem;
+    font-variation-settings:
+      'wdth' 104,
+      'wght' 500;
+    padding: 8px 15px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition:
+      background 0.14s ease,
+      color 0.14s ease;
+  }
+  .seg button:hover {
+    background: var(--surface-2);
+  }
+  .seg button .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.55;
+  }
+  .seg button .ct {
+    font-family: var(--f-mono);
+    font-size: 0.6875rem;
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
+  }
+  .seg button[data-set='operator'] {
+    color: var(--lane-op);
+  }
+  .seg button[data-set='engineer'] {
+    color: var(--lane-eng);
+  }
+  .seg button[data-set='agent'] {
+    color: var(--lane-agt);
+  }
+  .seg button[aria-pressed='true'] {
+    background: var(--text);
+    color: var(--ground);
+  }
+  .seg button[aria-pressed='true'] .ct {
+    color: var(--ground);
+    opacity: 0.75;
+  }
+  .seg button[aria-pressed='true'] .dot {
+    opacity: 1;
+  }
+
+  /* ---------- sections ---------- */
+
+  section {
+    padding: 34px 0 8px;
+    scroll-margin-top: 78px;
+  }
+  section + section {
+    border-top: 1px solid var(--line-soft);
+  }
+
+  .shead {
+    display: flex;
+    gap: 14px;
+    align-items: baseline;
+    margin-bottom: 6px;
+  }
+  .shead .num {
+    font-family: var(--f-mono);
+    font-size: 0.75rem;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    padding-top: 6px;
+  }
+  h2 {
+    font-family: var(--f-display);
+    font-variation-settings:
+      'wdth' 112,
+      'wght' 600;
+    font-size: var(--step-3);
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .sintro {
+    color: var(--text-2);
+    margin: 0 0 22px 30px;
+    max-width: 66ch;
+  }
+
+  /* ---------- lane blocks ---------- */
+
+  .lanes {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-left: 30px;
+  }
+
+  .lane {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--line);
+    border-radius: 5px;
+    padding: 16px 20px 18px;
+    box-shadow: var(--shadow);
+  }
+  .lane[data-lane='operator'] {
+    border-left-color: var(--lane-op);
+  }
+  .lane[data-lane='engineer'] {
+    border-left-color: var(--lane-eng);
+  }
+  .lane[data-lane='agent'] {
+    border-left-color: var(--lane-agt);
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-family: var(--f-display);
+    font-size: 0.6875rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-variation-settings:
+      'wdth' 104,
+      'wght' 600;
+    padding: 3px 9px;
+    border-radius: 3px;
+    margin-bottom: 11px;
+  }
+  .lane[data-lane='operator'] .chip {
+    background: var(--lane-op-soft);
+    color: var(--lane-op);
+  }
+  .lane[data-lane='engineer'] .chip {
+    background: var(--lane-eng-soft);
+    color: var(--lane-eng);
+  }
+  .lane[data-lane='agent'] .chip {
+    background: var(--lane-agt-soft);
+    color: var(--lane-agt);
+  }
+
+  .lane h3 {
+    font-family: var(--f-display);
+    font-variation-settings:
+      'wdth' 106,
+      'wght' 600;
+    font-size: var(--step-1);
+    line-height: 1.25;
+    margin: 0 0 8px;
+    text-wrap: balance;
+  }
+  .lane h4 {
+    font-family: var(--f-display);
+    font-variation-settings:
+      'wdth' 102,
+      'wght' 600;
+    font-size: 0.9375rem;
+    margin: 18px 0 6px;
+    letter-spacing: 0.005em;
+  }
+  .lane p {
+    margin: 0 0 10px;
+    max-width: 68ch;
+  }
+  .lane > *:last-child {
+    margin-bottom: 0;
+  }
+
+  .lane ul,
+  .lane ol {
+    margin: 0 0 10px;
+    padding-left: 1.25rem;
+    max-width: 68ch;
+  }
+  .lane li {
+    margin-bottom: 5px;
+  }
+  .lane li::marker {
+    color: var(--text-3);
+  }
+  .lane ol li::marker {
+    font-family: var(--f-mono);
+    font-size: 0.8125rem;
+    color: var(--accent);
+  }
+
+  .page:not([data-view='all']) .chip {
+    display: none;
+  }
+  .page[data-view='operator'] .lane:not([data-lane='operator']),
+  .page[data-view='engineer'] .lane:not([data-lane='engineer']),
+  .page[data-view='agent'] .lane:not([data-lane='agent']) {
+    display: none;
+  }
+  .page[data-view='operator'] section:not([data-lanes~='operator']),
+  .page[data-view='engineer'] section:not([data-lanes~='engineer']),
+  .page[data-view='agent'] section:not([data-lanes~='agent']) {
+    display: none;
+  }
+
+  /* ---------- inline furniture ---------- */
+
+  code {
+    font-family: var(--f-mono);
+    font-size: 0.85em;
+    background: var(--code-bg);
+    border: 1px solid var(--line-soft);
+    border-radius: 3px;
+    padding: 0.1em 0.35em;
+    word-break: break-word;
+  }
+
+  pre {
+    font-family: var(--f-mono);
+    font-size: 0.8125rem;
+    line-height: 1.65;
+    background: var(--code-bg);
+    border: 1px solid var(--line-soft);
+    border-radius: 4px;
+    padding: 13px 15px;
+    overflow-x: auto;
+    margin: 0 0 12px;
+  }
+  pre code {
+    background: none;
+    border: 0;
+    padding: 0;
+    font-size: inherit;
+  }
+
+  kbd {
+    font-family: var(--f-mono);
+    font-size: 0.78em;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-bottom-width: 2px;
+    border-radius: 3px;
+    padding: 0.1em 0.4em;
+  }
+
+  .tablewrap {
+    overflow-x: auto;
+    margin: 0 0 12px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.875rem;
+    min-width: 460px;
+  }
+  th,
+  td {
+    text-align: left;
+    padding: 9px 13px;
+    border-bottom: 1px solid var(--line-soft);
+    vertical-align: top;
+  }
+  th {
+    font-family: var(--f-display);
+    font-size: 0.6875rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-variation-settings:
+      'wdth' 102,
+      'wght' 600;
+    color: var(--text-3);
+    background: var(--surface-2);
+    white-space: nowrap;
+  }
+  tbody tr:last-child td {
+    border-bottom: 0;
+  }
+  td code {
+    font-size: 0.8125rem;
+  }
+
+  .note {
+    border-left: 2px solid var(--accent);
+    background: var(--accent-soft);
+    padding: 11px 15px;
+    border-radius: 0 4px 4px 0;
+    margin: 0 0 12px;
+    font-size: 0.9375rem;
+  }
+  .note strong {
+    font-variation-settings: 'wght' 600;
+  }
+  .note.is-crit {
+    border: 1px solid var(--crit);
+    border-left-width: 3px;
+    background: transparent;
+  }
+  .note.is-crit strong {
+    color: var(--crit);
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--f-display);
+    font-size: 0.75rem;
+    font-variation-settings:
+      'wdth' 102,
+      'wght' 600;
+    border: 1px solid currentColor;
+    border-radius: 99px;
+    padding: 1px 9px;
+    white-space: nowrap;
+  }
+  .pill::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .pill.ok {
+    color: var(--ok);
+  }
+  .pill.warn {
+    color: var(--warn);
+  }
+  .pill.crit {
+    color: var(--crit);
+  }
+  .pill.off {
+    color: var(--text-3);
+  }
+
+  .mods {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 12px;
+    margin: 0 0 4px;
+  }
+  .mod {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 14px 16px;
+  }
+  .mod h4 {
+    font-family: var(--f-display);
+    font-variation-settings:
+      'wdth' 106,
+      'wght' 600;
+    font-size: 0.9375rem;
+    margin: 0 0 5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .mod h4 .rw {
+    font-family: var(--f-mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.06em;
+    color: var(--text-3);
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    padding: 0 4px;
+    font-variation-settings: normal;
+  }
+  .mod p {
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--text-2);
+    line-height: 1.5;
+  }
+
+  .footer {
+    margin-top: 44px;
+    padding: 22px 40px 0;
+    border-top: 1px solid var(--line);
+    color: var(--text-3);
+    font-size: 0.875rem;
+  }
+  .footer .inner {
+    max-width: 940px;
+  }
+
+  @media (max-width: 900px) {
+    .page {
+      grid-template-columns: 1fr;
+    }
+    .rail {
+      position: static;
+      height: auto;
+      padding: 20px 0;
+    }
+    .rail nav {
+      flex-direction: row;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .rail .navlabel {
+      width: 100%;
+      padding-bottom: 4px;
+    }
+    .rail nav a {
+      border-left: 0;
+      border-bottom: 2px solid transparent;
+    }
+    .rail nav a.on {
+      border-left: 0;
+      border-bottom-color: var(--rail-accent);
+    }
+    .railfoot {
+      margin-top: 18px;
+    }
+    .wrap,
+    .masthead,
+    .switcher,
+    .footer {
+      padding-left: 22px;
+      padding-right: 22px;
+    }
+    .lanes,
+    .sintro {
+      margin-left: 0;
+    }
+    h1 {
+      font-size: var(--step-3);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      transition: none !important;
+      scroll-behavior: auto !important;
+    }
+  }
+</style>
+
+<div class="page" id="page" data-view="all">
+  <aside class="rail">
+    <div class="brand">
+      <div class="mark" aria-hidden="true">HC</div>
+      <div class="who">
+        <b>Hybrid</b>
+        <span>Command Center</span>
+      </div>
+    </div>
+
+    <nav id="toc" aria-label="Manual sections">
+      <p class="navlabel">Contents</p>
+      <a href="#orientation" data-for="orientation"><span class="n">01</span> Orientation</a>
+      <a href="#install" data-for="install"><span class="n">02</span> Install &amp; first run</a>
+      <a href="#drive" data-for="drive"><span class="n">03</span> Google Drive</a>
+      <a href="#session" data-for="session"><span class="n">04</span> First session</a>
+      <a href="#modules" data-for="modules"><span class="n">05</span> The modules</a>
+      <a href="#signal" data-for="signal"><span class="n">06</span> Publishing &amp; figures</a>
+      <a href="#mcp" data-for="mcp"><span class="n">07</span> MCP &amp; agent workflows</a>
+      <a href="#backup" data-for="backup"><span class="n">08</span> Backup &amp; recovery</a>
+      <a href="#trouble" data-for="trouble"><span class="n">09</span> Troubleshooting</a>
+      <a href="#contributing" data-for="contributing"
+        ><span class="n">10</span> Changing the code</a
+      >
+      <a href="#reference" data-for="reference"><span class="n">11</span> Reference tables</a>
+    </nav>
+
+    <div class="railfoot">
+      <b>G.Holmes Designs</b><br />
+      Version 5.4.0<br />
+      Local-first &middot; hosted-capable
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="masthead">
+      <div class="inner">
+        <p class="eyebrow">
+          <span>G.Holmes Designs &middot; Studio operations</span>
+          <span class="draft">Release 5.4.0</span>
+        </p>
+        <h1>Hybrid Command Center</h1>
+        <p class="deck">
+          One local-first command center for clients, projects, tasks, and planned content &mdash;
+          documented once and read three ways.
+        </p>
+
+        <dl class="stats">
+          <div class="stat">
+            <dt>Version</dt>
+            <dd>5.4.0</dd>
+          </div>
+          <div class="stat">
+            <dt>Runtime</dt>
+            <dd>Node 24+<small>uses built-in node:sqlite</small></dd>
+          </div>
+          <div class="stat is-ok">
+            <dt>Reach</dt>
+            <dd>Local or private AWS<small>HTTPS + operator auth when hosted</small></dd>
+          </div>
+          <div class="stat">
+            <dt>Source of truth</dt>
+            <dd>Local SQLite<small>Drive holds files, not records</small></dd>
+          </div>
+          <div class="stat is-warn">
+            <dt>Google Drive</dt>
+            <dd>Optional<small>app runs fully without it</small></dd>
+          </div>
+          <div class="stat is-warn">
+            <dt>Publishing</dt>
+            <dd>Optional<small>needs a Post Bridge key</small></dd>
+          </div>
+        </dl>
+      </div>
+    </header>
+
+    <div class="switcher">
+      <div class="inner">
+        <span class="lede">Reading as</span>
+        <div class="seg" role="group" aria-label="Choose an audience lane">
+          <button type="button" data-set="operator" aria-pressed="false">
+            <span class="dot" aria-hidden="true"></span>Operator
+            <span class="ct" data-count="operator"></span>
+          </button>
+          <button type="button" data-set="engineer" aria-pressed="false">
+            <span class="dot" aria-hidden="true"></span>Engineer
+            <span class="ct" data-count="engineer"></span>
+          </button>
+          <button type="button" data-set="agent" aria-pressed="false">
+            <span class="dot" aria-hidden="true"></span>Agent
+            <span class="ct" data-count="agent"></span>
+          </button>
+          <button type="button" data-set="all" aria-pressed="true">
+            All three <span class="ct" data-count="all"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="wrap">
+      <!-- 01 ================================================= -->
+      <section id="orientation" data-lanes="operator engineer agent">
+        <div class="shead">
+          <span class="num">01</span>
+          <h2>Orientation</h2>
+        </div>
+        <p class="sintro">
+          What this application is, what owns which data, and the boundaries that hold the rest of
+          the manual together.
+        </p>
+
+        <div class="lanes">
+          <article class="lane" data-lane="operator">
+            <span class="chip">Operator</span>
+            <h3>One studio, one operator, one source of truth</h3>
+            <p>
+              Hybrid Command Center is where your clients, projects, tasks, deadlines, and planned
+              social content live. It runs locally by default and can also run as one private,
+              single-operator AWS workspace. A hosted deployment uses one HTTPS address and an
+              operator login; it is not a multi-user or synchronization product.
+            </p>
+            <p>Two places hold your work, and they never overlap:</p>
+            <ul>
+              <li>
+                <strong>Your computer</strong> keeps the records &mdash; clients, projects, tasks,
+                checklists, dependencies, notes, tags, and planned posts.
+              </li>
+              <li>
+                <strong>Google Drive</strong> keeps the actual files. The app stores links to Drive
+                folders, never copies of your documents.
+              </li>
+            </ul>
+            <p>Deleting a project or a task here never deletes anything in Drive.</p>
+            <h4>What it deliberately does not do</h4>
+            <p>
+              There are no team accounts, no client portals, no billing, no time tracking, and no
+              permissions. If you need those, this is not the tool that will grow into them.
+            </p>
+          </article>
+
+          <article class="lane" data-lane="engineer">
+            <span class="chip">Engineer</span>
+            <h3>React 19 front end, Express 5 API, node:sqlite store</h3>
+            <pre><code>client/     React + TypeScript + Vite; typed HTTP boundary in src/api.ts
+server/     Express local API
+  domain/   deadline and dependency rules, framework-free
+  drive/    DriveProvider, Google impl, provisioning, read-only browse.ts
+  signal/   SignalProvider (read), service.ts (writes), campaigns, queue-health
+  publish/  Post Bridge wire, upload, analytics
+  app.ts    validated HTTP endpoints        db.ts  SQLite schema
+shared/     cross-layer types, workflow constants, branding defaults
+e2e/        Playwright critical-flow coverage
+data/       gitignored SQLite database and backups</code></pre>
+            <p>
+              The browser never receives Google tokens. UI code calls only the local API. Every
+              outside system sits behind a narrow provider interface: <code>DriveProvider</code> for
+              browsing, <code>DriveMediaProvider</code> for one resolved media link,
+              <code>SignalProvider</code> for reading the schedule,
+              <code>AnalyticsProvider</code> for figures.
+            </p>
+            <p>
+              Timestamps are stored as UTC ISO strings. Date-only deadlines are interpreted in the
+              machine's local timezone and become overdue after that local calendar day has passed.
+            </p>
+            <div class="note">
+              <strong>The bind gate fails closed.</strong> Local loopback use stays passwordless. A
+              non-loopback <code>HOST</code> is accepted only when the complete authentication
+              checklist is present: a session secret, operator password hash, HTTPS origin, TLS
+              termination acknowledgement, and explicit trusted-proxy setting. The supported AWS
+              package keeps Node on loopback behind same-origin Caddy.
+            </div>
+          </article>
+
+          <article class="lane" data-lane="agent">
+            <span class="chip">Agent</span>
+            <h3>Invariants that outrank any local convenience</h3>
+            <ul>
+              <li><code>client/</code> never imports a Google SDK and never reads a secret.</li>
+              <li>
+                <code>server/drive/browse.ts</code> is the read-only half of Drive and must stay
+                that way. Writes live in <code>service.ts</code>. Adding upload, download, move,
+                rename, or delete means a <em>new module beside</em> <code>browse.ts</code> with its
+                own confirmation flow &mdash; never a method on the browsing path.
+              </li>
+              <li>
+                <code>SignalProvider</code> has no write method <em>by construction</em>. Adding one
+                means a new module beside <code>read.ts</code>.
+              </li>
+              <li>
+                The calendar reads and never writes. Scheduled content and task due dates stay two
+                kinds &mdash; two arrays, two headed groups, never one list of "events" with a type
+                tag.
+              </li>
+              <li>
+                Figures are read, never computed, never written back.
+                <code>AnalyticsProvider</code> has <code>sync</code>, <code>list</code>, and
+                <code>days</code> and no way to submit, update, or cancel.
+              </li>
+              <li>Queue health is derived, never stored. There is no alerts table.</li>
+              <li>Keep deadline and dependency rules out of React components.</li>
+            </ul>
+            <div class="note is-crit">
+              <strong>Widening one interface must not widen another.</strong>
+              <code>DriveProvider</code> and <code>DriveMediaProvider</code> are two interfaces on
+              purpose. Files receives <code>DriveProvider</code> and cannot reach the media path at
+              all.
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- 02 ================================================= -->
+      <section id="install" data-lanes="operator engineer agent">
+        <div class="shead">
+          <span class="num">02</span>
+          <h2>Install and first run</h2>
+        </div>
+        <p class="sintro">
+          Getting from a fresh clone to a working local application. Drive can wait; this part
+          cannot.
+        </p>
+
+        <div class="lanes">
+          <article class="lane" data-lane="operator">
+            <span class="chip">Operator</span>
+            <h3>Five steps, then the app opens in your browser</h3>
+            <p>
+              You need Node.js 24 or newer from <a href="https://nodejs.org/">nodejs.org</a>.
+              Install it, then close and reopen your terminal so it takes effect.
+            </p>
+            <ol>
+              <li>Open PowerShell or Terminal and go to the application folder.</li>
+              <li>Run <code>npm install</code> and wait for it to finish.</li>
+              <li>
+                Copy the settings template: <code>Copy-Item .env.example .env</code> on Windows,
+                <code>cp .env.example .env</code> elsewhere.
+              </li>
+              <li>
+                Run <code>npm run db:migrate</code>. You should see
+                <em>Database schema is up to date.</em>
+              </li>
+              <li>
+                Run <code>npm run dev</code> and open
+                <a href="http://localhost:5173">http://localhost:5173</a>.
+              </li>
+            </ol>
+            <p>
+              Keep the terminal window open while you work. Press <kbd>Ctrl</kbd>+<kbd>C</kbd> to
+              stop; closing the window also stops it.
+            </p>
+            <h4>Empty workspace or demonstration data?</h4>
+            <p>
+              To start clean, do nothing more &mdash; just create your real clients. To look around
+              first, run <code>npm run db:seed</code>. That creates three example clients with
+              projects, tasks in every column, overdue work, a checklist, and a blocked task. It
+              never contacts Google Drive.
+            </p>
+            <p>
+              Seeding only works while the database has no clients, so decide before you start
+              entering real work.
+            </p>
+            <div class="note">
+              <strong>If it refuses to start</strong> and lists variables, open
+              <code>.env</code> and read the message &mdash; each line names one setting and what
+              was wrong with it. The message never prints the value it rejected, so it is safe to
+              copy out of a terminal.
+            </div>
+          </article>
+
+          <article class="lane" data-lane="engineer">
+            <span class="chip">Engineer</span>
+            <h3>Commands, ports, and boot validation</h3>
+            <pre><code>npm install
+cp .env.example .env
+npm run db:migrate
+npm run db:seed      # optional local demo data, never touches Drive
+npm run dev          # Vite 5173 + API 8787, live reload</code></pre>
+            <p>
+              Production-style local run: <code>npm run build</code> then <code>npm start</code>,
+              served from <code>http://localhost:8787</code> alone. Rebuild after code changes.
+            </p>
+            <p>
+              For a hosted operator, generate the Argon2id password hash with
+              <code>npm run auth:bootstrap</code> and follow <code>docs/cloud-hosting.md</code> and
+              <code>docs/cloud-cutover-rehearsal.md</code>. Do not expose the development server or
+              improvise a public bind.
+            </p>
+            <p>
+              Every <code>.env</code> variable is validated at startup against a Zod schema. A
+              refused value stops the boot with every problem listed at once, naming the variable
+              rather than echoing the value. Blank and absent are the same thing: the documented
+              default applies.
+            </p>
+            <p>
+              Changing <code>PORT</code> is rarely worth it &mdash; the OAuth redirect URI and the
+              dev proxy both have to move with it. Closing the duplicate process is usually the real
+              fix for a port collision.
+            </p>
+            <div class="note">
+              <strong>Drive is genuinely optional.</strong> Leave all three Google values blank and
+              the app runs with Drive reporting itself unconfigured. A value that
+              <em>is</em> present has to be usable.
+            </div>
+          </article>
+
+          <article class="lane" data-lane="agent">
+            <span class="chip">Agent</span>
+            <h3>Test and script constraints</h3>
+            <ul>
+              <li>
+                <code>npm run db:seed</code> creates local demo records only and must never contact
+                Drive. <code>--with-drive</code> is the explicit opt-in and exits without changes if
+                clients already exist.
+              </li>
+              <li>
+                <code>npm run signal:import</code> loads real archived campaign content, idempotent
+                by post id, never overwriting an existing post. It is not part of
+                <code>db:seed</code> because it is content, not demo data.
+              </li>
+              <li>Automated tests use the mock provider and must never call real Drive.</li>
+              <li>
+                Playwright starts and stops the API and Vite itself on ports <code>8788</code> and
+                <code>5174</code> against <code>data/e2e.db</code>, deleted at the start of every
+                run. If the command does not exit on its own, something it spawned outlived the run
+                &mdash; that is the bug.
+              </li>
+              <li>
+                Specs share one server and one database and run one at a time. Scope any count
+                assertion to rows the spec created, or read the number back from the API in the same
+                run.
+              </li>
+            </ul>
+            <div class="note is-crit">
+              <strong>Owner-run only, never in CI:</strong>
+              <code>npm run probe:post-bridge --live</code> writes to real social accounts. It
+              refuses to start without an API key, <code>--yes</code>,
+              <code>--accounts-approved</code>, an instant at least 48 hours out, an unused
+              <code>--probe-label</code>, an explicit
+              <code>--account &lt;platform&gt;:&lt;id&gt;</code> per account, and the label typed
+              back at the prompt. Hard budget of 50 requests including cleanup.
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- 03 ================================================= -->
+      <section id="drive" data-lanes="operator engineer agent">
+        <div class="shead">
+          <span class="num">03</span>
+          <h2>Connecting Google Drive</h2>
+        </div>
+        <p class="sintro">
+          Optional, but finish it before creating real clients if you want their folder structures
+          created for you.
+        </p>
+
+        <div class="lanes">
+          <article class="lane" data-lane="operator">
+            <span class="chip">Operator</span>
+            <h3>What to do in Google Cloud, in order</h3>
+            <ol>
+              <li>In Google Cloud Console, create or select a project.</li>
+              <li>
+                Under <strong>APIs &amp; Services &rarr; Library</strong>, enable the
+                <strong>Google Drive API</strong> and <strong>Google Picker API</strong>.
+              </li>
+              <li>
+                Configure the OAuth consent screen. For an External app in testing, add your own
+                Google account as a test user.
+              </li>
+              <li>
+                Under <strong>Credentials</strong>, create an <strong>OAuth client ID</strong> of
+                type <strong>Web application</strong>.
+              </li>
+              <li>Add the redirect address exactly as written below, with no trailing slash.</li>
+              <li>
+                Put the client ID, secret, Picker API key, numeric app ID, and a long random
+                encryption key into <code>.env</code>.
+              </li>
+              <li>
+                Restart, then open
+                <strong>Settings &rarr; Google Drive &rarr; Connect Google Drive</strong> and
+                approve <code>drive.file</code> access.
+              </li>
+              <li>
+                Select <strong>Choose root folder with Google Picker</strong> and choose the Command
+                Center root.
+              </li>
+            </ol>
+            <pre><code>http://localhost:8787/api/drive/oauth/callback</code></pre>
+            <h4>What the states on a card mean</h4>
+            <p>
+              <span class="pill ok">Drive ready</span>
+              <span class="pill warn">Drive pending</span>
+              <span class="pill crit">Drive issue</span>
+              <span class="pill off">Drive offline</span>
+            </p>
+            <p>
+              <em>Ready</em> means the folder was created. <em>Pending</em> means setup is
+              incomplete or still needs attention. <em>Issue</em> means Google returned an error.
+              <em>Offline</em> means Drive is not connected at all. In every case the local record
+              and its tasks stay fully usable.
+            </p>
+            <div class="note is-crit">
+              <strong>Drive drops out after about a week?</strong> An External OAuth app left in
+              <em>Testing</em> commonly receives a refresh token that expires after seven days when
+              Drive scopes are used. Reconnect from Settings, or move the app through Google's
+              publishing and verification path for longer-term use.
+            </div>
+          </article>
+
+          <article class="lane" data-lane="engineer">
+            <span class="chip">Engineer</span>
+            <h3>Token handling and root-folder resolution</h3>
+            <p>
+              <code>GOOGLE_TOKEN_ENCRYPTION_KEY</code> must be at least 32 characters. It is hashed
+              into the key that encrypts OAuth tokens at rest, so a short one is accepted by the
+              cipher and protects nothing. Back it up separately from the database &mdash; a backup
+              of one without the other restores nothing usable.
+            </p>
+            <p>
+              Rotating the encryption key does not revoke an already-issued token. Revocation
+              happens on Google's side.
+            </p>
+            <p>
+              The app requests only <code>drive.file</code>: it can use files it created and folders
+              the operator explicitly selected. Google Picker is the grant path for an existing
+              root; pasting a URL alone cannot grant access. Picker also verifies a stable folder ID
+              and refuses files or trashed folders.
+            </p>
+            <h4>Provisioning behaviour</h4>
+            <p>
+              Folder creation is resumable and idempotent: successful steps persist, and a retry
+              picks up where it stopped. A client gets a folder under the root; a project gets a
+              folder and five standard subfolders. A local project rename does
+              <strong>not</strong> rename the Drive folder.
+            </p>
+          </article>
+
+          <article class="lane" data-lane="agent">
+            <span class="chip">Agent</span>
+            <h3>Drive rules</h3>
+            <ul>
+              <li>
+                Never commit <code>.env</code>, OAuth credentials, encryption keys, tokens, SQLite
+                files, or logs.
+              </li>
+              <li>Tokens are encrypted server-side and never returned to the browser.</li>
+              <li>
+                Drive is authoritative for files; SQLite stores only references and provisioning
+                metadata.
+              </li>
+              <li>
+                Identify Drive folders by ID and stable idempotency properties, never by name alone.
+              </li>
+              <li>
+                Persist successful partial steps and make retries safe. Never mark Drive connected
+                before every required step succeeds.
+              </li>
+              <li>
+                Do not rename a Drive folder after a local rename without an explicit confirmation
+                flow.
+              </li>
+              <li>Never delete or modify a Drive file as a side effect of a local delete.</li>
+            </ul>
+            <p>
+              The Files module browses a project only at its own Drive folder and the subfolders
+              <code>drive_steps</code> recorded for it, matched by ID. Any other folder ID is
+              refused rather than fetched.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <!-- 04 ================================================= -->
+      <section id="session" data-lanes="operator engineer agent">
+        <div class="shead">
+          <span class="num">04</span>
+          <h2>Your first working session</h2>
+        </div>
+        <p class="sintro">
+          Client, then project, then task &mdash; the order that produces the cleanest workspace.
+        </p>
+
+        <div class="lanes">
+          <article class="lane" data-lane="operator">
+            <span class="chip">Operator</span>
+            <h3>Seven steps end to end</h3>
+            <ol>
+              <li>
+                <strong>Create a client.</strong> Clients &rarr; New client. Only the name is
+                required.
+              </li>
+              <li>
+                <strong>Create a project</strong> under that client. Add description, status,
+                priority, dates, deadline, and categories as needed.
+              </li>
+              <li>
+                <strong>Create a task.</strong> The last project you opened is pre-selected; the
+                client follows from the project. Pick a <strong>Type</strong> &mdash; Blog Post,
+                Video, Social Post, Graphics, Scheduling, QA / Brand Pass, Admin, Dev Work, or Other
+                &mdash; or leave it on <em>No type</em>, which is perfectly normal.
+              </li>
+              <li>
+                <strong>Add a checklist.</strong> Open the task, type an item, select
+                <strong>Add</strong>. The card then shows progress as a fraction, such as
+                <code>2/4</code>.
+              </li>
+              <li>
+                <strong>Add tags.</strong> Type a name and press <kbd>Enter</kbd> or a comma.
+                Existing names appear as suggestions.
+              </li>
+              <li>
+                <strong>Add a dependency</strong> on the task that must wait. It shows
+                <strong>Blocked</strong> until every dependency is complete, and the detail view
+                lists what is holding it up.
+              </li>
+              <li>
+                <strong>Move work through Status</strong> by dragging a card, or with the status
+                selector at the bottom of the card, which is the keyboard route. Position saves
+                automatically.
+              </li>
+            </ol>
+            <p>
+              The five stages are fixed in this version: Backlog, To Do, In Progress, Review,
+              Complete.
+            </p>
+            <div class="note">
+              <strong>Capitalisation never creates a second tag.</strong> <code>brand system</code>,
+              <code>Brand System</code>, and <code>&nbsp;Brand&nbsp;&nbsp;System&nbsp;</code> all
+              attach the one existing tag and keep its stored spelling. The same is true of project
+              categories and Signal campaigns.
+            </div>
+            <p>
+              Trying to complete a blocked task is explained rather than silently refused. Finish
+              the dependencies, remove an incorrect one, or confirm the override deliberately.
+            </p>
+          </article>
+
+          <article class="lane" data-lane="engineer">
+            <span class="chip">Engineer</span>
+            <h3>The shape of the data</h3>
+            <p>
+              Clients own projects; projects own tasks. Board-card and project-tile positions
+              persist, so drag order survives a reload. Dashboard counts and board filters are
+              computed from one shared rule, which is why they always agree.
+            </p>
+            <p>
+              Labels are normalized joins, never packed columns: tags label tasks, categories label
+              projects, Signal campaigns label Signal posts. All three match names
+              case-insensitively through one shared rule in <code>shared/types.ts</code>. Renaming a
+              label is a single write; deleting one detaches it and never deletes what it was
+              attached to.
+            </p>
+            <h4>Deadlines</h4>
+            <p>
+              Next 7 days includes today, so a task due today appears under both counts. Completed
+              tasks are never counted as overdue. Work under an archived project or client drops out
+              of every dashboard count and list, but stays visible on the board and at its direct
+              link.
+            </p>
+            <p>
+              <em>Recently updated</em> follows the work: adding, editing, completing, or deleting a
+              task, ticking a checklist item, or changing tags or dependencies all move a project
+              up. Rearranging tiles is not work and changes nothing there.
+            </p>
+          </article>
+
+          <article class="lane" data-lane="agent">
+            <span class="chip">Agent</span>
+            <h3>Deletion, archival, and merge semantics</h3>
+            <ul>
+              <li>
+                Archive rather than permanently delete top-level <strong>clients</strong>. Projects
+                and tasks may be hard-deleted from SQLite on user confirmation.
+              </li>
+              <li>A project delete cascades to its tasks and leaves Drive untouched.</li>
+              <li>
+                Merging a client moves its projects, archives the source, records it in
+                <code>client_merges</code> as an alias of the survivor, and retargets earlier
+                aliases so every lookup stays one hop.
+              </li>
+              <li>
+                The merge chooses field by field over exactly six columns &mdash; <code>name</code>,
+                <code>contact_name</code>, <code>email</code>, <code>phone</code>,
+                <code>website</code>, <code>notes</code> &mdash; each defaulting to the survivor's
+                own value <em>whether or not it is blank</em>. Inferring from blankness would make
+                the merge decide which record is current.
+              </li>
+              <li>
+                <code>status</code> and every <code>drive_*</code> column are outside the choice.
+                <code>slug</code> derives from the surviving name through
+                <code>buildClientSlug</code>, the same rule a rename follows.
+              </li>
+              <li>
+                The plan carries both records' values and every chosen one, so the confirmation hash
+                covers them: a preview taken under other choices cannot be confirmed.
+              </li>
+              <li>
+                A merge touches no Drive folder and writes no <code>integration_events</code> row.
+              </li>
+            </ul>
+            <div class="note is-crit">
+              <strong>There is no undo on a merge.</strong> It is one transaction, previewed and
+              confirmed.
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- 05 ================================================= -->
+      <section id="modules" data-lanes="operator engineer agent">
+        <div class="shead">
+          <span class="num">05</span>
+          <h2>The modules</h2>
+        </div>
+        <p class="sintro">
+          Nine places to be. Each one is labelled with what it is allowed to do to your data.
+        </p>
+
+        <div class="lanes">
+          <article class="lane" data-lane="operator">
+            <span class="chip">Operator</span>
+            <h3>Where each job lives</h3>
+            <div class="mods">
+              <div class="mod">
+                <h4>Dashboard <span class="rw">READ</span></h4>
+                <p>
+                  Start here. Overdue, due today, next seven days, and project health. Every count
+                  is a link to the board filtered behind it.
+                </p>
+              </div>
+              <div class="mod">
+                <h4>Clients <span class="rw">READ / WRITE</span></h4>
+                <p>
+                  Search, edit contact details, open Drive folders, review connection state,
+                  archive, and merge duplicates.
+                </p>
+              </div>
+              <div class="mod">
+                <h4>Projects <span class="rw">READ / WRITE</span></h4>
+                <p>
+                  Search, filter by client and category, seven sort modes, plus a Custom order you
+                  arrange by drag or keyboard that persists.
+                </p>
+              </div>
+              <div class="mod">
+                <h4>Status <span class="rw">READ / WRITE</span></h4>
+                <p>
+                  The five-stage board. Filters for client, project, priority, task type, focus, and
+                  tags all live in the page address, so a filtered view is shareable.
+                </p>
+              </div>
+              <div class="mod">
+                <h4>Signal <span class="rw">READ / WRITE</span></h4>
+                <p>
+                  The planner for content: month grid, unscheduled queue, quick capture, and the
+                  full editor for channels, media, timing, and campaigns.
+                </p>
+              </div>
+              <div class="mod">
+                <h4>Import <span class="rw">WRITE</span></h4>
+                <p>
+                  A campaign playbook workbook or pasted tabs becomes a client with projects, tasks,
+                  checklists, and dependencies &mdash; previewed first, then one confirmed write.
+                </p>
+              </div>
+              <div class="mod">
+                <h4>Files <span class="rw">READ ONLY</span></h4>
+                <p>
+                  Browse a project's Drive folder. Type, size, and modified date on every row, with
+                  Open in Drive. It cannot upload, download, move, rename, or delete.
+                </p>
+              </div>
+              <div class="mod">
+                <h4>Calendar <span class="rw">READ ONLY</span></h4>
+                <p>
+                  A month agenda putting scheduled content beside task due dates, kept as two groups
+                  rather than one merged list.
+                </p>
+              </div>
+              <div class="mod">
+                <h4>Settings <span class="rw">READ / WRITE</span></h4>
+                <p>
+                  Drive connection, branding, tags, categories, and campaigns. Deleting a label
+                  tells you how many records it affects and never deletes one of them.
+                </p>
+              </div>
+            </div>
+            <div class="note">
+              <strong>Branding is yours to change.</strong> Settings holds the sidebar wording,
+              colours, and an optional logo, and refuses a combination that would be unreadable
+              &mdash; contrast is checked as you type. Every field resets to the studio default.
+            </div>
+          </article>
+
+          <article class="lane" data-lane="engineer">
+            <span class="chip">Engineer</span>
+            <h3>What each module is allowed to reach</h3>
+            <div class="tablewrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Module</th>
+                    <th>Reaches</th>
+                    <th>Writes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Dashboard</td>
+                    <td>domain deadline functions</td>
+                    <td>nothing</td>
+                  </tr>
+                  <tr>
+                    <td>Files</td>
+                    <td><code>DriveProvider</code> via <code>browse.ts</code></td>
+                    <td>nothing</td>
+                  </tr>
+                  <tr>
+                    <td>Calendar</td>
+                    <td><code>SignalProvider</code> + due dates</td>
+                    <td>nothing</td>
+                  </tr>
+                  <tr>
+                    <td>Signal planner</td>
+                    <td>Signal service</td>
+                    <td><code>signal_posts</code> and joins</td>
+                  </tr>
+                  <tr>
+                    <td>Import</td>
+                    <td>workspace snapshot</td>
+                    <td>whole hierarchy, one transaction</td>
+                  </tr>
+                  <tr>
+                    <td>Figures</td>
+                    <td><code>AnalyticsProvider</code></td>
+                    <td>metrics tables only</td>
+                  </tr>
+                  <tr>
+                    <td>Settings / branding</td>
+                    <td><code>settings</code> table</td>
+                    <td>key <code>branding</code></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p>
+              Branding defaults live in <code>shared/branding.ts</code>; runtime overrides are
+              stored under the <code>branding</code> settings key. A logo is an
+              <code>https:</code> reference &mdash; this app stores no user files.
+            </p>
+            <p>
+              Integration activity is an append-only record of what each integration changed,
+              bounded to the most recent 200 rows, credential-scrubbed, and shown on the Import page
+              beside the receipt it belongs to.
+            </p>
+          </article>
+
+          <article class="lane" data-lane="agent">
+            <span class="chip">Agent</span>
+            <h3>Module-level rules</h3>
+            <ul>
+              <li>
+                <strong>Files reads and nothing else.</strong> Widening it changes what
+                <code>/files</code> promises, so <code>README.md</code> and the user manual change
+                in the same branch.
+              </li>
+              <li>
+                <strong>Branding validates from one place.</strong> <code>brandingIssues</code>,
+                <code>sidebarPalette</code>, and <code>shared/contrast.ts</code> are used by both
+                the API and the form. Never validate branding on one side only.
+              </li>
+              <li>
+                <strong>An import previews before it writes</strong>, plans from the same code twice
+                &mdash; once for the preview, once against the workspace as it stands at the commit
+                &mdash; and writes the whole hierarchy in one transaction. It skips a record the
+                workspace already has, reports the rule that matched, and never edits one.
+              </li>
+              <li>
+                Changing what the importer does means changing
+                <code>docs/campaign-playbook-import-format.md</code> in the same branch.
+              </li>
+              <li>
+                <strong>Every integration operation that changes local data</strong> records one
+                <code>integration_events</code> row through <code>recordIntegrationEvent</code>, in
+                the same transaction as whatever else it persists. Report
+                <code>PARTIAL</code> whenever some of an operation landed and some did not, and name
+                what landed.
+              </li>
+              <li>
+                Never write a credential to the log. Pass structured fields, not a request or
+                response dump, and let <code>redactSecrets</code> scrub the one free-text field an
+                external failure reaches.
+              </li>
+              <li>
+                Signal's own writes record <strong>no</strong> <code>integration_events</code> row
+                &mdash; it is local data now, like projects and tasks. The log is for what an
+                <em>integration</em> did.
+              </li>
+              <li>
+                Pair visual status colours with text or icons, and preserve visible keyboard focus.
+              </li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <!-- 06 ================================================= -->
+      <section id="signal" data-lanes="operator engineer agent">
+        <div class="shead">
+          <span class="num">06</span>
+          <h2>Publishing and figures</h2>
+        </div>
+        <p class="sintro">
+          Signal Campaign plans content. Publishing submits it. Figures read what the platforms
+          report back. All three stay separate on purpose.
+        </p>
+
+        <div class="lanes">
+          <article class="lane" data-lane="operator">
+            <span class="chip">Operator</span>
+            <h3>Plan, preview, then confirm</h3>
+            <p>
+              Save the post and any per-platform wording first, then choose
+              <strong>Show preview</strong>. Nothing is fetched and no provider is contacted until
+              you press it.
+            </p>
+            <p>
+              The preview opens with every channel in one short list &mdash;
+              <span class="pill ok">Ready to send</span> <span class="pill crit">Blocked</span>
+              <span class="pill off">Not available from this provider</span> &mdash; naming the
+              account each one resolved to. Blog is always last: no provider publishes to a blog, so
+              post it yourself and mark it published.
+            </p>
+            <p>
+              Below that is one tab per target showing exactly what that account receives: the text,
+              a note beside anything that came from an override, the title and first comment, the
+              media in that account's order, the date and time in your configured zone beside the
+              instant the provider is given, and whether the provider sends it or hands it to the
+              platform's app for you to finish.
+            </p>
+            <h4>Why a warning sits on one channel and not the post</h4>
+            <p>
+              A limit is rarely true of a post as a whole &mdash; a caption over 280 characters
+              blocks X and is fine on LinkedIn. A refusal says what has to change, and every refusal
+              must be fixed before <strong>Confirm and submit</strong> becomes available.
+            </p>
+            <p>
+              Video never plays on its own; press <strong>Load this video</strong>. A Drive file is
+              listed with its name, type, size, and last check rather than shown &mdash; a Drive
+              link addresses a page, not the file.
+            </p>
+            <div class="note is-crit">
+              <strong>A result marked UNCONFIRMED is never retried automatically.</strong> Inspect
+              Post Bridge before taking another action, or you risk a duplicate post.
+            </div>
+            <h4>What never moves on its own</h4>
+            <ul>
+              <li>
+                <strong>Mark published</strong> is always your action. Delivery never changes the
+                planning status.
+              </li>
+              <li>
+                <strong>Mark finished</strong> on a manual delivery records that one delivery, not
+                the post.
+              </li>
+              <li>
+                Figures change nothing at all. No number a platform reports can move a post, a
+                schedule, or a delivery answer.
+              </li>
+              <li>
+                A refresh runs only when you press it, and a failed one leaves the last good figures
+                on screen.
+              </li>
+            </ul>
+            <p>
+              A channel this provider does not measure says
+              <strong>Not available from this provider</strong> rather than showing a zero &mdash;
+              those are different claims and only one of them is true.
+            </p>
+          </article>
+
+          <article class="lane" data-lane="engineer">
+            <span class="chip">Engineer</span>
+            <h3>Enabling the provider path</h3>
+            <p>
+              Publishing is off until both <code>POST_BRIDGE_API_KEY</code> and an explicit IANA
+              <code>PUBLISH_TIMEZONE</code> (for example <code>America/New_York</code>) are in
+              <code>.env</code>. The API key stays on the server and is never returned to the
+              browser, written to the database, or written to the activity log.
+            </p>
+            <p>
+              Delivery state is deliberately separate from the planning status
+              <code>PUBLISHED</code>. The boundary, the content-variant inheritance, and the
+              scheduling conversion are recorded in <code>docs/publishing-integration.md</code>.
+            </p>
+            <p>
+              Deleting a post with a live provider submission cancels it first; publication history
+              then protects the Signal post from deletion so the audit record stays readable.
+            </p>
+            <h4>Figures</h4>
+            <p>
+              <code>server/publish/analytics.ts</code> writes only <code>signal_post_metrics</code>,
+              <code>signal_post_metric_days</code>, its own connection record, and one
+              <code>integration_events</code> row. Every provider read completes before any write,
+              so a refusal or failure cannot clear a good value. A per-day gain is a subtraction
+              between two stored snapshots.
+            </p>
+            <p>
+              Campaign totals add the provider's own per-delivery figures over a named set.
+              <code>server/publish/campaign-analytics.ts</code> holds no provider and makes no
+              network call, so opening a campaign view can never spend a synchronisation.
+            </p>
+          </article>
+
+          <article class="lane" data-lane="agent">
+            <span class="chip">Agent</span>
+            <h3>The media boundary, stated exactly</h3>
+            <p>
+              This app stores no media files, serves no media bytes, and holds no media bytes at
+              rest.
+            </p>
+            <ul>
+              <li>
+                <code>server/drive/media.ts</code> <strong>resolves</strong> one user-supplied Drive
+                link &mdash; parsed as a URL and host-checked before anything is looked up &mdash;
+                to canonical metadata and a version fingerprint, without reading bytes.
+              </li>
+              <li>
+                Its separate confirmed byte path streams that same file straight to the provider's
+                upload URL during a confirmed submit, update, or restore-and-resubmit, persisting
+                nothing and never writing to Drive.
+              </li>
+              <li>
+                Neither half is available to Files. There is no byte method on
+                <code>browse.ts</code> or <code>shared/drive.ts</code>.
+              </li>
+              <li>
+                A provider media ID is ephemeral: never a durable Signal reference, recreated on
+                every submit, update, and restore-and-resubmit.
+              </li>
+            </ul>
+            <h4>A media reference is discriminated</h4>
+            <p>
+              A row in <code>signal_post_media</code> is a public <code>https:</code> URL or a Drive
+              file, never something in between. The rule is one function,
+              <code>signalPostMediaIssue</code> in <code>shared/signal-media.ts</code>, enforced at
+              the Zod boundary, in the write service, <em>and</em> by SQLite triggers &mdash; a rule
+              stated in one layer is one the next <code>INSERT</code> walks around.
+            </p>
+            <p>
+              A Drive row carries Drive's name, MIME type, size, and at least one version signal,
+              because a file ID is not evidence of the bytes anyone previewed: Drive may replace a
+              file's content under the same ID. Classify with <code>signalMediaKindFor</code>, never
+              by passing a Drive row's URL to <code>signalMediaKind</code>.
+            </p>
+            <p>
+              A preview makes <strong>no</strong> Drive call &mdash; preflight reads the stored MIME
+              type, and the plan hash covers the whole descriptor and fingerprint, so a file that
+              moves invalidates a plan taken before it did. A stored fingerprint is replaced only by
+              an explicit recheck; a failed recheck writes nothing and leaves the last metadata
+              visible.
+            </p>
+            <h4>Scheduling and queue health</h4>
+            <ul>
+              <li>
+                <code>signal_posts</code> is the only store of planned content. Nothing else keeps a
+                second copy of a schedule.
+              </li>
+              <li>
+                A post carries a <code>YYYY-MM-DD</code> date and an <code>HH:MM</code> time and
+                <strong>never an instant</strong>. No code derives a moment from the pair, which is
+                what keeps a post on its own day in every zone. A null date is the unscheduled queue
+                and belongs to no cell.
+              </li>
+              <li>
+                A post with no campaign is <strong>No campaign</strong> wherever campaigns are
+                grouped, never a hidden post.
+              </li>
+              <li>
+                Acknowledging an alert writes one row to <code>signal_alert_acks</code> and nothing
+                else &mdash; never a post, a publication, a target, or a planning status. It carries
+                the fingerprint of the facts it was shown, so a situation that moves on returns as a
+                live alert rather than staying dismissed.
+              </li>
+              <li>
+                Adding an alert kind means a rule in <code>shared/queue-health.ts</code> and a
+                fixture test beside it, never a check inside a component.
+              </li>
+            </ul>
+            <div class="note is-crit">
+              <strong>No derivation beyond addition and subtraction.</strong> No rate, ratio,
+              average, or per-post normalisation &mdash; those belong to a card that decides what
+              they mean. A group with nothing measured carries no <code>totals</code> field rather
+              than a row of zeros.
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- 07 ================================================= -->
+      <section id="mcp" data-lanes="operator engineer agent">
+        <div class="shead">
+          <span class="num">07</span>
+          <h2>MCP connections and agent workflows</h2>
+        </div>
+        <p class="sintro">
+          Connect an MCP-capable IDE to this workspace, give each agent a stable identity, and use
+          the handoff queue without turning completion into an application or provider write.
+        </p>
+
+        <div class="lanes">
+          <article class="lane" data-lane="operator">
+            <span class="chip">Operator</span>
+            <h3>Choose the connection that matches where the agent runs</h3>
+            <ul>
+              <li>
+                <strong>Same computer:</strong> use local stdio. The IDE starts
+                <code>npm run mcp</code> beside the SQLite workspace. This is the simplest and
+                recommended connection.
+              </li>
+              <li>
+                <strong>Another device:</strong> use the hosted HTTPS endpoint
+                <code>https://your-hcc-host/api/mcp</code>. It exists only when operator
+                authentication is enabled and uses the same tool surface as stdio.
+              </li>
+            </ul>
+            <p>
+              Give every independently running agent a stable, recognizable label such as
+              <code>cursor-planning</code>, <code>claude-review</code>, or
+              <code>codex-release</code>. Labels may contain letters, digits, dots, underscores, and
+              hyphens; they must start and end with a letter or digit and are limited to 64
+              characters.
+            </p>
+            <h4>What the operator can see</h4>
+            <p>
+              Open <strong>Settings &rarr; Agent handoffs</strong> to see Open and Claimed work plus
+              Completed and Cancelled history from the last seven days. Open a row to read its
+              notes. The operator can cancel stuck work with a required reason; agents create,
+              claim, annotate, and complete handoffs through MCP.
+            </p>
+            <div class="note is-crit">
+              <strong>A handoff is coordination metadata.</strong> Claiming or completing one never
+              edits a task, changes a Signal post, publishes content, contacts Drive, or proves the
+              requested work succeeded. The acting agent must perform and verify the real work
+              separately.
+            </div>
+            <h4>What MCP does not expose</h4>
+            <p>
+              As of 5.4.0 the MCP surface is <strong>coordination only</strong> &mdash; seven handoff
+              tools and one inbox resource. An agent connected this way cannot create a project,
+              edit a task, schedule or publish a Signal post, reach Google Drive, or call a
+              provider. Workspace and Signal tools are planned but not built, and provider-write
+              tools are deliberately excluded. Anything an agent must actually change in the
+              workspace still goes through the app or the API, under the ordinary rules.
+            </p>
+            <h4>What is recorded when an agent acts</h4>
+            <p>
+              Every MCP tool call that attempts a change is written to a local append-only audit
+              table (<code>mcp_agent_events</code>) with the agent label, the tool, and the outcome
+              &mdash; <code>SUCCESS</code>, <code>REFUSED</code>, or <code>FAILURE</code>. The
+              newest 500 rows are kept. Refusals are recorded as deliberately as successes, so a
+              misbehaving agent leaves a trail.
+            </p>
+            <div class="note">
+              <strong>There is no screen for this table yet.</strong> The handoff history in
+              <strong>Settings &rarr; Agent handoffs</strong> is what you can read in the app; the
+              audit rows are currently reachable only by querying SQLite directly. If you need them,
+              ask an engineer &mdash; and take a backup first.
+            </div>
+          </article>
+
+          <article class="lane" data-lane="engineer">
+            <span class="chip">Engineer</span>
+            <h3>Local stdio connection</h3>
+            <p>
+              Add a server entry to the MCP configuration used by the IDE. On Windows,
+              <code>npm.cmd --prefix</code> makes the repository location explicit and avoids
+              depending on the IDE's working directory:
+            </p>
+            <pre><code>{
+  "mcpServers": {
+    "hybrid-command-center": {
+      "command": "npm.cmd",
+      "args": [
+        "--prefix",
+        "C:\\Users\\garni\\Documents\\CursorComps\\hybrid-command-center",
+        "run",
+        "mcp"
+      ],
+      "env": {
+        "MCP_AGENT_LABEL": "cursor-planning"
+      }
+    }
+  }
+}</code></pre>
+            <ol>
+              <li>Save the MCP configuration and restart or reload the IDE's MCP servers.</li>
+              <li>Confirm that <code>hybrid-command-center</code> connects.</li>
+              <li>
+                Confirm that its tool list contains <code>coordination_list_handoffs</code> and
+                <code>coordination_post_handoff</code>.
+              </li>
+              <li>
+                Read <code>hcc://coordination/inbox?state=open</code> or call the list tool before
+                taking work.
+              </li>
+            </ol>
+            <p>
+              An MCP client may instead provide <code>_meta.agent_label</code> during
+              <code>initialize</code>. <code>MCP_AGENT_LABEL</code> takes precedence when both are
+              present. Reads work without a label; coordination writes are refused without one.
+            </p>
+
+            <h3>Hosted HTTPS connection</h3>
+            <p>
+              First sign in as the operator. An authenticated
+              <code>POST /api/auth/mcp-bearer</code> issues a bearer once; a cookie-authenticated
+              request must include the session's CSRF token. Store the returned
+              <code>hcc_mcp_&hellip;</code> value in the MCP client's secret storage, never in this
+              repository or a handoff message. Configure the client with:
+            </p>
+            <pre><code>{
+  "url": "https://your-hcc-host/api/mcp",
+  "headers": {
+    "Authorization": "Bearer &lt;issued MCP bearer&gt;",
+    "x-agent-label": "cursor-planning"
+  }
+}</code></pre>
+            <p>
+              Send the <code>x-agent-label</code> header on every request. Bearer-authenticated MCP
+              calls do not need a CSRF header. Logout, password change, and database restore revoke
+              the bearer because it is bound to the operator session; issue a new one and update the
+              client's secret when that happens. Network MCP is not available in the ordinary
+              passwordless loopback runtime.
+            </p>
+            <div class="note">
+              <strong>Why the loopback runtime has no <code>/api/mcp</code>.</strong> The route is
+              mounted only when operator authentication is enforced, which a loopback bind never is.
+              A passwordless local install therefore returns <code>404</code> for
+              <code>POST /api/mcp</code> and <code>400</code> for
+              <code>POST /api/auth/mcp-bearer</code>. That is expected, not a misconfiguration
+              &mdash; use local stdio instead.
+            </div>
+            <h3>Protocol methods implemented</h3>
+            <p>
+              Both transports implement the same deliberately small JSON-RPC subset:
+              <code>initialize</code>, <code>notifications/initialized</code>, <code>ping</code>,
+              <code>tools/list</code>, <code>tools/call</code>, <code>resources/list</code>, and
+              <code>resources/read</code>. Nothing else is served. A client that expects
+              <code>prompts/*</code>, <code>completion/*</code>, sampling, or server-initiated
+              notifications will not find them &mdash; configure it for tools and resources only.
+              Network MCP accepts one JSON-RPC request per <code>POST</code> and answers with one
+              response.
+            </p>
+            <p>
+              Set <code>MCP_AGENT_LABEL</code> in the server entry's <code>env</code> block, as
+              above. It is the only MCP-specific environment variable and it belongs to the MCP
+              client's configuration, not to the application's <code>.env</code>.
+            </p>
+          </article>
+
+          <article class="lane" data-lane="agent">
+            <span class="chip">Agent</span>
+            <h3>The handoff lifecycle</h3>
+            <ol>
+              <li>
+                <strong>Look before claiming.</strong> Call
+                <code>coordination_list_handoffs</code> or read
+                <code>hcc://coordination/inbox?state=open</code>. Use
+                <code>coordination_get_handoff</code> to read the full request and notes.
+              </li>
+              <li>
+                <strong>Claim exactly one item.</strong> Call
+                <code>coordination_claim_handoff</code> with its <code>handoffId</code>. A directed
+                handoff can be claimed only by its named label; an any-agent item is first-claim
+                wins.
+              </li>
+              <li>
+                <strong>Do the real work.</strong> Follow the repository's ordinary authorization,
+                confirmation, validation, and provider rules. A claim grants no additional
+                permission.
+              </li>
+              <li>
+                <strong>Leave useful evidence.</strong> Use <code>coordination_add_note</code> for a
+                blocker, decision, changed assumption, file or PR reference, or validation result.
+                Never include tokens, passwords, API keys, or raw provider responses.
+              </li>
+              <li>
+                <strong>Close honestly.</strong> Call
+                <code>coordination_complete_handoff</code> only after the requested outcome is
+                actually achieved. If the work is obsolete or must stop, call
+                <code>coordination_cancel_handoff</code> with a specific reason.
+              </li>
+            </ol>
+
+            <h4>Creating a handoff</h4>
+            <p>
+              Call <code>coordination_post_handoff</code> with a subject type, a concise actionable
+              message, and optionally a target label and workspace subject ID. Use a stable
+              <code>clientRequestId</code> when retrying so an ambiguous response cannot create a
+              duplicate.
+            </p>
+            <pre><code>{
+  "toAgentLabel": "claude-review",
+  "subjectType": "project",
+  "subjectId": "42",
+  "message": "Review project 42 acceptance criteria and note any unmet evidence.",
+  "clientRequestId": "project-42-review-v1"
+}</code></pre>
+            <p>
+              Subject types are <code>task</code>, <code>signal_post</code>, <code>project</code>,
+              <code>client</code>, and <code>freeform</code>. Omit <code>toAgentLabel</code> for the
+              open pool and omit <code>subjectId</code> for freeform work. The server fills
+              <code>fromAgentLabel</code> from the MCP session and refuses a conflicting value.
+            </p>
+            <div class="note">
+              <strong>Polling and limits.</strong> There is no push subscription in 5.4.0; poll the
+              list tool or inbox resource at a reasonable interval. Each MCP session permits at most
+              10 coordination writes in a rolling minute. Reads do not spend that write budget.
+            </div>
+            <h4>Field limits</h4>
+            <p>
+              Values longer than these are refused, not truncated: agent label 64 characters,
+              <code>clientRequestId</code> 64, <code>message</code> 2000,
+              <code>coordination_add_note</code> body 2000, cancel reason 500, and
+              <code>subjectId</code> 200. A label must additionally start and end with a letter or
+              digit and may otherwise contain only letters, digits, <code>.</code>, <code>_</code>,
+              and <code>-</code>.
+            </p>
+            <h4>The inbox resource takes one form</h4>
+            <p>
+              <code>resources/read</code> accepts <code>hcc://coordination/inbox?state=open</code>,
+              or the same URI with the query omitted. Any other state &mdash;
+              <code>?state=claimed</code>, <code>?state=completed</code> &mdash; is refused rather
+              than filtered. To read anything other than open work, call
+              <code>coordination_list_handoffs</code>, which takes a state argument.
+            </p>
+            <h4>When a call is refused</h4>
+            <p>
+              Refusals are ordinary and expected; handle them rather than retrying blindly.
+            </p>
+            <ul>
+              <li>
+                <strong>Over the write budget:</strong> the call returns
+                <em>Coordination write rate limit exceeded (10 per rolling minute)</em>. Nothing is
+                written and nothing is queued. Wait out the window and try again &mdash; an
+                immediate retry simply fails too.
+              </li>
+              <li>
+                <strong>No agent label:</strong> reads succeed, writes are refused. Set
+                <code>MCP_AGENT_LABEL</code> or send <code>_meta.agent_label</code> on
+                <code>initialize</code>; over HTTPS, send <code>x-agent-label</code> on every
+                request.
+              </li>
+              <li>
+                <strong>Claiming someone else's directed handoff:</strong> refused. A directed item
+                is claimable only by the label it names.
+              </li>
+              <li>
+                <strong>Already claimed:</strong> an any-agent item is first-claim wins. Re-read the
+                row rather than assuming your claim held.
+              </li>
+            </ul>
+            <div class="note is-crit">
+              <strong>Every attempt is audited, including refusals.</strong> Each write-tool call
+              records the agent label, the tool, and <code>SUCCESS</code>, <code>REFUSED</code>, or
+              <code>FAILURE</code> to an append-only table the operator can have inspected. Never
+              put a token, password, API key, or raw provider response in a message, note, or cancel
+              reason &mdash; those fields are stored as written and are read by people.
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- 08 ================================================= -->
+      <section id="backup" data-lanes="operator engineer agent">
+        <div class="shead">
+          <span class="num">08</span>
+          <h2>Backup and recovery</h2>
+        </div>
+        <p class="sintro">
+          One SQLite file holds every record you have entered. Treat it accordingly.
+        </p>
+
+        <div class="lanes">
+          <article class="lane" data-lane="operator">
+            <span class="chip">Operator</span>
+            <h3>Before anything risky, take a copy</h3>
+            <p>
+              Stop the application first, then run the backup command. Keep the backups somewhere
+              private &mdash; the file holds every client, project, task, and note you have entered.
+            </p>
+            <pre><code>npm run db:backup</code></pre>
+            <p>
+              Store your <code>GOOGLE_TOKEN_ENCRYPTION_KEY</code> in a <em>different</em> private
+              place from the backups. One without the other will not restore a working Drive
+              connection.
+            </p>
+            <h4>Security habits worth keeping</h4>
+            <ul>
+              <li>Keep <code>.env</code> private and never publish the database.</li>
+              <li>Do not paste OAuth secrets into the browser interface.</li>
+              <li>
+                Review the Google consent screen before approving access, and connect only the
+                intended account.
+              </li>
+              <li>Stop the application when you step away from a shared computer.</li>
+            </ul>
+          </article>
+
+          <article class="lane" data-lane="engineer">
+            <span class="chip">Engineer</span>
+            <h3>Backup, restore, rehearse</h3>
+            <pre><code># stop npm run dev / npm start first
+npm run db:backup                      # add -- --keep &lt;n&gt; to prune older snapshots
+npm run db:restore -- &lt;backup-file&gt; --force
+npm run db:backup:rehearse
+npm run cutover:rehearse -- --plan</code></pre>
+            <p>
+              Backups use SQLite's online backup API through <code>server/backup.ts</code>. Rehearse
+              before a schema change: it proves the current snapshot restores against the current
+              schema rather than assuming it.
+            </p>
+            <p>
+              The AWS runtime transfers encrypted snapshots to a private S3 bucket, retains 14, and
+              supports scheduled restore rehearsals with redacted health signals. Production cutover
+              remains operator-owned; rehearse migration and rollback on disposable staging before
+              changing the authoritative workspace.
+            </p>
+          </article>
+
+          <article class="lane" data-lane="agent">
+            <span class="chip">Agent</span>
+            <h3>Rules</h3>
+            <ul>
+              <li>
+                Never commit a SQLite file. <code>data/</code> is gitignored and stays that way.
+              </li>
+              <li>Keep data writes transaction-safe at the <code>server/app.ts</code> boundary.</li>
+              <li>
+                <code>server/db.ts</code> is additive by design. A dropped column is a table rebuild
+                &mdash; the frozen <code>signal_posts.campaign</code> column is kept rather than
+                dropped for exactly this reason, and it is not a second place a campaign lives.
+              </li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <!-- 09 ================================================= -->
+      <section id="trouble" data-lanes="operator engineer">
+        <div class="shead">
+          <span class="num">09</span>
+          <h2>Troubleshooting</h2>
+        </div>
+        <p class="sintro">Symptom, cause, and the next thing to try.</p>
+
+        <div class="lanes">
+          <article class="lane" data-lane="operator">
+            <span class="chip">Operator</span>
+            <h3>Common stops, and what fixes them</h3>
+            <div class="tablewrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>What you see</th>
+                    <th>What to do</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>node</code> or <code>npm</code> is not recognized</td>
+                    <td>Install Node.js 24 or newer, then close and reopen the terminal.</td>
+                  </tr>
+                  <tr>
+                    <td>The local page will not open</td>
+                    <td>
+                      Check that <code>npm run dev</code> is still running with no error, and use
+                      <code>http://localhost:5173</code>. After <code>npm start</code>, use
+                      <code>http://localhost:8787</code>.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>A port is already in use</td>
+                    <td>Close the other running copy of the application.</td>
+                  </tr>
+                  <tr>
+                    <td>It refuses to start and lists settings</td>
+                    <td>
+                      Each line names one variable and what was wrong. Correct them in
+                      <code>.env</code>, save, start again.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Drive says credentials are required</td>
+                    <td>
+                      Confirm <code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code>, and
+                      <code>GOOGLE_TOKEN_ENCRYPTION_KEY</code> are all non-empty, then restart.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><code>redirect_uri_mismatch</code></td>
+                    <td>
+                      Google Cloud and <code>.env</code> must both read
+                      <code>http://localhost:8787/api/drive/oauth/callback</code>, with no trailing
+                      slash.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Google says access is blocked</td>
+                    <td>
+                      For an External app in Testing, add your account as a test user. A Workspace
+                      administrator may also restrict Drive scopes.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>The root folder is rejected</td>
+                    <td>
+                      Paste a <em>folder</em> URL or ID, not a file. Confirm the connected account
+                      can open it and that it is not in Trash.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>A card shows Drive offline or Drive issue</td>
+                    <td>
+                      The record and its tasks still work. Check the connection and root folder in
+                      Settings, and do not hand-create duplicate folders while diagnosing.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>A task will not complete</td>
+                    <td>
+                      Review its Dependencies. Finish the blockers, remove a wrong one, or use the
+                      override deliberately.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>A dashboard count looks wrong</td>
+                    <td>
+                      Check the task has a due date, is not already Complete, belongs to the project
+                      you think, and that the computer's date and timezone are right.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="lane" data-lane="engineer">
+            <span class="chip">Engineer</span>
+            <h3>Diagnosing past the obvious</h3>
+            <ul>
+              <li>
+                Config failures are reported all at once at boot, by variable name, never echoing
+                the rejected value &mdash; terminal output is safe to paste into an issue.
+              </li>
+              <li>
+                Moving <code>PORT</code> requires matching changes to the OAuth redirect URI and the
+                dev proxy. Prefer closing the duplicate process.
+              </li>
+              <li>
+                A seven-day Drive dropout is almost always the External-app-in-Testing refresh token
+                expiry, not a bug in the token store.
+              </li>
+              <li>
+                Raise <code>LOG_LEVEL</code> to <code>debug</code> or <code>trace</code> for a run;
+                anything unrecognised falls back to <code>info</code>.
+              </li>
+              <li>
+                Set <code>APP_ORIGIN</code> to the scheme-included origin the API should answer for
+                CORS.
+              </li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <!-- 10 ================================================= -->
+      <section id="contributing" data-lanes="engineer agent">
+        <div class="shead">
+          <span class="num">10</span>
+          <h2>Changing the code</h2>
+        </div>
+        <p class="sintro">
+          Branch naming, the draft-then-finalize release path, and what "done" means here.
+        </p>
+
+        <div class="lanes">
+          <article class="lane" data-lane="engineer">
+            <span class="chip">Engineer</span>
+            <h3>Branches, versions, and gates</h3>
+            <p>
+              Branch from <code>main</code>, one card per branch, named
+              <code>&lt;type&gt;/&lt;issue&gt;-&lt;slug&gt;</code>. Types are <code>feat</code>,
+              <code>fix</code>, <code>chore</code>, and <code>docs</code>. Settle the branch name
+              before opening a pull request &mdash; renaming a head branch closes the PR and it
+              cannot be reopened once the old ref is gone.
+            </p>
+            <p>
+              Required checks: <code>npm run typecheck</code>, <code>npm run lint</code>,
+              <code>npm run format:check</code>, <code>npm run build</code>,
+              <code>npm run test:coverage</code>, and <code>npm run test:e2e</code>. CI runs the
+              coverage variant, so a drop below any threshold fails the build.
+            </p>
+            <div class="note">
+              <strong>Coverage thresholds are measured figures, not targets.</strong> Raise one when
+              the suite genuinely covers more. Never lower one to make a branch pass.
+            </div>
+          </article>
+
+          <article class="lane" data-lane="agent">
+            <span class="chip">Agent</span>
+            <h3>Do not claim a version while under review</h3>
+            <p>
+              Every merged card ships a version bump, but feature work must not claim one early.
+              Keep the pull request <strong>draft</strong> and add one fragment at
+              <code>changes/&lt;issue&gt;.md</code> instead of editing <code>CHANGELOG.md</code>,
+              <code>package.json</code>, <code>package-lock.json</code>, or
+              <code>shared/branding.ts</code>. One file per card means concurrent cards do not
+              conflict.
+            </p>
+            <p>
+              Never name a branch after a version number. The version is decided at merge time from
+              milestone close order &mdash; first card closed takes the minor bump, the rest take
+              patches &mdash; so it is unknowable when the branch is created.
+            </p>
+            <h4>Finalization, in order</h4>
+            <ol>
+              <li>Refresh <code>origin/main</code> and merge or rebase it into the branch.</li>
+              <li>Reread the issue's bump rule and take the next available version.</li>
+              <li>
+                <code>npm version &lt;new-version&gt; --no-git-tag-version</code>, and set
+                <code>APP_VERSION</code> in <code>shared/branding.ts</code> to the same value.
+              </li>
+              <li>
+                Move the fragment's content under a new dated heading at the top of
+                <code>CHANGELOG.md</code>, then delete the fragment.
+              </li>
+              <li>
+                Run <code>npm run check:version-bump</code> and every required gate, then mark ready
+                and merge.
+              </li>
+            </ol>
+            <p>
+              If another card lands first, repeat finalization against the new
+              <code>origin/main</code>. Never preserve a now-taken number.
+            </p>
+            <div class="note is-crit">
+              <strong>The strip-types trap.</strong> The server runs under
+              <code>node --experimental-strip-types</code>, which erases annotations without
+              rewriting code, so
+              <strong>constructor parameter properties do not work there</strong>. Declare the field
+              and assign it in the constructor. Vite transpiles them, so unit tests, typecheck, and
+              the build all pass while the real server refuses to boot &mdash;
+              <code>@typescript-eslint/parameter-properties</code> is enforced over
+              <code>server/</code> and <code>shared/</code> so lint catches it instead.
+            </div>
+            <h4>Definition of done</h4>
+            <p>
+              The user flow is complete, validation and error states are present, unit and
+              integration tests pass, TypeScript and lint pass, the production build succeeds,
+              responsive behaviour is preserved, and no secret or real-Drive side effect is
+              introduced. Every gate in <code>.github/workflows/quality-gates.yml</code> blocks the
+              merge, end-to-end included.
+            </p>
+            <p>
+              <strong>Every milestone adds at least one <code>e2e/</code> spec</strong> &mdash; not
+              every card, a milestone. Cover the flow the milestone was about, in one spec, end to
+              end; leave branches and error paths to unit tests.
+            </p>
+            <p>
+              Changelog entries say what changed for someone <em>using</em> the app, not which files
+              moved. State breaking changes explicitly, including their absence, so a major digit is
+              never left to be inferred.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <!-- 11 ================================================= -->
+      <section id="reference" data-lanes="operator engineer agent">
+        <div class="shead">
+          <span class="num">11</span>
+          <h2>Reference tables</h2>
+        </div>
+        <p class="sintro">The lists worth keeping open in a second window.</p>
+
+        <div class="lanes">
+          <article class="lane" data-lane="operator">
+            <span class="chip">Operator</span>
+            <h3>First-time setup checklist</h3>
+            <ul>
+              <li>Node.js 24 or newer installed</li>
+              <li><code>npm install</code> completed</li>
+              <li><code>.env</code> created from <code>.env.example</code></li>
+              <li><code>npm run db:migrate</code> completed</li>
+              <li>Clean start or demo data chosen</li>
+              <li>Application opens locally</li>
+              <li>If hosting, operator password bootstrapped and the AWS cutover rehearsed</li>
+              <li>
+                Drive and Picker APIs enabled, consent screen and test user configured, if using
+                Drive
+              </li>
+              <li>OAuth web client created and the exact redirect URI added</li>
+              <li>
+                Client ID, client secret, Picker key/app ID, and encryption key saved in
+                <code>.env</code>
+              </li>
+              <li>Google account connected and root folder selected through Picker</li>
+              <li>First client, project, task, checklist, and dependency created</li>
+              <li>Backup plan established for the database <em>and</em> the encryption key</li>
+            </ul>
+            <p>
+              Once these are done, begin each session on the Dashboard, clear overdue work first,
+              and move active tasks through Review and Complete.
+            </p>
+          </article>
+
+          <article class="lane" data-lane="engineer">
+            <span class="chip">Engineer</span>
+            <h3>Environment variables</h3>
+            <div class="tablewrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Variable</th>
+                    <th>Default</th>
+                    <th>Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>PORT</code></td>
+                    <td><code>8787</code></td>
+                    <td>API port; moving it moves the redirect URI and dev proxy too.</td>
+                  </tr>
+                  <tr>
+                    <td><code>HOST</code></td>
+                    <td><code>127.0.0.1</code></td>
+                    <td>
+                      Non-loopback fails unless the complete authentication checklist is configured.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><code>DATABASE_PATH</code></td>
+                    <td><code>./data/command-center.db</code></td>
+                    <td>Gitignored location.</td>
+                  </tr>
+                  <tr>
+                    <td><code>APP_ORIGIN</code></td>
+                    <td><code>http://localhost:5173</code></td>
+                    <td>CORS origin, scheme included.</td>
+                  </tr>
+                  <tr>
+                    <td><code>GOOGLE_CLIENT_ID</code></td>
+                    <td>blank</td>
+                    <td>Blank leaves Drive unconfigured.</td>
+                  </tr>
+                  <tr>
+                    <td><code>GOOGLE_CLIENT_SECRET</code></td>
+                    <td>blank</td>
+                    <td>Server-side only.</td>
+                  </tr>
+                  <tr>
+                    <td><code>GOOGLE_API_KEY</code> / <code>GOOGLE_APP_ID</code></td>
+                    <td>blank</td>
+                    <td>Google Picker developer key and numeric Cloud project number.</td>
+                  </tr>
+                  <tr>
+                    <td><code>GOOGLE_REDIRECT_URI</code></td>
+                    <td><code>&hellip;/api/drive/oauth/callback</code></td>
+                    <td>Must match Google Cloud exactly.</td>
+                  </tr>
+                  <tr>
+                    <td><code>GOOGLE_TOKEN_ENCRYPTION_KEY</code></td>
+                    <td>blank</td>
+                    <td>At least 32 characters. Back up separately.</td>
+                  </tr>
+                  <tr>
+                    <td><code>POST_BRIDGE_API_KEY</code></td>
+                    <td>blank</td>
+                    <td>Required before the preview can submit.</td>
+                  </tr>
+                  <tr>
+                    <td><code>PUBLISH_TIMEZONE</code></td>
+                    <td>blank</td>
+                    <td>Explicit IANA zone, e.g. <code>America/New_York</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>LOG_LEVEL</code></td>
+                    <td><code>info</code></td>
+                    <td>Unrecognised values fall back to <code>info</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>SESSION_SECRET</code> / <code>OPERATOR_PASSWORD_HASH</code></td>
+                    <td>blank</td>
+                    <td>Required for hosted authentication; keep both server-side.</td>
+                  </tr>
+                  <tr>
+                    <td><code>MCP_AGENT_LABEL</code></td>
+                    <td>blank</td>
+                    <td>
+                      Set in the MCP client's server entry, not the app's <code>.env</code>. Blank
+                      leaves reads working and coordination writes refused.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <code>PRODUCTION_TLS_TERMINATED</code> / <code>TRUSTED_PROXY_HOPS</code>
+                    </td>
+                    <td>blank / <code>0</code></td>
+                    <td>
+                      Hosted bind gate; the AWS Caddy contract uses <code>true</code> and
+                      <code>1</code>.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h4>Commands</h4>
+            <div class="tablewrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Command</th>
+                    <th>Does</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>npm run dev</code></td>
+                    <td>Front end and API with live reload</td>
+                  </tr>
+                  <tr>
+                    <td><code>npm run build</code> / <code>npm start</code></td>
+                    <td>Type check and production build; serve it</td>
+                  </tr>
+                  <tr>
+                    <td><code>npm run db:migrate</code></td>
+                    <td>Initialize or upgrade SQLite</td>
+                  </tr>
+                  <tr>
+                    <td><code>npm run db:seed</code></td>
+                    <td>Local demo data; <code>-- --with-drive</code> to provision folders</td>
+                  </tr>
+                  <tr>
+                    <td><code>npm run signal:import</code></td>
+                    <td>Load archived campaign content, idempotent by post id</td>
+                  </tr>
+                  <tr>
+                    <td><code>npm run auth:bootstrap</code></td>
+                    <td>Generate the hosted operator's Argon2id password hash</td>
+                  </tr>
+                  <tr>
+                    <td><code>npm run mcp</code></td>
+                    <td>
+                      Start local stdio MCP; set <code>MCP_AGENT_LABEL</code> for coordination
+                      writes
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><code>npm test</code> / <code>npm run test:coverage</code></td>
+                    <td>Unit and integration with mock Drive</td>
+                  </tr>
+                  <tr>
+                    <td><code>npm run test:e2e</code></td>
+                    <td>Playwright on 8788 / 5174 against <code>data/e2e.db</code></td>
+                  </tr>
+                  <tr>
+                    <td><code>npm run check:version-bump</code></td>
+                    <td>Finalization gate</td>
+                  </tr>
+                  <tr>
+                    <td><code>npm run probe:post-bridge</code></td>
+                    <td>Contract probe; plans by default, <code>--live</code> is owner-run only</td>
+                  </tr>
+                  <tr>
+                    <td><code>npm run probe:buffer</code></td>
+                    <td>Buffer contract probe; plans by default, live mode is owner-run only</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="lane" data-lane="agent">
+            <span class="chip">Agent</span>
+            <h3>API surface, by group</h3>
+            <p>
+              Routes are validated with Zod at <code>server/app.ts</code>. Local loopback use is
+              passwordless; a hosted runtime requires the operator session and CSRF protection on
+              mutations. Network MCP additionally accepts a server-issued bearer bound to that
+              operator session.
+            </p>
+            <div class="tablewrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Group</th>
+                    <th>Routes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Health &amp; dashboard</td>
+                    <td>
+                      <code>GET /api/health</code>, <code>GET /api/dashboard</code>,
+                      <code>GET /api/calendar</code>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Clients</td>
+                    <td>
+                      <code>GET|POST /api/clients</code>, <code>PATCH /api/clients/:id</code>,
+                      <code>&hellip;/archive</code>, <code>&hellip;/unarchive</code>,
+                      <code>&hellip;/retry-drive</code>, <code>&hellip;/merge/preview</code>,
+                      <code>&hellip;/merge</code>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Projects</td>
+                    <td>
+                      <code>GET|POST /api/projects</code>,
+                      <code>PATCH|DELETE /api/projects/:id</code>, <code>&hellip;/archive</code>,
+                      <code>&hellip;/categories</code>, <code>&hellip;/files</code>,
+                      <code>POST /api/projects/reorder</code>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Tasks</td>
+                    <td>
+                      <code>GET|POST /api/tasks</code>, <code>PATCH|DELETE /api/tasks/:id</code>,
+                      <code>&hellip;/checklist</code>, <code>&hellip;/dependencies</code>,
+                      <code>&hellip;/tags</code>, <code>POST /api/tasks/reorder</code>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Labels</td>
+                    <td>
+                      <code>/api/tags</code> and <code>/api/categories</code> &mdash; list, create,
+                      rename, delete
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Signal planning</td>
+                    <td>
+                      <code>/api/signal/posts</code> (+ <code>/duplicate</code>, <code>/slot</code>,
+                      <code>/next-slot</code>, <code>/variants</code>),
+                      <code>/api/signal/queue</code>, <code>/api/signal/campaigns</code>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Signal media</td>
+                    <td>
+                      <code>POST /api/signal/drive-media/resolve</code>,
+                      <code>POST /api/signal/posts/:id/media/recheck</code>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Publishing</td>
+                    <td>
+                      <code>&hellip;/publish/preview</code>, <code>&hellip;/publish</code>,
+                      <code>/api/signal/publications/:id/provider/preview|apply</code>,
+                      <code>&hellip;/reconcile</code>,
+                      <code>&hellip;/targets/:accountId/finish</code>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Figures</td>
+                    <td>
+                      <code>GET /api/signal/posts/:id/metrics</code>,
+                      <code>POST &hellip;/metrics/refresh</code>,
+                      <code>GET /api/signal/analytics/campaigns</code>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Queue health</td>
+                    <td>
+                      <code>GET /api/signal/health</code>,
+                      <code>PUT /api/signal/health/config</code>,
+                      <code>POST|DELETE &hellip;/alerts/:id/acknowledge</code>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Import</td>
+                    <td>
+                      <code>POST /api/import/playbook/preview</code>,
+                      <code>POST /api/import/playbook</code>, <code>GET /api/import/receipts</code>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Drive &amp; settings</td>
+                    <td>
+                      <code>/api/drive/oauth/start|callback</code>,
+                      <code>POST /api/drive/sync</code>, <code>/api/settings/drive</code>,
+                      <code>/api/settings/branding</code>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Activity</td>
+                    <td>
+                      <code>GET /api/integrations/activity</code> &mdash; append-only, newest 200,
+                      credential-scrubbed
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Authentication &amp; MCP</td>
+                    <td>
+                      <code>GET /api/auth/status</code>, <code>POST /api/auth/login|logout</code>,
+                      <code>POST /api/auth/mcp-bearer</code>, and streamable HTTP
+                      <code>POST /api/mcp</code>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Agent coordination</td>
+                    <td>
+                      <code>/api/coordination/*</code> for the operator inbox; the same handoff
+                      tools and <code>hcc://coordination/inbox?state=open</code> resource are
+                      exposed through local stdio and network MCP
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <h4>MCP tool surface</h4>
+              <p>
+                Seven tools, coordination only. Reads &mdash;
+                <code>coordination_list_handoffs</code>, <code>coordination_get_handoff</code>
+                &mdash; need no agent label and do not spend the write budget. Writes &mdash;
+                <code>coordination_post_handoff</code>, <code>coordination_claim_handoff</code>,
+                <code>coordination_complete_handoff</code>,
+                <code>coordination_cancel_handoff</code>, <code>coordination_add_note</code> &mdash;
+                require a label and share 10 calls per rolling minute per session. Workspace and
+                Signal tools are not built; provider-write tools are excluded by design.
+              </p>
+            </div>
+            <h4>Companion documents</h4>
+            <ul>
+              <li>
+                <code>AGENTS.md</code> &mdash; repository guidance; the authority for every rule in
+                the Agent lane.
+              </li>
+              <li>
+                <code>docs/campaign-playbook-import-format.md</code> &mdash; the versioned XLSX
+                contract.
+              </li>
+              <li>
+                <code>docs/publishing-integration.md</code> &mdash; provider boundary and scheduling
+                conversion.
+              </li>
+              <li>
+                <code>docs/view-state-convention.md</code> &mdash; default views and durable URL
+                state.
+              </li>
+              <li>
+                <code>docs/cloud-hosting.md</code> &mdash; the decision record a hosted deployment
+                follows.
+              </li>
+              <li>
+                <code>docs/cloud-cutover-rehearsal.md</code> &mdash; staging migration, rollback,
+                and production-cutover evidence.
+              </li>
+              <li>
+                <code>docs/multi-agent-mcp-decision.md</code> and
+                <code>docs/agent-coordination-plan.md</code> &mdash; MCP trust boundaries and the
+                handoff vocabulary.
+              </li>
+            </ul>
+          </article>
+        </div>
+      </section>
+    </div>
+
+    <footer class="footer">
+      <div class="inner">
+        <p>
+          Hybrid Command Center 5.4.0 &mdash; operating manual, updated 2026-08-26. Compiled from
+          <code>USER_MANUAL.md</code>, <code>README.md</code>, and <code>AGENTS.md</code>. Where
+          this page and those files disagree, the repository is correct.
+        </p>
+      </div>
+    </footer>
+  </main>
+</div>
+
+<script>
+  (function () {
+    var page = document.getElementById('page');
+    var buttons = Array.prototype.slice.call(document.querySelectorAll('.seg button'));
+    var lanes = Array.prototype.slice.call(document.querySelectorAll('.lane'));
+    var sections = Array.prototype.slice.call(document.querySelectorAll('section[data-lanes]'));
+    var navLinks = Array.prototype.slice.call(document.querySelectorAll('#toc a'));
+
+    // Count blocks per lane for the switcher.
+    var counts = { operator: 0, engineer: 0, agent: 0, all: lanes.length };
+    lanes.forEach(function (el) {
+      var k = el.getAttribute('data-lane');
+      if (counts[k] !== undefined) counts[k] += 1;
+    });
+    Object.keys(counts).forEach(function (k) {
+      var slot = document.querySelector('[data-count="' + k + '"]');
+      if (slot) slot.textContent = counts[k];
+    });
+
+    function apply(view) {
+      page.setAttribute('data-view', view);
+      buttons.forEach(function (b) {
+        b.setAttribute('aria-pressed', String(b.getAttribute('data-set') === view));
+      });
+      // Hide nav entries for sections this lane has nothing in.
+      sections.forEach(function (sec) {
+        var has = view === 'all' || sec.getAttribute('data-lanes').split(' ').indexOf(view) !== -1;
+        navLinks.forEach(function (a) {
+          if (a.getAttribute('data-for') === sec.id) a.hidden = !has;
+        });
+      });
+    }
+
+    buttons.forEach(function (b) {
+      b.addEventListener('click', function () {
+        apply(b.getAttribute('data-set'));
+      });
+    });
+
+    // Mark the section currently in view.
+    var visible = new Map();
+    var observer = new IntersectionObserver(
+      function (entries) {
+        entries.forEach(function (e) {
+          visible.set(e.target.id, e.isIntersecting ? e.intersectionRatio : 0);
+        });
+        var best = null,
+          bestRatio = 0;
+        visible.forEach(function (ratio, id) {
+          if (ratio > bestRatio) {
+            bestRatio = ratio;
+            best = id;
+          }
+        });
+        navLinks.forEach(function (a) {
+          a.classList.toggle('on', best !== null && a.getAttribute('data-for') === best);
+        });
+      },
+      { rootMargin: '-70px 0px -55% 0px', threshold: [0, 0.25, 0.5, 1] },
+    );
+    sections.forEach(function (s) {
+      observer.observe(s);
+    });
+
+    apply('all');
+  })();
+</script>
