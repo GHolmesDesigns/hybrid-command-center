@@ -13,4 +13,14 @@ describe('RollingWindowLimiter', () => {
     expect(limiter.tryConsume(1100)).toBe(true);
     expect(limiter.remaining(1100)).toBe(0);
   });
+
+  it('reports retryAfterMs from the oldest stamp only once the window is full', () => {
+    const limiter = new RollingWindowLimiter(2, 1000);
+    expect(limiter.retryAfterMs(0)).toBe(0);
+    expect(limiter.tryConsume(0)).toBe(true);
+    expect(limiter.retryAfterMs(0)).toBe(0);
+    expect(limiter.tryConsume(100)).toBe(true);
+    expect(limiter.retryAfterMs(200)).toBe(800);
+    expect(limiter.retryAfterMs(1000)).toBe(0);
+  });
 });

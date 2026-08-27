@@ -19,16 +19,28 @@ import { sessionFromRawToken } from '../auth/service.ts';
 import type { OperatorSessionRecord } from '../auth/sessions.ts';
 import { handleMcpJsonRpc, type JsonRpcRequest, type JsonRpcResponse } from './stdio.ts';
 import { createMcpSession, setMcpSessionAgentLabel, type McpSession } from './session.ts';
+import type { McpWriteLimiterRegistry } from './write-limiter-registry.ts';
 
 export type McpHttpAuthContext = {
   session: OperatorSessionRecord;
   usedBearer: boolean;
+  /**
+   * The presented credential's own identity — the bearer's token hash when bearer-authenticated,
+   * or the session's token hash for cookie auth. Deliberately not always `session.tokenHash`:
+   * each bearer issued from one session gets its own write budget (C116), distinct from the
+   * cookie session's own budget.
+   */
+  credentialKey: string;
 };
 
 export type McpHttpHandlerOptions = {
   db: Db;
   sessionSecret: string;
   now?: () => number;
+  /** Process-lifetime coordination write budgets (C116). Omitted only in tests that don't
+   *  exercise rate limiting — coordination writes then fall back to the per-request no-op limiter
+   *  that reproduced the original bug, so production wiring must always pass one. */
+  writeLimiters?: McpWriteLimiterRegistry;
 };
 
 function headerValue(raw: string | string[] | undefined): string | null {
@@ -59,7 +71,11 @@ export function resolveMcpHttpAuth(
       now,
     });
     if (!resolved) return null;
-    return { session: resolved.session, usedBearer: true };
+    return {
+      session: resolved.session,
+      usedBearer: true,
+      credentialKey: resolved.bearer.tokenHash,
+    };
   }
 
   const rawToken = readSessionToken(req.headers.cookie);
@@ -69,7 +85,7 @@ export function resolveMcpHttpAuth(
     now,
   });
   if (!session) return null;
-  return { session, usedBearer: false };
+  return { session, usedBearer: false, credentialKey: session.tokenHash };
 }
 
 /** Fail closed when a cookie session POST lacks a matching CSRF token. Bearer auth skips CSRF. */
@@ -131,6 +147,17 @@ export async function handleMcpHttpPost(
       },
     });
     return;
+  }
+  // Replace the per-request no-op limiter with one backed by the process-lifetime registry, so
+  // coordination writes actually accumulate across requests (C116). Label may still be null here
+  // (coordination.ts refuses writes without one before ever consulting the limiter).
+  if (options.writeLimiters) {
+    const now = options.now?.() ?? Date.now();
+    session.coordinationWrites = options.writeLimiters.limiterFor(
+      auth.credentialKey,
+      session.agentLabel ?? '',
+      now,
+    );
   }
 
   const responses: JsonRpcResponse[] = [];

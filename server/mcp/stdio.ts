@@ -119,7 +119,11 @@ export async function handleMcpJsonRpc(
         const text =
           result.outcome === 'SUCCESS'
             ? JSON.stringify(result.data ?? null)
-            : JSON.stringify({ outcome: result.outcome, error: result.error });
+            : JSON.stringify({
+                outcome: result.outcome,
+                error: result.error,
+                ...(result.retryAfterMs !== undefined ? { retryAfterMs: result.retryAfterMs } : {}),
+              });
         reply({
           content: [{ type: 'text', text }],
           isError: result.outcome !== 'SUCCESS',
