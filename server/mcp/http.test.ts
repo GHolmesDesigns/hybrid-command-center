@@ -234,6 +234,45 @@ describe('network MCP (C113)', () => {
   });
 });
 
+/**
+ * The `authRequired === false` branch (#356). Every suite above passes `enforceAuth: true`, so
+ * nothing pinned the default loopback derivation — a future change that mounted the MCP route
+ * above the `authRequired` gate would publish an unauthenticated JSON-RPC surface on the app's
+ * own origin and no test would go red. These construct the app on the loopback default rather
+ * than passing `enforceAuth: false`, so they exercise the derivation production actually uses.
+ */
+describe('network MCP on a loopback bind (C113)', () => {
+  let db: Db;
+
+  beforeEach(async () => {
+    db = createDb(':memory:');
+    // An operator password on record is the interesting case: even then, a loopback bind must
+    // leave the network surface unmounted.
+    setSetting(db, OPERATOR_PASSWORD_HASH_SETTING_KEY, await hashPassword(PASSWORD));
+  });
+
+  afterEach(() => {
+    try {
+      db.close();
+    } catch {
+      // already closed
+    }
+  });
+
+  it('does not mount the MCP route when auth is not required', async () => {
+    const res = await request(createApp(db))
+      .post(MCP_HTTP_PATH)
+      .send({ jsonrpc: '2.0', id: 1, method: 'ping' });
+    expect(res.status).toBe(404);
+  });
+
+  it('refuses to issue a bearer when auth is not required', async () => {
+    const res = await request(createApp(db)).post(MCP_BEARER_ISSUE_PATH);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Authentication is not required on this host.');
+  });
+});
+
 describe('network MCP handler units', () => {
   let db: Db;
 
