@@ -8,6 +8,27 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.3.5] - 2026-08-26
+
+### Added
+
+- A cloud cutover rehearsal runbook at `docs/cloud-cutover-rehearsal.md` with the forward migration
+  checklist, rollback rehearsal (freeze writes, restore a fresh hosted snapshot), failure decision
+  table, and monitoring confirmation aligned with `docs/cloud-hosting.md` §8.
+- `npm run cutover:rehearse` orchestrates disposable backup/restore rehearsal and optional
+  frozen-write rollback verification; `--plan` prints the operator sequence without touching data.
+- End-to-end coverage in `e2e/cloud-cutover-rehearsal.spec.ts` for login, authenticated workspace
+  use, Drive mock reconnect, restart persistence, backup, rollback, and post-restore verification.
+
+### Changed
+
+- README, USER_MANUAL, and `docs/cloud-hosting.md` now describe the same supported AWS deployment
+  path and distinguish **rehearsal proven on staging** from **production cutover** (operator-owned).
+
+### Breaking changes
+
+None.
+
 ## [5.3.4] - 2026-08-26
 
 ### Added
