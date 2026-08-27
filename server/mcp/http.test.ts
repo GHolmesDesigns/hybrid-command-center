@@ -11,6 +11,13 @@ import {
   MCP_BEARER_ISSUE_PATH,
   MCP_HTTP_PATH,
 } from '../../shared/mcp-network.ts';
+import {
+  createMcpHttpHandler,
+  handleMcpHttpPost,
+  mcpHttpCsrfOk,
+  resolveMcpHttpAuth,
+} from './http.ts';
+import { createSession } from '../auth/sessions.ts';
 
 const SECRET = 'test-session-secret-at-least-32-chars!';
 const PASSWORD = 'operator-password-ok';
@@ -185,5 +192,123 @@ describe('network MCP (C113)', () => {
       .send({ jsonrpc: '2.0', id: 6, method: 'ping' });
     expect(res.status).toBe(200);
     expect(res.body.result).toEqual({});
+  });
+
+  it('refuses invalid bearer tokens and malformed JSON-RPC bodies', async () => {
+    const badBearer = await request(app())
+      .post(MCP_HTTP_PATH)
+      .set('Authorization', 'Bearer hcc_mcp_not-in-database')
+      .send({ jsonrpc: '2.0', id: 1, method: 'ping' });
+    expect(badBearer.status).toBe(401);
+
+    const { cookie, csrfToken } = await login();
+    const invalidBody = await request(app())
+      .post(MCP_HTTP_PATH)
+      .set('Cookie', cookie)
+      .set(CSRF_HEADER_NAME, csrfToken)
+      .send('not-json');
+    expect(invalidBody.status).toBe(400);
+    expect(invalidBody.body.error.code).toBe(-32700);
+  });
+
+  it('refuses an invalid agent label header before JSON-RPC runs', async () => {
+    const { cookie, csrfToken } = await login();
+    const res = await request(app())
+      .post(MCP_HTTP_PATH)
+      .set('Cookie', cookie)
+      .set(CSRF_HEADER_NAME, csrfToken)
+      .set(MCP_AGENT_LABEL_HEADER, 'bad label!')
+      .send({ jsonrpc: '2.0', id: 7, method: 'ping' });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe(-32602);
+  });
+
+  it('returns 204 for notifications without an id', async () => {
+    const { cookie, csrfToken } = await login();
+    const res = await request(app())
+      .post(MCP_HTTP_PATH)
+      .set('Cookie', cookie)
+      .set(CSRF_HEADER_NAME, csrfToken)
+      .send({ jsonrpc: '2.0', method: 'notifications/initialized' });
+    expect(res.status).toBe(204);
+  });
+});
+
+describe('network MCP handler units', () => {
+  let db: Db;
+
+  beforeEach(() => {
+    db = createDb(':memory:');
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  it('resolveMcpHttpAuth and mcpHttpCsrfOk cover cookie and bearer branches', () => {
+    const session = createSession(db, {
+      sessionSecret: SECRET,
+      clientAddress: '127.0.0.1',
+      now: 1_000,
+    });
+    const cookieReq = {
+      headers: { cookie: `hcc_session=${session.rawToken}` },
+    } as Parameters<typeof resolveMcpHttpAuth>[0];
+    const cookieAuth = resolveMcpHttpAuth(cookieReq, {
+      db,
+      sessionSecret: SECRET,
+      now: () => 1_001,
+    });
+    expect(cookieAuth?.usedBearer).toBe(false);
+    expect(
+      mcpHttpCsrfOk(cookieAuth!, { headers: { [CSRF_HEADER_NAME]: session.csrfToken } } as never),
+    ).toBe(true);
+    expect(mcpHttpCsrfOk(cookieAuth!, { headers: { [CSRF_HEADER_NAME]: 'wrong' } } as never)).toBe(
+      false,
+    );
+  });
+
+  it('createMcpHttpHandler rejects non-POST methods', async () => {
+    const handler = createMcpHttpHandler({ db, sessionSecret: SECRET });
+    const res = {
+      statusCode: 200,
+      body: null as unknown,
+      status(code: number) {
+        this.statusCode = code;
+        return this;
+      },
+      json(payload: unknown) {
+        this.body = payload;
+        return this;
+      },
+      end() {
+        return this;
+      },
+    };
+    await handler({ method: 'GET', headers: {}, body: {} } as never, res as never);
+    expect(res.statusCode).toBe(405);
+  });
+
+  it('handleMcpHttpPost returns 401 without auth', async () => {
+    const res = {
+      statusCode: 200,
+      body: null as unknown,
+      status(code: number) {
+        this.statusCode = code;
+        return this;
+      },
+      json(payload: unknown) {
+        this.body = payload;
+        return this;
+      },
+      end() {
+        return this;
+      },
+    };
+    await handleMcpHttpPost({ headers: {}, body: {} } as never, res as never, {
+      db,
+      sessionSecret: SECRET,
+    });
+    expect(res.statusCode).toBe(401);
   });
 });

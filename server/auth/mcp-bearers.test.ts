@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createDb, type Db } from '../db.ts';
-import { createSession } from './sessions.ts';
 import {
   createMcpBearer,
   hashMcpBearerToken,
@@ -9,6 +8,7 @@ import {
   revokeAllMcpBearers,
   revokeBearersForSession,
 } from './mcp-bearers.ts';
+import { createSession, revokeAllSessions } from './sessions.ts';
 import { MCP_BEARER_TOKEN_PREFIX } from '../../shared/mcp-network.ts';
 
 const SECRET = 'session-secret-at-least-thirty-two-chars!!';
@@ -106,5 +106,29 @@ describe('mcp bearers', () => {
     );
     expect(readMcpBearerToken('Basic nope')).toBeNull();
     expect(readMcpBearerToken(undefined)).toBeNull();
+    expect(readMcpBearerToken(['Bearer token-one', 'Bearer token-two'])).toBe('token-one');
+  });
+
+  it('rejects wrong-prefix and expired-session bearers', () => {
+    expect(resolveMcpBearer(db, { rawToken: 'not-a-bearer', sessionSecret: SECRET })).toBeNull();
+
+    const session = createSession(db, {
+      sessionSecret: SECRET,
+      clientAddress: '127.0.0.1',
+      now: 0,
+    });
+    const issued = createMcpBearer(db, {
+      sessionTokenHash: session.record.tokenHash,
+      sessionSecret: SECRET,
+      now: 0,
+    });
+    revokeAllSessions(db, 100);
+    expect(
+      resolveMcpBearer(db, {
+        rawToken: issued.rawToken,
+        sessionSecret: SECRET,
+        now: 200,
+      }),
+    ).toBeNull();
   });
 });
