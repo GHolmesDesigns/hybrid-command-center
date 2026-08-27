@@ -96,6 +96,14 @@ CREATE TABLE IF NOT EXISTS operator_sessions (
   revoked_at TEXT,
   client_address TEXT
 );
+-- MCP bearer tokens (C113): bound to an operator session; revoked with logout, password change, restore.
+-- Keep in sync with OPERATOR_MCP_BEARERS_TABLE_SQL in server/auth/mcp-bearers.ts.
+CREATE TABLE IF NOT EXISTS operator_mcp_bearers (
+  token_hash TEXT PRIMARY KEY,
+  session_token_hash TEXT NOT NULL,
+  issued_at TEXT NOT NULL,
+  revoked_at TEXT
+);
 -- Drive OAuth pending states (C52): one row per connect attempt, bound to a session when auth is on.
 -- Keep in sync with OAUTH_PENDING_STATES_TABLE_SQL in server/drive/oauth.ts.
 CREATE TABLE IF NOT EXISTS oauth_pending_states (
@@ -597,6 +605,7 @@ CREATE INDEX IF NOT EXISTS idx_project_categories_category ON project_categories
 CREATE INDEX IF NOT EXISTS idx_import_receipts_created ON import_receipts(created_at DESC);
 -- Purge walks idle expiry; absolute and revoked rows are filtered in the same DELETE.
 CREATE INDEX IF NOT EXISTS idx_operator_sessions_idle ON operator_sessions(idle_expires_at);
+CREATE INDEX IF NOT EXISTS idx_operator_mcp_bearers_session ON operator_mcp_bearers(session_token_hash);
 -- Expired OAuth pending rows are deleted by expires_at on begin/consume and on a periodic purge.
 CREATE INDEX IF NOT EXISTS idx_oauth_pending_expires ON oauth_pending_states(expires_at);
 CREATE INDEX IF NOT EXISTS idx_integration_events_created ON integration_events(created_at DESC);

@@ -501,6 +501,11 @@ export async function restoreDatabase(options: {
         `UPDATE operator_sessions SET revoked_at = COALESCE(revoked_at, ?) WHERE revoked_at IS NULL`,
       )
       .run((options.now ?? new Date()).toISOString());
+    restored
+      .prepare(
+        `UPDATE operator_mcp_bearers SET revoked_at = COALESCE(revoked_at, ?) WHERE revoked_at IS NULL`,
+      )
+      .run((options.now ?? new Date()).toISOString());
   } finally {
     restored.close();
   }
