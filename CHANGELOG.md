@@ -8,6 +8,20 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.4.1] - 2026-08-27
+
+### Security
+
+- The guarantee that a loopback bind exposes no network MCP surface is now pinned by tests. On the
+  passwordless loopback default, `POST /api/mcp` is unreachable and no operator bearer can be
+  issued — behaviour that was already correct but that nothing verified, so a later change could
+  have published an unauthenticated JSON-RPC endpoint on the app's own origin without a gate
+  turning red.
+
+### Breaking changes
+
+None.
+
 ## [5.4.0] - 2026-08-26
 
 ### Added
