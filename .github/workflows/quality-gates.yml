@@ -52,6 +52,12 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     timeout-minutes: 8
+    # Base `contents: read` covers checkout. `pull-requests: write` is scoped to this job alone —
+    # only the auto-revert step below uses it, to convert a prematurely-readied draft back and
+    # explain why, rather than leaving a red PR with no code change that would fix it.
+    permissions:
+      contents: read
+      pull-requests: write
 
     steps:
       # Actions are pinned to a commit SHA rather than a floating major tag: a tag is mutable
@@ -110,10 +116,39 @@ jobs:
       # somehow differs from the base, not a second gate, and a green tick there is not evidence
       # that a version was checked.
       - name: Check the version was bumped
+        id: version_bump
         if: >-
           github.ref == 'refs/heads/main' ||
           (github.event_name == 'pull_request' && github.event.pull_request.draft == false)
         run: npm run check:version-bump
+
+      # `ready_for_review` is the one moment a human (or another agent) can put a card branch
+      # into the exact state AGENTS.md forbids: marked ready before finalization bumped the
+      # version. The step above then fails on the first click, every time, with no code change
+      # that would fix it — the only remedy is converting back to draft and finishing the
+      # finalize checklist. This happened across roughly a dozen recent pull requests (#340,
+      # #354, #356, and others) before anyone traced it back to this exact cause, so automate the
+      # remedy instead of relying on everyone rediscovering it: revert the toggle and spell out
+      # the next step on the pull request itself.
+      - name: Revert a premature ready-for-review back to draft
+        if: >-
+          failure() && steps.version_bump.outcome == 'failure' &&
+          github.event_name == 'pull_request' && github.event.action == 'ready_for_review'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          MESSAGE: |
+            Reverted to draft: `check:version-bump` failed, which means finalization has not run
+            yet. Per `AGENTS.md`, a draft pull request keeps its per-issue fragment at
+            `changes/<issue>.md` and does not claim a version — only mark it ready **after**
+            finalizing: refresh `origin/main`, run `npm version <next> --no-git-tag-version`, set
+            `APP_VERSION` in `shared/branding.ts` to the same value, move the fragment's content
+            under a new dated heading in `CHANGELOG.md`, delete the fragment, and confirm
+            `npm run check:version-bump` passes locally.
+        run: |
+          gh pr ready "${PR_NUMBER}" --repo "${REPO}" --undo
+          gh pr comment "${PR_NUMBER}" --repo "${REPO}" --body "${MESSAGE}"
 
   quality-gates:
     needs: checks
