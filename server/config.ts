@@ -45,8 +45,10 @@ export const isLoopbackHost = (host: string) =>
   LOOPBACK_HOSTS.some((loopback) => loopback === host.trim().toLowerCase());
 
 /**
- * The §5.1 checklist from `docs/cloud-hosting.md`: a non-loopback bind is allowed only when
- * every item is true. `OPERATOR_PASSWORD_HASH` must come from the environment for this gate —
+ * The §5.1 checklist from `docs/cloud-hosting.md`. Completing it turns operator authentication
+ * on (C114), including when `HOST` stays loopback behind Caddy. A non-loopback bind is still
+ * refused by the Zod bind gate until every item is true, and the production preflight refuses
+ * non-loopback entirely. `OPERATOR_PASSWORD_HASH` must come from the environment for this gate —
  * a settings-row hash is enough for loopback testing later, not for publishing the API.
  * `TRUSTED_PROXY_HOPS` must be set explicitly (even to `0`) so a hosted deploy cannot silently
  * inherit the loopback default and then trust a forged `X-Forwarded-For`.

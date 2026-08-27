@@ -8,13 +8,7 @@ import { isValid, parseISO } from 'date-fns';
 import { z } from 'zod';
 import type { Db } from './db.ts';
 import { getDb, transaction } from './db.ts';
-import {
-  config,
-  publishConfigured,
-  bufferConfigured,
-  isLoopbackHost,
-  authIsConfigured,
-} from './config.ts';
+import { config, publishConfigured, bufferConfigured, authenticationConfigured } from './config.ts';
 import { createAuthMiddleware, type AuthedRequest } from './auth/middleware.ts';
 import {
   authStatus,
@@ -304,16 +298,24 @@ const productionContentSecurityPolicy = {
 export type AppOptions = {
   production?: boolean;
   /**
-   * Force operator auth on loopback (tests). Production derives this from the bind address:
-   * loopback stays passwordless; a non-loopback bind already passed the §5.1 checklist.
+   * Force operator auth without the full §5.1 checklist (tests). Production derives
+   * `authRequired` from `authenticationConfigured` — complete checklist means auth is on, even
+   * when `HOST` stays loopback behind the proxy. Incomplete local checklist stays passwordless.
    */
   enforceAuth?: boolean;
+  /**
+   * Override `APP_ORIGIN` for checklist evaluation in tests (production-shaped loopback). Does
+   * not change CORS; use only when proving auth turns on from the checklist alone.
+   */
+  appOrigin?: string;
   /** Override auth config for tests (session secret, password hash, proxy hops, Secure cookies). */
   auth?: {
     sessionSecret?: string;
     operatorPasswordHash?: string;
     trustedProxyHops?: number;
     secureCookies?: boolean;
+    productionTlsTerminated?: boolean;
+    trustedProxyHopsConfigured?: boolean;
   };
   /**
    * The Drive provider the read-only browsing routes use. Tests supply a mock one so a
@@ -757,19 +759,32 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   app.use(requestLogger(options.logStream));
 
   /**
-   * Operator authentication (C51). Loopback stays passwordless unless a test sets `enforceAuth`.
-   * A non-loopback bind already satisfied the §5.1 checklist at boot, so every API route needs a
-   * session (and CSRF on mutations) except the public login/status/health surface.
+   * Operator authentication (C51 / C114). Auth is required when the §5.1 / §11 checklist is
+   * complete — not when leaving loopback. Production keeps `HOST` on loopback behind Caddy;
+   * local `npm run dev` without the checklist stays passwordless. Tests may set `enforceAuth`
+   * to force a session without filling every checklist field.
    */
   const sessionSecret = options.auth?.sessionSecret ?? config.auth.sessionSecret;
   const operatorPasswordHash =
     options.auth?.operatorPasswordHash ?? config.auth.operatorPasswordHash;
   const trustedProxyHops = options.auth?.trustedProxyHops ?? config.auth.trustedProxyHops;
-  const authRequired = options.enforceAuth ?? (!isLoopbackHost(config.host) && authIsConfigured());
+  const appOrigin = options.appOrigin ?? config.appOrigin;
+  const productionTlsTerminated =
+    options.auth?.productionTlsTerminated ?? config.auth.productionTlsTerminated;
+  const trustedProxyHopsConfigured =
+    options.auth?.trustedProxyHopsConfigured ?? config.auth.trustedProxyHopsConfigured;
+  const authRequired =
+    options.enforceAuth ??
+    authenticationConfigured({
+      sessionSecret,
+      operatorPasswordHash,
+      appOrigin,
+      productionTlsTerminated,
+      trustedProxyHopsConfigured,
+    });
   const secureCookies =
     options.auth?.secureCookies ??
-    (authRequired &&
-      (config.auth.productionTlsTerminated || config.appOrigin.startsWith('https:')));
+    (authRequired && (productionTlsTerminated || appOrigin.startsWith('https:')));
   const authNowMs = () => clock().getTime();
 
   // Auth uses express-rate-limit (not requestBudget) so CodeQL's missing-rate-limiting query can

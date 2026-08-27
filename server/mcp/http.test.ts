@@ -235,19 +235,19 @@ describe('network MCP (C113)', () => {
 });
 
 /**
- * The `authRequired === false` branch (#356). Every suite above passes `enforceAuth: true`, so
- * nothing pinned the default loopback derivation — a future change that mounted the MCP route
- * above the `authRequired` gate would publish an unauthenticated JSON-RPC surface on the app's
- * own origin and no test would go red. These construct the app on the loopback default rather
- * than passing `enforceAuth: false`, so they exercise the derivation production actually uses.
+ * The `authRequired === false` branch (#356 / #362). Every suite above passes `enforceAuth: true`,
+ * so nothing pinned the default derivation — a future change that mounted the MCP route above the
+ * `authRequired` gate would publish an unauthenticated JSON-RPC surface on the app's own origin
+ * and no test would go red. These construct the app on the incomplete local checklist rather than
+ * passing `enforceAuth: false`, so they exercise the derivation production actually uses.
  */
-describe('network MCP on a loopback bind (C113)', () => {
+describe('network MCP when auth is not required (C113)', () => {
   let db: Db;
 
   beforeEach(async () => {
     db = createDb(':memory:');
-    // An operator password on record is the interesting case: even then, a loopback bind must
-    // leave the network surface unmounted.
+    // An operator password on record is the interesting case: even then, an incomplete checklist
+    // must leave the network surface unmounted (loopback alone is not the gate).
     setSetting(db, OPERATOR_PASSWORD_HASH_SETTING_KEY, await hashPassword(PASSWORD));
   });
 
