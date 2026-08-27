@@ -1,8 +1,10 @@
 /**
- * Operator authentication constants and types shared by the API and the client (C51 / #177).
+ * Operator authentication constants and types shared by the API and the client (C51 / #177,
+ * C114 / #362).
  *
- * Loopback stays passwordless. A non-loopback bind requires the full §5.1 checklist in
- * `docs/cloud-hosting.md` — see `authenticationConfigured` in `server/config.ts`.
+ * Auth is required when the §5.1 / §11 checklist is complete — see `authenticationConfigured` in
+ * `server/config.ts`. Local loopback without that checklist stays passwordless. Leaving loopback
+ * is not what turns auth on; production keeps `HOST` on loopback behind the proxy.
  */
 
 /** HttpOnly session cookie name. The cookie holds the raw token; SQLite stores only a hash. */

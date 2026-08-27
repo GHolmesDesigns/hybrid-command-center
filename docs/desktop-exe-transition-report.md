@@ -78,32 +78,38 @@ The repository is already close to a packagable architecture:
 
 ### The `authRequired` branch governs the desktop shape
 
-The single most important fact for this report, and the one the original draft got wrong. As of C51,
-the application **does** have authentication, and `server/app.ts` derives whether to enforce it:
+The single most important fact for this report, and the one the original draft got wrong. As of C51
+(and clarified by C114), the application **does** have authentication, and `server/app.ts` derives
+whether to enforce it from the §5.1 / §11 checklist — not from leaving loopback:
 
 ```
-const authRequired = options.enforceAuth ?? (!isLoopbackHost(config.host) && authIsConfigured());
+const authRequired =
+  options.enforceAuth ??
+  authenticationConfigured({ sessionSecret, operatorPasswordHash, appOrigin, ... });
 ```
 
-A desktop build binds `127.0.0.1` on port `0`. Loopback ⇒ `authRequired` is **false**. Three
-consequences follow, and each is load-bearing below:
+A desktop build binds `127.0.0.1` on port `0` and does **not** load the production checklist, so
+`authRequired` is **false**. Three consequences follow, and each is load-bearing below:
 
-1. **No login prompt.** The desktop build inherits the unauthenticated loopback path for free. There
-   is no operator-password UX to design. This is a genuine simplification.
+1. **No login prompt.** The desktop build inherits the unauthenticated incomplete-checklist path for
+   free. There is no operator-password UX to design. This is a genuine simplification.
 2. **No session to bind OAuth state to.** `oauth_pending_states.session_token_hash` is populated only
    when operator auth is on, so a system-browser callback validates on PKCE and state alone. The
    desktop OAuth flow described below works unmodified.
 3. **Network MCP does not exist.** `/api/mcp` is mounted only inside `if (authRequired)`, so the
    desktop build has no network MCP at all. See [Network MCP on the desktop](#network-mcp-on-the-desktop-unresolved).
 
-Verified empirically against `c9036c7` — `createApp(db)` with default loopback options returns `404`
-for `POST /api/mcp` and `400 {"error":"Authentication is not required on this host."}` for
-`POST /api/auth/mcp-bearer`.
+Verified empirically — `createApp(db)` with the incomplete local checklist returns `404` for
+`POST /api/mcp` and `400 {"error":"Authentication is not required on this host."}` for
+`POST /api/auth/mcp-bearer`. With the checklist complete and `HOST` still loopback, auth is on
+(C114).
 
 The non-loopback bind gate is therefore no longer "loopback because there is no authentication." It
 is a five-item checklist in `server/config.ts` — `SESSION_SECRET` (≥32 chars),
 `OPERATOR_PASSWORD_HASH`, an `https` `APP_ORIGIN`, `PRODUCTION_TLS_TERMINATED=true`, and
-`TRUSTED_PROXY_HOPS` set explicitly. Non-loopback binding is permitted once it passes.
+`TRUSTED_PROXY_HOPS` set explicitly. Production keeps `HOST` on loopback behind Caddy and turns
+auth on from that same checklist; non-loopback binding is a foot-gun the production preflight
+still refuses.
 
 ### Defaults that cannot be copied into an installer
 
@@ -144,12 +150,13 @@ The first desktop release should preserve the tested Express API rather than rep
 
 Add a random launch-bound authorization value to desktop API requests so another local process or an unrelated browser page cannot operate the API merely by finding the port. Continue enforcing loopback-only binding. This preserves the web/server separation while tightening the local desktop boundary.
 
-**[revised 08-26]** This recommendation survives C51 intact, and is now more important than when it
-was written. Because a loopback bind sets `authRequired` to false, the operator session layer is
-inactive on the desktop and the launch-bound value is the *only* thing standing between another
-local process and a fully open API. It is not defence-in-depth here; it is the sole control. It must
-not be confused with, or reuse the storage of, the C113 MCP bearer (`operator_mcp_bearers`), which
-is bound to an operator session that does not exist on this path.
+**[revised 08-26 / 08-27]** This recommendation survives C51 and C114 intact, and is now more
+important than when it was written. Because a desktop launch leaves the production checklist
+incomplete, `authRequired` is false and the operator session layer is inactive — the launch-bound
+value is the *only* thing standing between another local process and a fully open API. It is not
+defence-in-depth here; it is the sole control. It must not be confused with, or reuse the storage
+of, the C113 MCP bearer (`operator_mcp_bearers`), which is bound to an operator session that does
+not exist on this path.
 
 ### Network MCP on the desktop (unresolved)
 
@@ -158,9 +165,9 @@ or origin. Architecturally that is the shape a packaged desktop app wants, and i
 "spawn and supervise a second server" problem the original draft never addressed.
 
 It is nonetheless unavailable on the desktop. The route is mounted only inside `if (authRequired)`,
-and `POST /api/auth/mcp-bearer` returns `400` when auth is not required. A loopback desktop build
-therefore has **no network MCP**, and MCP falls back to stdio — which is `npm run mcp`, a terminal
-command, in a product whose entire premise is the absence of a terminal.
+and `POST /api/auth/mcp-bearer` returns `400` when auth is not required. A desktop build with an
+incomplete checklist therefore has **no network MCP**, and MCP falls back to stdio — which is
+`npm run mcp`, a terminal command, in a product whose entire premise is the absence of a terminal.
 
 Three options, none free:
 
@@ -304,13 +311,13 @@ if deferred.
   describe this case and would not catch it.
 - Never render arbitrary remote pages in the application window.
 - Add a release dependency policy because each desktop release ships Electron, Chromium, Node, and npm dependencies together.
-- **[added 08-26]** Add a regression test asserting that `/api/mcp` is **not** reachable when
-  `authRequired` is false. Today every network-MCP test constructs the app with `enforceAuth: true`
-  (`server/mcp/http.test.ts`, `server/app.test.ts`), so nothing pins the loopback-off behavior. A
-  future card could mount the route unconditionally without a single test going red — which on the
-  desktop build would expose an unauthenticated JSON-RPC surface on the app's own origin. This test
-  is worth adding **whether or not desktop ever ships**, and does not depend on any decision in this
-  report.
+- **[added 08-26 / revised 08-27]** Add a regression test asserting that `/api/mcp` is **not**
+  reachable when `authRequired` is false. Shipped with #356 / #361 against the incomplete-checklist
+  derivation (and kept current by C114): `server/mcp/http.test.ts` constructs `createApp(db)`
+  without `enforceAuth`, so mounting the route above the gate goes red. A future card that mounted
+  the route unconditionally would otherwise expose an unauthenticated JSON-RPC surface on the app's
+  own origin — including the desktop build. This test is worth keeping **whether or not desktop
+  ever ships**, and does not depend on any decision in this report.
 
 **Exit condition:** the packaged renderer cannot access Node or the filesystem, unexpected navigation is blocked, external destinations open safely, and Electron security warnings are clean. **[revised 08-26]** The MCP exposure test passes, and the chosen MCP option from
 [Network MCP on the desktop](#network-mcp-on-the-desktop-unresolved) is implemented and tested.

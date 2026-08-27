@@ -9,9 +9,10 @@ type GateState =
   { kind: 'loading' } | { kind: 'ready' } | { kind: 'login' } | { kind: 'error'; message: string };
 
 /**
- * Asks `/api/auth/status` before mounting the app. Loopback reports `authRequired: false` and
- * proceeds immediately; a hosted bind that needs a session shows the login screen until one
- * exists, then remounts the app so the first data fetch carries the CSRF token.
+ * Asks `/api/auth/status` before mounting the app. An incomplete checklist reports
+ * `authRequired: false` and proceeds immediately; when the §5.1 / §11 checklist is complete
+ * (including loopback-behind-proxy production) the login screen stays until a session exists,
+ * then remounts the app so the first data fetch carries the CSRF token.
  */
 export function AuthGate({ children }: { children: ReactNode }) {
   const [state, setState] = useState<GateState>({ kind: 'loading' });

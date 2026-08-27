@@ -1,10 +1,12 @@
 /**
- * Express middleware for operator session + CSRF (C51 / #177).
+ * Express middleware for operator session + CSRF (C51 / #177, C114 / #362).
  *
- * When `authRequired` is false (loopback), every request proceeds with `req.operatorSession = null`.
- * When true, public prefixes from `shared/auth.ts` skip the session check; everything else needs a
- * live session. State-changing methods also need a matching CSRF header — except login, which is
- * public, and GET (including the Drive OAuth callback), which SameSite=Lax already covers.
+ * When `authRequired` is false (incomplete §5.1 checklist — typical local loopback), every request
+ * proceeds with `req.operatorSession = null`. When true (checklist complete, including the
+ * loopback-behind-proxy production shape), public prefixes from `shared/auth.ts` skip the session
+ * check; everything else needs a live session. State-changing methods also need a matching CSRF
+ * header — except login, which is public, and GET (including the Drive OAuth callback), which
+ * SameSite=Lax already covers.
  */
 import type { NextFunction, Request, Response } from 'express';
 import type { Db } from '../db.ts';

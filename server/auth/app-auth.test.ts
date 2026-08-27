@@ -7,6 +7,7 @@ import { setSetting } from '../drive/service.ts';
 import { OPERATOR_PASSWORD_HASH_SETTING_KEY } from './service.ts';
 import { CSRF_HEADER_NAME, SESSION_COOKIE_NAME } from '../../shared/auth.ts';
 import { loginRateLimiter } from './login-rate-limit.ts';
+import { MCP_HTTP_PATH } from '../mcp/http.ts';
 
 const SECRET = 'test-session-secret-at-least-32-chars!';
 const PASSWORD = 'operator-password-ok';
@@ -128,5 +129,93 @@ describe('operator authentication routes', () => {
       .send({ password: 'wrong-password!!' });
     // Same socket peer, so the progressive delay from the first failure still applies.
     expect(spoofed.status).toBe(429);
+  });
+});
+
+/**
+ * C114 / #362 — production keeps `HOST=127.0.0.1` behind Caddy. Auth must turn on from the
+ * §5.1 / §11 checklist alone, without `enforceAuth` and without leaving loopback.
+ */
+describe('operator auth on loopback-behind-proxy production (C114)', () => {
+  let db: Db;
+  let passwordHash: string;
+
+  beforeEach(async () => {
+    loginRateLimiter.reset();
+    db = createDb(':memory:');
+    passwordHash = await hashPassword(PASSWORD);
+    setSetting(db, OPERATOR_PASSWORD_HASH_SETTING_KEY, passwordHash);
+  });
+
+  afterEach(() => {
+    try {
+      db.close();
+    } catch {
+      // already closed
+    }
+  });
+
+  /** Full checklist, loopback host left at the process default, no `enforceAuth`. */
+  const productionShapedApp = () =>
+    createApp(db, {
+      appOrigin: 'https://hcc.example.com',
+      auth: {
+        sessionSecret: SECRET,
+        operatorPasswordHash: passwordHash,
+        trustedProxyHops: 1,
+        trustedProxyHopsConfigured: true,
+        productionTlsTerminated: true,
+        // Supertest is plain HTTP; Secure cookies would not round-trip.
+        secureCookies: false,
+      },
+    });
+
+  it('requires auth when the checklist is complete on loopback', async () => {
+    const res = await request(productionShapedApp()).get('/api/clients');
+    expect(res.status).toBe(401);
+    expect(res.body.error).toMatch(/Authentication required/);
+
+    const status = await request(productionShapedApp()).get('/api/auth/status');
+    expect(status.body).toMatchObject({ authRequired: true, authenticated: false });
+  });
+
+  it('logs in, CSRF-protects mutations, and logs out under the production shape', async () => {
+    const shaped = productionShapedApp();
+    const login = await request(shaped).post('/api/auth/login').send({ password: PASSWORD });
+    expect(login.status).toBe(200);
+    expect(login.body.csrfToken).toBeTruthy();
+    const cookie = login.headers['set-cookie']?.[0];
+    expect(cookie).toContain(`${SESSION_COOKIE_NAME}=`);
+    expect(cookie?.toLowerCase()).toContain('samesite=lax');
+
+    const muted = await request(shaped)
+      .post('/api/clients')
+      .set('Cookie', cookie!)
+      .send({ name: 'Prod Shape Client' });
+    expect(muted.status).toBe(403);
+
+    const created = await request(shaped)
+      .post('/api/clients')
+      .set('Cookie', cookie!)
+      .set(CSRF_HEADER_NAME, login.body.csrfToken)
+      .send({ name: 'Prod Shape Client' });
+    expect(created.status).toBe(201);
+
+    const logout = await request(shaped).post('/api/auth/logout').set('Cookie', cookie!);
+    expect(logout.status).toBe(200);
+    expect((await request(shaped).get('/api/clients').set('Cookie', cookie!)).status).toBe(401);
+  });
+
+  it('mounts network MCP only when the checklist turns auth on', async () => {
+    const withAuth = await request(productionShapedApp())
+      .post(MCP_HTTP_PATH)
+      .send({ jsonrpc: '2.0', id: 1, method: 'ping' });
+    // Mounted but unauthenticated → 401, not Express 404.
+    expect(withAuth.status).toBe(401);
+
+    const withoutChecklist = await request(createApp(db))
+      .post(MCP_HTTP_PATH)
+      .send({ jsonrpc: '2.0', id: 1, method: 'ping' });
+    expect(withoutChecklist.status).toBe(404);
   });
 });
