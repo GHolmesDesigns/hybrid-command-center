@@ -8,6 +8,20 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.4.2] - 2026-08-27
+
+### Changed
+
+- The cutover runbook now has an explicit **production** column (C115) beside disposable staging
+  (C55): SSM secrets, public HTTPS origin / Wix DNS, restore, second-device login, Drive reconnect,
+  and declaring the host authoritative. README, USER_MANUAL, hosting, and deploy docs point at that
+  checklist. The supported public origin is named in those docs only after the operator completes
+  cutover — this release does not invent a live hostname.
+
+### Breaking changes
+
+None.
+
 ## [5.4.1] - 2026-08-27
 
 ### Security

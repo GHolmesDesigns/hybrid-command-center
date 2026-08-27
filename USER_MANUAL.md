@@ -1282,9 +1282,12 @@ Day-to-day use remains local-only on this computer until you complete a cutover.
 shape is **AWS** — one small server, HTTPS in front, the same SQLite file on a durable disk, secrets
 in AWS Parameter Store, and off-site backups in a private S3 bucket kept separate from the Drive
 encryption key. C51–C54 shipped operator authentication, the runtime package, and hosted backups;
-**C55** adds the [cutover rehearsal runbook](docs/cloud-cutover-rehearsal.md) for proving migration
-and rollback on disposable staging. This manual’s local backup steps are what you use until that
-rehearsal passes and you approve production cutover separately.
+**C55** adds the [cutover runbook](docs/cloud-cutover-rehearsal.md) for proving migration and
+rollback on disposable staging; **C114** requires login when the production checklist is complete
+even behind Caddy on loopback; **C115** is the production column of that same runbook (public
+HTTPS origin, restored workspace, second-device login). This manual’s local backup steps are what
+you use until staging rehearsal passes and you approve production cutover. After cutover succeeds,
+this section names the supported public origin.
 
 ## 11. Troubleshooting
 

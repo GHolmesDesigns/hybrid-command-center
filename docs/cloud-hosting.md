@@ -1,10 +1,11 @@
 # Cloud Hosting — Decision Record
 
-Status: **decided (C50 / #176). Runtime contract settled on AWS; C51–C54 shipped; C55 adds the
-cutover rehearsal runbook.** Nothing in this app is reachable off loopback by design until an operator
-completes production cutover. Sections 1–8 are the product decision (C20 / #77). Section 11 is the
-production implementation contract C51–C55 are written against. Section 12 names the inert AWS account
-resources staged with C50. The step-by-step rehearsal checklist is
+Status: **decided (C50 / #176). Runtime contract settled on AWS; C51–C54 shipped; C55 rehearsal
+runbook shipped; C114 enforces auth on loopback-behind-Caddy; C115 is production cutover.** Nothing
+in this app is reachable off loopback by design until an operator completes production cutover.
+Sections 1–8 are the product decision (C20 / #77). Section 11 is the production implementation
+contract C51–C55 and C114–C115 are written against. Section 12 names the inert AWS account resources
+staged with C50. The step-by-step staging and production checklists are
 [`docs/cloud-cutover-rehearsal.md`](cloud-cutover-rehearsal.md).
 
 **`HOST` cannot expose the current server.** The default bind stays `127.0.0.1`, and the half of
@@ -263,8 +264,9 @@ snapshot.**
 7. Only then stop treating the laptop copy as live. Keep it as a cold spare.
 
 No production data is moved by this decision record. The steps above are the implementation card's
-cutover checklist, not something to run from this PR. The runnable operator checklist, failure table,
-and monitoring confirmation live in [`cloud-cutover-rehearsal.md`](cloud-cutover-rehearsal.md) (C55).
+cutover checklist, not something to run from this decision PR. The runnable operator checklist
+(staging and production columns), failure table, and monitoring confirmation live in
+[`cloud-cutover-rehearsal.md`](cloud-cutover-rehearsal.md) (C55 rehearsal; C115 production).
 
 ### 8.2 Rollback
 

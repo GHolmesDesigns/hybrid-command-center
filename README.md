@@ -12,7 +12,7 @@ The Import module's versioned XLSX contract, pasted text form, and example campa
 
 Signal Campaign can tailor a post per platform and per account, preview what each target would receive, and explicitly submit scheduled social posts through an optional Post Bridge integration. [Publishing Integration](docs/publishing-integration.md) records its provider boundary, the content-variant inheritance, the scheduling conversion, and why delivery state remains separate from `PUBLISHED`.
 
-Nothing in this app is reachable off loopback by design, and the server enforces that itself: a `HOST` outside `127.0.0.1`, `::1`, and `localhost` fails the boot while there is no authentication to put in front of it. The cloud decision and **AWS production runtime contract** — access model, EC2+Caddy+EBS shape, trusted proxy hops, SSM secret names, S3 backups, and staged account prerequisites — are in [Cloud Hosting](docs/cloud-hosting.md). Operator authentication, the production runtime package, and hosted backups are shipped (C51–C54); the [cutover rehearsal runbook](docs/cloud-cutover-rehearsal.md) (C55) is how an owner proves migration and rollback on disposable staging before any production cutover.
+Nothing in this app is reachable off loopback by design, and the server enforces that itself: a `HOST` outside `127.0.0.1`, `::1`, and `localhost` fails the boot while there is no authentication to put in front of it. The cloud decision and **AWS production runtime contract** — access model, EC2+Caddy+EBS shape, trusted proxy hops, SSM secret names, S3 backups, and staged account prerequisites — are in [Cloud Hosting](docs/cloud-hosting.md). Operator authentication, the production runtime package, and hosted backups are shipped (C51–C54); C114 enforces login when the production checklist is complete even with `HOST=127.0.0.1` behind Caddy. The [cutover runbook](docs/cloud-cutover-rehearsal.md) covers disposable staging rehearsal (C55) and the production cutover checklist (C115) — live DNS, secrets, and data moves stay operator-owned.
 
 If IDE agents should plan Signal and workspace work through MCP, read [Multi-Agent MCP](docs/multi-agent-mcp-decision.md) first. It chooses a local stdio server over Signal — not a provider MCP wrapper — keeps provider publishing on the human-confirmed UI path, and defers any network MCP endpoint until operator authentication ships. For agents handing work to each other through the workspace, see [Agent Coordination Hub](docs/agent-coordination-plan.md) (C109 decided; C110–C112 implement handoffs). Coordination tools ship via `npm run mcp` (set `MCP_AGENT_LABEL` for writes); operators cancel stuck handoffs under **Settings → Agent handoffs**. The broader workspace/Signal MCP surface remains MCP-C106–C108.
 
@@ -196,12 +196,12 @@ import that arrived while another was running — see [Request budgets](#request
 
 ### Request budgets
 
-The API requires an operator session when it binds off loopback. On loopback every route still
-trusts the local browser, which is why day-to-day development stays passwordless. A hosted bind
-must satisfy `docs/cloud-hosting.md` §5.1 before listen, and then every application route needs
+The API requires an operator session when the production checklist is complete
+(`docs/cloud-hosting.md` §5.1 / §11), including the loopback-behind-Caddy shape. Incomplete local
+config stays passwordless on loopback, which is why day-to-day development needs no login. A
+hosted origin must satisfy that checklist before listen, and then every application route needs
 the session cookie (and CSRF on mutations). The routes that cost real memory, CPU, or Google's
-quota also carry a ceiling so a listen address leaving loopback does not publish an unbounded
-import or Drive walk.
+quota also carry a ceiling so a public origin does not publish an unbounded import or Drive walk.
 
 There is deliberately **no global limiter**. The board is used interactively — a drag reorders
 several tasks, opening a project reads its tasks and its files — and one bucket over every route
@@ -751,14 +751,16 @@ Schedule `db:backup` the same way if you want unattended snapshots — same comm
 - Publishing is deliberate and optional: a person presses **Show preview**, reads one tab per target account — the text that account receives, its media in order, its options, the local wall clock beside the provider instant, its delivery mode and its warnings — then confirms. Nothing remote loads before that press; public image and video previews are a further optional choice that warns about sharing the viewer's IP with the media host; a video needs its own press and never autoplays; and the server fetches no preview URL at all. The publisher records delivery separately and never sets `PUBLISHED`; after confirmed delivery, the user may mark the post published
 - A non-loopback `HOST` fails the boot unless operator authentication is fully configured
   (`SESSION_SECRET`, `OPERATOR_PASSWORD_HASH`, https `APP_ORIGIN`, `PRODUCTION_TLS_TERMINATED=true`,
-  explicit `TRUSTED_PROXY_HOPS`). Loopback stays passwordless. Set the password with
-  `npm run auth:bootstrap`. The AWS runtime contract is in [`docs/cloud-hosting.md`](docs/cloud-hosting.md)
-  §11 (`TRUSTED_PROXY_HOPS=1` behind Caddy); account prerequisites are named in §12. C53's runtime
-  files are in [`deploy/aws`](deploy/aws/README.md) and its secret-free payload is built with
-  `npm run build:production-artifact`; C54 ships hosted backup timers and the off-site runbook; C55's
-  [`cutover rehearsal runbook`](docs/cloud-cutover-rehearsal.md) and `npm run cutover:rehearse` prove
-  migration and rollback on disposable staging — production cutover remains a separately approved
-  operator action.
+  explicit `TRUSTED_PROXY_HOPS`). When that checklist is complete, auth is required even with
+  `HOST=127.0.0.1` behind Caddy (C114). Incomplete local checklist stays passwordless. Set the
+  password with `npm run auth:bootstrap`. The AWS runtime contract is in
+  [`docs/cloud-hosting.md`](docs/cloud-hosting.md) §11 (`TRUSTED_PROXY_HOPS=1` behind Caddy);
+  account prerequisites are named in §12. C53's runtime files are in
+  [`deploy/aws`](deploy/aws/README.md) and its secret-free payload is built with
+  `npm run build:production-artifact`; C54 ships hosted backup timers and the off-site runbook;
+  C55's [`cutover runbook`](docs/cloud-cutover-rehearsal.md) and `npm run cutover:rehearse` prove
+  migration and rollback on disposable staging; **C115** is the operator-owned production column
+  of that same runbook (public origin, secrets, data, DNS).
 ## Planned extension points
 
 **Calendar:** `/calendar` has shipped read-only — `readCalendarRange` in `server/calendar.ts` over `SignalProvider` and the deadline domain functions, behind `GET /api/calendar`. Week and month-grid views would be further clients of that same range, not new reads. Editing stays in the Signal planner beside `server/signal/service.ts`; the calendar remains a window onto the schedule. Optional Google Calendar sync belongs in a separate provider beside Drive, not in task components. Every sync attempt should record to `integration_events` through `recordIntegrationEvent` — a sync that reads some sources and fails on one is the `PARTIAL` case the log was shaped for.
@@ -780,7 +782,9 @@ under [`deploy/aws`](deploy/aws/README.md): same-origin Caddy proxying, pre-traf
 single-writer locking, retained EBS storage, and fail-closed production preflight. The manifest is
 inert until an owner deploys it and contains no production credentials, DNS changes, or data.
 C54 ships scheduled off-site backups and recovery monitoring ([`docs/offsite-backup-operations.md`](docs/offsite-backup-operations.md)).
-C55 adds the [`cutover rehearsal runbook`](docs/cloud-cutover-rehearsal.md) and `npm run cutover:rehearse`
-for disposable staging proof — production DNS, credentials, and data cutover stay operator-owned.
+C55 adds the [`cutover runbook`](docs/cloud-cutover-rehearsal.md) and `npm run cutover:rehearse`
+for disposable staging proof. C114 enforces operator auth on the production checklist with
+loopback `HOST`. **C115** is the production cutover column of that runbook — DNS, credentials,
+and data stay operator-owned; after it succeeds, this README names the supported public origin.
 C52 (`drive.file` + Picker) is this track.
-Recommended order for Files extensions: (1) recent-files and cross-project search over the existing listing, (2) uploads/downloads, (3) guarded move/rename operations, (4) optional Calendar sync. Cloud implementation order is C51 → C52 → C53, with C54 parallel after C50.
+Recommended order for Files extensions: (1) recent-files and cross-project search over the existing listing, (2) uploads/downloads, (3) guarded move/rename operations, (4) optional Calendar sync. Cloud implementation order is C51 → C52 → C53, with C54 parallel after C50; cutover is C55 → C114 → C115.
