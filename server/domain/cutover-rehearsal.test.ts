@@ -3,6 +3,7 @@ import {
   cutoverVerificationPassed,
   CUTOVER_FAILURE_DECISIONS,
   CUTOVER_OPERATOR_STOPS,
+  CUTOVER_PRODUCTION_CHECKLIST,
   formatCutoverVerificationReport,
   verifyPostRestore,
   type CutoverSnapshot,
@@ -70,5 +71,11 @@ describe('operator guardrails', () => {
     );
     expect(rollback?.action).toContain('fresh hosted backup');
     expect(rollback?.abort).toBe(true);
+  });
+
+  it('pins the production cutover checklist (C115)', () => {
+    expect(CUTOVER_PRODUCTION_CHECKLIST).toHaveLength(9);
+    expect(CUTOVER_PRODUCTION_CHECKLIST.some((step) => step.includes('second-device'))).toBe(true);
+    expect(CUTOVER_PRODUCTION_CHECKLIST.some((step) => step.includes('public origin'))).toBe(true);
   });
 });

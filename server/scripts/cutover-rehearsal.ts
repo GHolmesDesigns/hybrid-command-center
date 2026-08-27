@@ -42,9 +42,11 @@ function toCutoverSnapshot(databasePath: string): CutoverSnapshot {
 }
 
 function printPlan() {
-  console.log(`Cloud cutover rehearsal plan (C55)
+  console.log(`Cloud cutover rehearsal plan (C55 disposable staging)
 
-Operator-only actions — stop before any step that moves production data, credentials, DNS, or grants.
+This CLI never runs the production column. Production cutover is C115 — see the Production
+column in docs/cloud-cutover-rehearsal.md. Operator-only actions — stop before any step that
+moves production data, credentials, DNS, or grants.
 
 1. Confirm prerequisite cards C51–C54 are merged and staging checks are green.
 2. Stop local writes or take the supported online backup, then verify the snapshot.
@@ -56,7 +58,7 @@ Operator-only actions — stop before any step that moves production data, crede
 8. Declare the host authoritative only after every checklist item passes.
 9. Rollback: freeze writes, fresh hosted backup, restore that snapshot — never the pre-cutover laptop copy.
 
-See docs/cloud-cutover-rehearsal.md for the full checklist, failure table, and monitoring confirmation.`);
+See docs/cloud-cutover-rehearsal.md for staging vs production columns, failure table, and monitoring.`);
 }
 
 function assertStoppedForRestore() {

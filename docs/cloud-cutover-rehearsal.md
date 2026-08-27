@@ -1,8 +1,13 @@
-# Cloud cutover rehearsal (C55 / #181)
+# Cloud cutover rehearsal and production cutover
 
 This runbook is the **operator-owned** sequence for moving the workspace to the AWS host,
-rehearsing rollback, and returning to loopback. It implements [`cloud-hosting.md` §8](cloud-hosting.md)
-on disposable staging infrastructure.
+rehearsing rollback, and — only after a successful disposable staging pass — cutting over
+production. It implements [`cloud-hosting.md` §8](cloud-hosting.md).
+
+| Track | Card | Infrastructure |
+| --- | --- | --- |
+| **Staging (rehearsal)** | C55 / #181 | Disposable EC2 + EBS; no Wix DNS; no production Google redirect |
+| **Production cutover** | C115 / #363 | Production host; public HTTPS origin; live data and credentials |
 
 **Agents and CI** use mock Drive, disposable databases, and non-production hosts only. Every step
 that moves production data, credentials, DNS, or grants is marked **Operator stop** below.
@@ -11,15 +16,18 @@ that moves production data, credentials, DNS, or grants is marked **Operator sto
 
 ## Prerequisites
 
-Confirm before starting:
+Confirm before starting the matching column:
 
-- [ ] Cards **C51** (operator auth), **C52** (`drive.file` + Picker), **C53** (runtime package), and
-      **C54** (off-site backups) are merged on `main`.
-- [ ] A **disposable** staging EC2 instance and EBS volume — not the production hostname, not Wix DNS
-      changes. Reuse [`deploy/aws/README.md`](../deploy/aws/README.md) with a staging hostname and
-      sentinel SSM values replaced on the staging host only.
-- [ ] `npm run build:production-artifact` produces `dist/production` with no secrets or database.
-- [ ] Local `npm run db:backup:rehearse` passes against the laptop copy you intend to migrate.
+| Prerequisite | Staging | Production |
+| --- | --- | --- |
+| Cards on `main` | C51–C54 | C51–C55, **C114** (#362) |
+| Host | Disposable staging EC2 + EBS — not the production hostname | Production EC2 + EBS per [`deploy/aws/`](../deploy/aws/README.md) and [`cloud-hosting.md` §11](cloud-hosting.md) |
+| Artifact | `npm run build:production-artifact` → `dist/production` (no secrets/DB) | Same build that includes C114 auth enforcement |
+| Local rehearsal | `npm run db:backup:rehearse` on a **copy** of the laptop DB you intend to migrate | Same, immediately before freeze/snapshot |
+| Staging pass | — | Disposable staging checklist below has passed |
+
+Reuse [`deploy/aws/README.md`](../deploy/aws/README.md) with a staging hostname and sentinel SSM
+values on staging only. Production loads real SSM secrets (no `UNSET`).
 
 ---
 
@@ -38,37 +46,34 @@ The same list is encoded in `server/domain/cutover-rehearsal.ts` for tests and t
 
 ---
 
-## Forward migration checklist
+## Staging vs production checklist
 
-### 1. Freeze or snapshot the source **Operator stop**
+Use the **Staging** column for C55 rehearsal. Use the **Production** column only after staging
+passes and the operator explicitly continues (C115).
 
-- Stop the local app **or** take the supported online backup: `npm run db:backup`.
-- Verify the snapshot with `npm run db:backup:rehearse` on a **copy** (never the live file as the
-  rehearsal target).
-- Keep the laptop database until the host rehearsal passes.
+| Step | Staging | Production |
+| --- | --- | --- |
+| 1. Freeze or snapshot source **Operator stop** | Stop local app **or** `npm run db:backup`; verify with `db:backup:rehearse` on a copy; keep laptop DB | Same |
+| 2. Transfer snapshot and key separately **Operator stop** | Copy `.db` to staging storage/`scp`; encryption key via separate channel (staging SSM) | Same channels to **production** object storage and `/hcc/production/*` SSM |
+| 3. Deploy on empty volume **Operator stop** | Attach staging volume; install `dist/production`; staging `runtime.env` (no production DNS/redirect) | Attach production volume; install artifact; load SSM secrets with **no `UNSET`**: `SESSION_SECRET`, `OPERATOR_PASSWORD_HASH` (`auth:bootstrap`), Drive keys, encryption key |
+| 4. Origin and TLS **Operator stop** | Staging HTTPS host only; do **not** change Wix DNS or production Google redirect | Set `APP_ORIGIN` and `GOOGLE_REDIRECT_URI` to `https://<public-host>`; add that redirect on the Google OAuth client; point Wix DNS (CNAME/A) at the Elastic IP; Caddy terminates TLS → `127.0.0.1:8787` |
+| 5. Restore and migrate **Operator stop** | `npm run db:restore -- <snapshot> --force` then `npm run db:migrate` | Same on the production volume |
+| 6. Backup/restore rehearsal on host | `cutover:rehearse` / `db:backup:rehearse` / off-site rehearsal on disposable paths | Confirm timers and monitoring (table below); optional disposable subdir rehearsal before traffic |
+| 7. Authenticated HTTPS smoke **Operator stop** | `/api/health`; login/CSRF/limits/logout; `TRUSTED_PROXY_HOPS=1`, `PRODUCTION_TLS_TERMINATED=true`, `HOST=127.0.0.1`; clients/projects/tasks/Calendar/Signal/Files/import/publish preflight | Same, **and** login from a **second device** against the public origin; C114 checklist must enforce auth on loopback-behind-Caddy |
+| 8. Drive reconnect (`drive.file`) **Operator stop** | Disconnect if needed; revoke in Google Account; reconnect; Picker; tokens decrypt | Same on production origin; revoke any obsolete broad grant |
+| 9. Declare authoritative **Operator stop** | Staging is never the live workspace | Only after every production row passes: stop treating the laptop as live; keep it as a cold spare until a fresh hosted backup exists; then name `https://<public-host>` in README, USER_MANUAL, and hosting docs |
 
-### 2. Transfer snapshot and key separately **Operator stop**
+Example public host shape (operator-chosen under the Wix zone): `https://hcc.gholmesdesigns.com`.
+Do not treat that string as live until step 9 completes.
 
-- Copy the timestamped `.db` snapshot to staging object storage or `scp`.
-- Copy `GOOGLE_TOKEN_ENCRYPTION_KEY` through a **separate** channel (SSM Parameter Store on the host,
-  never beside the backup object).
-
-### 3. Deploy on an empty volume **Operator stop**
-
-- Attach the encrypted gp3 volume at `/var/lib/hybrid-command-center`.
-- Install from `dist/production`, configure `runtime.env` from SSM (no `UNSET` sentinels).
-- Do **not** register the production Google redirect or change Wix DNS in this rehearsal.
-
-### 4. Restore and migrate **Operator stop**
+### Restore commands (both columns)
 
 ```bash
 npm run db:restore -- /path/to/snapshot.db --force
 npm run db:migrate
 ```
 
-### 5. Rehearse backup/restore on staging
-
-On the disposable host (application stopped for restore steps):
+### Disposable rehearsal CLI (staging; optional on production before traffic)
 
 ```bash
 npm run cutover:rehearse -- --plan
@@ -82,26 +87,6 @@ Or use the existing C10/C54 paths:
 npm run db:backup:rehearse
 npm run db:backup:offsite:rehearse
 ```
-
-### 6. Start authenticated HTTPS and smoke-check **Operator stop**
-
-- [ ] `/api/health` returns `{ ok: true }` through Caddy on HTTPS.
-- [ ] Operator login, CSRF on mutations, brute-force limits, and session logout work.
-- [ ] `TRUSTED_PROXY_HOPS=1`, `PRODUCTION_TLS_TERMINATED=true`, `HOST=127.0.0.1`.
-- [ ] Clients, projects, tasks, Calendar, Signal, Files browse, import preview, publishing preflight.
-- [ ] Sync to Folder provisions against mock or connected Drive on staging.
-
-### 7. Drive reconnect with `drive.file` **Operator stop**
-
-- [ ] Disconnect in Settings if migrating from an old full-Drive grant.
-- [ ] Revoke the app in [Google Account permissions](https://myaccount.google.com/permissions).
-- [ ] Reconnect on the host; OAuth requests only `drive.file`; Picker selects the root folder.
-- [ ] Confirm encrypted tokens decrypt with the restored encryption key.
-
-### 8. Declare authoritative **Operator stop**
-
-Only after every item above passes: stop treating the laptop copy as live. Keep it as a cold spare
-until a fresh hosted backup exists.
 
 ---
 
@@ -154,7 +139,7 @@ Before declaring staging ready (and again before production cutover):
 
 | Check | Where |
 | --- | --- |
-| `/api/health` liveness | `curl -fsS https://<staging-host>/api/health` |
+| `/api/health` liveness | `curl -fsS https://<host>/api/health` |
 | systemd app unit active | `systemctl is-active hybrid-command-center` |
 | Single-writer lock | Second `flock --nonblock` on writer lock must fail |
 | Off-site backup timer | `systemctl list-timers hcc-offsite-backup.timer` |
@@ -174,6 +159,8 @@ use, Drive mock reconnect, restart persistence, backup, frozen-write rollback, a
 verification on a throwaway database. It never contacts production infrastructure.
 
 Unit coverage: `server/domain/cutover-rehearsal.test.ts`, existing backup and auth tests.
+
+Live production cutover evidence is **owner-run and not committed**.
 
 ---
 

@@ -1,9 +1,10 @@
 /**
- * Cloud cutover rehearsal rules (C55 / #181).
+ * Cloud cutover rehearsal and production cutover rules (C55 / #181; C115 / #363).
  *
  * Framework-free on purpose: post-restore verification and operator abort conditions live here
  * so the CLI, tests, and runbook cannot diverge. Nothing here touches a database or a network —
- * callers pass snapshot summaries and get a decision.
+ * callers pass snapshot summaries and get a decision. Staging vs production steps live in
+ * docs/cloud-cutover-rehearsal.md; agents never execute the production column.
  */
 
 export interface CutoverSnapshot {
@@ -37,6 +38,19 @@ export const CUTOVER_OPERATOR_STOPS = [
   'Rotate or enter an encryption or session key on the host',
   'Change DNS or the production public origin',
   'Freeze the live workspace or declare the host authoritative',
+] as const;
+
+/** Production-column checklist headings from docs/cloud-cutover-rehearsal.md (C115). */
+export const CUTOVER_PRODUCTION_CHECKLIST = [
+  'Freeze or snapshot source',
+  'Transfer snapshot and key separately',
+  'Deploy on empty volume with SSM secrets (no UNSET)',
+  'Set APP_ORIGIN / GOOGLE_REDIRECT_URI, Wix DNS, and Caddy TLS',
+  'Restore and migrate on the production volume',
+  'Enable backup timers and monitoring',
+  'Authenticated HTTPS smoke including second-device login',
+  'Drive reconnect under drive.file + Picker',
+  'Declare host authoritative and name the public origin in docs',
 ] as const;
 
 export const CUTOVER_FAILURE_DECISIONS: CutoverFailureDecision[] = [
