@@ -154,6 +154,40 @@ export function lookupSession(
   });
 }
 
+/**
+ * Look up a live session by its stored token hash. Used when only the hash is known (MCP bearer
+ * binding). Refreshes idle expiry the same way `lookupSession` does.
+ */
+export function lookupSessionByHash(
+  db: Db,
+  options: { tokenHash: string; now?: number },
+): OperatorSessionRecord | null {
+  if (!options.tokenHash) return null;
+  const now = options.now ?? Date.now();
+  const row = db
+    .prepare('SELECT * FROM operator_sessions WHERE token_hash = ?')
+    .get(options.tokenHash) as SessionRow | undefined;
+  if (!row) return null;
+  if (row.revoked_at) return null;
+
+  const nowIso = iso(now);
+  if (row.idle_expires_at <= nowIso || row.absolute_expires_at <= nowIso) return null;
+
+  const idleExpiresAt = iso(now + SESSION_IDLE_TIMEOUT_MS);
+  const cappedIdle =
+    idleExpiresAt < row.absolute_expires_at ? idleExpiresAt : row.absolute_expires_at;
+
+  db.prepare(
+    `UPDATE operator_sessions SET last_seen_at = ?, idle_expires_at = ? WHERE token_hash = ?`,
+  ).run(nowIso, cappedIdle, options.tokenHash);
+
+  return toRecord({
+    ...row,
+    last_seen_at: nowIso,
+    idle_expires_at: cappedIdle,
+  });
+}
+
 export function revokeSession(db: Db, tokenHash: string, now: number = Date.now()): void {
   db.prepare(
     `UPDATE operator_sessions SET revoked_at = COALESCE(revoked_at, ?) WHERE token_hash = ?`,

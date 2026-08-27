@@ -5,6 +5,7 @@ import {
   createSession,
   hashSessionToken,
   lookupSession,
+  lookupSessionByHash,
   purgeExpiredSessions,
   revokeAllSessions,
   revokeSession,
@@ -145,5 +146,20 @@ describe('operator sessions', () => {
     const token = 'raw-token-value';
     expect(hashSessionToken(token, SECRET)).toBe(hashSessionToken(token, SECRET));
     expect(hashSessionToken(token, SECRET)).not.toBe(hashSessionToken(token, `${SECRET}x`));
+  });
+
+  it('lookupSessionByHash mirrors lookupSession expiry and refresh rules', () => {
+    open();
+    const created = createSession(db, {
+      sessionSecret: SECRET,
+      clientAddress: '127.0.0.1',
+      now: 1_000,
+    });
+    expect(
+      lookupSessionByHash(db, { tokenHash: created.record.tokenHash, now: 1_001 }),
+    ).toMatchObject({ tokenHash: created.record.tokenHash });
+    expect(lookupSessionByHash(db, { tokenHash: 'missing' })).toBeNull();
+    revokeSession(db, created.record.tokenHash, 2_000);
+    expect(lookupSessionByHash(db, { tokenHash: created.record.tokenHash, now: 2_001 })).toBeNull();
   });
 });

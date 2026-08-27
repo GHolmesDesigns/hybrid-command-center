@@ -8,6 +8,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.4.0] - 2026-08-26
+
+### Added
+
+- Network MCP (C113): streamable HTTP MCP at `/api/mcp` on the same origin as the API, gated by
+  operator session or a server-issued bearer bound to that session, CSRF on cookie mutations, and
+  the `x-agent-label` header on every call — the same coordination tool surface as local stdio, with
+  bearer revocation on logout, password change, and restore.
+
+### Breaking changes
+
+None.
+
 ## [5.3.5] - 2026-08-26
 
 ### Added

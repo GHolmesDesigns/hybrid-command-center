@@ -1,0 +1,314 @@
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import request from 'supertest';
+import { createApp } from '../app.ts';
+import { createDb, type Db } from '../db.ts';
+import { hashPassword } from '../auth/password.ts';
+import { setSetting } from '../drive/service.ts';
+import { OPERATOR_PASSWORD_HASH_SETTING_KEY } from '../auth/service.ts';
+import { CSRF_HEADER_NAME } from '../../shared/auth.ts';
+import {
+  MCP_AGENT_LABEL_HEADER,
+  MCP_BEARER_ISSUE_PATH,
+  MCP_HTTP_PATH,
+} from '../../shared/mcp-network.ts';
+import {
+  createMcpHttpHandler,
+  handleMcpHttpPost,
+  mcpHttpCsrfOk,
+  resolveMcpHttpAuth,
+} from './http.ts';
+import { createSession } from '../auth/sessions.ts';
+
+const SECRET = 'test-session-secret-at-least-32-chars!';
+const PASSWORD = 'operator-password-ok';
+
+describe('network MCP (C113)', () => {
+  let db: Db;
+  let passwordHash: string;
+
+  beforeEach(async () => {
+    db = createDb(':memory:');
+    passwordHash = await hashPassword(PASSWORD);
+    setSetting(db, OPERATOR_PASSWORD_HASH_SETTING_KEY, passwordHash);
+  });
+
+  afterEach(() => {
+    try {
+      db.close();
+    } catch {
+      // already closed
+    }
+  });
+
+  const app = () =>
+    createApp(db, {
+      enforceAuth: true,
+      auth: {
+        sessionSecret: SECRET,
+        operatorPasswordHash: passwordHash,
+        trustedProxyHops: 0,
+        secureCookies: false,
+      },
+    });
+
+  async function login() {
+    const res = await request(app()).post('/api/auth/login').send({ password: PASSWORD });
+    expect(res.status).toBe(200);
+    return {
+      csrfToken: res.body.csrfToken as string,
+      cookie: res.headers['set-cookie']?.[0] as string,
+    };
+  }
+
+  async function issueBearer(cookie: string, csrfToken: string) {
+    const res = await request(app())
+      .post(MCP_BEARER_ISSUE_PATH)
+      .set('Cookie', cookie)
+      .set(CSRF_HEADER_NAME, csrfToken);
+    expect(res.status).toBe(200);
+    return res.body.bearerToken as string;
+  }
+
+  it('refuses unauthenticated MCP requests', async () => {
+    const res = await request(app())
+      .post(MCP_HTTP_PATH)
+      .send({ jsonrpc: '2.0', id: 1, method: 'ping' });
+    expect(res.status).toBe(401);
+  });
+
+  it('refuses cookie-authenticated mutations without CSRF', async () => {
+    const { cookie } = await login();
+    const res = await request(app())
+      .post(MCP_HTTP_PATH)
+      .set('Cookie', cookie)
+      .set(MCP_AGENT_LABEL_HEADER, 'cursor')
+      .send({ jsonrpc: '2.0', id: 1, method: 'ping' });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/CSRF/);
+  });
+
+  it('lists coordination tools over bearer auth like stdio', async () => {
+    const { cookie, csrfToken } = await login();
+    const bearer = await issueBearer(cookie, csrfToken);
+
+    const res = await request(app())
+      .post(MCP_HTTP_PATH)
+      .set('Authorization', `Bearer ${bearer}`)
+      .set(MCP_AGENT_LABEL_HEADER, 'cursor')
+      .send({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
+    expect(res.status).toBe(200);
+    expect(
+      res.body.result.tools.some(
+        (tool: { name: string }) => tool.name === 'coordination_post_handoff',
+      ),
+    ).toBe(true);
+    expect(JSON.stringify(res.body)).not.toMatch(/hcc_mcp_|session-secret|password/i);
+  });
+
+  it('posts a handoff over bearer auth when agent_label is set', async () => {
+    const { cookie, csrfToken } = await login();
+    const bearer = await issueBearer(cookie, csrfToken);
+
+    const res = await request(app())
+      .post(MCP_HTTP_PATH)
+      .set('Authorization', `Bearer ${bearer}`)
+      .set(MCP_AGENT_LABEL_HEADER, 'cursor')
+      .send({
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'tools/call',
+        params: {
+          name: 'coordination_post_handoff',
+          arguments: { subjectType: 'freeform', message: 'From network MCP.' },
+        },
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.result.isError).toBe(false);
+    const payload = JSON.parse(res.body.result.content[0].text);
+    expect(payload.state).toBe('OPEN');
+  });
+
+  it('refuses coordination writes without agent_label header', async () => {
+    const { cookie, csrfToken } = await login();
+    const bearer = await issueBearer(cookie, csrfToken);
+
+    const res = await request(app())
+      .post(MCP_HTTP_PATH)
+      .set('Authorization', `Bearer ${bearer}`)
+      .send({
+        jsonrpc: '2.0',
+        id: 3,
+        method: 'tools/call',
+        params: {
+          name: 'coordination_post_handoff',
+          arguments: { subjectType: 'freeform', message: 'No label.' },
+        },
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.result.isError).toBe(true);
+    expect(res.body.result.content[0].text).toMatch(/agent_label/);
+  });
+
+  it('revokes bearer on logout', async () => {
+    const { cookie, csrfToken } = await login();
+    const bearer = await issueBearer(cookie, csrfToken);
+
+    await request(app()).post('/api/auth/logout').set('Cookie', cookie);
+
+    const res = await request(app())
+      .post(MCP_HTTP_PATH)
+      .set('Authorization', `Bearer ${bearer}`)
+      .set(MCP_AGENT_LABEL_HEADER, 'cursor')
+      .send({ jsonrpc: '2.0', id: 4, method: 'ping' });
+    expect(res.status).toBe(401);
+  });
+
+  it('revokes bearer on password change', async () => {
+    const { cookie, csrfToken } = await login();
+    const bearer = await issueBearer(cookie, csrfToken);
+
+    const changed = await request(app())
+      .post('/api/auth/password')
+      .set('Cookie', cookie)
+      .set(CSRF_HEADER_NAME, csrfToken)
+      .send({ currentPassword: PASSWORD, newPassword: 'new-operator-password-ok!' });
+    expect(changed.status).toBe(200);
+
+    const res = await request(app())
+      .post(MCP_HTTP_PATH)
+      .set('Authorization', `Bearer ${bearer}`)
+      .set(MCP_AGENT_LABEL_HEADER, 'cursor')
+      .send({ jsonrpc: '2.0', id: 5, method: 'ping' });
+    expect(res.status).toBe(401);
+  });
+
+  it('allows cookie session MCP with CSRF on mutations', async () => {
+    const { cookie, csrfToken } = await login();
+    const res = await request(app())
+      .post(MCP_HTTP_PATH)
+      .set('Cookie', cookie)
+      .set(CSRF_HEADER_NAME, csrfToken)
+      .set(MCP_AGENT_LABEL_HEADER, 'cursor')
+      .send({ jsonrpc: '2.0', id: 6, method: 'ping' });
+    expect(res.status).toBe(200);
+    expect(res.body.result).toEqual({});
+  });
+
+  it('refuses invalid bearer tokens and malformed JSON-RPC bodies', async () => {
+    const badBearer = await request(app())
+      .post(MCP_HTTP_PATH)
+      .set('Authorization', 'Bearer hcc_mcp_not-in-database')
+      .send({ jsonrpc: '2.0', id: 1, method: 'ping' });
+    expect(badBearer.status).toBe(401);
+
+    const { cookie, csrfToken } = await login();
+    const invalidBody = await request(app())
+      .post(MCP_HTTP_PATH)
+      .set('Cookie', cookie)
+      .set(CSRF_HEADER_NAME, csrfToken)
+      .send('not-json');
+    expect(invalidBody.status).toBe(400);
+    expect(invalidBody.body.error.code).toBe(-32700);
+  });
+
+  it('refuses an invalid agent label header before JSON-RPC runs', async () => {
+    const { cookie, csrfToken } = await login();
+    const res = await request(app())
+      .post(MCP_HTTP_PATH)
+      .set('Cookie', cookie)
+      .set(CSRF_HEADER_NAME, csrfToken)
+      .set(MCP_AGENT_LABEL_HEADER, 'bad label!')
+      .send({ jsonrpc: '2.0', id: 7, method: 'ping' });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe(-32602);
+  });
+
+  it('returns 204 for notifications without an id', async () => {
+    const { cookie, csrfToken } = await login();
+    const res = await request(app())
+      .post(MCP_HTTP_PATH)
+      .set('Cookie', cookie)
+      .set(CSRF_HEADER_NAME, csrfToken)
+      .send({ jsonrpc: '2.0', method: 'notifications/initialized' });
+    expect(res.status).toBe(204);
+  });
+});
+
+describe('network MCP handler units', () => {
+  let db: Db;
+
+  beforeEach(() => {
+    db = createDb(':memory:');
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  it('resolveMcpHttpAuth and mcpHttpCsrfOk cover cookie and bearer branches', () => {
+    const session = createSession(db, {
+      sessionSecret: SECRET,
+      clientAddress: '127.0.0.1',
+      now: 1_000,
+    });
+    const cookieReq = {
+      headers: { cookie: `hcc_session=${session.rawToken}` },
+    } as Parameters<typeof resolveMcpHttpAuth>[0];
+    const cookieAuth = resolveMcpHttpAuth(cookieReq, {
+      db,
+      sessionSecret: SECRET,
+      now: () => 1_001,
+    });
+    expect(cookieAuth?.usedBearer).toBe(false);
+    expect(
+      mcpHttpCsrfOk(cookieAuth!, { headers: { [CSRF_HEADER_NAME]: session.csrfToken } } as never),
+    ).toBe(true);
+    expect(mcpHttpCsrfOk(cookieAuth!, { headers: { [CSRF_HEADER_NAME]: 'wrong' } } as never)).toBe(
+      false,
+    );
+  });
+
+  it('createMcpHttpHandler rejects non-POST methods', async () => {
+    const handler = createMcpHttpHandler({ db, sessionSecret: SECRET });
+    const res = {
+      statusCode: 200,
+      body: null as unknown,
+      status(code: number) {
+        this.statusCode = code;
+        return this;
+      },
+      json(payload: unknown) {
+        this.body = payload;
+        return this;
+      },
+      end() {
+        return this;
+      },
+    };
+    await handler({ method: 'GET', headers: {}, body: {} } as never, res as never);
+    expect(res.statusCode).toBe(405);
+  });
+
+  it('handleMcpHttpPost returns 401 without auth', async () => {
+    const res = {
+      statusCode: 200,
+      body: null as unknown,
+      status(code: number) {
+        this.statusCode = code;
+        return this;
+      },
+      json(payload: unknown) {
+        this.body = payload;
+        return this;
+      },
+      end() {
+        return this;
+      },
+    };
+    await handleMcpHttpPost({ headers: {}, body: {} } as never, res as never, {
+      db,
+      sessionSecret: SECRET,
+    });
+    expect(res.statusCode).toBe(401);
+  });
+});

@@ -17,6 +17,7 @@ import {
   revokeSession,
   type OperatorSessionRecord,
 } from './sessions.ts';
+import { revokeAllMcpBearers, revokeBearersForSession } from './mcp-bearers.ts';
 
 export const OPERATOR_PASSWORD_HASH_SETTING_KEY = 'operator_password_hash';
 
@@ -97,8 +98,10 @@ export async function login(
 }
 
 export function logout(db: Db, options: { tokenHash: string | null; now?: number }): void {
+  const now = options.now ?? Date.now();
   if (options.tokenHash) {
-    revokeSession(db, options.tokenHash, options.now ?? Date.now());
+    revokeBearersForSession(db, options.tokenHash, now);
+    revokeSession(db, options.tokenHash, now);
   }
 }
 
@@ -120,6 +123,7 @@ export async function changePassword(
   }
   const next = await hashPassword(options.newPassword);
   setSetting(db, OPERATOR_PASSWORD_HASH_SETTING_KEY, next);
+  revokeAllMcpBearers(db, options.now ?? Date.now());
   revokeAllSessions(db, options.now ?? Date.now());
   return { ok: true };
 }
@@ -134,6 +138,7 @@ export async function resetPassword(
 ): Promise<void> {
   const next = await hashPassword(options.newPassword);
   setSetting(db, OPERATOR_PASSWORD_HASH_SETTING_KEY, next);
+  revokeAllMcpBearers(db, options.now ?? Date.now());
   revokeAllSessions(db, options.now ?? Date.now());
 }
 

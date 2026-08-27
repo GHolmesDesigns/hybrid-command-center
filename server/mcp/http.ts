@@ -1,0 +1,165 @@
+/**
+ * Streamable HTTP MCP adapter (C113 / #340).
+ *
+ * POST `/api/mcp` accepts one JSON-RPC request per call and returns a JSON-RPC response on the
+ * same origin as the API. Operator auth is a session cookie or a bearer bound to that session;
+ * cookie mutations also require CSRF. The agent label header is applied on every call.
+ */
+import type { Request, Response } from 'express';
+import type { Db } from '../db.ts';
+import { CSRF_HEADER_NAME } from '../../shared/auth.ts';
+import {
+  MCP_AGENT_LABEL_HEADER,
+  MCP_BEARER_HEADER,
+  MCP_HTTP_PATH,
+} from '../../shared/mcp-network.ts';
+import { readSessionToken } from '../auth/cookies.ts';
+import { readMcpBearerToken, resolveMcpBearer } from '../auth/mcp-bearers.ts';
+import { sessionFromRawToken } from '../auth/service.ts';
+import type { OperatorSessionRecord } from '../auth/sessions.ts';
+import { handleMcpJsonRpc, type JsonRpcRequest, type JsonRpcResponse } from './stdio.ts';
+import { createMcpSession, setMcpSessionAgentLabel, type McpSession } from './session.ts';
+
+export type McpHttpAuthContext = {
+  session: OperatorSessionRecord;
+  usedBearer: boolean;
+};
+
+export type McpHttpHandlerOptions = {
+  db: Db;
+  sessionSecret: string;
+  now?: () => number;
+};
+
+function headerValue(raw: string | string[] | undefined): string | null {
+  if (typeof raw === 'string' && raw.trim()) return raw.trim();
+  if (Array.isArray(raw) && typeof raw[0] === 'string' && raw[0].trim()) return raw[0].trim();
+  return null;
+}
+
+function csrfHeader(req: Request): string | null {
+  return headerValue(req.headers[CSRF_HEADER_NAME]);
+}
+
+function agentLabelHeader(req: Request): string | null {
+  return headerValue(req.headers[MCP_AGENT_LABEL_HEADER]);
+}
+
+/** Resolve operator session from bearer or cookie. */
+export function resolveMcpHttpAuth(
+  req: Request,
+  options: McpHttpHandlerOptions,
+): McpHttpAuthContext | null {
+  const now = options.now?.() ?? Date.now();
+  const bearerRaw = readMcpBearerToken(req.headers[MCP_BEARER_HEADER]);
+  if (bearerRaw) {
+    const resolved = resolveMcpBearer(options.db, {
+      rawToken: bearerRaw,
+      sessionSecret: options.sessionSecret,
+      now,
+    });
+    if (!resolved) return null;
+    return { session: resolved.session, usedBearer: true };
+  }
+
+  const rawToken = readSessionToken(req.headers.cookie);
+  const session = sessionFromRawToken(options.db, {
+    rawToken,
+    sessionSecret: options.sessionSecret,
+    now,
+  });
+  if (!session) return null;
+  return { session, usedBearer: false };
+}
+
+/** Fail closed when a cookie session POST lacks a matching CSRF token. Bearer auth skips CSRF. */
+export function mcpHttpCsrfOk(auth: McpHttpAuthContext, req: Request): boolean {
+  if (auth.usedBearer) return true;
+  const token = csrfHeader(req);
+  return Boolean(token && token === auth.session.csrfToken);
+}
+
+function applyAgentLabel(session: McpSession, req: Request): string | null {
+  const fromHeader = agentLabelHeader(req);
+  if (fromHeader !== null) {
+    setMcpSessionAgentLabel(session, fromHeader);
+    return fromHeader;
+  }
+  return session.agentLabel;
+}
+
+export async function handleMcpHttpPost(
+  req: Request,
+  res: Response,
+  options: McpHttpHandlerOptions,
+): Promise<void> {
+  const auth = resolveMcpHttpAuth(req, options);
+  if (!auth) {
+    res.status(401).json({ error: 'Authentication required.' });
+    return;
+  }
+  if (!mcpHttpCsrfOk(auth, req)) {
+    res.status(403).json({ error: 'CSRF token missing or invalid.' });
+    return;
+  }
+
+  let request: JsonRpcRequest;
+  try {
+    request = req.body as JsonRpcRequest;
+    if (!request || typeof request !== 'object') {
+      throw new Error('Invalid JSON-RPC body.');
+    }
+  } catch {
+    res.status(400).json({
+      jsonrpc: '2.0',
+      id: null,
+      error: { code: -32700, message: 'Parse error' },
+    });
+    return;
+  }
+
+  const session = createMcpSession();
+  try {
+    applyAgentLabel(session, req);
+  } catch (error) {
+    res.status(400).json({
+      jsonrpc: '2.0',
+      id: request.id ?? null,
+      error: {
+        code: -32602,
+        message: error instanceof Error ? error.message : 'Invalid agent label.',
+      },
+    });
+    return;
+  }
+
+  const responses: JsonRpcResponse[] = [];
+  await handleMcpJsonRpc(
+    session,
+    request,
+    (message) => {
+      responses.push(message);
+    },
+    options.db,
+  );
+
+  const reply = responses[0];
+  if (!reply) {
+    res.status(204).end();
+    return;
+  }
+  res.status(200).json(reply);
+}
+
+/** Express handler factory for `POST ${MCP_HTTP_PATH}`. */
+export function createMcpHttpHandler(options: McpHttpHandlerOptions) {
+  return async (req: Request, res: Response): Promise<void> => {
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed.' });
+      return;
+    }
+    await handleMcpHttpPost(req, res, options);
+  };
+}
+
+export { MCP_HTTP_PATH };

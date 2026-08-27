@@ -25,7 +25,10 @@ import {
 import { buildSessionCookie, clearSessionCookie } from './auth/cookies.ts';
 import { clientAddress, type AddressRequest } from './auth/client-address.ts';
 import { purgeExpiredSessions } from './auth/sessions.ts';
+import { createMcpBearer } from './auth/mcp-bearers.ts';
 import { CSRF_HEADER_NAME } from '../shared/auth.ts';
+import { MCP_BEARER_ISSUE_PATH, MCP_HTTP_PATH } from '../shared/mcp-network.ts';
+import { createMcpHttpHandler } from './mcp/http.ts';
 import { DRIVE_OAUTH_SCOPE } from '../shared/drive-oauth.ts';
 import {
   getCategory,
@@ -818,6 +821,19 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     }),
   );
 
+  // Network MCP (C113): own auth (session cookie or bearer) before the global `/api` middleware,
+  // because bearer clients do not carry the HttpOnly session cookie.
+  if (authRequired) {
+    app.post(
+      MCP_HTTP_PATH,
+      createMcpHttpHandler({
+        db,
+        sessionSecret,
+        now: authNowMs,
+      }),
+    );
+  }
+
   app.use(
     '/api',
     createAuthMiddleware({
@@ -885,6 +901,24 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     });
     res.setHeader('Set-Cookie', clearSessionCookie({ secure: secureCookies }));
     res.json({ ok: true });
+  });
+
+  app.post(MCP_BEARER_ISSUE_PATH, (req, res) => {
+    if (!authRequired) {
+      res.status(400).json({ error: 'Authentication is not required on this host.' });
+      return;
+    }
+    const session = (req as AuthedRequest).operatorSession;
+    if (!session) {
+      res.status(401).json({ error: 'Authentication required.' });
+      return;
+    }
+    const issued = createMcpBearer(db, {
+      sessionTokenHash: session.tokenHash,
+      sessionSecret,
+      now: authNowMs(),
+    });
+    res.json({ ok: true, bearerToken: issued.rawToken });
   });
 
   app.post('/api/auth/password', async (req, res, next) => {
