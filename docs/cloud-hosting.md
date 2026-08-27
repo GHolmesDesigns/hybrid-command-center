@@ -1,9 +1,11 @@
 # Cloud Hosting — Decision Record
 
-Status: **decided (C50 / #176). Runtime contract settled on AWS; app still not implemented for
-remote access.** Nothing in this app is reachable off loopback by design. Sections 1–8 are the
-product decision (C20 / #77). Section 11 is the production implementation contract C51–C55 are
-written against. Section 12 names the inert AWS account resources staged with this card.
+Status: **decided (C50 / #176). Runtime contract settled on AWS; C51–C54 shipped; C55 adds the
+cutover rehearsal runbook.** Nothing in this app is reachable off loopback by design until an operator
+completes production cutover. Sections 1–8 are the product decision (C20 / #77). Section 11 is the
+production implementation contract C51–C55 are written against. Section 12 names the inert AWS account
+resources staged with C50. The step-by-step rehearsal checklist is
+[`docs/cloud-cutover-rehearsal.md`](cloud-cutover-rehearsal.md).
 
 **`HOST` cannot expose the current server.** The default bind stays `127.0.0.1`, and the half of
 the §5.1 bind gate that can be enforced without authentication now is: `server/config.ts` refuses
@@ -261,7 +263,8 @@ snapshot.**
 7. Only then stop treating the laptop copy as live. Keep it as a cold spare.
 
 No production data is moved by this decision record. The steps above are the implementation card's
-cutover checklist, not something to run from this PR.
+cutover checklist, not something to run from this PR. The runnable operator checklist, failure table,
+and monitoring confirmation live in [`cloud-cutover-rehearsal.md`](cloud-cutover-rehearsal.md) (C55).
 
 ### 8.2 Rollback
 

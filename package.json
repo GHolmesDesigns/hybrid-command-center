@@ -1,6 +1,6 @@
 {
   "name": "hybrid-command-center",
-  "version": "5.3.4",
+  "version": "5.3.5",
   "private": true,
   "type": "module",
   "engines": {
@@ -34,7 +34,8 @@
     "db:backup:rehearse": "node --experimental-strip-types server/scripts/rehearse-backup.ts",
     "db:backup:offsite": "node --experimental-strip-types server/scripts/offsite-backup.ts backup",
     "db:backup:offsite:rehearse": "node --experimental-strip-types server/scripts/offsite-backup.ts rehearse",
-    "db:backup:health": "node --experimental-strip-types server/scripts/offsite-backup.ts health"
+    "db:backup:health": "node --experimental-strip-types server/scripts/offsite-backup.ts health",
+    "cutover:rehearse": "node --experimental-strip-types server/scripts/cutover-rehearsal.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
