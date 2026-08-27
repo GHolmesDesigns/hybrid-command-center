@@ -13,3 +13,8 @@ package-lock.json
 *.md
 
 *.docx
+
+# The hand-authored HTML manual: a bespoke stylesheet and hand-wrapped prose.
+# Prettier always double-quotes CSS strings regardless of singleQuote, so this
+# file cannot be both hand-authored and gate-clean. Same reasoning as *.md above.
+docs/manual/
