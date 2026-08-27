@@ -8,6 +8,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.4.3] - 2026-08-27
+
+### Fixed
+
+- Marking a draft pull request ready for review before finalization (per `AGENTS.md`) now
+  self-heals instead of leaving a red, unexplained check: CI converts the pull request back to
+  draft and comments with the finalize checklist, rather than only failing `check:version-bump`
+  with no next step spelled out.
+
+### Breaking changes
+
+None. Nothing in the running application changed; this is a contributor workflow change.
+
 ## [5.4.2] - 2026-08-27
 
 ### Changed
