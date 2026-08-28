@@ -13,6 +13,9 @@ describe('mcp tool registry', () => {
     const names = mcpToolsListPayload().map((tool) => tool.name);
     expect(names).toContain('system_capabilities');
     expect(names).toContain('coordination_list_handoffs');
+    expect(names).toContain('workspace_dashboard_summary');
+    expect(names).toContain('signal_queue_health');
+    expect(names.filter((name) => name !== 'system_capabilities')).toHaveLength(13);
     expect(isRegisteredMcpTool('system_capabilities')).toBe(true);
     expect(isRegisteredMcpTool('not_a_tool')).toBe(false);
   });
@@ -28,9 +31,12 @@ describe('mcp tool registry', () => {
 
   it('marks availability from granted scopes and meta tools', () => {
     const writeTool = mcpToolRegistryEntry('coordination_post_handoff')!;
+    const readTool = mcpToolRegistryEntry('workspace_dashboard_summary')!;
     const metaTool = mcpToolRegistryEntry('system_capabilities')!;
     expect(mcpToolAvailable(writeTool, ['coordination:read'])).toBe(false);
     expect(mcpToolAvailable(writeTool, ['coordination:write'])).toBe(true);
+    expect(mcpToolAvailable(readTool, ['coordination:read'])).toBe(false);
+    expect(mcpToolAvailable(readTool, ['workspace:read'])).toBe(true);
     expect(mcpToolAvailable(metaTool, [])).toBe(true);
   });
 

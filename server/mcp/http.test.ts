@@ -221,6 +221,43 @@ describe('network MCP (C113)', () => {
     expect(db.prepare('SELECT COUNT(*) AS total FROM agent_handoffs').get()).toEqual({ total: 0 });
   });
 
+  it('refuses workspace reads without workspace:read scope', async () => {
+    const { cookie, csrfToken } = await login();
+    const issued = await issueScopedBearer(cookie, csrfToken, 'coordination-only', [
+      'coordination:read',
+    ]);
+
+    const read = await request(app())
+      .post(MCP_HTTP_PATH)
+      .set('Authorization', `Bearer ${issued.bearerToken}`)
+      .send({
+        jsonrpc: '2.0',
+        id: 24,
+        method: 'tools/call',
+        params: { name: 'workspace_dashboard_summary', arguments: {} },
+      });
+    expect(read.status).toBe(403);
+    expect(read.body.error.data.code).toBe('WORKSPACE_SCOPE_REQUIRED');
+  });
+
+  it('allows workspace reads with workspace:read scope', async () => {
+    const { cookie, csrfToken } = await login();
+    const issued = await issueScopedBearer(cookie, csrfToken, 'reader', ['workspace:read']);
+
+    const read = await request(app())
+      .post(MCP_HTTP_PATH)
+      .set('Authorization', `Bearer ${issued.bearerToken}`)
+      .send({
+        jsonrpc: '2.0',
+        id: 25,
+        method: 'tools/call',
+        params: { name: 'workspace_dashboard_summary', arguments: {} },
+      });
+    expect(read.status).toBe(200);
+    expect(read.body.result.isError).toBe(false);
+    expect(JSON.parse(read.body.result.content[0].text).counts).toBeDefined();
+  });
+
   it('revokes one scoped credential without interrupting another', async () => {
     const { cookie, csrfToken } = await login();
     const first = await issueScopedBearer(cookie, csrfToken, 'cursor', ['coordination:read']);

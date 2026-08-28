@@ -8,16 +8,11 @@
 import { getDb, type Db } from '../db.ts';
 import { APP_VERSION } from '../../shared/branding.ts';
 import { MCP_AGENT_SCOPES, type McpAgentScope } from '../../shared/mcp-agent-registry.ts';
-import { callCoordinationTool, mcpToolCallErrorPayload } from './coordination.ts';
+import { callMcpTool } from './dispatch.ts';
+import { mcpToolCallErrorPayload } from './coordination.ts';
 import { MCP_RESOURCE_DEFINITIONS, readMcpResource } from './resources.ts';
-import {
-  mcpToolRegistryEntry,
-  mcpToolsListPayload,
-  workspaceContextFiltersFromToolArgs,
-} from './registry.ts';
+import { mcpToolsListPayload } from './registry.ts';
 import { setMcpSessionAgentLabel, type McpSession } from './session.ts';
-import { buildWorkspaceContextDescriptor } from './workspace-context.ts';
-import { redactToolResult } from './redact.ts';
 
 export interface JsonRpcRequest {
   jsonrpc?: string;
@@ -127,20 +122,10 @@ export async function handleMcpJsonRpc(
           fail(-32602, 'tools/call requires a tool name.');
           return;
         }
-        const entry = mcpToolRegistryEntry(call.name);
-        if (entry?.handler === 'system_capabilities') {
-          const payload = buildWorkspaceContextDescriptor(db, {
-            grantedScopes,
-            filters: workspaceContextFiltersFromToolArgs(call.arguments ?? {}),
-            now,
-          });
-          reply({
-            content: [{ type: 'text', text: JSON.stringify(redactToolResult(payload)) }],
-            isError: false,
-          });
-          return;
-        }
-        const result = callCoordinationTool(db, session, call.name, call.arguments ?? {}, now);
+        const result = await callMcpTool(db, session, call.name, call.arguments ?? {}, {
+          grantedScopes,
+          now,
+        });
         const text =
           result.outcome === 'SUCCESS'
             ? JSON.stringify(result.data ?? null)
