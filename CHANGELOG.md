@@ -8,6 +8,22 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.6.7] - 2026-08-28
+
+### Added
+
+- `hcc://workspace/context` — a bounded MCP resource snapshot with app and capability versions,
+  active workspace counts, open handoffs, queue-health headline, tools generated from the MCP tool
+  registry (with required scopes and availability for the calling credential), and approval
+  boundaries for operations that are never available over MCP.
+- `system_capabilities` — the same descriptor as a tool call for clients with weak resource support.
+- Section and include filters on the resource URI, plus declared truncation when the response would
+  exceed the byte ceiling.
+
+### Breaking changes
+
+None.
+
 ## [5.6.6] - 2026-08-28
 
 ### Changed

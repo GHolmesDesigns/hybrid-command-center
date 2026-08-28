@@ -24,6 +24,7 @@ import {
 } from '../auth/mcp-agent-credentials.ts';
 import { sessionFromRawToken } from '../auth/service.ts';
 import type { OperatorSessionRecord } from '../auth/sessions.ts';
+import { MCP_AGENT_SCOPES } from '../../shared/mcp-agent-registry.ts';
 import { handleMcpJsonRpc, type JsonRpcRequest, type JsonRpcResponse } from './stdio.ts';
 import { createMcpSession, setMcpSessionAgentLabel, type McpSession } from './session.ts';
 import type { McpWriteLimiterRegistry } from './write-limiter-registry.ts';
@@ -240,19 +241,20 @@ export async function handleMcpHttpPost(
       return;
     }
   }
+  const nowMs = options.now?.() ?? Date.now();
   // Replace the per-request no-op limiter with one backed by the process-lifetime registry, so
   // coordination writes actually accumulate across requests (C116). Label may still be null here
   // (coordination.ts refuses writes without one before ever consulting the limiter).
   if (options.writeLimiters) {
-    const now = options.now?.() ?? Date.now();
     session.coordinationWrites = options.writeLimiters.limiterFor(
       auth.credentialKey,
       session.agentLabel ?? '',
-      now,
+      nowMs,
     );
   }
 
   const responses: JsonRpcResponse[] = [];
+  const grantedScopes = auth.agentCredential?.scopes ?? MCP_AGENT_SCOPES;
   await handleMcpJsonRpc(
     session,
     request,
@@ -260,6 +262,7 @@ export async function handleMcpHttpPost(
       responses.push(message);
     },
     options.db,
+    { grantedScopes, now: new Date(nowMs) },
   );
 
   const reply = responses[0];

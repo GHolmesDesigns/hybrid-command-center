@@ -30,6 +30,7 @@ describe('handleMcpJsonRpc', () => {
     expect(listed.result.tools.some((tool) => tool.name === 'coordination_post_handoff')).toBe(
       true,
     );
+    expect(listed.result.tools.some((tool) => tool.name === 'system_capabilities')).toBe(true);
 
     await handleMcpJsonRpc(
       session,
@@ -162,6 +163,45 @@ describe('handleMcpJsonRpc', () => {
       db,
     );
     expect(replies[4]).toMatchObject({ error: { code: -32603 } });
+  });
+
+  it('returns workspace context from resources/read and system_capabilities', async () => {
+    const session = createMcpSession({ agentLabel: 'cursor' });
+    const { replies, write } = capture();
+
+    await handleMcpJsonRpc(
+      session,
+      {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'resources/read',
+        params: { uri: 'hcc://workspace/context?sections=tools,approvalBoundaries' },
+      },
+      write,
+      db,
+      { grantedScopes: ['coordination:read'] },
+    );
+    const resource = replies[0] as { result: { contents: Array<{ text: string }> } };
+    const fromResource = JSON.parse(resource.result.contents[0]!.text);
+    expect(fromResource.grantedScopes).toEqual(['coordination:read']);
+    expect(fromResource.tools?.length).toBeGreaterThan(0);
+    expect(fromResource.approvalBoundaries?.length).toBeGreaterThan(0);
+
+    await handleMcpJsonRpc(
+      session,
+      {
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'tools/call',
+        params: { name: 'system_capabilities', arguments: { sections: ['workspace'] } },
+      },
+      write,
+      db,
+    );
+    const tool = replies[1] as { result: { content: Array<{ text: string }> } };
+    const fromTool = JSON.parse(tool.result.content[0]!.text);
+    expect(fromTool.workspace).toBeDefined();
+    expect(fromTool.capabilityVersion).toMatch(/^mcp-[0-9a-f]{8}$/);
   });
 
   it('refuses initialize when agent_label is invalid', async () => {

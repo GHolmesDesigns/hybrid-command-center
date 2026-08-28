@@ -41,12 +41,11 @@ import {
   type McpCoordinationErrorDetail,
 } from '../../shared/mcp-coordination-errors.ts';
 import {
-  COORDINATION_TOOLS,
   COORDINATION_WRITE_TOOLS,
-  type CoordinationTool,
   type McpAgentEventOutcome,
 } from '../../shared/mcp-agent-events.ts';
 import { recordMcpAgentEvent } from './events.ts';
+import { isCoordinationTool } from './registry.ts';
 import { redactToolResult } from './redact.ts';
 import type { McpSession } from './session.ts';
 
@@ -115,9 +114,6 @@ const noteArgsSchema = z
   .strict();
 
 const WRITE_TOOLS = new Set<string>(COORDINATION_WRITE_TOOLS);
-
-const isCoordinationTool = (name: string): name is CoordinationTool =>
-  (COORDINATION_TOOLS as readonly string[]).includes(name);
 
 const refused = (
   error: string,
@@ -402,106 +398,3 @@ function finish(
   }
   return scrubbed;
 }
-
-/** Tool descriptors for MCP `tools/list` (stdio adapter). */
-export const COORDINATION_TOOL_DEFINITIONS: ReadonlyArray<{
-  name: CoordinationTool;
-  description: string;
-  inputSchema: Record<string, unknown>;
-}> = [
-  {
-    name: 'coordination_list_handoffs',
-    description: 'List agent handoffs, optionally filtered by state.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        state: { type: 'string', enum: [...AGENT_HANDOFF_STATES] },
-      },
-      additionalProperties: false,
-    },
-  },
-  {
-    name: 'coordination_get_handoff',
-    description: 'Get one handoff and its notes.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        handoffId: { type: 'string' },
-      },
-      required: ['handoffId'],
-      additionalProperties: false,
-    },
-  },
-  {
-    name: 'coordination_post_handoff',
-    description:
-      'Create an OPEN handoff. from_agent_label is the MCP session agent_label; optional client_request_id is idempotent.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        fromAgentLabel: { type: 'string' },
-        toAgentLabel: { type: ['string', 'null'] },
-        subjectType: { type: 'string', enum: [...AGENT_HANDOFF_SUBJECT_TYPES] },
-        subjectId: { type: ['string', 'null'] },
-        message: { type: 'string' },
-        clientRequestId: { type: 'string' },
-      },
-      required: ['subjectType', 'message'],
-      additionalProperties: false,
-    },
-  },
-  {
-    name: 'coordination_claim_handoff',
-    description: 'Claim an OPEN handoff (directed label or open-pool first claim).',
-    inputSchema: {
-      type: 'object',
-      properties: { handoffId: { type: 'string' } },
-      required: ['handoffId'],
-      additionalProperties: false,
-    },
-  },
-  {
-    name: 'coordination_complete_handoff',
-    description:
-      'Complete a CLAIMED handoff as the claimer. Never publishes or contacts Drive. Optional client_request_id is idempotent.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        handoffId: { type: 'string' },
-        clientRequestId: { type: 'string' },
-      },
-      required: ['handoffId'],
-      additionalProperties: false,
-    },
-  },
-  {
-    name: 'coordination_cancel_handoff',
-    description:
-      'Cancel an OPEN or CLAIMED handoff as the poster or claimer. Optional client_request_id is idempotent.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        handoffId: { type: 'string' },
-        reason: { type: 'string' },
-        clientRequestId: { type: 'string' },
-      },
-      required: ['handoffId', 'reason'],
-      additionalProperties: false,
-    },
-  },
-  {
-    name: 'coordination_add_note',
-    description:
-      'Append a note to a non-cancelled handoff. Optional client_request_id is idempotent.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        handoffId: { type: 'string' },
-        body: { type: 'string' },
-        clientRequestId: { type: 'string' },
-      },
-      required: ['handoffId', 'body'],
-      additionalProperties: false,
-    },
-  },
-];

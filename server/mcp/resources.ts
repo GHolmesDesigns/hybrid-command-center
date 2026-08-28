@@ -1,13 +1,15 @@
 /**
- * MCP resource adapter for the coordination inbox (C111).
- *
- * `hcc://coordination/inbox?state=open` is a snapshot of active work: OPEN and CLAIMED handoffs.
- * Agents poll; there is no push subscription in v1.
+ * MCP resource adapters (C111 coordination inbox, C120 workspace context).
  */
 import type { Db } from '../db.ts';
 import { listHandoffs } from '../agent-coordination/service.ts';
 import { COORDINATION_INBOX_URI } from '../../shared/mcp-agent-events.ts';
+import type { McpAgentScope } from '../../shared/mcp-agent-registry.ts';
 import { redactToolResult } from './redact.ts';
+import {
+  readWorkspaceContextResource,
+  WORKSPACE_CONTEXT_RESOURCE_DEFINITION,
+} from './workspace-context.ts';
 
 export const COORDINATION_RESOURCE_DEFINITIONS = [
   {
@@ -16,6 +18,11 @@ export const COORDINATION_RESOURCE_DEFINITIONS = [
     description: 'Open and claimed agent handoffs (active inbox).',
     mimeType: 'application/json',
   },
+] as const;
+
+export const MCP_RESOURCE_DEFINITIONS = [
+  ...COORDINATION_RESOURCE_DEFINITIONS,
+  WORKSPACE_CONTEXT_RESOURCE_DEFINITION,
 ] as const;
 
 export function readCoordinationResource(
@@ -44,6 +51,22 @@ export function readCoordinationResource(
     mimeType: 'application/json',
     text: JSON.stringify(payload),
   };
+}
+
+export function readMcpResource(
+  db: Db,
+  uri: string,
+  options: { grantedScopes?: readonly McpAgentScope[]; now?: Date } = {},
+): {
+  uri: string;
+  mimeType: string;
+  text: string;
+} {
+  const normalized = uri.trim();
+  if (normalized.startsWith('hcc://workspace/context')) {
+    return readWorkspaceContextResource(db, normalized, options.grantedScopes, options.now);
+  }
+  return readCoordinationResource(db, normalized);
 }
 
 function isOpenInboxUri(uri: string): boolean {
