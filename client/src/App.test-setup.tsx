@@ -236,6 +236,13 @@ export const testState = {
   agentHandoffDetailPayload: null as
     import('../../shared/agent-coordination').AgentHandoffDetail | null,
   agentHandoffDetailError: null as string | null,
+  mcpAgentRegistryPayload: {
+    enabled: false,
+    credentials: [],
+  } as {
+    enabled: boolean;
+    credentials: import('../../shared/mcp-agent-registry').McpAgentCredentialSummary[];
+  },
   /**
    * What `GET /api/projects/:id/files` answers, per request, so a suite can vary the page
    * by folder and by cursor the way real Drive does. Unset means a Drive nobody connected.
@@ -697,6 +704,7 @@ const payloadFor = (url: string) => {
         picker: null,
       }
     );
+  if (url.endsWith('/api/auth/mcp-agents')) return testState.mcpAgentRegistryPayload;
   if (url.endsWith('/api/projects')) return testState.projectsPayload;
   if (url.endsWith('/api/clients')) return testState.clientsPayload;
   if (url.endsWith('/api/tasks')) return testState.tasksPayload;
@@ -743,6 +751,32 @@ const respondTo = (url: string, init?: RequestInit) => {
   }
   if (url.endsWith('/api/settings/drive') && testState.driveSettingsError)
     return reply(503, { error: testState.driveSettingsError });
+  if (url.endsWith('/api/auth/mcp-agents') && method === 'POST') {
+    const credential = {
+      id: 'credential-issued',
+      agentId: 'agent-issued',
+      label: body.label,
+      scopes: body.scopes,
+      issuedAt: '2026-08-28T12:00:00.000Z',
+      expiresAt: body.expiresAt,
+      lastUsedAt: null,
+      lastOrigin: null,
+      revokedAt: null,
+    };
+    testState.mcpAgentRegistryPayload.credentials = [
+      ...testState.mcpAgentRegistryPayload.credentials,
+      credential,
+    ];
+    return { ok: true, bearerToken: 'hcc_mcp_shown-once', credential };
+  }
+  const revokeMcpCredential = url.match(/\/api\/auth\/mcp-credentials\/([^/?]+)\/revoke$/);
+  if (revokeMcpCredential && method === 'POST') {
+    testState.mcpAgentRegistryPayload.credentials =
+      testState.mcpAgentRegistryPayload.credentials.filter(
+        (credential) => credential.id !== revokeMcpCredential[1],
+      );
+    return { ok: true };
+  }
   if (url.endsWith('/api/settings/drive/root') && method === 'POST') {
     const current = testState.driveSettingsPayload ?? {
       configured: true,
@@ -1637,6 +1671,7 @@ beforeEach(() => {
   testState.agentHandoffsError = null;
   testState.agentHandoffDetailPayload = null;
   testState.agentHandoffDetailError = null;
+  testState.mcpAgentRegistryPayload = { enabled: false, credentials: [] };
   testState.driveListingPayload = null;
   testState.calendarPayload = null;
   testState.signalPostsPayload = [];

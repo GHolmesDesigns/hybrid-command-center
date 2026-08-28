@@ -20,8 +20,18 @@ import { buildSessionCookie, clearSessionCookie } from './auth/cookies.ts';
 import { clientAddress, type AddressRequest } from './auth/client-address.ts';
 import { purgeExpiredSessions } from './auth/sessions.ts';
 import { createMcpBearer } from './auth/mcp-bearers.ts';
+import {
+  createMcpAgentCredential,
+  listMcpAgentCredentials,
+  renameMcpAgentRegistration,
+  revokeMcpAgentCredential,
+} from './auth/mcp-agent-credentials.ts';
 import { CSRF_HEADER_NAME } from '../shared/auth.ts';
 import { MCP_BEARER_ISSUE_PATH, MCP_HTTP_PATH } from '../shared/mcp-network.ts';
+import {
+  createMcpAgentCredentialSchema,
+  updateMcpAgentRegistrationSchema,
+} from '../shared/mcp-agent-registry.ts';
 import { createMcpHttpHandler } from './mcp/http.ts';
 import { McpWriteLimiterRegistry } from './mcp/write-limiter-registry.ts';
 import { DRIVE_OAUTH_SCOPE } from '../shared/drive-oauth.ts';
@@ -939,6 +949,64 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       now: authNowMs(),
     });
     res.json({ ok: true, bearerToken: issued.rawToken });
+  });
+
+  app.get('/api/auth/mcp-agents', (_req, res) => {
+    res.json({
+      enabled: authRequired,
+      credentials: authRequired ? listMcpAgentCredentials(db, authNowMs()) : [],
+    });
+  });
+
+  app.post('/api/auth/mcp-agents', (req, res, next) => {
+    try {
+      if (!authRequired) {
+        res.status(400).json({ error: 'Authentication is not required on this host.' });
+        return;
+      }
+      const input = createMcpAgentCredentialSchema.parse(req.body);
+      const issued = createMcpAgentCredential(db, {
+        ...input,
+        sessionSecret,
+        now: authNowMs(),
+      });
+      res.status(201).json({
+        ok: true,
+        bearerToken: issued.rawToken,
+        credential: issued.credential,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.patch('/api/auth/mcp-agents/:agentId', (req, res, next) => {
+    try {
+      if (!authRequired) {
+        res.status(400).json({ error: 'Authentication is not required on this host.' });
+        return;
+      }
+      const input = updateMcpAgentRegistrationSchema.parse(req.body);
+      if (!renameMcpAgentRegistration(db, req.params.agentId, input.label)) {
+        res.status(404).json({ error: 'Agent registration not found.' });
+        return;
+      }
+      res.json({ ok: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post('/api/auth/mcp-credentials/:credentialId/revoke', (req, res) => {
+    if (!authRequired) {
+      res.status(400).json({ error: 'Authentication is not required on this host.' });
+      return;
+    }
+    if (!revokeMcpAgentCredential(db, req.params.credentialId, authNowMs())) {
+      res.status(404).json({ error: 'Active MCP credential not found.' });
+      return;
+    }
+    res.json({ ok: true });
   });
 
   app.post('/api/auth/password', async (req, res, next) => {

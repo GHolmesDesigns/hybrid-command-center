@@ -49,7 +49,7 @@ describe('the Settings layout', () => {
     // A card left as a direct child of the grid is a card back in a shared row track, taking
     // its starting edge from whatever sits beside it. There is no such card.
     expect(document.querySelectorAll('.settings-layout > .settings-card')).toHaveLength(0);
-    expect(document.querySelectorAll('.settings-layout .settings-card')).toHaveLength(9);
+    expect(document.querySelectorAll('.settings-layout .settings-card')).toHaveLength(10);
   });
 
   it('reads in one order: what the workspace connects to and organises by, then how it looks', async () => {
@@ -62,6 +62,7 @@ describe('the Settings layout', () => {
       'Task tags',
       'Signal campaigns',
       'Agent handoffs',
+      'Agent credentials',
     ]);
     expect(headingsIn(appearance)).toEqual([
       'Branding',
@@ -80,6 +81,7 @@ describe('the Settings layout', () => {
       'Task tags',
       'Signal campaigns',
       'Agent handoffs',
+      'Agent credentials',
       'Branding',
       'Default views',
       'Local timezone',
