@@ -2920,9 +2920,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       ...(error instanceof SignalCampaignInUseError
         ? { code: 'SIGNAL_CAMPAIGN_IN_USE', attachedPostCount: error.attachedPostCount }
         : {}),
-      ...(error instanceof McpAgentLabelTakenError
-        ? { code: 'MCP_AGENT_LABEL_TAKEN' }
-        : {}),
+      ...(error instanceof McpAgentLabelTakenError ? { code: 'MCP_AGENT_LABEL_TAKEN' } : {}),
     });
   });
   return app;

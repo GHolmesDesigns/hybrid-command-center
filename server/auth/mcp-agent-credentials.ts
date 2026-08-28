@@ -106,9 +106,7 @@ export function createMcpAgentCredential(
   let agentId = '';
   transaction(db, () => {
     const existing = db
-      .prepare(
-        `SELECT id FROM agent_registrations WHERE display_label = ? COLLATE NOCASE`,
-      )
+      .prepare(`SELECT id FROM agent_registrations WHERE display_label = ? COLLATE NOCASE`)
       .get(options.label) as { id: string } | undefined;
     if (existing) {
       const active = db
