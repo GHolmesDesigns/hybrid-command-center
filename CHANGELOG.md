@@ -8,6 +8,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.6.5] - 2026-08-28
+
+### Added
+
+- Added server-bound MCP agent identities with scoped, independently expiring and revocable
+  credentials, plus a Settings panel that displays each secret only once.
+
+### Fixed
+
+- Refused and audited attempts to impersonate another MCP agent by changing `x-agent-label`.
+
+### Breaking changes
+
+None. Existing operator-session MCP bearers remain supported.
+
 ## [5.6.4] - 2026-08-28
 
 ### Added
