@@ -74,10 +74,10 @@ describe('mcpCoordinationErrorDetail', () => {
   });
 
   it('falls back to invalid state for unmatched 409 prose', () => {
-    expect(mcpCoordinationErrorFromMessage('Unexpected conflict.', 409, 'DONE')).toMatchObject({
+    expect(mcpCoordinationErrorFromMessage('Unexpected conflict.', 409, 'COMPLETED')).toMatchObject({
       code: 'COORDINATION_INVALID_STATE',
       retryable: false,
-      currentState: 'DONE',
+      currentState: 'COMPLETED',
     });
   });
 
