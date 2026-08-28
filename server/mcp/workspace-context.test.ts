@@ -151,9 +151,8 @@ describe('buildWorkspaceContextDescriptor', () => {
       const actual = await importOriginal<typeof import('../../shared/mcp-workspace-context.ts')>();
       return { ...actual, WORKSPACE_CONTEXT_BYTE_CEILING: 900 };
     });
-    const { buildWorkspaceContextDescriptor: buildWithLowCeiling } = await import(
-      './workspace-context.ts'
-    );
+    const { buildWorkspaceContextDescriptor: buildWithLowCeiling } =
+      await import('./workspace-context.ts');
     const descriptor = buildWithLowCeiling(db, {
       filters: { sections: ['workspace', 'handoffs', 'queueHealth', 'tools'] },
       now: NOW,
