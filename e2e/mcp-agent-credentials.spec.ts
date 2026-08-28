@@ -84,6 +84,20 @@ test('operator issues, observes, and independently revokes an MCP agent credenti
       data: { jsonrpc: '2.0', id: 2, method: 'ping' },
     });
     expect(after.status()).toBe(401);
+
+    // Same label after revoke must succeed — Settings re-issue used to 500 on the unique label.
+    const reissued = await request.post('/api/auth/mcp-agents', {
+      headers: { [CSRF_HEADER_NAME]: csrfToken },
+      data: {
+        label: 'e2e-codex',
+        scopes: ['coordination:read', 'coordination:write'],
+        expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+      },
+    });
+    expect(reissued.status()).toBe(201);
+    const reissueBody = (await reissued.json()) as { bearerToken: string };
+    expect(reissueBody.bearerToken).toMatch(/^hcc_mcp_/);
+    expect(reissueBody.bearerToken).not.toBe(body.bearerToken);
   } finally {
     await context.close();
     await new Promise<void>((resolve, reject) => {

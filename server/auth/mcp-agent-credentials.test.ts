@@ -3,6 +3,7 @@ import { createDb, type Db } from '../db.ts';
 import {
   createMcpAgentCredential,
   listMcpAgentCredentials,
+  McpAgentLabelTakenError,
   renameMcpAgentRegistration,
   resolveMcpAgentCredential,
   revokeMcpAgentCredential,
@@ -116,5 +117,29 @@ describe('scoped MCP agent credentials', () => {
       agentId: issued.credential.agentId,
       label: 'cursor-review',
     });
+  });
+
+  it('reuses a registration after revoke so the same label can be issued again', () => {
+    const first = issue('claude-desktop', 1_000);
+    expect(revokeMcpAgentCredential(db, first.credential.id, 2_000)).toBe(true);
+    const second = issue('claude-desktop', 3_000);
+    expect(second.credential.agentId).toBe(first.credential.agentId);
+    expect(second.credential.id).not.toBe(first.credential.id);
+    expect(listMcpAgentCredentials(db, 3_001)).toEqual([
+      expect.objectContaining({ id: second.credential.id, label: 'claude-desktop' }),
+    ]);
+    expect(
+      resolveMcpAgentCredential(db, {
+        rawToken: second.rawToken,
+        sessionSecret: SECRET,
+        origin: null,
+        now: 3_001,
+      }),
+    ).toMatchObject({ agentLabel: 'claude-desktop', agentId: first.credential.agentId });
+  });
+
+  it('refuses a second active credential for the same label', () => {
+    issue('codex-desktop', 1_000);
+    expect(() => issue('CODEX-DESKTOP', 2_000)).toThrow(McpAgentLabelTakenError);
   });
 });
