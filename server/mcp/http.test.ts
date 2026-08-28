@@ -18,6 +18,8 @@ import {
   resolveMcpHttpAuth,
 } from './http.ts';
 import { createSession } from '../auth/sessions.ts';
+import { listMcpAgentEvents } from './events.ts';
+import { COORDINATION_WRITE_LIMIT_PER_MINUTE } from '../../shared/mcp-agent-events.ts';
 
 const SECRET = 'test-session-secret-at-least-32-chars!';
 const PASSWORD = 'operator-password-ok';
@@ -231,6 +233,163 @@ describe('network MCP (C113)', () => {
       .set(CSRF_HEADER_NAME, csrfToken)
       .send({ jsonrpc: '2.0', method: 'notifications/initialized' });
     expect(res.status).toBe(204);
+  });
+});
+
+/**
+ * The network write rate limit must persist across separate `POST /api/mcp` requests, not reset
+ * with the fresh `McpSession` each one builds (C116 / #366). Every request below reuses ONE
+ * `createApp()` instance — the app-per-request pattern the other suites use would rebuild the
+ * registry every time and mask the exact bug this card fixes.
+ */
+describe('network MCP write rate limit persistence (C116)', () => {
+  let db: Db;
+  let passwordHash: string;
+
+  beforeEach(async () => {
+    db = createDb(':memory:');
+    passwordHash = await hashPassword(PASSWORD);
+    setSetting(db, OPERATOR_PASSWORD_HASH_SETTING_KEY, passwordHash);
+  });
+
+  afterEach(() => {
+    try {
+      db.close();
+    } catch {
+      // already closed
+    }
+  });
+
+  const app = () =>
+    createApp(db, {
+      enforceAuth: true,
+      auth: {
+        sessionSecret: SECRET,
+        operatorPasswordHash: passwordHash,
+        trustedProxyHops: 0,
+        secureCookies: false,
+      },
+    });
+
+  async function login(instance: ReturnType<typeof app>) {
+    const res = await request(instance).post('/api/auth/login').send({ password: PASSWORD });
+    expect(res.status).toBe(200);
+    return {
+      csrfToken: res.body.csrfToken as string,
+      cookie: res.headers['set-cookie']?.[0] as string,
+    };
+  }
+
+  async function issueBearer(instance: ReturnType<typeof app>, cookie: string, csrfToken: string) {
+    const res = await request(instance)
+      .post(MCP_BEARER_ISSUE_PATH)
+      .set('Cookie', cookie)
+      .set(CSRF_HEADER_NAME, csrfToken);
+    expect(res.status).toBe(200);
+    return res.body.bearerToken as string;
+  }
+
+  function postHandoff(
+    instance: ReturnType<typeof app>,
+    bearer: string,
+    label: string,
+    id: number,
+  ) {
+    return request(instance)
+      .post(MCP_HTTP_PATH)
+      .set('Authorization', `Bearer ${bearer}`)
+      .set(MCP_AGENT_LABEL_HEADER, label)
+      .send({
+        jsonrpc: '2.0',
+        id,
+        method: 'tools/call',
+        params: {
+          name: 'coordination_post_handoff',
+          arguments: { subjectType: 'freeform', message: `Write ${id}.` },
+        },
+      });
+  }
+
+  function listHandoffs(instance: ReturnType<typeof app>, bearer: string, id: number) {
+    return request(instance)
+      .post(MCP_HTTP_PATH)
+      .set('Authorization', `Bearer ${bearer}`)
+      .send({
+        jsonrpc: '2.0',
+        id,
+        method: 'tools/call',
+        params: { name: 'coordination_list_handoffs', arguments: {} },
+      });
+  }
+
+  it('refuses the 11th write with one bearer and one label, carrying retryAfterMs', async () => {
+    const instance = app();
+    const { cookie, csrfToken } = await login(instance);
+    const bearer = await issueBearer(instance, cookie, csrfToken);
+
+    for (let i = 1; i <= COORDINATION_WRITE_LIMIT_PER_MINUTE; i += 1) {
+      const res = await postHandoff(instance, bearer, 'cursor', i);
+      expect(res.status).toBe(200);
+      expect(res.body.result.isError).toBe(false);
+    }
+
+    const eleventh = await postHandoff(instance, bearer, 'cursor', 11);
+    expect(eleventh.status).toBe(200);
+    expect(eleventh.body.result.isError).toBe(true);
+    const payload = JSON.parse(eleventh.body.result.content[0].text);
+    expect(payload.outcome).toBe('REFUSED');
+    expect(payload.error).toMatch(/rate limit/i);
+    expect(payload.retryAfterMs).toBeGreaterThan(0);
+
+    const events = listMcpAgentEvents(db, { tool: 'coordination_post_handoff' });
+    const refused = events.find((event) => event.outcome === 'REFUSED');
+    expect(refused?.agentLabel).toBe('cursor');
+  });
+
+  it('still hits the outer ceiling when eleven requests use eleven different agent labels', async () => {
+    const instance = app();
+    const { cookie, csrfToken } = await login(instance);
+    const bearer = await issueBearer(instance, cookie, csrfToken);
+
+    for (let i = 1; i <= COORDINATION_WRITE_LIMIT_PER_MINUTE; i += 1) {
+      const res = await postHandoff(instance, bearer, `cursor-${i}`, i);
+      expect(res.status).toBe(200);
+      expect(res.body.result.isError).toBe(false);
+    }
+
+    const eleventh = await postHandoff(instance, bearer, 'cursor-11', 11);
+    const payload = JSON.parse(eleventh.body.result.content[0].text);
+    expect(payload.outcome).toBe('REFUSED');
+    expect(payload.error).toMatch(/rate limit/i);
+  });
+
+  it('does not share a write budget between two distinct bearers', async () => {
+    const instance = app();
+    const { cookie, csrfToken } = await login(instance);
+    const bearerA = await issueBearer(instance, cookie, csrfToken);
+    const bearerB = await issueBearer(instance, cookie, csrfToken);
+
+    for (let i = 1; i <= COORDINATION_WRITE_LIMIT_PER_MINUTE; i += 1) {
+      const res = await postHandoff(instance, bearerA, 'cursor', i);
+      expect(res.body.result.isError).toBe(false);
+    }
+    const bearerARefused = await postHandoff(instance, bearerA, 'cursor', 11);
+    expect(JSON.parse(bearerARefused.body.result.content[0].text).outcome).toBe('REFUSED');
+
+    const bearerBFirstWrite = await postHandoff(instance, bearerB, 'cursor', 12);
+    expect(bearerBFirstWrite.body.result.isError).toBe(false);
+  });
+
+  it('never rate-limits reads', async () => {
+    const instance = app();
+    const { cookie, csrfToken } = await login(instance);
+    const bearer = await issueBearer(instance, cookie, csrfToken);
+
+    for (let i = 1; i <= COORDINATION_WRITE_LIMIT_PER_MINUTE + 5; i += 1) {
+      const res = await listHandoffs(instance, bearer, i);
+      expect(res.status).toBe(200);
+      expect(res.body.result.isError).toBe(false);
+    }
   });
 });
 

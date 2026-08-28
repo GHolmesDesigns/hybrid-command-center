@@ -46,6 +46,8 @@ export interface McpToolCallResult {
   data?: unknown;
   /** Plain-language error for REFUSED / FAILURE; already scrubbed. */
   error?: string;
+  /** Set only on the coordination-write rate-limit refusal path (C116). */
+  retryAfterMs?: number;
 }
 
 const listArgsSchema = z
@@ -127,6 +129,7 @@ export function callCoordinationTool(
       return finish(db, session, tool, {
         outcome: 'REFUSED',
         error: 'Coordination write rate limit exceeded (10 per rolling minute).',
+        retryAfterMs: session.coordinationWrites.retryAfterMs(now.getTime()),
       });
     }
   }
@@ -307,6 +310,7 @@ function finish(
     outcome: result.outcome,
     ...(result.data !== undefined ? { data: redactToolResult(result.data) } : {}),
     ...(result.error !== undefined ? { error: redactToolResult(result.error) } : {}),
+    ...(result.retryAfterMs !== undefined ? { retryAfterMs: result.retryAfterMs } : {}),
   };
   if (shouldAudit) {
     recordMcpAgentEvent(db, {

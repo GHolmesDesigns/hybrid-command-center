@@ -8,6 +8,20 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.5.0] - 2026-08-27
+
+### Fixed
+
+- The network MCP coordination write rate limit (10 per rolling minute) now actually persists
+  across `POST /api/mcp` requests instead of resetting on every call, closing a gap reproduced live
+  against production. The budget is enforced per credential (bearer or session), and no
+  `x-agent-label` value can widen it — a nested per-label budget still applies inside that ceiling.
+  Refusals report how long to wait before retrying.
+
+### Breaking changes
+
+None.
+
 ## [5.4.3] - 2026-08-27
 
 ### Fixed

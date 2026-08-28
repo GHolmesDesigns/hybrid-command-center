@@ -8,13 +8,20 @@ import {
   COORDINATION_WRITE_LIMIT_PER_MINUTE,
   normalizeOptionalAgentLabel,
 } from '../../shared/mcp-agent-events.ts';
-import { RollingWindowLimiter } from './rate-limit.ts';
+import { RollingWindowLimiter, type CoordinationWriteLimiter } from './rate-limit.ts';
 
 const ONE_MINUTE_MS = 60_000;
 
 export interface McpSession {
   agentLabel: string | null;
-  coordinationWrites: RollingWindowLimiter;
+  /**
+   * Defaults to a fresh per-session `RollingWindowLimiter`, which is what stdio uses for the
+   * life of its one long-lived process session. The network HTTP transport overwrites this per
+   * request with a limiter drawn from the process-lifetime `McpWriteLimiterRegistry` (C116 /
+   * `server/mcp/write-limiter-registry.ts`), since a fresh `McpSession` per POST would otherwise
+   * make the budget a no-op.
+   */
+  coordinationWrites: CoordinationWriteLimiter;
 }
 
 export function createMcpSession(options: { agentLabel?: string | null } = {}): McpSession {
