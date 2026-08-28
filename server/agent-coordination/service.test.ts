@@ -183,3 +183,57 @@ describe('operator HTTP cancel', () => {
     expect(response.status).toBe(400);
   });
 });
+
+describe('clientRequestId mutation idempotency', () => {
+  it('replays note, complete, and cancel without a second write', () => {
+    const handoff = post();
+    claimHandoff(db, handoff.id, 'claude', NOW);
+    const firstNote = addHandoffNote(
+      db,
+      handoff.id,
+      { agentLabel: 'claude', body: 'First note.' },
+      NOW,
+      { clientRequestId: 'note-req-1', mutationTool: 'coordination_add_note' },
+    );
+    const replayNote = addHandoffNote(
+      db,
+      handoff.id,
+      { agentLabel: 'claude', body: 'Must not append.' },
+      NOW,
+      { clientRequestId: 'note-req-1', mutationTool: 'coordination_add_note' },
+    );
+    expect(replayNote.id).toBe(firstNote.id);
+    expect(getHandoff(db, handoff.id).notes).toHaveLength(1);
+
+    const done = completeHandoff(db, handoff.id, 'claude', NOW, {
+      clientRequestId: 'complete-req-1',
+      mutationTool: 'coordination_complete_handoff',
+    });
+    const replayDone = completeHandoff(db, handoff.id, 'claude', NOW, {
+      clientRequestId: 'complete-req-1',
+      mutationTool: 'coordination_complete_handoff',
+    });
+    expect(replayDone.id).toBe(done.id);
+    expect(replayDone.state).toBe('COMPLETED');
+
+    const toCancel = post({ message: 'Cancel target.' });
+    const cancelled = cancelHandoffAsAgent(
+      db,
+      toCancel.id,
+      'cursor',
+      { reason: 'Original reason.' },
+      NOW,
+      { clientRequestId: 'cancel-req-1', mutationTool: 'coordination_cancel_handoff' },
+    );
+    const replayCancel = cancelHandoffAsAgent(
+      db,
+      toCancel.id,
+      'cursor',
+      { reason: 'Different reason.' },
+      NOW,
+      { clientRequestId: 'cancel-req-1', mutationTool: 'coordination_cancel_handoff' },
+    );
+    expect(replayCancel.id).toBe(cancelled.id);
+    expect(replayCancel.cancelReason).toBe('Original reason.');
+  });
+});

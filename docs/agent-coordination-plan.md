@@ -489,8 +489,8 @@ automatically.
 | --- | --- |
 | **Post idempotency** | Optional `client_request_id`. Duplicate `(from_agent_label, client_request_id)` returns the existing row; no second insert. |
 | **Without client_request_id** | Each post creates a new handoff — intentional retries without an id are new work. |
-| **Claim / complete / cancel** | Idempotent on already-terminal or already-claimed-by-self states: return the current row (or a clear `REFUSED` when unauthorized), never a second state flip. |
-| **Notes** | Always append; no client-request idempotency in v1. |
+| **Claim / complete / cancel** | Idempotent on already-terminal or already-claimed-by-self states: return the current row (or a clear `REFUSED` when unauthorized), never a second state flip. Optional `client_request_id` on complete and cancel returns the first outcome for `(agent_label, client_request_id, tool)` and writes nothing further. |
+| **Notes** | Append by default. Optional `client_request_id` returns the first note for `(agent_label, client_request_id, coordination_add_note)` and appends nothing on replay. Without `client_request_id`, each call appends. |
 
 ### 5.6 Rate limits
 

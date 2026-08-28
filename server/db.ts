@@ -570,6 +570,22 @@ CREATE TABLE IF NOT EXISTS agent_handoff_notes (
   body TEXT NOT NULL CHECK(length(body) BETWEEN 1 AND 2000),
   at TEXT NOT NULL
 );
+-- MCP mutation idempotency for note, complete, and cancel (C117). One row per
+-- (agent_label, client_request_id, tool); retention in server/agent-coordination/mutations.ts.
+CREATE TABLE IF NOT EXISTS agent_handoff_mutations (
+  id TEXT PRIMARY KEY,
+  created_at TEXT NOT NULL,
+  agent_label TEXT NOT NULL,
+  client_request_id TEXT NOT NULL CHECK(length(client_request_id) BETWEEN 1 AND 64),
+  tool TEXT NOT NULL CHECK(tool IN (
+    'coordination_add_note',
+    'coordination_complete_handoff',
+    'coordination_cancel_handoff'
+  )),
+  handoff_id TEXT NOT NULL REFERENCES agent_handoffs(id) ON DELETE CASCADE,
+  result_kind TEXT NOT NULL CHECK(result_kind IN ('note', 'handoff')),
+  result_id TEXT NOT NULL
+);
 -- MCP local-write audit (MCP-C106 contract; first writers are C111 coordination tools).
 -- Append-only: one INSERT in server/mcp/events.ts, retention deletes oldest rows, nothing updates.
 CREATE TABLE IF NOT EXISTS mcp_agent_events (
@@ -670,6 +686,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_handoffs_client_request
   WHERE client_request_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_agent_handoff_notes_handoff
   ON agent_handoff_notes(handoff_id, at);
+-- Mutation replay: duplicate (agent_label, client_request_id, tool) returns the stored outcome.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_handoff_mutations_replay
+  ON agent_handoff_mutations(agent_label, client_request_id, tool);
+CREATE INDEX IF NOT EXISTS idx_agent_handoff_mutations_created
+  ON agent_handoff_mutations(created_at);
 -- Retention over MCP audit keeps the newest rows and prunes the rest.
 CREATE INDEX IF NOT EXISTS idx_mcp_agent_events_at ON mcp_agent_events(at);
 `;

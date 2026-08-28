@@ -34,6 +34,11 @@ import {
   type AgentHandoffState,
   type AgentHandoffSubjectType,
 } from '../../shared/agent-coordination.ts';
+import {
+  findHandoffMutation,
+  recordHandoffMutation,
+  type AgentHandoffMutationTool,
+} from './mutations.ts';
 
 const id = () => crypto.randomUUID();
 
@@ -110,6 +115,36 @@ const notesFor = (db: Db, handoffId: string): AgentHandoffNote[] =>
 
 const refuse = (reason: string): never => {
   throw new AgentCoordinationError(reason, 409);
+};
+
+export interface HandoffMutationOptions {
+  clientRequestId?: string;
+  mutationTool?: AgentHandoffMutationTool;
+}
+
+const replayHandoffOutcome = (
+  db: Db,
+  agentLabel: string,
+  clientRequestId: string,
+  tool: AgentHandoffMutationTool,
+): AgentHandoff | null => {
+  const stored = findHandoffMutation(db, agentLabel, clientRequestId, tool);
+  if (!stored || stored.resultKind !== 'handoff') return null;
+  return selectHandoff(db, stored.resultId);
+};
+
+const replayNoteOutcome = (
+  db: Db,
+  agentLabel: string,
+  clientRequestId: string,
+  tool: AgentHandoffMutationTool,
+): AgentHandoffNote | null => {
+  const stored = findHandoffMutation(db, agentLabel, clientRequestId, tool);
+  if (!stored || stored.resultKind !== 'note') return null;
+  const row = db
+    .prepare('SELECT * FROM agent_handoff_notes WHERE id = ?')
+    .get(stored.resultId) as unknown as NoteRow | undefined;
+  return row ? toNote(row) : null;
 };
 
 export function getHandoff(db: Db, handoffId: string): AgentHandoffDetail {
@@ -216,13 +251,34 @@ export function completeHandoff(
   handoffId: string,
   agentLabelRaw: string,
   now: Date = new Date(),
+  options: HandoffMutationOptions = {},
 ): AgentHandoff {
   const agentLabel = agentLabelSchema.parse(agentLabelRaw);
+  const clientRequestId = options.clientRequestId ?? null;
+  const mutationTool = options.mutationTool ?? 'coordination_complete_handoff';
   const instant = now.toISOString();
   return transaction(db, () => {
+    if (clientRequestId) {
+      const replay = replayHandoffOutcome(db, agentLabel, clientRequestId, mutationTool);
+      if (replay) return replay;
+    }
+
     const handoff = requireHandoff(db, handoffId);
     const decision = decideComplete(handoff, agentLabel);
-    if (decision.kind === 'idempotent') return handoff;
+    if (decision.kind === 'idempotent') {
+      if (clientRequestId) {
+        recordHandoffMutation(db, {
+          agentLabel,
+          clientRequestId,
+          tool: mutationTool,
+          handoffId,
+          resultKind: 'handoff',
+          resultId: handoff.id,
+          at: instant,
+        });
+      }
+      return handoff;
+    }
     if (decision.kind === 'refused') refuse(decision.reason);
     db.prepare(
       `UPDATE agent_handoffs
@@ -231,6 +287,17 @@ export function completeHandoff(
     ).run(instant, instant, handoffId, agentLabel);
     const next = requireHandoff(db, handoffId);
     if (next.state !== 'COMPLETED') refuse('The handoff could not be completed.');
+    if (clientRequestId) {
+      recordHandoffMutation(db, {
+        agentLabel,
+        clientRequestId,
+        tool: mutationTool,
+        handoffId,
+        resultKind: 'handoff',
+        resultId: next.id,
+        at: instant,
+      });
+    }
     return next;
   });
 }
@@ -241,15 +308,36 @@ export function cancelHandoffAsAgent(
   agentLabelRaw: string,
   raw: AgentHandoffCancelInput,
   now: Date = new Date(),
+  options: HandoffMutationOptions = {},
 ): AgentHandoff {
   const agentLabel = agentLabelSchema.parse(agentLabelRaw);
   const { reason } = agentHandoffCancelInputSchema.parse(raw);
   const cancelReason = redactSecrets(reason);
+  const clientRequestId = options.clientRequestId ?? null;
+  const mutationTool = options.mutationTool ?? 'coordination_cancel_handoff';
   const instant = now.toISOString();
   return transaction(db, () => {
+    if (clientRequestId) {
+      const replay = replayHandoffOutcome(db, agentLabel, clientRequestId, mutationTool);
+      if (replay) return replay;
+    }
+
     const handoff = requireHandoff(db, handoffId);
     const decision = decideAgentCancel(handoff, agentLabel);
-    if (decision.kind === 'idempotent') return handoff;
+    if (decision.kind === 'idempotent') {
+      if (clientRequestId) {
+        recordHandoffMutation(db, {
+          agentLabel,
+          clientRequestId,
+          tool: mutationTool,
+          handoffId,
+          resultKind: 'handoff',
+          resultId: handoff.id,
+          at: instant,
+        });
+      }
+      return handoff;
+    }
     if (decision.kind === 'refused') refuse(decision.reason);
     db.prepare(
       `UPDATE agent_handoffs
@@ -258,6 +346,17 @@ export function cancelHandoffAsAgent(
     ).run(instant, cancelReason, instant, handoffId);
     const next = requireHandoff(db, handoffId);
     if (next.state !== 'CANCELLED') refuse('The handoff could not be cancelled.');
+    if (clientRequestId) {
+      recordHandoffMutation(db, {
+        agentLabel,
+        clientRequestId,
+        tool: mutationTool,
+        handoffId,
+        resultKind: 'handoff',
+        resultId: next.id,
+        at: instant,
+      });
+    }
     return next;
   });
 }
@@ -293,11 +392,19 @@ export function addHandoffNote(
   handoffId: string,
   raw: AgentHandoffNoteInput,
   now: Date = new Date(),
+  options: HandoffMutationOptions = {},
 ): AgentHandoffNote {
   const input = agentHandoffNoteInputSchema.parse(raw);
   const body = redactSecrets(input.body);
+  const clientRequestId = options.clientRequestId ?? null;
+  const mutationTool = options.mutationTool ?? 'coordination_add_note';
   const instant = now.toISOString();
   return transaction(db, () => {
+    if (clientRequestId) {
+      const replay = replayNoteOutcome(db, input.agentLabel, clientRequestId, mutationTool);
+      if (replay) return replay;
+    }
+
     const handoff = requireHandoff(db, handoffId);
     const decision = decideAddNote(handoff);
     if (decision.kind === 'refused') refuse(decision.reason);
@@ -311,6 +418,18 @@ export function addHandoffNote(
     const row = db
       .prepare('SELECT * FROM agent_handoff_notes WHERE id = ?')
       .get(noteId) as unknown as NoteRow;
-    return toNote(row);
+    const note = toNote(row);
+    if (clientRequestId) {
+      recordHandoffMutation(db, {
+        agentLabel: input.agentLabel,
+        clientRequestId,
+        tool: mutationTool,
+        handoffId,
+        resultKind: 'note',
+        resultId: note.id,
+        at: instant,
+      });
+    }
+    return note;
   });
 }

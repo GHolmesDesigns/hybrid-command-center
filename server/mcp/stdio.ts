@@ -7,7 +7,11 @@
  */
 import { getDb, type Db } from '../db.ts';
 import { APP_VERSION } from '../../shared/branding.ts';
-import { callCoordinationTool, COORDINATION_TOOL_DEFINITIONS } from './coordination.ts';
+import {
+  callCoordinationTool,
+  COORDINATION_TOOL_DEFINITIONS,
+  mcpToolCallErrorPayload,
+} from './coordination.ts';
 import { COORDINATION_RESOURCE_DEFINITIONS, readCoordinationResource } from './resources.ts';
 import { setMcpSessionAgentLabel, type McpSession } from './session.ts';
 
@@ -119,11 +123,7 @@ export async function handleMcpJsonRpc(
         const text =
           result.outcome === 'SUCCESS'
             ? JSON.stringify(result.data ?? null)
-            : JSON.stringify({
-                outcome: result.outcome,
-                error: result.error,
-                ...(result.retryAfterMs !== undefined ? { retryAfterMs: result.retryAfterMs } : {}),
-              });
+            : JSON.stringify(mcpToolCallErrorPayload(result));
         reply({
           content: [{ type: 'text', text }],
           isError: result.outcome !== 'SUCCESS',
