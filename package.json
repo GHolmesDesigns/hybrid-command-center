@@ -22,6 +22,7 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "check:version-bump": "node --experimental-strip-types server/scripts/check-version-bump.ts",
+    "check:manual-version": "node --experimental-strip-types server/scripts/check-manual-version.ts",
     "db:migrate": "node --experimental-strip-types server/scripts/migrate.ts",
     "db:seed": "node --experimental-strip-types server/scripts/seed.ts",
     "auth:bootstrap": "node --experimental-strip-types server/scripts/bootstrap-operator.ts",
