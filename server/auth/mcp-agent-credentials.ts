@@ -36,6 +36,17 @@ export type ResolvedMcpAgentCredential = {
 export const OPERATOR_BOOTSTRAP_AGENT_ID = 'operator-session-bootstrap';
 export const OPERATOR_BOOTSTRAP_AGENT_LABEL = 'operator-session';
 
+/** Re-issuing a label that still has an active credential — revoke first or pick another name. */
+export class McpAgentLabelTakenError extends Error {
+  readonly status = 409 as const;
+  constructor(label: string) {
+    super(
+      `An active MCP agent credential already uses the name “${label}”. Revoke it first, or choose a different name.`,
+    );
+    this.name = 'McpAgentLabelTakenError';
+  }
+}
+
 export function operatorBootstrapCredential(tokenHash: string): ResolvedMcpAgentCredential {
   return {
     credentialId: tokenHash,
@@ -86,15 +97,39 @@ export function createMcpAgentCredential(
   const scopes = orderedScopes(mcpAgentScopesSchema.parse(options.scopes));
   const rawToken = `${MCP_BEARER_TOKEN_PREFIX}${crypto.randomBytes(32).toString('base64url')}`;
   const tokenHash = hashMcpBearerToken(rawToken, options.sessionSecret);
-  const agentId = crypto.randomUUID();
   const credentialId = crypto.randomUUID();
   const issuedAt = iso(now);
 
+  // Labels are unique for the handoff board. Revoke only soft-deletes the credential row, so
+  // re-issue must reuse the registration when nothing active still holds the name — otherwise
+  // the UNIQUE index on display_label fails and the Settings form surfaces a generic 500.
+  let agentId = '';
   transaction(db, () => {
-    db.prepare(
-      `INSERT INTO agent_registrations(id, display_label, created_at, last_used_at, last_origin)
-       VALUES(?,?,?,NULL,NULL)`,
-    ).run(agentId, options.label, issuedAt);
+    const existing = db
+      .prepare(
+        `SELECT id FROM agent_registrations WHERE display_label = ? COLLATE NOCASE`,
+      )
+      .get(options.label) as { id: string } | undefined;
+    if (existing) {
+      const active = db
+        .prepare(
+          `SELECT id FROM agent_credentials
+           WHERE agent_id = ? AND revoked_at IS NULL AND expires_at > ?`,
+        )
+        .get(existing.id, issuedAt) as { id: string } | undefined;
+      if (active) throw new McpAgentLabelTakenError(options.label);
+      agentId = existing.id;
+      db.prepare('UPDATE agent_registrations SET display_label=? WHERE id=?').run(
+        options.label,
+        agentId,
+      );
+    } else {
+      agentId = crypto.randomUUID();
+      db.prepare(
+        `INSERT INTO agent_registrations(id, display_label, created_at, last_used_at, last_origin)
+         VALUES(?,?,?,NULL,NULL)`,
+      ).run(agentId, options.label, issuedAt);
+    }
     db.prepare(
       `INSERT INTO agent_credentials(id, agent_id, token_hash, scopes, issued_at, expires_at,
        last_used_at, revoked_at) VALUES(?,?,?,?,?,?,NULL,NULL)`,

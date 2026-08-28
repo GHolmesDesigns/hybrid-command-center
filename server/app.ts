@@ -23,6 +23,7 @@ import { createMcpBearer } from './auth/mcp-bearers.ts';
 import {
   createMcpAgentCredential,
   listMcpAgentCredentials,
+  McpAgentLabelTakenError,
   renameMcpAgentRegistration,
   revokeMcpAgentCredential,
 } from './auth/mcp-agent-credentials.ts';
@@ -2883,6 +2884,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
               // first* that tags and categories already answer with a 409 and a code.
               error instanceof SignalCampaignNameTakenError ||
                 error instanceof SignalCampaignInUseError ||
+                error instanceof McpAgentLabelTakenError ||
                 error?.code === 'SQLITE_CONSTRAINT_UNIQUE'
               ? 409
               : 500;
@@ -2917,6 +2919,9 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       // detached, which is the only thing that makes confirming it a decision.
       ...(error instanceof SignalCampaignInUseError
         ? { code: 'SIGNAL_CAMPAIGN_IN_USE', attachedPostCount: error.attachedPostCount }
+        : {}),
+      ...(error instanceof McpAgentLabelTakenError
+        ? { code: 'MCP_AGENT_LABEL_TAKEN' }
         : {}),
     });
   });
