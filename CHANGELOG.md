@@ -8,6 +8,23 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.6.6] - 2026-08-28
+
+### Changed
+
+- Reconciled the MCP decision record, coordination plan, and `AGENTS.md` with what shipped:
+  coordination MCP (C111), operator inbox (C112), and network MCP (C113) are live; workspace and
+  Signal MCP tools (MCP-C106–C108) remain unbuilt.
+- Committed the three MCP capability reports and a current `docs/work-summary.md` production
+  baseline.
+- Recorded §9 catalog corrections: `workspace_dashboard_summary` awaits C121's dashboard module;
+  `signal_publish_preview` awaits C122's async dispatch path.
+- Added `docs/mcp-capability-plan.md` to the decision and coordination cross-reference lists.
+
+### Breaking changes
+
+None.
+
 ## [5.6.5] - 2026-08-28
 
 ### Added

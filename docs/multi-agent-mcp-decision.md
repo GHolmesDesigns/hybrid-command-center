@@ -1,8 +1,10 @@
 # Multi-Agent MCP — Decision Record
 
-Status: **decided, not implemented.** This document settles the trust boundary and tool surface
-for exposing Hybrid Command Center to IDE agents over MCP. It adds no production MCP server,
-changes no runtime behaviour, and does not consume a provider's own MCP server.
+Status: **partially implemented.** C111 (coordination MCP tools), C112 (operator inbox), and C113
+(network MCP on the hosted origin) shipped. Workspace and Signal MCP tools (MCP-C106–C108) remain
+unbuilt — only coordination tools and resources are registered today. This document settles the trust
+boundary and tool surface for exposing Hybrid Command Center to IDE agents over MCP. It does not
+consume a provider's own MCP server.
 
 Card: C105 (#304). Resolves the v5 multi-agent MCP question. Builds on the Signal-over-MCP
 shape already named in [`publishing-integration.md`](publishing-integration.md) §17.2 and
@@ -18,18 +20,18 @@ from the authenticated UI until a later card makes an explicit security decision
 
 ## 1. The decision
 
-**Ship a local stdio MCP server beside the existing Node API, exposing _Signal and workspace
-planning_ to IDE agents the operator already runs on the same machine.** The server is a thin
+**Ship local stdio and authenticated HTTP MCP beside the existing Node API**, exposing
+_coordination_ today and _Signal and workspace planning_ as MCP-C106–C108 land. The server is a thin
 adapter over the same domain services and Zod boundaries the HTTP API uses — not a second write
-path, not a wrapper around provider MCP servers, and not a network listener.
+path, not a wrapper around provider MCP servers.
 
 Six things follow:
 
 1. **Audience** — one operator's local IDE agents (Cursor, Claude Code, Codex CLI, and similar).
    There is no second account, no collaborator role, and no agent tenancy inside the workspace.
-2. **Transport** — **local stdio only** for the first implementation. The MCP process is spawned
-   by the IDE on the same host as the SQLite database; it inherits the loopback-only exposure
-   model the app already enforces.
+2. **Transport** — **local stdio** (IDE-spawned on the same host as SQLite) **and authenticated
+   HTTP** on the hosted origin (`POST /api/mcp`, C113). Stdio inherits the loopback-only exposure
+   model; network MCP requires C51 operator session or a server-issued bearer bound to it.
 3. **Architecture shape** — **Signal-over-MCP**: agents read and plan into `signal_posts` and
    the surrounding workspace tables; provider writes stay on the existing publish service with
    human confirmation in the UI.
@@ -37,9 +39,9 @@ Six things follow:
    would be a second transport to the same REST calls and would let an agent bypass `plan.ts`,
    the capability matrix, preview, and confirmation — producing exactly the orphan posts C78
    detects.
-5. **Network MCP** — **deferred** until operator authentication and the cloud-hosting
-   prerequisites in §8 are merged. No SSE or streamable HTTP MCP endpoint ships before C51
-   (#177).
+5. **Network MCP** — **shipped** as C113 (#340) on the public HTTPS origin after C51–C55 merged
+   (C115 production cutover). Streamable HTTP MCP uses the same tool surface as stdio; provider-write
+   tools remain excluded.
 6. **Development coordination** — **deferred.** Coordinating multiple coding agents across Git
    branches and GitHub issues is a different product from exposing this workspace; it is not
    answered here. **Agent handoffs between IDE platforms** on the same workspace are scoped in
@@ -52,13 +54,13 @@ Six things follow:
 | Option | Verdict | Reason |
 | --- | --- | --- |
 | Local stdio MCP beside the API | **Chosen** | Matches today's single-operator, loopback-only model. No new network surface. IDE already spawns stdio MCP servers safely. |
-| Secured network MCP (SSE / streamable HTTP on the hosted origin) | **Deferred** | Requires C51 operator sessions, CSRF, rate limits, and the bind gate from [`cloud-hosting.md`](cloud-hosting.md) §5 before any non-loopback listener. See §8. |
+| Secured network MCP (SSE / streamable HTTP on the hosted origin) | **Shipped (C113)** | Live on the hosted origin after C51–C55; session or MCP bearer, CSRF on mutations, same tool surface as stdio. See §8. |
 | Consuming a provider's MCP server (Post Bridge, Buffer, third-party) | **Rejected** | Buys nothing the REST client lacks; the write path bypasses this app's source of truth and confirmation flow. Recorded in §17.2 of `publishing-integration.md`. |
 | Development-issue coordination MCP (branch/PR/issue tooling only) | **Deferred** | Useful, but not this workspace's data model. A future card may expose GitHub/issue tools under a separate server name so trust boundaries do not mix. |
 | Exposing the raw HTTP API to agents without MCP | **Rejected** | Same trust questions without schema discovery, and it tempts ad-hoc scripts that skip validation. MCP tools map one-to-one to existing service methods instead. |
 
-**Revisit network MCP when** C51 (#177) is merged and a hosted rehearsal (#181) proves
-operator login, CSRF, session revocation, and proxy trust together on the production shape.
+**Network MCP shipped** as C113 after C51 (#177) and C55 (#181) proved operator login, CSRF,
+session revocation, and proxy trust on disposable infrastructure (C115 production cutover).
 
 **Revisit provider MCP consumption when** never, unless Post Bridge or Buffer publish a
 read-only inventory surface this app cannot reach through the existing adapters — and even then
@@ -110,19 +112,19 @@ argument until validated by Zod at the service boundary.
 | T1 | Agent publishes to social accounts without operator review | Provider write tools **excluded** from MCP v1; UI-only submit with `planHash` / `reconcileHash` |
 | T2 | Agent exfiltrates API keys or OAuth tokens through tool results | MCP tools never return secrets; reuse `redactSecrets`; no `settings` row dumps |
 | T3 | Agent writes orphan posts directly at Post Bridge | Do not consume provider MCP; local planning only until UI submit |
-| T4 | Unauthenticated network MCP exposes the workspace | Network transport deferred until C51; stdio has no listener |
+| T4 | Unauthenticated network MCP exposes the workspace | Network transport requires C51 session or MCP bearer; stdio has no listener |
 | T5 | Two agents race on the same post | SQLite single-writer + optimistic `planHash` invalidation on publish; MCP uses same services |
 | T6 | Agent spams provider refresh endpoints | Integration write tools carry the same manual budget as UI; rate-limit MCP integration writes per session |
 | T7 | Agent imports destructive playbook data | Import tools require preview hash + explicit commit tool; same transactional rules as HTTP |
 | T8 | Agent merges clients irreversibly | Merge tools require preview hash + commit; same confirmation hash as HTTP |
 | T9 | Agent triggers Drive sync broadly | `drive.sync` integration write logged; scoped to existing sync rules |
-| T10 | Compromised IDE spawns MCP against production host | Network MCP out of scope until auth; hosted MCP requires C51 session + CSRF |
+| T10 | Compromised IDE spawns MCP against production host | Hosted MCP requires C51 session or scoped MCP bearer + CSRF |
 
 ### 3.4 Threat-model checklist (verification)
 
 Use this checklist in documentation review before any implementation card merges:
 
-- [ ] Chosen transport is local stdio; network alternatives are explicitly deferred with C51 named.
+- [x] Stdio and authenticated network HTTP (C113) are the chosen transports; C51 named for network.
 - [ ] Provider MCP consumption is rejected, not merely unimplemented.
 - [ ] Every tool is classified read-only, local write, integration write, or provider write.
 - [ ] No provider-write tool is callable without the same confirmation the UI requires — v1 excludes them entirely.
@@ -145,7 +147,7 @@ Use this checklist in documentation review before any implementation card merges
 | **Agent label** | Optional string the IDE supplies (`clientInfo.name` / MCP initialization metadata). Stored on MCP audit rows for forensics only for workspace/Signal tools; **not** an authorization principal for those tools in v1. Coordination tools (C109+) treat a non-empty label as the agent principal for claim/complete/cancel — see [`agent-coordination-plan.md`](agent-coordination-plan.md) §5.1. |
 | **Session binding** | None on stdio. Every tool call is authorized as the operator. |
 
-### 4.2 Agent identity (deferred — network MCP)
+### 4.2 Agent identity (network MCP — C113 shipped)
 
 | Field | Rule |
 | --- | --- |
@@ -155,7 +157,7 @@ Use this checklist in documentation review before any implementation card merges
 
 ### 4.3 Authorization matrix
 
-| Class | Operator (UI) | Agent (MCP v1) | Agent (network, deferred) |
+| Class | Operator (UI) | Agent (MCP v1) | Agent (network, C113) |
 | --- | --- | --- | --- |
 | Read-only workspace / Signal reads | Allowed | Allowed | Allowed with session |
 | Local write (CRUD, planning edits) | Allowed | Allowed | Allowed with session |
@@ -227,7 +229,8 @@ Refused provider-write attempts (if a stub tool exists) log `REFUSED` without to
 
 ## 8. Network exposure and cloud-hosting prerequisites
 
-Network MCP **must not** ship until the following cards are merged and verified together:
+Network MCP **shipped** as C113 (#340) after the following cards merged and C55 verified them
+together on disposable infrastructure:
 
 | Prerequisite | Issue | What it supplies for MCP |
 | --- | --- | --- |
@@ -238,11 +241,8 @@ Network MCP **must not** ship until the following cards are merged and verified 
 | C54 — hosted backup operations | #180 | Recovery without resurrecting stale MCP sessions |
 | C55 — cutover rehearsal | #181 | End-to-end proof of auth + CSRF + proxy + restore invalidation |
 
-**C51 (#177) is the explicit authentication prerequisite** called for in the acceptance criteria.
-No card may expose `/api/mcp` or streamable HTTP MCP on the public origin until C51's session
-model is live and the rehearsal checklist in C55 passes on disposable infrastructure.
-
-Local stdio MCP is **not blocked** by C50–C55 — it never leaves the workstation.
+C113 exposes streamable HTTP MCP at `POST /api/mcp` on the public origin. Local stdio MCP is
+**not blocked** by C50–C55 — it never leaves the workstation.
 
 ---
 
@@ -285,7 +285,7 @@ already owns the behaviour.
 | `workspace_manage_tag` | L | `server/domain/tags` | Operator | `mcp_agent_events` |
 | `workspace_list_categories` | R | `server/domain/categories` | Operator | — |
 | `workspace_manage_category` | L | `server/domain/categories` | Operator | `mcp_agent_events` |
-| `workspace_dashboard_summary` | R | `server/domain/dashboard` | Operator | — |
+| `workspace_dashboard_summary` | R | `server/app.ts` (inline `/api/dashboard` at line 1825; **C121** extracts `server/domain/dashboard.ts`) | Operator | — |
 | `workspace_calendar_range` | R | `server/calendar.ts` | Operator | — |
 
 ### 9.3 Signal — planning and reads
@@ -309,7 +309,7 @@ already owns the behaviour.
 | `signal_queue_health` | R | `server/signal/queue-health.ts` | Operator | — |
 | `signal_ack_alert` | L | `server/signal/queue-health.ts` | Operator | `mcp_agent_events` |
 | `signal_card_delivery_status` | R | `server/signal/read.ts` | Operator | — |
-| `signal_publish_preview` | R | `server/publish/service.ts` | Operator | — (no provider network on preflight) |
+| `signal_publish_preview` | R | `server/publish/service.ts` (`PublishService.preview`; **C122** makes the MCP dispatch path async before this tool ships) | Operator | — (no provider network on preflight) |
 | `signal_list_publications` | R | `server/publish/service.ts` | Operator | — |
 
 **Explicitly excluded (P — UI only):** `signal_publish_submit`, `signal_publish_now`,
@@ -379,14 +379,17 @@ or provider-write policy.
 ### Waves, milestones, and end-to-end coverage
 
 These waves continue from Wave 19 (C103). **Wave 20 and Wave 21 milestones already exist** for
-provider lifecycle and trust decisions — MCP work starts at Wave 22. Coordination cards C109–C113
-are detailed in [`agent-coordination-plan.md`](agent-coordination-plan.md).
+provider lifecycle and trust decisions. **Coordination shipped before workspace MCP tools** — C109–C112
+and C111 landed while MCP-C106–C108 remain unbuilt. Coordination cards are detailed in
+[`agent-coordination-plan.md`](agent-coordination-plan.md). Hardening and the remaining tool surface
+are in [`mcp-capability-plan.md`](mcp-capability-plan.md).
 
-| Wave | Cards | Theme | Estimate (sequential) | Browser coverage |
+| Wave | Cards | Theme | Estimate (sequential) | Status |
 | --- | --- | --- | --- | --- |
-| 22 — Multi-agent MCP | C105, MCP-C106, MCP-C107, MCP-C108 | Local stdio workspace and Signal access | **~10–22 h** | `e2e/mcp-signal-planning.spec.ts` on MCP-C107 |
-| 23 — Agent coordination hub | C109–C112 | Handoffs and operator inbox | **~7–17 h** | `e2e/coordination-inbox.spec.ts` on C112 |
-| 24 — Network MCP | C113 | HTTPS MCP after operator auth | **4–8 h** | integration tests; C55 staging rehearsal |
+| 23 — Agent coordination hub | C109–C112, C111 | Handoffs and operator inbox | **~7–17 h** | **Shipped** |
+| 24 — Network MCP | C113 | HTTPS MCP after operator auth | **4–8 h** | **Shipped** |
+| 22 — Multi-agent MCP | MCP-C106, MCP-C107, MCP-C108 | Workspace and Signal over MCP | **~10–22 h** | **Unbuilt** |
+| 26+ — MCP hardening and context | C116–C134 | Defect fixes, reads, writes, streams | per plan | In progress |
 
 **MCP-C106–C108** below are this plan's implementation cards. They are not publishing-wave
 C106–C108 (#305–#307).
@@ -471,13 +474,14 @@ service for operator cancel. See [`agent-coordination-plan.md`](agent-coordinati
 **Scope:** Agent handoffs panel, `/api/coordination/*`, `e2e/coordination-inbox.spec.ts`.
 **Blocks:** none.
 
-### C113 — Network MCP behind operator auth (deferred)
+### C113 — Network MCP behind operator auth (shipped)
 
-**Branch:** `feat/<issue>-mcp-network`
-**Size:** L · **Estimate:** 4–8 hours · **Wave / milestone:** 24 — Network MCP (deferred; may join Cloud Hosting)
-**Issue:** #340 · **Depends on:** MCP-C108, C111, C51 (#177), C53 (#179), C55 (#181).
+**Branch:** `feat/340-mcp-network`
+**Size:** L · **Estimate:** 4–8 hours · **Wave / milestone:** 24 — Network MCP
+**Issue:** #340 · **Depends on:** C111, C51 (#177), C53 (#179), C55 (#181). MCP-C108 remains
+unbuilt; coordination tools are the live MCP surface today.
 **Scope:** Streamable HTTP MCP on the same origin as the API, session + CSRF + agent label header,
-same tool surface as stdio plus coordination tools.
+coordination tools plus whatever workspace/Signal tools land in MCP-C106–C108.
 **Out of scope:** Provider-write tools unless a new security decision record says otherwise.
 
 Full card text: [`agent-coordination-plan.md`](agent-coordination-plan.md).
@@ -503,9 +507,11 @@ health from Cursor without starting the browser, and no tool performs a network 
 
 - [`publishing-integration.md`](publishing-integration.md) §17.2 — Signal-over-MCP shape and C78 prerequisite (shipped).
 - [`post-bridge-api-surface.md`](post-bridge-api-surface.md) §9 — why provider MCP is read-risk, write-danger.
-- [`cloud-hosting.md`](cloud-hosting.md) §5 — operator authentication model for deferred network MCP.
+- [`cloud-hosting.md`](cloud-hosting.md) §5 — operator authentication model for network MCP (C113).
 - [`AGENTS.md`](../AGENTS.md) — Files read-only boundary, integration log rules, Signal authority.
 - [`agent-coordination-plan.md`](agent-coordination-plan.md) — handoff hub cards C109–C113.
+- [`mcp-capability-plan.md`](mcp-capability-plan.md) — Waves 26–30 hardening, reads, writes, and
+  catalog corrections (C119–C134).
 
 ---
 

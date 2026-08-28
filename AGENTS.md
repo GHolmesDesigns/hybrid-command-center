@@ -21,11 +21,12 @@
   `server/domain/agent-coordination.ts`; persistence in `service.ts`. Claim/complete never mutate
   tasks, Signal posts, or any provider path; audit is the handoff row and notes, not
   `integration_events`. MCP tools are C111; operator inbox UI is C112.
-- `server/mcp/`: local stdio MCP surface. C111 ships coordination tools and the
-  `hcc://coordination/inbox` resource here; each tool maps to one `agent-coordination` service
-  method. `mcp_agent_events` is append-only (500-row retention). Coordination writes require a
-  non-empty init `agent_label` and share a 10/minute session budget. Workspace and Signal MCP tools
-  remain MCP-C106–C108.
+- `server/mcp/`: stdio and authenticated HTTP MCP (`stdio.ts`, `http.ts`). **Coordination shipped
+  first (C111–C113):** handoff tools and `hcc://coordination/inbox` on both transports; workspace
+  and Signal MCP tools remain MCP-C106–C108. Each coordination tool maps to one
+  `agent-coordination` service method. `mcp_agent_events` is append-only (500-row retention).
+  Coordination writes require a non-empty init `agent_label` and share a 10/minute session budget
+  on stdio; network writes use the persisted limiter registry (C116).
 - `server/import.ts`: campaign playbook import — workspace snapshot, transactional commit, receipts.
 - `server/integration-log.ts`: the append-only integration activity records every integration writes.
 - `server/app.ts`: validated HTTP boundary; keep data writes transaction-safe.
