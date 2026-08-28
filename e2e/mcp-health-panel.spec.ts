@@ -68,6 +68,7 @@ test('operator opens MCP health panel, runs test connection, and sees a result',
         agents: [],
         errorSummary: [],
         staleHandoffs: [],
+        recentCompletions: [],
         auditEventCount: 0,
       }),
     });

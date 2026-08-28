@@ -206,7 +206,7 @@ export function McpHealthPanelCard({
               </ul>
             </div>
           ) : null}
-          {panel?.recentCompletions.length ? (
+          {panel?.recentCompletions?.length ? (
             <div className="mcp-health-completions">
               <h3>Recent handoff results</h3>
               <ul>
