@@ -748,6 +748,91 @@
     color: var(--text-3);
   }
 
+  /* Plain-language glossary rows used in the operator primer. */
+  .gloss {
+    margin: 0 0 12px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .gloss > div {
+    display: grid;
+    grid-template-columns: minmax(140px, 210px) 1fr;
+    gap: 0 18px;
+    padding: 11px 15px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .gloss > div:last-child {
+    border-bottom: 0;
+  }
+  .gloss dt {
+    font-family: var(--f-display);
+    font-variation-settings:
+      'wdth' 102,
+      'wght' 600;
+    font-size: 0.9375rem;
+    margin: 0;
+  }
+  .gloss dd {
+    margin: 0;
+    font-size: 0.9375rem;
+    color: var(--text-2);
+    line-height: 1.55;
+  }
+  @media (max-width: 640px) {
+    .gloss > div {
+      grid-template-columns: 1fr;
+      gap: 3px;
+    }
+  }
+
+  /* A setting name alone in a cell must never break mid-word: a wrapped
+     variable name reads as two different variables. */
+  td > code:only-child {
+    white-space: nowrap;
+    word-break: normal;
+  }
+
+  /* A blank line the reader fills in by hand or on a printout. */
+  .fill {
+    display: block;
+    min-height: 1.15em;
+    border-bottom: 1px dashed var(--line);
+  }
+
+  /* Collapsed aside for the Mac and Linux equivalents of a Windows step. */
+  details.os {
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 0;
+    margin: 0 0 12px;
+    background: var(--surface-2);
+    font-size: 0.9375rem;
+  }
+  details.os > summary {
+    cursor: pointer;
+    padding: 9px 15px;
+    font-family: var(--f-display);
+    font-size: 0.8125rem;
+    letter-spacing: 0.04em;
+    font-variation-settings:
+      'wdth' 102,
+      'wght' 600;
+    color: var(--text-2);
+  }
+  details.os > summary:hover {
+    color: var(--text);
+  }
+  details.os[open] > summary {
+    border-bottom: 1px solid var(--line-soft);
+  }
+  details.os .osbody {
+    padding: 12px 15px 4px;
+  }
+  details.os .osbody > *:last-child {
+    margin-bottom: 0;
+  }
+
   .mods {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
@@ -865,6 +950,7 @@
 
     <nav id="toc" aria-label="Manual sections">
       <p class="navlabel">Contents</p>
+      <a href="#basics" data-for="basics"><span class="n">00</span> Before you begin</a>
       <a href="#orientation" data-for="orientation"><span class="n">01</span> Orientation</a>
       <a href="#install" data-for="install"><span class="n">02</span> Install &amp; first run</a>
       <a href="#drive" data-for="drive"><span class="n">03</span> Google Drive</a>
@@ -882,7 +968,7 @@
 
     <div class="railfoot">
       <b>G.Holmes Designs</b><br />
-      Version 5.4.0<br />
+      Version 5.5.0<br />
       Local-first &middot; hosted-capable
     </div>
   </aside>
@@ -892,7 +978,7 @@
       <div class="inner">
         <p class="eyebrow">
           <span>G.Holmes Designs &middot; Studio operations</span>
-          <span class="draft">Release 5.4.0</span>
+          <span class="draft">Release 5.5.0</span>
         </p>
         <h1>Hybrid Command Center</h1>
         <p class="deck">
@@ -903,7 +989,7 @@
         <dl class="stats">
           <div class="stat">
             <dt>Version</dt>
-            <dd>5.4.0</dd>
+            <dd>5.5.0</dd>
           </div>
           <div class="stat">
             <dt>Runtime</dt>
@@ -953,6 +1039,264 @@
     </div>
 
     <div class="wrap">
+      <!-- 00 ================================================= -->
+      <section id="basics" data-lanes="operator">
+        <div class="shead">
+          <span class="num">00</span>
+          <h2>Before you begin</h2>
+        </div>
+        <p class="sintro">
+          If you have never started a program by typing a line of text, read this first. It is the
+          one section that assumes nothing, and every later instruction is built on it.
+        </p>
+
+        <div class="lanes">
+          <article class="lane" data-lane="operator">
+            <span class="chip">Operator</span>
+            <h3>What you are actually doing when you start this app</h3>
+            <p>
+              Hybrid Command Center has no icon to double-click. You start it by opening a text
+              window called a <strong>terminal</strong>, pointing that window at the folder the app
+              lives in, and typing one short line. The app then runs on your own computer and opens
+              in your web browser like an ordinary website &mdash; except that nothing leaves your
+              machine.
+            </p>
+            <p>
+              Every instruction in this manual is that same loop: point a terminal at the folder,
+              type a line, press <kbd>Enter</kbd>, wait. Learn the loop once, here, and the rest of
+              the manual is only ever telling you which line to type.
+            </p>
+
+            <h4>The eight words that appear on every page</h4>
+            <dl class="gloss">
+              <div>
+                <dt>Terminal</dt>
+                <dd>
+                  A window where you type instructions instead of clicking them. On Windows it is
+                  called <strong>PowerShell</strong> or <strong>Windows Terminal</strong>. It looks
+                  more dangerous than it is: it does nothing at all until you type something and
+                  press <kbd>Enter</kbd>.
+                </dd>
+              </div>
+              <div>
+                <dt>Command</dt>
+                <dd>
+                  One line you type into a terminal. In this manual commands are printed in a
+                  monospaced box, like <code>npm install</code>. Type them exactly, spaces included.
+                </dd>
+              </div>
+              <div>
+                <dt>Folder path</dt>
+                <dd>
+                  The full address of a folder, written out as one line &mdash; for example
+                  <code>C:\Users\you\Documents\hybrid-command-center</code>. It is the same folder
+                  you would click your way to in File Explorer, written as text so a terminal can
+                  understand it.
+                </dd>
+              </div>
+              <div>
+                <dt>The app folder</dt>
+                <dd>
+                  The one folder that holds this whole application. You can recognise it: it
+                  directly contains a file named <code>package.json</code> and folders named
+                  <code>client</code> and <code>server</code>. Almost every problem in Section 09
+                  comes from running a command somewhere else.
+                </dd>
+              </div>
+              <div>
+                <dt>Node.js</dt>
+                <dd>
+                  The engine this application runs on, the way a spreadsheet needs Excel. You
+                  install it once from
+                  <a href="https://nodejs.org/">nodejs.org</a> and then never think about it again.
+                </dd>
+              </div>
+              <div>
+                <dt>npm</dt>
+                <dd>
+                  Short for <em>Node package manager</em>. It arrives with Node.js and it is the
+                  program you are talking to whenever a command starts with <code>npm</code>. Its
+                  job is to fetch the pre-built parts this app is assembled from, and to run the
+                  app's named shortcuts &mdash; <code>npm run dev</code> is a shortcut, not a
+                  separate program.
+                </dd>
+              </div>
+              <div>
+                <dt><code>node_modules</code></dt>
+                <dd>
+                  The folder npm creates the first time you run <code>npm install</code>. It holds
+                  those pre-built parts. It is large, it is not your work, and it is rebuilt from
+                  scratch by running <code>npm install</code> again. Never back it up and never edit
+                  it.
+                </dd>
+              </div>
+              <div>
+                <dt><code>.env</code></dt>
+                <dd>
+                  A plain text settings file that sits in the app folder and holds this machine's
+                  private values, such as Google keys. The leading dot is part of the name. It is
+                  never shared and never published.
+                </dd>
+              </div>
+            </dl>
+
+            <h4>The one skill that matters: opening a terminal in the right folder</h4>
+            <p>
+              A terminal is always &ldquo;standing in&rdquo; one folder, and it runs your command
+              there. Point it at the wrong folder and a perfectly correct command fails. Do this on
+              Windows:
+            </p>
+            <ol>
+              <li>
+                Open <strong>File Explorer</strong> &mdash; the yellow folder icon on the taskbar,
+                or hold <kbd>Windows</kbd> and press <kbd>E</kbd>.
+              </li>
+              <li>
+                Click your way to the app folder. You are in the right place when you can see
+                <code>package.json</code>, <code>client</code>, and <code>server</code> listed
+                inside it. If you do not know where it was put, ask whoever set the machine up and
+                write the path down in the box below.
+              </li>
+              <li>
+                Right-click a blank area inside that folder and choose
+                <strong>Open in Terminal</strong>. If that choice is not on the menu, click once in
+                the white address bar along the top of the window so the path highlights, type
+                <code>powershell</code> over it, and press <kbd>Enter</kbd>.
+              </li>
+              <li>
+                A window opens with a line of text ending in <code>&gt;</code>. The text before the
+                <code>&gt;</code> is the folder you are standing in. Read it and confirm it is the
+                app folder.
+              </li>
+              <li>
+                To be certain, type <code>dir</code> and press <kbd>Enter</kbd>. You should see
+                <code>package.json</code>, <code>client</code>, and <code>server</code> in the list.
+                If you do not, close the window and start again at step 2 &mdash; do not type
+                anything else.
+              </li>
+            </ol>
+            <details class="os">
+              <summary>On a Mac or on Linux</summary>
+              <div class="osbody">
+                <p>
+                  Open <strong>Terminal</strong> from Applications &rarr; Utilities. Type
+                  <code>cd</code>, then a space, then drag the app folder from Finder onto the
+                  Terminal window &mdash; it pastes the path for you &mdash; and press
+                  <kbd>Enter</kbd>. Use <code>ls</code> where this manual says <code>dir</code>.
+                  Every <code>npm</code> command in this manual is identical on all three systems.
+                </p>
+              </div>
+            </details>
+
+            <h4>Typing a command, and knowing when it is done</h4>
+            <ul>
+              <li>
+                Type the line exactly as printed, or copy it from this page and paste it &mdash;
+                <strong>right-click</strong> pastes into PowerShell. Then press <kbd>Enter</kbd>
+                once.
+              </li>
+              <li>
+                Text will scroll past while it works. That is the command reporting progress, not an
+                error. Yellow warnings during <code>npm install</code> are normal and can be
+                ignored.
+              </li>
+              <li>
+                <strong>Do not close the window while a command is working.</strong> Wait for one of
+                the two endings below.
+              </li>
+            </ul>
+            <p>There are only two kinds of command in this manual, and they end differently:</p>
+            <div class="tablewrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Kind</th>
+                    <th>Examples</th>
+                    <th>How you know it worked</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Does a job, then stops</td>
+                    <td>
+                      <code>npm install</code>, <code>npm run db:migrate</code>,
+                      <code>npm run db:backup</code>
+                    </td>
+                    <td>
+                      The scrolling stops and the <code>&gt;</code> prompt comes back, waiting for
+                      you. You can now type the next command or close the window.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Keeps running until you stop it</td>
+                    <td><code>npm run dev</code>, <code>npm start</code></td>
+                    <td>
+                      The prompt <em>never</em> comes back and a web address is printed. That is
+                      success, not a freeze. Leave the window open and go use the app.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p>
+              To stop a running app: click the terminal window, then hold <kbd>Ctrl</kbd> and press
+              <kbd>C</kbd>. Closing the window stops it too. Minimise that window while you work
+              &mdash; do not close it, or the app shuts down mid-sentence.
+            </p>
+
+            <h4>Write these down once</h4>
+            <p>
+              Fill these in the first time someone sets this machine up, and this manual becomes a
+              great deal shorter to use.
+            </p>
+            <div class="tablewrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>What</th>
+                    <th>Where to find it</th>
+                    <th>Value for this machine</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>App folder path</td>
+                    <td>The address bar in File Explorer while the folder is open</td>
+                    <td><span class="fill"></span></td>
+                  </tr>
+                  <tr>
+                    <td>Everyday web address</td>
+                    <td>Printed by <code>npm run dev</code>; normally localhost port 5173</td>
+                    <td><span class="fill"></span></td>
+                  </tr>
+                  <tr>
+                    <td>Who to ask</td>
+                    <td>The person who installed it, for anything in the Engineer lane</td>
+                    <td><span class="fill"></span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p>
+              <strong>Localhost</strong> is the name a computer uses for itself. A web address
+              beginning <code>http://localhost</code> is served by your own machine and is not on
+              the internet. Nobody else can open it, and the address will not work on your phone.
+            </p>
+
+            <div class="note">
+              <strong>You cannot damage client files from here.</strong> Every command in this
+              manual acts on this app's own folder and its own local records. None of them delete,
+              move, or overwrite anything in Google Drive. The worst an ordinary mistake does is
+              refuse to run and print a message.
+            </div>
+            <p>
+              You are ready for Section 02 when you can open a terminal that is already standing in
+              the app folder, and <code>dir</code> lists <code>package.json</code>.
+            </p>
+          </article>
+        </div>
+      </section>
+
       <!-- 01 ================================================= -->
       <section id="orientation" data-lanes="operator engineer agent">
         <div class="shead">
@@ -970,15 +1314,19 @@
             <h3>One studio, one operator, one source of truth</h3>
             <p>
               Hybrid Command Center is where your clients, projects, tasks, deadlines, and planned
-              social content live. It runs locally by default and can also run as one private,
-              single-operator AWS workspace. A hosted deployment uses one HTTPS address and an
-              operator login; it is not a multi-user or synchronization product.
+              social content live. Normally it runs on your own computer and is reached through your
+              browser at an address only that computer can serve. It can also be published to one
+              private web address with a single login, and from 5.4.2 signing in from a second
+              machine is a supported, tested step rather than an accident. Even then it is one
+              workspace for one person: there are no team accounts, and no copy of your records
+              travels between machines.
             </p>
             <p>Two places hold your work, and they never overlap:</p>
             <ul>
               <li>
                 <strong>Your computer</strong> keeps the records &mdash; clients, projects, tasks,
-                checklists, dependencies, notes, tags, and planned posts.
+                checklists, dependencies, notes, tags, and planned posts. All of them sit in one
+                file, which is why Section 08 exists.
               </li>
               <li>
                 <strong>Google Drive</strong> keeps the actual files. The app stores links to Drive
@@ -986,6 +1334,23 @@
               </li>
             </ul>
             <p>Deleting a project or a task here never deletes anything in Drive.</p>
+            <h4>Reaching it from a second machine</h4>
+            <p>
+              Only possible once an engineer has published the workspace to a private web address;
+              it is not something you can switch on yourself. Once they have, there is nothing to
+              install on the second machine. You open the same address in a browser, sign in with
+              the operator password, and you are looking at the same live workspace, not a copy of
+              it. Close the laptop and the second machine still works, because the records live on
+              the host rather than on either computer.
+            </p>
+            <div class="note is-crit">
+              <strong>Once the hosted copy is live, stop opening the local one.</strong> The
+              <code>npm run dev</code> workspace on your own machine does not know the hosted one
+              exists. Enter a client in one and it will never appear in the other, and there is no
+              merge that will reconcile them afterwards. The moment an engineer declares the host
+              authoritative, the laptop becomes a cold spare you keep for emergencies and do not
+              type into.
+            </div>
             <h4>What it deliberately does not do</h4>
             <p>
               There are no team accounts, no client portals, no billing, no time tracking, and no
@@ -1018,11 +1383,14 @@ data/       gitignored SQLite database and backups</code></pre>
               machine's local timezone and become overdue after that local calendar day has passed.
             </p>
             <div class="note">
-              <strong>The bind gate fails closed.</strong> Local loopback use stays passwordless. A
-              non-loopback <code>HOST</code> is accepted only when the complete authentication
-              checklist is present: a session secret, operator password hash, HTTPS origin, TLS
-              termination acknowledgement, and explicit trusted-proxy setting. The supported AWS
-              package keeps Node on loopback behind same-origin Caddy.
+              <strong>The checklist decides authentication, not the bind address.</strong> Operator
+              auth turns on when the complete authentication checklist is present &mdash; a session
+              secret, operator password hash, HTTPS origin, TLS termination acknowledgement, and an
+              explicit trusted-proxy setting &mdash; and it stays on even when <code>HOST</code>
+              remains <code>127.0.0.1</code>. That matters because the supported AWS package keeps
+              Node on loopback behind same-origin Caddy: leaving loopback is not what gates login.
+              A local <code>npm run dev</code> without the checklist stays passwordless, and a
+              non-loopback <code>HOST</code> is still refused until the checklist is complete.
             </div>
           </article>
 
@@ -1071,54 +1439,149 @@ data/       gitignored SQLite database and backups</code></pre>
           <h2>Install and first run</h2>
         </div>
         <p class="sintro">
-          Getting from a fresh clone to a working local application. Drive can wait; this part
-          cannot.
+          Getting from a copy of the files to a working application on this machine. Google Drive
+          can wait; this part cannot.
         </p>
 
         <div class="lanes">
           <article class="lane" data-lane="operator">
             <span class="chip">Operator</span>
-            <h3>Five steps, then the app opens in your browser</h3>
+            <h3>Set it up once, then start it in one command a day</h3>
             <p>
-              You need Node.js 24 or newer from <a href="https://nodejs.org/">nodejs.org</a>.
-              Install it, then close and reopen your terminal so it takes effect.
+              This section assumes you can open a terminal that is already standing in the app
+              folder. If that sentence is not yet obvious, read Section 00 first &mdash; it takes
+              five minutes and it is the thing that makes the rest work.
             </p>
+
+            <h4>First, install the engine</h4>
             <ol>
-              <li>Open PowerShell or Terminal and go to the application folder.</li>
-              <li>Run <code>npm install</code> and wait for it to finish.</li>
               <li>
-                Copy the settings template: <code>Copy-Item .env.example .env</code> on Windows,
-                <code>cp .env.example .env</code> elsewhere.
+                Go to <a href="https://nodejs.org/">nodejs.org</a> and download the version marked
+                <strong>LTS</strong>, as long as it is 24 or newer. Run the installer and accept
+                every default.
               </li>
               <li>
-                Run <code>npm run db:migrate</code>. You should see
-                <em>Database schema is up to date.</em>
+                <strong>Close every terminal window you have open, then open a new one.</strong>
+                Windows only notices newly installed programs in windows opened afterwards. Skipping
+                this one step is the most common reason a correct command answers
+                <em>npm is not recognized</em>.
               </li>
               <li>
-                Run <code>npm run dev</code> and open
-                <a href="http://localhost:5173">http://localhost:5173</a>.
+                Check it took: type <code>node --version</code> and press <kbd>Enter</kbd>. A
+                version number such as <code>v24.4.0</code> means you are ready. An error means the
+                installer did not finish, or you are still in an old window.
               </li>
             </ol>
+
+            <h4>Then, the four setup commands</h4>
             <p>
-              Keep the terminal window open while you work. Press <kbd>Ctrl</kbd>+<kbd>C</kbd> to
-              stop; closing the window also stops it.
+              Run these once, in this order, in a terminal standing in the app folder. Wait for the
+              <code>&gt;</code> prompt to return before typing the next one.
             </p>
-            <h4>Empty workspace or demonstration data?</h4>
-            <p>
-              To start clean, do nothing more &mdash; just create your real clients. To look around
-              first, run <code>npm run db:seed</code>. That creates three example clients with
-              projects, tasks in every column, overdue work, a checklist, and a blocked task. It
-              never contacts Google Drive.
-            </p>
-            <p>
-              Seeding only works while the database has no clients, so decide before you start
-              entering real work.
-            </p>
+            <div class="tablewrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Type this</th>
+                    <th>What it does</th>
+                    <th>What you should see</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>npm install</code></td>
+                    <td>
+                      Fetches the pre-built parts the app is assembled from and puts them in
+                      <code>node_modules</code>.
+                    </td>
+                    <td>
+                      Several minutes of scrolling the first time, then the prompt returns. Yellow
+                      warnings along the way are normal.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><code>Copy-Item .env.example .env</code></td>
+                    <td>
+                      Makes this machine's own settings file by copying the blank template beside
+                      it.
+                    </td>
+                    <td>
+                      No output at all. Silence is success here. A file named <code>.env</code> now
+                      sits in the folder.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><code>npm run db:migrate</code></td>
+                    <td>
+                      Builds the empty local database that will hold your clients, projects, and
+                      tasks.
+                    </td>
+                    <td><em>Database schema is up to date.</em></td>
+                  </tr>
+                  <tr>
+                    <td><code>npm run dev</code></td>
+                    <td>Starts the application and keeps it running.</td>
+                    <td>
+                      A web address is printed and the prompt never returns. That is success. Open
+                      <a href="http://localhost:5173">http://localhost:5173</a> in your browser.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <details class="os">
+              <summary>On a Mac or on Linux</summary>
+              <div class="osbody">
+                <p>
+                  Every command above is identical except the second one, which is
+                  <code>cp .env.example .env</code>. Everything else, including the web address, is
+                  the same.
+                </p>
+              </div>
+            </details>
+
             <div class="note">
-              <strong>If it refuses to start</strong> and lists variables, open
-              <code>.env</code> and read the message &mdash; each line names one setting and what
-              was wrong with it. The message never prints the value it rejected, so it is safe to
-              copy out of a terminal.
+              <strong>Every day after the first, only the last command matters.</strong> Open a
+              terminal in the app folder, run <code>npm run dev</code>, and open the browser. The
+              other three are setup, not routine. Run <code>npm install</code> again only when
+              someone tells you the app's files have been updated.
+            </div>
+
+            <h4>Stopping, and leaving it running</h4>
+            <p>
+              Keep that terminal window open the whole time you work &mdash; minimise it, do not
+              close it. To stop the app deliberately, click the window and hold <kbd>Ctrl</kbd>
+              while pressing <kbd>C</kbd>. Closing the window stops it too, which is fine at the end
+              of the day and disruptive in the middle of one.
+            </p>
+
+            <h4>Empty workspace, or something to look at first?</h4>
+            <p>
+              To start clean, do nothing more &mdash; go and create your real clients. To have
+              something to explore before you commit, run <code>npm run db:seed</code> before you
+              enter anything of your own. It creates three example clients with projects, tasks in
+              every column, overdue work, a checklist, and a blocked task, and it never contacts
+              Google Drive.
+            </p>
+            <p>
+              Seeding refuses to run once a single real client exists, so make the choice before you
+              start typing real work.
+            </p>
+
+            <h4>Opening the settings file when you need to</h4>
+            <p>
+              Windows has no default program for a file called <code>.env</code>, so double-clicking
+              it will ask you to choose one. Right-click it, choose
+              <strong>Open with &rarr; Notepad</strong>, and tick nothing about always using
+              Notepad. Inside, each line reads <code>NAME=value</code>. Change only what a section
+              of this manual tells you to change, save, and restart the app for it to take effect.
+            </p>
+
+            <div class="note">
+              <strong>If it refuses to start and prints a list of settings</strong>, read the list
+              rather than the first red line. Each entry names one setting in <code>.env</code> and
+              what was wrong with it. It never prints the value it rejected, so the message is safe
+              to copy and send to an engineer.
             </div>
           </article>
 
@@ -1205,45 +1668,219 @@ npm run dev          # Vite 5173 + API 8787, live reload</code></pre>
           <h2>Connecting Google Drive</h2>
         </div>
         <p class="sintro">
-          Optional, but finish it before creating real clients if you want their folder structures
-          created for you.
+          Optional. Do it before you create real clients if you want their Drive folders built for
+          you automatically.
         </p>
 
         <div class="lanes">
           <article class="lane" data-lane="operator">
             <span class="chip">Operator</span>
-            <h3>What to do in Google Cloud, in order</h3>
+            <h3>Giving the app permission to use your Drive</h3>
+            <p>
+              Google will not let a program touch your Drive just because you ask it to. The
+              permission has to be registered with Google in advance, and
+              <strong>Google Cloud Console</strong> is the website where you register it. It is
+              free for this, it is a separate site from Drive, and it looks like a developer tool
+              because it is one. Budget about fifteen minutes. You do this once, ever.
+            </p>
+            <div class="note is-crit">
+              <strong>Sign in with the right Google account first.</strong> Whatever account you are
+              signed into at <a href="https://console.cloud.google.com/">console.cloud.google.com</a>
+              is the Drive this app will use. If the studio has a separate work account, sign out of
+              your personal one before you start. Getting this wrong is the single most common
+              failure, and unpicking it means starting over.
+            </div>
+
+            <h4>What Google calls things, and what they mean here</h4>
+            <dl class="gloss">
+              <div>
+                <dt>Project</dt>
+                <dd>
+                  In Google Cloud, a container that holds a set of settings. It has
+                  <em>nothing whatever</em> to do with projects in this app. Make one, name it
+                  something like <code>hybrid-command-center</code>, and forget it.
+                </dd>
+              </div>
+              <div>
+                <dt>API</dt>
+                <dd>
+                  A single Google service you are switching on. You need two of them: the
+                  <strong>Drive API</strong> so the app can make folders, and the
+                  <strong>Picker API</strong> so you can choose a folder from a proper Google
+                  file-picker window.
+                </dd>
+              </div>
+              <div>
+                <dt>OAuth consent screen</dt>
+                <dd>
+                  The page you yourself will see later when you approve the app. Google makes you
+                  write it before it will show it to you.
+                </dd>
+              </div>
+              <div>
+                <dt>Client ID and client secret</dt>
+                <dd>
+                  A username and password belonging to <em>the app</em>, not to you. You copy them
+                  into <code>.env</code> and never type them anywhere else.
+                </dd>
+              </div>
+              <div>
+                <dt>Redirect address</dt>
+                <dd>
+                  Where Google sends your browser back to once you have approved. It has to match
+                  what the app expects, character for character.
+                </dd>
+              </div>
+            </dl>
+
+            <h4>In Google Cloud Console, in this order</h4>
             <ol>
-              <li>In Google Cloud Console, create or select a project.</li>
+              <li>Create a project, or select one you already made for this.</li>
               <li>
-                Under <strong>APIs &amp; Services &rarr; Library</strong>, enable the
-                <strong>Google Drive API</strong> and <strong>Google Picker API</strong>.
+                Go to <strong>APIs &amp; Services &rarr; Library</strong>, search for
+                <strong>Google Drive API</strong>, and enable it. Search again for
+                <strong>Google Picker API</strong> and enable that too.
               </li>
               <li>
-                Configure the OAuth consent screen. For an External app in testing, add your own
-                Google account as a test user.
+                Fill in the OAuth consent screen. Choose <strong>External</strong> and leave it in
+                <em>Testing</em>. On the test-users step, add your own Google address &mdash; the
+                same one you are signed in as. Without that, Google will block you from your own
+                app.
               </li>
               <li>
-                Under <strong>Credentials</strong>, create an <strong>OAuth client ID</strong> of
-                type <strong>Web application</strong>.
-              </li>
-              <li>Add the redirect address exactly as written below, with no trailing slash.</li>
-              <li>
-                Put the client ID, secret, Picker API key, numeric app ID, and a long random
-                encryption key into <code>.env</code>.
+                Go to <strong>Credentials</strong>, choose
+                <strong>Create credentials &rarr; OAuth client ID</strong>, and pick the type
+                <strong>Web application</strong>.
               </li>
               <li>
-                Restart, then open
-                <strong>Settings &rarr; Google Drive &rarr; Connect Google Drive</strong> and
-                approve <code>drive.file</code> access.
+                In <strong>Authorised redirect URIs</strong>, add the address below exactly as
+                printed. No trailing slash, no <code>https</code>, no capital letters.
+                <pre><code>http://localhost:8787/api/drive/oauth/callback</code></pre>
               </li>
               <li>
-                Select <strong>Choose root folder with Google Picker</strong> and choose the Command
-                Center root.
+                On the same screen, under <strong>Authorised JavaScript origins</strong>, add both
+                of these. Miss this and Drive itself will still connect, but the Picker fails with
+                <em>Access blocked &mdash; no registered origin</em> and
+                <code>Error 401: invalid_client</code>.
+                <pre><code>http://localhost:5173
+http://localhost:8787</code></pre>
+              </li>
+              <li>
+                Google now shows you a client ID and a client secret. Copy both somewhere safe
+                before closing that box &mdash; the secret is easy to lose and awkward to replace.
+              </li>
+              <li>
+                Still under <strong>Credentials</strong>, create an <strong>API key</strong> for the
+                Picker, and note the <strong>project number</strong> shown on the console dashboard.
               </li>
             </ol>
-            <pre><code>http://localhost:8787/api/drive/oauth/callback</code></pre>
-            <h4>What the states on a card mean</h4>
+
+            <h4>Back on your own machine</h4>
+            <ol>
+              <li>
+                Open <code>.env</code> in Notepad, as described in Section 02. The lines you need
+                are already there and empty. Paste each value straight after its <code>=</code> sign
+                &mdash; no quotation marks, no spaces on either side of the <code>=</code>.
+                <div class="tablewrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Line in <code>.env</code></th>
+                        <th>What goes after the <code>=</code></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><code>GOOGLE_CLIENT_ID</code></td>
+                        <td>The client ID from step 6. It ends in
+                          <code>.apps.googleusercontent.com</code>.</td>
+                      </tr>
+                      <tr>
+                        <td><code>GOOGLE_CLIENT_SECRET</code></td>
+                        <td>The client secret from step 6.</td>
+                      </tr>
+                      <tr>
+                        <td><code>GOOGLE_API_KEY</code></td>
+                        <td>The API key from step 7.</td>
+                      </tr>
+                      <tr>
+                        <td><code>GOOGLE_APP_ID</code></td>
+                        <td>The project number from step 7 &mdash; digits only.</td>
+                      </tr>
+                      <tr>
+                        <td><code>GOOGLE_REDIRECT_URI</code></td>
+                        <td>
+                          Already filled in for you. Leave it exactly as it is; it has to match what
+                          you typed into Google in step 5.
+                        </td>
+                      </tr>
+                      <tr>
+                        <td><code>GOOGLE_TOKEN_ENCRYPTION_KEY</code></td>
+                        <td>
+                          Not from Google. Invent a long random string of at least 32 characters
+                          &mdash; a password manager's generator is ideal.
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                Keep a copy of that encryption key somewhere private and
+                <em>separate from your backups</em>. Section 08 explains why the separation matters.
+              </li>
+              <li>Save the file. Stop the app with <kbd>Ctrl</kbd>+<kbd>C</kbd> and start it again.</li>
+              <li>
+                In the app, open <strong>Settings &rarr; Google Drive &rarr; Connect Google
+                Drive</strong>. Read the Google approval page, confirm it names the account you
+                intended, and approve.
+              </li>
+              <li>
+                Choose <strong>Select root folder with Google Picker</strong> and pick the one Drive
+                folder that will hold everything this app creates. Pasting a folder address instead
+                will not work &mdash; picking it in that window is what actually grants access.
+              </li>
+            </ol>
+
+            <h4>Three fields, three formats</h4>
+            <p>
+              Google asks for the same addresses three times in three shapes, and a value that is
+              right in one box is rejected in the next. This is the single most common reason Drive
+              setup stalls.
+            </p>
+            <div class="tablewrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Where</th>
+                    <th>Shape</th>
+                    <th>Example</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Authorised redirect URIs</td>
+                    <td>Full path</td>
+                    <td><code>http://localhost:8787/api/drive/oauth/callback</code></td>
+                  </tr>
+                  <tr>
+                    <td>Authorised JavaScript origins</td>
+                    <td>Origin only &mdash; no path, no trailing slash</td>
+                    <td><code>http://localhost:5173</code></td>
+                  </tr>
+                  <tr>
+                    <td>API key &rarr; Websites</td>
+                    <td>Wildcard</td>
+                    <td><code>http://localhost:5173/*</code></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p>
+              Both ports appear because <code>npm run dev</code> serves 5173 and
+              <code>npm start</code> serves 8787. List only one and the Picker breaks whenever you
+              switch between them.
+            </p>
+
+            <h4>What the status on a card is telling you</h4>
             <p>
               <span class="pill ok">Drive ready</span>
               <span class="pill warn">Drive pending</span>
@@ -1251,16 +1888,16 @@ npm run dev          # Vite 5173 + API 8787, live reload</code></pre>
               <span class="pill off">Drive offline</span>
             </p>
             <p>
-              <em>Ready</em> means the folder was created. <em>Pending</em> means setup is
-              incomplete or still needs attention. <em>Issue</em> means Google returned an error.
-              <em>Offline</em> means Drive is not connected at all. In every case the local record
-              and its tasks stay fully usable.
+              <em>Ready</em>: the folder exists. <em>Pending</em>: setup is unfinished or still
+              needs a nudge. <em>Issue</em>: Google returned an error. <em>Offline</em>: Drive is not
+              connected at all. In every one of those cases the client, its projects, and its tasks
+              carry on working normally &mdash; only the folder link is affected.
             </p>
             <div class="note is-crit">
-              <strong>Drive drops out after about a week?</strong> An External OAuth app left in
-              <em>Testing</em> commonly receives a refresh token that expires after seven days when
-              Drive scopes are used. Reconnect from Settings, or move the app through Google's
-              publishing and verification path for longer-term use.
+              <strong>Drive stops working after about a week?</strong> Nothing is broken. An
+              External app left in <em>Testing</em> is given permission that Google expires after
+              seven days. Reconnect from Settings whenever it lapses, or ask an engineer to take the
+              app through Google's publishing and verification process so it stops expiring.
             </div>
           </article>
 
@@ -1477,6 +2114,12 @@ npm run dev          # Vite 5173 + API 8787, live reload</code></pre>
           <article class="lane" data-lane="operator">
             <span class="chip">Operator</span>
             <h3>Where each job lives</h3>
+            <p>
+              Nine areas, reached from the sidebar. The tag beside each name says what it is allowed
+              to do: <strong>READ</strong> only shows you things, <strong>WRITE</strong> changes
+              them, and <strong>READ ONLY</strong> means the area physically cannot alter what it is
+              showing you, however hard you click.
+            </p>
             <div class="mods">
               <div class="mod">
                 <h4>Dashboard <span class="rw">READ</span></h4>
@@ -1503,7 +2146,8 @@ npm run dev          # Vite 5173 + API 8787, live reload</code></pre>
                 <h4>Status <span class="rw">READ / WRITE</span></h4>
                 <p>
                   The five-stage board. Filters for client, project, priority, task type, focus, and
-                  tags all live in the page address, so a filtered view is shareable.
+                  tags are all written into the browser's address bar, so you can bookmark a
+                  filtered view or send it to someone.
                 </p>
               </div>
               <div class="mod">
@@ -1516,8 +2160,9 @@ npm run dev          # Vite 5173 + API 8787, live reload</code></pre>
               <div class="mod">
                 <h4>Import <span class="rw">WRITE</span></h4>
                 <p>
-                  A campaign playbook workbook or pasted tabs becomes a client with projects, tasks,
-                  checklists, and dependencies &mdash; previewed first, then one confirmed write.
+                  Turns a campaign planning spreadsheet, or tab-separated text pasted straight in,
+                  into a client with its projects, tasks, checklists, and dependencies. It shows you
+                  everything it intends to create before it creates any of it.
                 </p>
               </div>
               <div class="mod">
@@ -1675,64 +2320,81 @@ npm run dev          # Vite 5173 + API 8787, live reload</code></pre>
         <div class="lanes">
           <article class="lane" data-lane="operator">
             <span class="chip">Operator</span>
-            <h3>Plan, preview, then confirm</h3>
+            <h3>Plan it here, preview it, then confirm</h3>
             <p>
-              Save the post and any per-platform wording first, then choose
-              <strong>Show preview</strong>. Nothing is fetched and no provider is contacted until
-              you press it.
+              Two words in this section carry the weight. The <strong>provider</strong> is the
+              outside service that actually delivers a post to Instagram, LinkedIn, and the rest;
+              this app plans and hands over, it never publishes directly. <strong>Figures</strong>
+              are the view and engagement numbers those platforms report back afterwards.
             </p>
+            <p>
+              Nothing is sent and no outside service is contacted until you press a button that says
+              so. Save the post and any per-platform wording first, then choose
+              <strong>Show preview</strong>.
+            </p>
+
+            <h4>Reading the preview</h4>
             <p>
               The preview opens with every channel in one short list &mdash;
               <span class="pill ok">Ready to send</span> <span class="pill crit">Blocked</span>
               <span class="pill off">Not available from this provider</span> &mdash; naming the
-              account each one resolved to. Blog is always last: no provider publishes to a blog, so
-              post it yourself and mark it published.
+              account each one matched to, so you can catch a post aimed at the wrong profile before
+              it leaves. Blog is always last: no provider publishes to a blog, so post it yourself
+              and then mark it published here.
             </p>
             <p>
-              Below that is one tab per target showing exactly what that account receives: the text,
-              a note beside anything that came from an override, the title and first comment, the
-              media in that account's order, the date and time in your configured zone beside the
-              instant the provider is given, and whether the provider sends it or hands it to the
-              platform's app for you to finish.
+              Below that is one tab per destination showing exactly what that account will receive:
+              the text, a marker beside anything you overrode for that platform, the title and first
+              comment, the media in that account's order, and the date and time both in your own
+              timezone and as the exact moment the provider will be given. The tab also says whether
+              the provider sends the post itself or hands it to the platform's phone app for you to
+              finish by hand.
             </p>
-            <h4>Why a warning sits on one channel and not the post</h4>
+
+            <h4>Why a warning sits on one channel rather than the whole post</h4>
             <p>
-              A limit is rarely true of a post as a whole &mdash; a caption over 280 characters
-              blocks X and is fine on LinkedIn. A refusal says what has to change, and every refusal
-              must be fixed before <strong>Confirm and submit</strong> becomes available.
+              Limits are almost never true of a post as a whole. A caption over 280 characters stops
+              X and is perfectly fine on LinkedIn, so the warning belongs to X. Every refusal says
+              what has to change, and all of them have to be cleared before
+              <strong>Confirm and submit</strong> will do anything.
             </p>
             <p>
-              Video never plays on its own; press <strong>Load this video</strong>. A Drive file is
-              listed with its name, type, size, and last check rather than shown &mdash; a Drive
-              link addresses a page, not the file.
+              Video never plays by itself in the preview &mdash; press
+              <strong>Load this video</strong>. A file held in Google Drive is listed by name, type,
+              size, and when it was last checked rather than shown, because a Drive link points at a
+              page about the file, not the file itself.
             </p>
+
             <div class="note is-crit">
-              <strong>A result marked UNCONFIRMED is never retried automatically.</strong> Inspect
-              Post Bridge before taking another action, or you risk a duplicate post.
+              <strong>A result marked UNCONFIRMED means nobody knows whether it went out.</strong>
+              The app will never quietly try again, because that is how the same post ends up
+              published twice. Open Post Bridge, find out what actually happened, and only then
+              decide what to do.
             </div>
-            <h4>What never moves on its own</h4>
+
+            <h4>Four things that never happen on their own</h4>
             <ul>
               <li>
-                <strong>Mark published</strong> is always your action. Delivery never changes the
-                planning status.
+                <strong>Mark published</strong> is always your decision. A successful delivery does
+                not move the post's planning status for you.
               </li>
               <li>
-                <strong>Mark finished</strong> on a manual delivery records that one delivery, not
-                the post.
+                <strong>Mark finished</strong> on a hand-delivered post records that one delivery
+                only, not the whole post.
               </li>
               <li>
-                Figures change nothing at all. No number a platform reports can move a post, a
-                schedule, or a delivery answer.
+                Figures change nothing at all. No number a platform reports can move a post, alter a
+                schedule, or change a delivery result.
               </li>
               <li>
-                A refresh runs only when you press it, and a failed one leaves the last good figures
-                on screen.
+                Figures refresh only when you press refresh, and a failed refresh leaves the last
+                good numbers on screen rather than blanking them.
               </li>
             </ul>
             <p>
               A channel this provider does not measure says
-              <strong>Not available from this provider</strong> rather than showing a zero &mdash;
-              those are different claims and only one of them is true.
+              <strong>Not available from this provider</strong> instead of showing a zero. Those are
+              two different claims and only one of them would be true.
             </p>
           </article>
 
@@ -1861,68 +2523,195 @@ npm run dev          # Vite 5173 + API 8787, live reload</code></pre>
           <h2>MCP connections and agent workflows</h2>
         </div>
         <p class="sintro">
-          Connect an MCP-capable IDE to this workspace, give each agent a stable identity, and use
-          the handoff queue without turning completion into an application or provider write.
+          How AI coding assistants connect to this workspace, hand work to one another, and leave a
+          trail &mdash; without any of that ever counting as the work itself.
         </p>
 
         <div class="lanes">
           <article class="lane" data-lane="operator">
             <span class="chip">Operator</span>
-            <h3>Choose the connection that matches where the agent runs</h3>
-            <ul>
-              <li>
-                <strong>Same computer:</strong> use local stdio. The IDE starts
-                <code>npm run mcp</code> beside the SQLite workspace. This is the simplest and
-                recommended connection.
-              </li>
-              <li>
-                <strong>Another device:</strong> use the hosted HTTPS endpoint
-                <code>https://your-hcc-host/api/mcp</code>. It exists only when operator
-                authentication is enabled and uses the same tool surface as stdio.
-              </li>
-            </ul>
+            <h3>What an agent connection is, and what it is not</h3>
             <p>
-              Give every independently running agent a stable, recognizable label such as
-              <code>cursor-planning</code>, <code>claude-review</code>, or
-              <code>codex-release</code>. Labels may contain letters, digits, dots, underscores, and
-              hyphens; they must start and end with a letter or digit and are limited to 64
-              characters.
+              This section matters only if AI coding assistants work on this application alongside a
+              person. If that is not happening on your machine, skip to Section 08 &mdash; nothing
+              here is needed to run the app.
             </p>
-            <h4>What the operator can see</h4>
             <p>
-              Open <strong>Settings &rarr; Agent handoffs</strong> to see Open and Claimed work plus
-              Completed and Cancelled history from the last seven days. Open a row to read its
-              notes. The operator can cancel stuck work with a required reason; agents create,
-              claim, annotate, and complete handoffs through MCP.
+              An <strong>agent</strong> is an AI assistant working inside a code editor. Left alone,
+              one of those assistants has no idea what another one is doing. Connecting them to this
+              app gives them a shared noticeboard: one can pin up a job, another can take it down
+              and report back, and you can read the board. That is the entire feature.
             </p>
-            <div class="note is-crit">
-              <strong>A handoff is coordination metadata.</strong> Claiming or completing one never
-              edits a task, changes a Signal post, publishes content, contacts Drive, or proves the
-              requested work succeeded. The acting agent must perform and verify the real work
-              separately.
+            <p>
+              Making the connection is an engineer's job and it is described in the next panel. What
+              belongs to you is the noticeboard itself &mdash; reading it, and cancelling anything
+              that has stalled.
+            </p>
+
+            <h4>The words this section uses</h4>
+            <dl class="gloss">
+              <div>
+                <dt>Agent</dt>
+                <dd>
+                  An AI assistant that runs inside a code editor and can read and change files on
+                  its own. Cursor and Claude Code are examples.
+                </dd>
+              </div>
+              <div>
+                <dt>MCP</dt>
+                <dd>
+                  Model Context Protocol: an agreed format that lets an AI assistant talk to another
+                  program. Connecting an assistant &ldquo;over MCP&rdquo; gives it a small, fixed
+                  set of actions it may perform in this app &mdash; and nothing outside that set.
+                </dd>
+              </div>
+              <div>
+                <dt>Editor, or IDE</dt>
+                <dd>
+                  The program the assistant lives in. It is also where the connection is configured,
+                  which is why the engineer instructions below talk about editing a settings file
+                  rather than clicking anything in this app.
+                </dd>
+              </div>
+              <div>
+                <dt>Label</dt>
+                <dd>
+                  The short name an assistant signs its work with, such as
+                  <code>cursor-planning</code>. Every row on the board carries one.
+                </dd>
+              </div>
+              <div>
+                <dt>Handoff</dt>
+                <dd>
+                  One item on the noticeboard: a request passed from one assistant to another, with
+                  notes attached and a status of Open, Claimed, Completed, or Cancelled.
+                </dd>
+              </div>
+              <div>
+                <dt>Inbox</dt>
+                <dd>The handoffs currently addressed to one particular assistant.</dd>
+              </div>
+              <div>
+                <dt>Local, or stdio</dt>
+                <dd>
+                  The plumbing used when the assistant and this app sit on the same computer: the
+                  editor starts a small helper program in the app folder and talks to it directly.
+                  Nothing crosses a network and there is no password.
+                </dd>
+              </div>
+            </dl>
+
+            <h4>Which of the two connections applies</h4>
+            <div class="tablewrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Where the assistant runs</th>
+                    <th>Connection</th>
+                    <th>What that means for you</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>On this same computer</td>
+                    <td>Local (stdio)</td>
+                    <td>
+                      The normal, recommended choice. The editor starts the helper itself; you do
+                      not run a command and there is nothing extra to keep open.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>On a different computer</td>
+                    <td>Hosted web address</td>
+                    <td>
+                      Only possible if this app has been published to a private web address with a
+                      login. An engineer issues a one-time key for each assistant. An ordinary
+                      install on your own machine does not have this and never will.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
-            <h4>What MCP does not expose</h4>
             <p>
-              As of 5.4.0 the MCP surface is <strong>coordination only</strong> &mdash; seven handoff
-              tools and one inbox resource. An agent connected this way cannot create a project,
-              edit a task, schedule or publish a Signal post, reach Google Drive, or call a
-              provider. Workspace and Signal tools are planned but not built, and provider-write
-              tools are deliberately excluded. Anything an agent must actually change in the
-              workspace still goes through the app or the API, under the ordinary rules.
+              If someone reports that the hosted address returns
+              <em>not found</em> on your machine, that is the correct answer rather than a fault.
+              The remote door is only fitted to installations that have a login on the front of
+              them.
             </p>
-            <h4>What is recorded when an agent acts</h4>
+
+            <h4>Give every assistant a name you would recognise</h4>
             <p>
-              Every MCP tool call that attempts a change is written to a local append-only audit
-              table (<code>mcp_agent_events</code>) with the agent label, the tool, and the outcome
-              &mdash; <code>SUCCESS</code>, <code>REFUSED</code>, or <code>FAILURE</code>. The
-              newest 500 rows are kept. Refusals are recorded as deliberately as successes, so a
-              misbehaving agent leaves a trail.
+              Each connected assistant needs a label, and it should describe the job rather than the
+              person &mdash; <code>cursor-planning</code>, <code>claude-review</code>,
+              <code>codex-release</code>. It is a signature: it appears beside everything that
+              assistant does, and two assistants sharing one label makes the board unreadable.
+            </p>
+            <p>
+              Labels may use letters, digits, dots, underscores, and hyphens. They must begin and
+              end with a letter or a digit, and stop at 64 characters. No spaces.
+            </p>
+
+            <h4>When a client says the server failed</h4>
+            <p>
+              Each connected client starts its own private copy of the coordination server and stops
+              it when the client closes. Nothing is shared, and you never start one yourself. If a
+              client shows the connection as <em>failed</em>, that client's copy died and it will
+              not start another one on its own &mdash; there is no retry and usually no restart
+              button. Quit that client fully and reopen it. On Windows that means quitting from the
+              system tray, not closing the window.
+            </p>
+            <p>
+              Restarting one client does not affect the others, and a failed connection never harms
+              your records &mdash; the board is read from the same database the app uses.
+            </p>
+
+            <h4>Reading the board: Settings &rarr; Agent handoffs</h4>
+            <p>
+              Open <strong>Settings</strong>, then <strong>Agent handoffs</strong>. You will see
+              work that is <strong>Open</strong> (nobody has picked it up) and
+              <strong>Claimed</strong> (somebody is on it), plus everything
+              <strong>Completed</strong> or <strong>Cancelled</strong> in the last seven days. Open
+              any row to read its notes.
+            </p>
+            <p>
+              One control here is yours: cancelling a row that has stalled. It asks you for a
+              reason, and that reason is kept. Creating, claiming, annotating, and completing are
+              done by the assistants themselves &mdash; there are no buttons for those.
+            </p>
+
+            <div class="note is-crit">
+              <strong>A handoff is a note about work, never the work.</strong> Marking one complete
+              does not edit a task, move a planned post, publish anything, or touch Google Drive,
+              and it is not evidence that the job was actually done. Read the board the way you
+              would read a colleague's sticky note: it records what someone says they did.
+            </div>
+
+            <h4>What a connected assistant cannot do</h4>
+            <p>
+              In version 5.5.0 this connection carries seven handoff actions and one inbox list, and
+              nothing else. Through it, an assistant cannot create a client or a project, edit a
+              task, schedule or publish content, or reach Google Drive. Those tools are planned;
+              tools that would publish on your behalf are deliberately left out.
+            </p>
+            <p>
+              So anything an assistant genuinely changes in your workspace, it changes the same way
+              you would &mdash; through the app &mdash; where every ordinary preview and confirmation
+              still stands in the way.
+            </p>
+
+            <h4>What is written down when an assistant acts</h4>
+            <p>
+              Every attempt to change something is recorded on this machine with three facts: which
+              label did it, what it tried, and how it ended &mdash; succeeded, refused, or failed.
+              Refusals are recorded as carefully as successes, so an assistant that keeps
+              overstepping leaves a visible trail. The most recent 500 entries are kept and none of
+              them can be edited afterwards.
             </p>
             <div class="note">
-              <strong>There is no screen for this table yet.</strong> The handoff history in
-              <strong>Settings &rarr; Agent handoffs</strong> is what you can read in the app; the
-              audit rows are currently reachable only by querying SQLite directly. If you need them,
-              ask an engineer &mdash; and take a backup first.
+              <strong>That record has no screen yet.</strong> What you can read in the app is the
+              handoff history under <strong>Settings &rarr; Agent handoffs</strong>. Reaching the
+              fuller record means opening the database directly, which is an engineer's task. Ask
+              for it, and ask them to take a backup first &mdash; Section 08.
             </div>
           </article>
 
@@ -1930,26 +2719,66 @@ npm run dev          # Vite 5173 + API 8787, live reload</code></pre>
             <span class="chip">Engineer</span>
             <h3>Local stdio connection</h3>
             <p>
-              Add a server entry to the MCP configuration used by the IDE. On Windows,
-              <code>npm.cmd --prefix</code> makes the repository location explicit and avoids
-              depending on the IDE's working directory:
+              Add a server entry to the MCP configuration used by the client. On Windows,
+              <code>npm.cmd --prefix</code> makes the repository location explicit rather than
+              depending on the working directory the client happens to spawn from. Anchor that
+              prefix to a variable, not an absolute path: a checkout lives at a different path on
+              every machine, and a project-scoped config is committed.
+            </p>
+            <p>
+              <strong>Cursor</strong> &mdash; <code>.cursor/mcp.json</code> in the repository.
+              Cursor expands variables in <code>command</code>, <code>args</code>, <code>env</code>,
+              <code>url</code>, and <code>headers</code>;
+              <code>${workspaceFolder}</code> resolves to the folder containing the config.
             </p>
             <pre><code>{
   "mcpServers": {
     "hybrid-command-center": {
       "command": "npm.cmd",
-      "args": [
-        "--prefix",
-        "C:\\Users\\garni\\Documents\\CursorComps\\hybrid-command-center",
-        "run",
-        "mcp"
-      ],
+      "args": ["--prefix", "${workspaceFolder}", "run", "mcp"],
       "env": {
         "MCP_AGENT_LABEL": "cursor-planning"
       }
     }
   }
 }</code></pre>
+            <p>
+              <strong>Claude Code</strong> &mdash; <code>.mcp.json</code> at the repository root. It
+              expands <code>${VAR}</code> and <code>${VAR:-default}</code> but has no workspace
+              variable, and its <code>cwd</code> field does not work. Fall back to <code>.</code> so
+              the entry still resolves when the client is started from the repository root.
+            </p>
+            <pre><code>{
+  "mcpServers": {
+    "hybrid-command-center": {
+      "type": "stdio",
+      "command": "npm.cmd",
+      "args": ["--prefix", "${CLAUDE_PROJECT_DIR:-.}", "run", "mcp"],
+      "env": {
+        "MCP_AGENT_LABEL": "claude-review"
+      }
+    }
+  }
+}</code></pre>
+            <p>
+              <strong>Codex</strong> &mdash; <code>~/.codex/config.toml</code>, which is global and
+              has no project context, so an absolute path is correct there. That file is
+              machine-local and never committed, so it does not need to be portable.
+            </p>
+            <pre><code>[mcp_servers."hybrid-command-center"]
+command = "npm.cmd"
+args = ["--prefix", 'C:\Users\you\path\to\hybrid-command-center', "run", "mcp"]
+startup_timeout_sec = 60
+
+[mcp_servers."hybrid-command-center".env]
+MCP_AGENT_LABEL = "codex-release"</code></pre>
+            <div class="note">
+              <strong>One label per client, not one label per repository.</strong> Each connected
+              client is an independently running agent, so give each its own &mdash;
+              <code>cursor-planning</code>, <code>claude-review</code>,
+              <code>codex-release</code>. Two clients sharing a label makes the handoff board
+              unreadable and the audit trail useless.
+            </div>
             <ol>
               <li>Save the MCP configuration and restart or reload the IDE's MCP servers.</li>
               <li>Confirm that <code>hybrid-command-center</code> connects.</li>
@@ -1991,9 +2820,14 @@ npm run dev          # Vite 5173 + API 8787, live reload</code></pre>
               passwordless loopback runtime.
             </p>
             <div class="note">
-              <strong>Why the loopback runtime has no <code>/api/mcp</code>.</strong> The route is
-              mounted only when operator authentication is enforced, which a loopback bind never is.
-              A passwordless local install therefore returns <code>404</code> for
+              <strong>Why the passwordless runtime has no <code>/api/mcp</code>.</strong> Pinned by
+              tests since 5.4.1, so a later change cannot quietly publish an unauthenticated
+              JSON-RPC endpoint on the app's own origin without a gate turning red. The route is
+              mounted only when operator authentication is enforced &mdash; which the ordinary
+              passwordless local default, an incomplete checklist, never is. Note that the bind
+              address is not the gate: a hosted AWS install keeps <code>HOST</code> on
+              <code>127.0.0.1</code> behind Caddy, still enforces login, and therefore still serves
+              <code>/api/mcp</code>. A passwordless local install returns <code>404</code> for
               <code>POST /api/mcp</code> and <code>400</code> for
               <code>POST /api/auth/mcp-bearer</code>. That is expected, not a misconfiguration
               &mdash; use local stdio instead.
@@ -2071,9 +2905,22 @@ npm run dev          # Vite 5173 + API 8787, live reload</code></pre>
               <code>fromAgentLabel</code> from the MCP session and refuses a conflicting value.
             </p>
             <div class="note">
-              <strong>Polling and limits.</strong> There is no push subscription in 5.4.0; poll the
-              list tool or inbox resource at a reasonable interval. Each MCP session permits at most
-              10 coordination writes in a rolling minute. Reads do not spend that write budget.
+              <strong>Polling and limits.</strong> There is no push subscription in 5.5.0; poll the
+              list tool or inbox resource at a reasonable interval. Coordination writes are capped
+              at 10 in a rolling minute. Reads do not spend that write budget.
+            </div>
+            <div class="note is-crit">
+              <strong>5.5.0 makes the write budget per credential, and makes it persist.</strong>
+              Over HTTPS the cap is now enforced two ways at once, both at 10 writes per rolling
+              minute: an <em>outer</em> budget keyed on the credential alone &mdash; the bearer, or
+              the session for cookie auth &mdash; and an <em>inner</em> budget keyed on that
+              credential plus the agent label, nested inside it. The outer one is the ceiling.
+              Rotating <code>x-agent-label</code> between requests does not buy more writes; ten a
+              minute per credential is the whole allowance however many labels you spend it under.
+              Before 5.5.0 the network transport built a fresh session per <code>POST</code>, so the
+              budget reset on every call and the documented limit did nothing over HTTP. Budgets
+              live for the life of the server process and reset when it restarts; idle keys are
+              pruned. Local stdio is unchanged &mdash; it keeps its own per-session limiter.
             </div>
             <h4>Field limits</h4>
             <p>
@@ -2099,9 +2946,11 @@ npm run dev          # Vite 5173 + API 8787, live reload</code></pre>
             <ul>
               <li>
                 <strong>Over the write budget:</strong> the call returns
-                <em>Coordination write rate limit exceeded (10 per rolling minute)</em>. Nothing is
-                written and nothing is queued. Wait out the window and try again &mdash; an
-                immediate retry simply fails too.
+                <em>Coordination write rate limit exceeded (10 per rolling minute)</em>, together
+                with <code>retryAfterMs</code> &mdash; how long until the offending window has room
+                again. Nothing is written and nothing is queued. Wait that long and try again; an
+                immediate retry simply fails too, and switching agent label does not get you past
+                it.
               </li>
               <li>
                 <strong>No agent label:</strong> reads succeed, writes are refused. Set
@@ -2142,26 +2991,74 @@ npm run dev          # Vite 5173 + API 8787, live reload</code></pre>
         <div class="lanes">
           <article class="lane" data-lane="operator">
             <span class="chip">Operator</span>
-            <h3>Before anything risky, take a copy</h3>
+            <h3>One file holds everything you have typed</h3>
             <p>
-              Stop the application first, then run the backup command. Keep the backups somewhere
-              private &mdash; the file holds every client, project, task, and note you have entered.
+              Every client, project, task, checklist, tag, note, and planned post you have entered
+              lives in a single file inside the app folder:
+              <code>data\command-center.db</code>. Lose it and you lose all of it, which is why
+              taking a copy is a two-minute habit rather than a project.
             </p>
-            <pre><code>npm run db:backup</code></pre>
             <p>
-              Store your <code>GOOGLE_TOKEN_ENCRYPTION_KEY</code> in a <em>different</em> private
-              place from the backups. One without the other will not restore a working Drive
-              connection.
+              Your actual documents are not in that file. Those are in Google Drive and are backed
+              up by Google. This file holds the records <em>about</em> the work.
             </p>
-            <h4>Security habits worth keeping</h4>
-            <ul>
-              <li>Keep <code>.env</code> private and never publish the database.</li>
-              <li>Do not paste OAuth secrets into the browser interface.</li>
+
+            <h4>Taking a copy</h4>
+            <ol>
               <li>
-                Review the Google consent screen before approving access, and connect only the
-                intended account.
+                Stop the app first. Click its terminal window, hold <kbd>Ctrl</kbd> and press
+                <kbd>C</kbd>, and wait for the <code>&gt;</code> prompt to come back. Copying a
+                database while it is being written to is how you get a copy that will not open.
               </li>
-              <li>Stop the application when you step away from a shared computer.</li>
+              <li>In that same window, run <code>npm run db:backup</code>.</li>
+              <li>
+                It prints <em>Backup written to</em> followed by the full path of the file it just
+                made. Copies land in <code>data\backups\</code> inside the app folder, named by
+                date and time.
+              </li>
+              <li>Start the app again with <code>npm run dev</code>.</li>
+            </ol>
+
+            <div class="note is-crit">
+              <strong>A copy sitting on the same computer is not a backup.</strong> The
+              <code>data\backups\</code> folder lives on the same disk as the original, so one
+              failed drive takes both. Copy the newest file out to an external drive or a private
+              cloud folder on a rhythm you actually keep to. It contains every client name, contact
+              detail, and note you have entered, so store it somewhere private.
+            </div>
+
+            <h4>When to take one</h4>
+            <ul>
+              <li>Before merging two clients &mdash; that one cannot be undone.</li>
+              <li>Before deleting a project, which takes its tasks with it.</li>
+              <li>Before an engineer updates the app or opens the database.</li>
+              <li>On a schedule of your choosing. Weekly is a reasonable floor for active work.</li>
+            </ul>
+
+            <h4>The encryption key lives somewhere else</h4>
+            <p>
+              Keep <code>GOOGLE_TOKEN_ENCRYPTION_KEY</code> from your <code>.env</code> file in a
+              different private place from the backups &mdash; a password manager, not the same
+              folder. Restoring a database without that key gives you all your records back and no
+              working Drive connection, and the two together in one place defeats the point of
+              encrypting anything.
+            </p>
+
+            <h4>Habits worth keeping</h4>
+            <ul>
+              <li>Never email, upload, or share <code>.env</code> or the database file.</li>
+              <li>
+                Never type an OAuth secret into a page inside the app. Nothing in this app will ever
+                ask you for one.
+              </li>
+              <li>
+                Read the Google approval page before approving it, and check it names the account
+                you meant to use.
+              </li>
+              <li>
+                Stop the app when you step away from a shared computer. Anyone who can reach the
+                browser on that machine can reach your workspace.
+              </li>
             </ul>
           </article>
 
@@ -2184,6 +3081,24 @@ npm run cutover:rehearse -- --plan</code></pre>
               remains operator-owned; rehearse migration and rollback on disposable staging before
               changing the authoritative workspace.
             </p>
+            <p>
+              <strong>5.4.2 splits that runbook into two columns.</strong>
+              <code>docs/cloud-cutover-rehearsal.md</code> now carries disposable staging (C55)
+              beside production cutover (C115), and the production column is not a copy of the
+              staging one. It additionally requires SSM secrets loaded with no <code>UNSET</code>,
+              <code>APP_ORIGIN</code> and <code>GOOGLE_REDIRECT_URI</code> moved to the public host
+              with Wix DNS pointed at the Elastic IP, restore and migrate on the production volume,
+              a Drive reconnect on the production origin that revokes any obsolete broad grant, and
+              an authenticated HTTPS smoke that includes <strong>a login from a second device</strong>
+              against the public origin.
+            </p>
+            <div class="note is-crit">
+              <strong>Step 9 is the one that changes what is true.</strong> Only after every
+              production row passes does the host become authoritative: the laptop stops being live
+              and is kept as a cold spare until a fresh hosted backup exists. The public hostname is
+              named in README, USER_MANUAL, and the hosting docs at that point and not before
+              &mdash; 5.4.2 deliberately ships without inventing a live hostname.
+            </div>
           </article>
 
           <article class="lane" data-lane="agent">
@@ -2215,7 +3130,11 @@ npm run cutover:rehearse -- --plan</code></pre>
         <div class="lanes">
           <article class="lane" data-lane="operator">
             <span class="chip">Operator</span>
-            <h3>Common stops, and what fixes them</h3>
+            <h3>What went wrong, and the next thing to do</h3>
+            <p>
+              Find the closest match to what you are seeing. Where a fix mentions a terminal, it
+              means one standing in the app folder &mdash; Section 00.
+            </p>
             <div class="tablewrap">
               <table>
                 <thead>
@@ -2227,75 +3146,136 @@ npm run cutover:rehearse -- --plan</code></pre>
                 <tbody>
                   <tr>
                     <td><code>node</code> or <code>npm</code> is not recognized</td>
-                    <td>Install Node.js 24 or newer, then close and reopen the terminal.</td>
+                    <td>
+                      Either Node.js is not installed, or this window was open before you installed
+                      it. Close every terminal, open a new one, and type
+                      <code>node --version</code>. No version number means go back to Section 02 and
+                      install Node.js.
+                    </td>
                   </tr>
                   <tr>
-                    <td>The local page will not open</td>
+                    <td>It cannot find <code>package.json</code>, or says <em>ENOENT</em></td>
                     <td>
-                      Check that <code>npm run dev</code> is still running with no error, and use
-                      <code>http://localhost:5173</code>. After <code>npm start</code>, use
-                      <code>http://localhost:8787</code>.
+                      Your terminal is standing in the wrong folder. Type <code>dir</code>: if you
+                      cannot see <code>package.json</code>, close the window and open a new one from
+                      inside the app folder.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>The page will not open in the browser</td>
+                    <td>
+                      Check the terminal is still running with no error in it. After
+                      <code>npm run dev</code> the address is
+                      <code>http://localhost:5173</code>. After <code>npm start</code> it is
+                      <code>http://localhost:8787</code>. They are not interchangeable.
                     </td>
                   </tr>
                   <tr>
                     <td>A port is already in use</td>
-                    <td>Close the other running copy of the application.</td>
+                    <td>
+                      A copy of the app is already running. Look along the taskbar for another
+                      terminal window and stop it with <kbd>Ctrl</kbd>+<kbd>C</kbd>. If there is
+                      none to find, open Task Manager with
+                      <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Esc</kbd>, find
+                      <strong>Node.js JavaScript Runtime</strong>, and end it.
+                    </td>
                   </tr>
                   <tr>
-                    <td>It refuses to start and lists settings</td>
+                    <td>I closed the terminal by accident</td>
                     <td>
-                      Each line names one variable and what was wrong. Correct them in
-                      <code>.env</code>, save, start again.
+                      The app stopped; nothing was lost. Open a terminal in the app folder and run
+                      <code>npm run dev</code> again.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>It refuses to start and prints a list of settings</td>
+                    <td>
+                      Each line names one setting in <code>.env</code> and what was wrong with it.
+                      Fix those lines, save, and start again. The message never prints the value it
+                      rejected, so it is safe to send to an engineer as-is.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>I edited <code>.env</code> and nothing changed</td>
+                    <td>
+                      Settings are read once at startup. Stop the app with
+                      <kbd>Ctrl</kbd>+<kbd>C</kbd> and start it again. If it still ignores you,
+                      check the file is named exactly <code>.env</code> and not
+                      <code>.env.txt</code> &mdash; in File Explorer, turn on
+                      <strong>View &rarr; Show &rarr; File name extensions</strong> to see the truth.
                     </td>
                   </tr>
                   <tr>
                     <td>Drive says credentials are required</td>
                     <td>
-                      Confirm <code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code>, and
-                      <code>GOOGLE_TOKEN_ENCRYPTION_KEY</code> are all non-empty, then restart.
+                      <code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code>, and
+                      <code>GOOGLE_TOKEN_ENCRYPTION_KEY</code> must all have something after the
+                      <code>=</code>. Fill in whichever is blank and restart.
                     </td>
                   </tr>
                   <tr>
                     <td><code>redirect_uri_mismatch</code></td>
                     <td>
                       Google Cloud and <code>.env</code> must both read
-                      <code>http://localhost:8787/api/drive/oauth/callback</code>, with no trailing
-                      slash.
+                      <code>http://localhost:8787/api/drive/oauth/callback</code> &mdash; identical,
+                      with no trailing slash. Compare them character by character; a stray space at
+                      the end counts.
                     </td>
                   </tr>
                   <tr>
                     <td>Google says access is blocked</td>
                     <td>
-                      For an External app in Testing, add your account as a test user. A Workspace
-                      administrator may also restrict Drive scopes.
+                      Your own Google address has to be listed as a test user on the consent screen,
+                      even though the app is yours. Add it in Google Cloud Console. On a Workspace
+                      account, an administrator may be blocking Drive access outright.
                     </td>
                   </tr>
                   <tr>
                     <td>The root folder is rejected</td>
                     <td>
-                      Paste a <em>folder</em> URL or ID, not a file. Confirm the connected account
-                      can open it and that it is not in Trash.
+                      You picked a file rather than a folder, or a folder in Trash. Choose a live
+                      folder that the connected account can open, using the Picker window rather
+                      than a pasted address.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Drive worked, and stopped about a week later</td>
+                    <td>
+                      Expected on an app left in <em>Testing</em>. Reconnect from
+                      <strong>Settings &rarr; Google Drive</strong>. Section 03 explains the
+                      permanent fix.
                     </td>
                   </tr>
                   <tr>
                     <td>A card shows Drive offline or Drive issue</td>
                     <td>
-                      The record and its tasks still work. Check the connection and root folder in
-                      Settings, and do not hand-create duplicate folders while diagnosing.
+                      The client and its tasks still work. Check the connection and root folder in
+                      Settings. Do not hand-make folders in Drive while you are diagnosing &mdash;
+                      you will end up with duplicates the app cannot see.
                     </td>
                   </tr>
                   <tr>
-                    <td>A task will not complete</td>
+                    <td>A task will not move to Complete</td>
                     <td>
-                      Review its Dependencies. Finish the blockers, remove a wrong one, or use the
-                      override deliberately.
+                      Something it depends on is unfinished. Open the task and read Dependencies:
+                      finish the blockers, remove one that is wrong, or use the override
+                      deliberately.
                     </td>
                   </tr>
                   <tr>
                     <td>A dashboard count looks wrong</td>
                     <td>
-                      Check the task has a due date, is not already Complete, belongs to the project
-                      you think, and that the computer's date and timezone are right.
+                      Check the task has a due date, is not already Complete, and sits under the
+                      project you think it does. Then check this computer's own date, time, and
+                      timezone &mdash; the counts are worked out from them.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Something not on this list</td>
+                    <td>
+                      Copy the whole message from the terminal, note what you did immediately
+                      before, and send both to an engineer. A screenshot of the last line alone is
+                      rarely enough to work from.
                     </td>
                   </tr>
                 </tbody>
@@ -2402,6 +3382,16 @@ npm run cutover:rehearse -- --plan</code></pre>
               If another card lands first, repeat finalization against the new
               <code>origin/main</code>. Never preserve a now-taken number.
             </p>
+            <div class="note">
+              <strong>Marking ready too early now self-heals.</strong> Clicking
+              <em>Ready for review</em> the moment the draft-time checks go green &mdash; before
+              running the finalize steps above &mdash; makes <code>check:version-bump</code> fail
+              deterministically, and no code change can fix it. Since 5.4.3, CI stops leaving that
+              as an unexplained red check: on exactly that failure it converts the pull request back
+              to <strong>draft</strong> and comments with the finalize checklist. Nothing in the
+              running application changed; this is a contributor-workflow guard. Finish
+              finalization, then mark ready.
+            </div>
             <div class="note is-crit">
               <strong>The strip-types trap.</strong> The server runs under
               <code>node --experimental-strip-types</code>, which erases annotations without
@@ -2445,31 +3435,87 @@ npm run cutover:rehearse -- --plan</code></pre>
         <div class="lanes">
           <article class="lane" data-lane="operator">
             <span class="chip">Operator</span>
-            <h3>First-time setup checklist</h3>
-            <ul>
-              <li>Node.js 24 or newer installed</li>
-              <li><code>npm install</code> completed</li>
-              <li><code>.env</code> created from <code>.env.example</code></li>
-              <li><code>npm run db:migrate</code> completed</li>
-              <li>Clean start or demo data chosen</li>
-              <li>Application opens locally</li>
-              <li>If hosting, operator password bootstrapped and the AWS cutover rehearsed</li>
-              <li>
-                Drive and Picker APIs enabled, consent screen and test user configured, if using
-                Drive
-              </li>
-              <li>OAuth web client created and the exact redirect URI added</li>
-              <li>
-                Client ID, client secret, Picker key/app ID, and encryption key saved in
-                <code>.env</code>
-              </li>
-              <li>Google account connected and root folder selected through Picker</li>
-              <li>First client, project, task, checklist, and dependency created</li>
-              <li>Backup plan established for the database <em>and</em> the encryption key</li>
-            </ul>
+            <h3>Setup checklist, and the four commands you will ever type</h3>
             <p>
-              Once these are done, begin each session on the Dashboard, clear overdue work first,
-              and move active tasks through Review and Complete.
+              Each line below is something you can look at and confirm, rather than a command you
+              hope worked.
+            </p>
+
+            <h4>Done once, when the machine is set up</h4>
+            <ul>
+              <li>The app folder's full path is written down where you can find it</li>
+              <li>
+                <code>node --version</code> prints a version number of 24 or higher in a fresh
+                terminal
+              </li>
+              <li>
+                A terminal opened in the app folder shows <code>package.json</code> when you type
+                <code>dir</code>
+              </li>
+              <li><code>npm install</code> finished and a <code>node_modules</code> folder exists</li>
+              <li>A file named <code>.env</code> sits beside <code>.env.example</code></li>
+              <li><code>npm run db:migrate</code> reported <em>Database schema is up to date</em></li>
+              <li>You decided between a clean start and demonstration data</li>
+              <li>The app opens at <code>http://localhost:5173</code> in your browser</li>
+              <li>You have created a client, a project, a task, a checklist, and a dependency</li>
+              <li>
+                You know where backups land, and where the encryption key is kept &mdash; two
+                different places
+              </li>
+            </ul>
+
+            <h4>Also done once, if you are using Google Drive</h4>
+            <ul>
+              <li>You were signed into the intended Google account throughout</li>
+              <li>Drive API and Picker API are both enabled in Google Cloud Console</li>
+              <li>The consent screen exists and lists your own address as a test user</li>
+              <li>A Web application OAuth client exists with the exact redirect address</li>
+              <li>
+                All six Google lines in <code>.env</code> have a value after the <code>=</code>
+              </li>
+              <li>
+                Settings shows Drive connected, and a root folder was chosen through the Picker
+                window
+              </li>
+              <li>A newly created client shows <span class="pill ok">Drive ready</span></li>
+            </ul>
+
+            <h4>The commands, all of them</h4>
+            <div class="tablewrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Command</th>
+                    <th>When you use it</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>npm run dev</code></td>
+                    <td>Every time you want to work. This is the only daily one.</td>
+                  </tr>
+                  <tr>
+                    <td><code>npm run db:backup</code></td>
+                    <td>Before anything risky, and on your own schedule. Stop the app first.</td>
+                  </tr>
+                  <tr>
+                    <td><code>npm install</code></td>
+                    <td>Once at setup, and again whenever the app's files have been updated.</td>
+                  </tr>
+                  <tr>
+                    <td><code>npm run db:migrate</code></td>
+                    <td>Once at setup, and after an update if you are told to.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p>
+              Everything else in this manual's command tables belongs to an engineer. You will not
+              need it, and nothing in your day depends on it.
+            </p>
+            <p>
+              Once setup is done, begin each session on the Dashboard, clear overdue work first, and
+              move active tasks through Review into Complete.
             </p>
           </article>
 
@@ -2496,6 +3542,8 @@ npm run cutover:rehearse -- --plan</code></pre>
                     <td><code>127.0.0.1</code></td>
                     <td>
                       Non-loopback fails unless the complete authentication checklist is configured.
+                      Loopback is allowed either way &mdash; but once that checklist is complete,
+                      login is required on loopback too.
                     </td>
                   </tr>
                   <tr>
@@ -2831,7 +3879,7 @@ npm run cutover:rehearse -- --plan</code></pre>
     <footer class="footer">
       <div class="inner">
         <p>
-          Hybrid Command Center 5.4.0 &mdash; operating manual, updated 2026-08-26. Compiled from
+          Hybrid Command Center 5.5.0 &mdash; operating manual, updated 2026-08-28. Compiled from
           <code>USER_MANUAL.md</code>, <code>README.md</code>, and <code>AGENTS.md</code>. Where
           this page and those files disagree, the repository is correct.
         </p>

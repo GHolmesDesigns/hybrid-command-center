@@ -8,6 +8,18 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.5.1] - 2026-08-27
+
+### Fixed
+
+- Operator authentication now turns on when the production checklist is complete, including the
+  loopback-behind-Caddy shape (`HOST=127.0.0.1`). Leaving loopback is no longer what gates login;
+  local `npm run dev` without the checklist stays passwordless.
+
+### Breaking changes
+
+None.
+
 ## [5.5.0] - 2026-08-27
 
 ### Fixed
