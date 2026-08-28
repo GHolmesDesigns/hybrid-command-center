@@ -5,7 +5,7 @@ import { createDb, type Db } from '../db.ts';
 import { hashPassword } from '../auth/password.ts';
 import { setSetting } from '../drive/service.ts';
 import { OPERATOR_PASSWORD_HASH_SETTING_KEY } from '../auth/service.ts';
-import { CSRF_HEADER_NAME, SESSION_COOKIE_NAME } from '../../shared/auth.ts';
+import { CSRF_HEADER_NAME } from '../../shared/auth.ts';
 import * as healthPanelModule from './health-panel.ts';
 
 const SECRET = 'test-session-secret-at-least-32-chars!';
@@ -42,7 +42,9 @@ describe('MCP health HTTP routes', () => {
     });
 
   async function login() {
-    const response = await request(authedApp()).post('/api/auth/login').send({ password: PASSWORD });
+    const response = await request(authedApp())
+      .post('/api/auth/login')
+      .send({ password: PASSWORD });
     expect(response.status).toBe(200);
     return {
       cookie: response.headers['set-cookie']?.[0] as string,
