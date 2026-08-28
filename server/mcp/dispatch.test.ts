@@ -78,10 +78,16 @@ describe('callMcpTool', () => {
 
   it('refuses unknown tools and coordination writes without write scope', async () => {
     const session = createMcpSession({ agentLabel: 'cursor' });
-    const unknown = await callMcpTool(db, session, 'not_registered', {}, {
-      grantedScopes: ['workspace:read'],
-      now: NOW,
-    });
+    const unknown = await callMcpTool(
+      db,
+      session,
+      'not_registered',
+      {},
+      {
+        grantedScopes: ['workspace:read'],
+        now: NOW,
+      },
+    );
     expect(unknown.outcome).toBe('FAILURE');
     expect(unknown.errorDetail?.code).toBe('COORDINATION_UNKNOWN_TOOL');
 
@@ -101,10 +107,16 @@ describe('callMcpTool', () => {
 
   it('routes workspace reads when workspace:read is granted', async () => {
     const session = createMcpSession({ agentLabel: 'cursor' });
-    const result = await callMcpTool(db, session, 'workspace_dashboard_summary', {}, {
-      grantedScopes: ['workspace:read'],
-      now: NOW,
-    });
+    const result = await callMcpTool(
+      db,
+      session,
+      'workspace_dashboard_summary',
+      {},
+      {
+        grantedScopes: ['workspace:read'],
+        now: NOW,
+      },
+    );
     expect(result.outcome).toBe('SUCCESS');
     expect((result.data as { counts: unknown }).counts).toBeDefined();
   });
