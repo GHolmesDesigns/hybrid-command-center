@@ -8,6 +8,24 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.6.9] - 2026-08-28
+
+### Added
+
+- MCP read tools over stdio and HTTP: `workspace_dashboard_summary`, `workspace_list_tasks`,
+  `signal_list_posts`, `signal_queue_snapshot`, `signal_queue_health`, and `signal_publish_preview`.
+- An async tool dispatcher and registry entries for the six reads, gated on `workspace:read` with a
+  structured refusal when the credential lacks that scope.
+
+### Changed
+
+- `tools/list` now generates fourteen tools from the registry (seven coordination, six workspace and
+  Signal reads, plus `system_capabilities`).
+
+### Breaking changes
+
+None.
+
 ## [5.6.8] - 2026-08-28
 
 ### Changed
