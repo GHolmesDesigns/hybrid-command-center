@@ -187,6 +187,69 @@ describe('buildMcpHealthPanel', () => {
     ]);
   });
 
+  it('reports all_failed when every audited call failed', () => {
+    recordMcpAgentEvent(db, {
+      agentLabel: 'broken',
+      tool: 'coordination_list_handoffs',
+      outcome: 'REFUSED',
+      summary: 'Unauthorized claim.',
+      at: '2026-08-28T12:00:00.000Z',
+    });
+    const panel = buildMcpHealthPanel(db, { enabled: true, now: NOW });
+    expect(panel.state).toBe('all_failed');
+    expect(panel.stateReason).toMatch(/every audited call failed/);
+  });
+
+  it('reports healthy when every audited call succeeded', () => {
+    recordMcpAgentEvent(db, {
+      agentLabel: 'steady',
+      tool: 'coordination_list_handoffs',
+      outcome: 'SUCCESS',
+      summary: 'coordination_list_handoffs succeeded.',
+      at: '2026-08-28T12:00:00.000Z',
+    });
+    const panel = buildMcpHealthPanel(db, { enabled: true, now: NOW });
+    expect(panel.state).toBe('healthy');
+  });
+
+  it('sorts equal-count error summaries alphabetically by code', () => {
+    recordMcpAgentEvent(db, {
+      agentLabel: 'cursor',
+      tool: 'coordination_post_handoff',
+      outcome: 'REFUSED',
+      summary: 'Handoff not found.',
+      at: '2026-08-28T12:00:00.000Z',
+    });
+    recordMcpAgentEvent(db, {
+      agentLabel: 'cursor',
+      tool: 'coordination_post_handoff',
+      outcome: 'REFUSED',
+      summary: 'Invalid state for complete.',
+      at: '2026-08-28T12:01:00.000Z',
+    });
+    const panel = buildMcpHealthPanel(db, { enabled: true, now: NOW });
+    expect(panel.errorSummary.map((row) => row.code)).toEqual([
+      'COORDINATION_INVALID_STATE',
+      'COORDINATION_NOT_FOUND',
+    ]);
+  });
+
+  it('ignores handoffs that have not crossed the stale thresholds', () => {
+    postHandoff(
+      db,
+      {
+        fromAgentLabel: 'poster',
+        toAgentLabel: null,
+        subjectType: 'freeform',
+        subjectId: null,
+        message: 'Fresh open handoff',
+      },
+      NOW,
+    );
+    const panel = buildMcpHealthPanel(db, { enabled: true, now: NOW });
+    expect(panel.staleHandoffs).toEqual([]);
+  });
+
   it('keeps the newest success and failure timestamps per agent', () => {
     recordMcpAgentEvent(db, {
       agentLabel: 'cursor',

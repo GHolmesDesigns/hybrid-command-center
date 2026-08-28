@@ -175,4 +175,33 @@ describe('isStaleClaimedHandoff', () => {
     expect(isStaleClaimedHandoff(handoff('2026-07-01T00:00:00.000Z'), now)).toBe(true);
     expect(isStaleClaimedHandoff(handoff('2026-08-20T00:00:00.000Z'), now)).toBe(false);
   });
+
+  it('ignores invalid claim timestamps', () => {
+    const now = new Date('2026-08-28T12:00:00.000Z');
+    expect(isStaleClaimedHandoff(handoff('not-a-date'), now)).toBe(false);
+  });
+});
+
+describe('deriveMcpHealthPanelState healthy path', () => {
+  it('reports healthy when every active agent only succeeds', () => {
+    expect(
+      deriveMcpHealthPanelState({
+        registry: [],
+        agents: [
+          {
+            label: 'cursor',
+            lastUsedAt: null,
+            lastOrigin: null,
+            lastSuccessAt: '2026-08-28T12:00:00.000Z',
+            lastFailureAt: null,
+            requestCount: 3,
+            refusalCount: 0,
+            failureCount: 0,
+            rateLimitCount: 0,
+          },
+        ],
+        auditUnreadable: false,
+      }).state,
+    ).toBe('healthy');
+  });
 });
