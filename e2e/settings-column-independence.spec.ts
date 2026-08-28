@@ -35,7 +35,7 @@ const READING_ORDER = [
   'Task tags',
   'Signal campaigns',
   'Agent handoffs',
-  'Agent credentials',
+  'Agent connection setup',
   'Connection health',
   'Branding',
   'Default views',
@@ -184,7 +184,7 @@ test('a Settings card follows its own column, and no card follows the other one'
     'Task tags',
     'Signal campaigns',
     'Agent handoffs',
-    'Agent credentials',
+    'Agent connection setup',
     'Connection health',
   ]) {
     expect(Math.round(find(connected, heading).top - find(disconnected, heading).top)).toBe(
@@ -231,7 +231,7 @@ test('the keyboard reaches the Settings cards in the order they are read', async
   // runner can replace the form halfway through the Tab walk.
   await expect(
     page
-      .getByLabel('Agent credentials')
+      .getByLabel('Agent connection setup')
       .getByText('Available when operator authentication enables network MCP.'),
   ).toBeVisible();
 

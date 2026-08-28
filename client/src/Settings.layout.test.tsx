@@ -62,7 +62,7 @@ describe('the Settings layout', () => {
       'Task tags',
       'Signal campaigns',
       'Agent handoffs',
-      'Agent credentials',
+      'Agent connection setup',
       'Connection health',
     ]);
     expect(headingsIn(appearance)).toEqual([
@@ -82,7 +82,7 @@ describe('the Settings layout', () => {
       'Task tags',
       'Signal campaigns',
       'Agent handoffs',
-      'Agent credentials',
+      'Agent connection setup',
       'Connection health',
       'Branding',
       'Default views',
