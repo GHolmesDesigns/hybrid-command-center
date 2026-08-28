@@ -125,6 +125,33 @@ describe('network MCP (C113)', () => {
     expect(JSON.stringify(res.body)).not.toMatch(/hcc_mcp_|session-secret|password/i);
   });
 
+  it('lists and gets the shared prompt definitions over HTTP', async () => {
+    const { cookie, csrfToken } = await login();
+    const bearer = await issueBearer(cookie, csrfToken);
+
+    const listed = await request(app())
+      .post(MCP_HTTP_PATH)
+      .set('Authorization', `Bearer ${bearer}`)
+      .set(MCP_AGENT_LABEL_HEADER, 'cursor')
+      .send({ jsonrpc: '2.0', id: 30, method: 'prompts/list' });
+    expect(listed.status).toBe(200);
+    expect(listed.body.result.prompts).toHaveLength(5);
+
+    const fetched = await request(app())
+      .post(MCP_HTTP_PATH)
+      .set('Authorization', `Bearer ${bearer}`)
+      .set(MCP_AGENT_LABEL_HEADER, 'cursor')
+      .send({
+        jsonrpc: '2.0',
+        id: 31,
+        method: 'prompts/get',
+        params: { name: 'start_claimed_work', arguments: { handoffId: 'handoff-http' } },
+      });
+    expect(fetched.status).toBe(200);
+    expect(fetched.body.result.messages[0].content.text).toContain('handoff-http');
+    expect(fetched.body.result.messages[0].content.text).toContain('coordination_claim_handoff');
+  });
+
   it('posts a handoff over bearer auth when agent_label is set', async () => {
     const { cookie, csrfToken } = await login();
     const bearer = await issueBearer(cookie, csrfToken);
