@@ -12,6 +12,7 @@ import { callMcpTool } from './dispatch.ts';
 import { mcpToolCallErrorPayload } from './coordination.ts';
 import { MCP_RESOURCE_DEFINITIONS, readMcpResource } from './resources.ts';
 import { mcpToolsListPayload } from './registry.ts';
+import { getMcpPrompt, mcpPromptsListPayload } from './prompts.ts';
 import { setMcpSessionAgentLabel, type McpSession } from './session.ts';
 
 export interface JsonRpcRequest {
@@ -104,7 +105,7 @@ export async function handleMcpJsonRpc(
         }
         reply({
           protocolVersion: PROTOCOL_VERSION,
-          capabilities: { tools: {}, resources: {} },
+          capabilities: { tools: {}, resources: {}, prompts: {} },
           serverInfo: { name: 'hybrid-command-center', version: APP_VERSION },
         });
         return;
@@ -118,6 +119,29 @@ export async function handleMcpJsonRpc(
       case 'tools/list':
         reply({ tools: mcpToolsListPayload() });
         return;
+      case 'prompts/list':
+        reply({ prompts: mcpPromptsListPayload() });
+        return;
+      case 'prompts/get': {
+        const get = (params ?? {}) as { name?: unknown; arguments?: unknown };
+        if (typeof get.name !== 'string' || !get.name) {
+          fail(-32602, 'prompts/get requires a prompt name.');
+          return;
+        }
+        let prompt;
+        try {
+          prompt = getMcpPrompt(get.name, get.arguments);
+        } catch (error) {
+          fail(-32602, error instanceof Error ? error.message : 'Invalid prompt arguments.');
+          return;
+        }
+        if (!prompt) {
+          fail(-32602, `Unknown prompt: ${get.name}`);
+          return;
+        }
+        reply(prompt);
+        return;
+      }
       case 'tools/call': {
         const call = (params ?? {}) as { name?: string; arguments?: unknown };
         if (!call.name || typeof call.name !== 'string') {

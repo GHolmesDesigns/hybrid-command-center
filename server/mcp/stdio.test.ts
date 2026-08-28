@@ -55,7 +55,7 @@ describe('handleMcpJsonRpc', () => {
 
   it('initializes from clientInfo.name when _meta.agent_label is absent', async () => {
     const session = createMcpSession();
-    const { write } = capture();
+    const { replies, write } = capture();
     await handleMcpJsonRpc(
       session,
       {
@@ -68,6 +68,59 @@ describe('handleMcpJsonRpc', () => {
       db,
     );
     expect(session.agentLabel).toBe('cursor');
+    expect(replies[0]).toMatchObject({ result: { capabilities: { prompts: {} } } });
+  });
+
+  it('lists and gets prompts over the shared JSON-RPC handler', async () => {
+    const session = createMcpSession({ agentLabel: 'cursor' });
+    const { replies, write } = capture();
+    await handleMcpJsonRpc(session, { jsonrpc: '2.0', id: 1, method: 'prompts/list' }, write, db);
+    const listed = replies[0] as { result: { prompts: Array<{ name: string }> } };
+    expect(listed.result.prompts.map((prompt) => prompt.name)).toContain('verify_before_complete');
+
+    await handleMcpJsonRpc(
+      session,
+      {
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'prompts/get',
+        params: { name: 'verify_before_complete', arguments: { handoffId: 'handoff-1' } },
+      },
+      write,
+      db,
+    );
+    expect(replies[1]).toMatchObject({
+      result: { messages: [{ role: 'user', content: { type: 'text' } }] },
+    });
+
+    await handleMcpJsonRpc(
+      session,
+      { jsonrpc: '2.0', id: 3, method: 'prompts/get', params: {} },
+      write,
+      db,
+    );
+    await handleMcpJsonRpc(
+      session,
+      { jsonrpc: '2.0', id: 4, method: 'prompts/get', params: { name: 'missing' } },
+      write,
+      db,
+    );
+    await handleMcpJsonRpc(
+      session,
+      {
+        jsonrpc: '2.0',
+        id: 5,
+        method: 'prompts/get',
+        params: { name: 'start_claimed_work', arguments: {} },
+      },
+      write,
+      db,
+    );
+    expect(replies[2]).toMatchObject({ error: { code: -32602 } });
+    expect(replies[3]).toMatchObject({ error: { code: -32602 } });
+    expect(replies[4]).toMatchObject({
+      error: { code: -32602, message: expect.stringMatching(/handoffId/) },
+    });
   });
 
   it('covers ping, notifications, missing method, and unknown method', async () => {
