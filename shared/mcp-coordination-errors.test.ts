@@ -74,11 +74,13 @@ describe('mcpCoordinationErrorDetail', () => {
   });
 
   it('falls back to invalid state for unmatched 409 prose', () => {
-    expect(mcpCoordinationErrorFromMessage('Unexpected conflict.', 409, 'COMPLETED')).toMatchObject({
-      code: 'COORDINATION_INVALID_STATE',
-      retryable: false,
-      currentState: 'COMPLETED',
-    });
+    expect(mcpCoordinationErrorFromMessage('Unexpected conflict.', 409, 'COMPLETED')).toMatchObject(
+      {
+        code: 'COORDINATION_INVALID_STATE',
+        retryable: false,
+        currentState: 'COMPLETED',
+      },
+    );
   });
 
   it('exposes static refusal helpers for session and tool errors', () => {
