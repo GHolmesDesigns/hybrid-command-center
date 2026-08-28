@@ -8,6 +8,101 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.6.4] - 2026-08-28
+
+### Added
+
+- `npm run check:manual-version` fails when the operating manual's current-version stamps
+  disagree with `package.json` — the same drift that let the manual sit at 5.4.0 through four
+  releases with nothing catching it. It checks the rail footer, the masthead release badge, the
+  stats block, and the colophon: four locations with no historical reading at all, each anchored
+  to markup that exists for exactly one purpose. Wired into the quality gates alongside
+  `check:version-bump`, under the same condition — only once a version claim is real (on `main`,
+  or once a pull request leaves draft), so a draft branch legitimately holding the last-released
+  version never fails it.
+- A fifth candidate stamp — the sentence describing what the MCP surface currently offers — is
+  deliberately not checked. Nearby prose in the exact same shape ("5.5.0 makes the write budget
+  per credential...") is a historical attribution that must never move, and nothing short of
+  reading a sentence for meaning reliably tells the two apart. A narrower gate that is always
+  right was chosen over a broader one that would eventually cry wolf.
+
+### Breaking changes
+
+None.
+
+## [5.6.3] - 2026-08-28
+
+### Added
+
+- Three multi-agent MCP capability reports — Claude Code, Codex, and Cursor's independent reviews
+  of the MCP surface at 5.4.2 — and the consolidating `docs/mcp-capability-plan.md` that governs
+  the defects and cards they found, are now tracked at `docs/`.
+- Claude Code's and Cursor's own project MCP configuration (`.mcp.json`, `.cursor/mcp.json`) are
+  now tracked, so opening this repository in either tool auto-configures its connection to this
+  project's own MCP server. Claude Code's dev-server launch config (`.claude/launch.json`) is
+  tracked for the same reason.
+
+### Changed
+
+- `.gitignore` now excludes `.claude/scheduled_tasks.lock` (a live runtime lock, not app state),
+  `.cursor/mcp.json.portable-backup` (a redundant duplicate of the tracked config), and
+  `data/.fuse_hidden*` (interrupted-write artifacts from a FUSE-backed filesystem, not app data).
+
+### Breaking changes
+
+None.
+
+## [5.6.2] - 2026-08-28
+
+### Changed
+
+- The completed Version 4 and Version 5 planning reports (`VERSION_4_FEASIBILITY_REPORT.md`,
+  `VERSION_5_CARDS.md`, `VERSION_5_FEASIBILITY_REPORT.md`) move from the repository root to
+  `docs/iterations/`, alongside newer planning material already gathered there. Every card those
+  reports describe (C31–C48) has already shipped; nothing in the app or its build depends on their
+  root-level path.
+- `docs/iterations/` also now tracks `VERSION_5B_FEASIBILITY_REPORT.md` (C85-era, baseline #259)
+  and `VERSION_5_ADDITIONS_PHASE_PLAN.md` (C56–C71, filed as #183–#198) — the same class of
+  already-shipped planning history as the three reports above. The raw `.docx` source behind one
+  of them is left untracked; it's a binary export superseded by its own Markdown conversion.
+
+### Breaking changes
+
+None. This is a documentation relocation only.
+
+## [5.6.1] - 2026-08-28
+
+### Fixed
+
+- MCP coordination note, complete, and cancel tools accept optional `clientRequestId` idempotency keys; an exact retry returns the first outcome and writes nothing further.
+- Every coordination tool refusal and failure now carries structured error data (`code`, `retryable`, and when relevant `retryAfterMs`, `currentState`, and `requiredAction`) beside the existing plain-language error string.
+
+### Breaking changes
+
+None.
+
+## [5.6.0] - 2026-08-28
+
+### Fixed
+
+- The operating manual is brought current to 5.5.0. It had been written against 5.4.0 and then
+  edited in place for 5.4.2 without being committed, so it no longer matched the app.
+- Corrected: authentication is gated by the completed production checklist, not by the bind
+  address. The manual said a loopback bind is never authenticated, which is wrong for the
+  supported shape where `HOST` stays `127.0.0.1` behind Caddy and login is still enforced.
+- Corrected: the coordination write budget is enforced per credential and persists across
+  requests. The manual described the earlier per-session limiter, which no longer reflects how
+  the network transport enforces the budget.
+
+### Added
+
+- The manual now documents `retryAfterMs` on a write-budget refusal, and the guard that reverts a
+  pull request marked ready before finalization back to draft.
+
+### Breaking changes
+
+None. This is a documentation-only change.
+
 ## [5.5.2] - 2026-08-28
 
 ### Fixed
