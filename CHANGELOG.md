@@ -8,6 +8,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.7.1] - 2026-08-28
+
+### Added
+
+- Added five MCP workflow prompts for claiming work, reviewing project status, preparing handoffs,
+  verifying completion evidence, and triaging the Signal queue over both stdio and HTTP.
+
+### Breaking changes
+
+None.
+
 ## [5.7.0] - 2026-08-28
 
 ### Added
