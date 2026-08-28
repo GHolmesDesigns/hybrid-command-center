@@ -1,9 +1,11 @@
 # Agent Coordination Hub — Plan
 
-Status: **decided (C109 / #336), not implemented.** This plan extends the MCP work from
-[`multi-agent-mcp-decision.md`](multi-agent-mcp-decision.md) (C105) with a coordination layer so
-multiple IDE agents can **hand work to each other through HCC** rather than relying on accidental
-reads of the same SQLite rows.
+Status: **implemented (C110–C113 shipped).** C109 settled the model; C110–C112 delivered the handoff
+queue, coordination MCP tools, and operator inbox; C113 added authenticated HTTP MCP on the hosted
+origin. Workspace and Signal MCP tools (MCP-C106–C108) remain unbuilt. This plan extends the MCP
+work from [`multi-agent-mcp-decision.md`](multi-agent-mcp-decision.md) (C105) with a coordination
+layer so multiple IDE agents can **hand work to each other through HCC** rather than relying on
+accidental reads of the same SQLite rows.
 
 **Decision date:** 25 August 2026. Card C109 finalizes §4–§8 below. Runtime, schema, UI, and MCP
 tools ship in C110–C112; this document adds no application code.
@@ -20,11 +22,11 @@ changes it. Completing a handoff never calls publish, Drive, or import paths.
 
 ## 1. What “hub” means here
 
-| Layer | What it provides | Cards |
-| --- | --- | --- |
-| Shared workspace | One SQLite truth for clients, tasks, Signal | MCP-C106–MCP-C108 (Wave 22) |
-| **Agent coordination** | Handoffs, claims, threads, operator inbox | **C109–C112** |
-| Remote access | Network MCP on the hosted origin | C113 |
+| Layer | What it provides | Cards | Status |
+| --- | --- | --- | --- |
+| Shared workspace | One SQLite truth for clients, tasks, Signal | MCP-C106–MCP-C108 (Wave 22) | **Unbuilt** |
+| **Agent coordination** | Handoffs, claims, threads, operator inbox | **C109–C112, C111** | **Shipped** |
+| Remote access | Network MCP on the hosted origin | C113 | **Shipped** |
 
 **In scope:** durable handoffs between named agents (`agent_label` from MCP init), an operator-visible
 inbox, and MCP tools to post, claim, complete, and list coordination items.
@@ -61,21 +63,20 @@ satisfy the one-`e2e`-spec-per-milestone rule in `AGENTS.md`.
 Sizes are the repository label scale, not calendar days: `size-s` under 1 hour, `size-m` 1–3 hours,
 `size-l` 4–8 hours, `size-xl` 8–12 hours, `size-xxl` a day or more.
 
-| Wave | Cards | GitHub issues | Theme | Estimate (sequential) | Browser coverage |
+| Wave | Cards | GitHub issues | Theme | Estimate (sequential) | Status |
 | --- | --- | --- | --- | --- | --- |
-| 22 — Multi-agent MCP | C105, MCP-C106, MCP-C107, MCP-C108 | #304, TBD | Workspace read/write over local stdio | **~10–22 h** (1–3 h + 1–3 h + 4–8 h + 4–8 h) | `e2e/mcp-signal-planning.spec.ts` on MCP-C107 |
-| 23 — Agent coordination hub | C109, C110, C111, C112 | #336–#339 | Handoffs, claims, operator inbox | **~7–17 h** (1–3 h + 4–8 h + 1–3 h + 1–3 h) | `e2e/coordination-inbox.spec.ts` on C112 |
-| 24 — Network MCP | C113 | #340 | Streamable HTTP MCP after operator auth | **4–8 h** | integration tests only; staging rehearsal per C55 |
+| 23 — Agent coordination hub | C109, C110, C111, C112 | #336–#339 | Handoffs, claims, operator inbox | **~7–17 h** | **Shipped** |
+| 24 — Network MCP | C113 | #340 | Streamable HTTP MCP after operator auth | **4–8 h** | **Shipped** |
+| 22 — Multi-agent MCP | MCP-C106, MCP-C107, MCP-C108 | TBD | Workspace read/write over MCP | **~10–22 h** | **Unbuilt** |
 
 **MCP-C106–C108** are the implementation cards named in
 [`multi-agent-mcp-decision.md`](multi-agent-mcp-decision.md) §10. They are **not** publishing-wave
 C106–C108 (#305–#307).
 
-Wave 22 must land before Wave 23 starts **implementation** work (C110+). C109 (this docs
-settlement) binds to MCP-C106's `agent_label` and `mcp_agent_events` **contracts** from
-[`multi-agent-mcp-decision.md`](multi-agent-mcp-decision.md) and does not require that runtime to
-exist before the decision merges. Wave 24 stays **deferred** until C51 (#177), C53 (#179), and C55
-(#181) merge; it may share the Cloud Hosting milestone rather than ship as a code-only Wave 24.
+Wave 22 (MCP-C106–C108) remains **unbuilt** — coordination and network MCP shipped first. C109
+(this docs settlement) binds to MCP-C106's `agent_label` and `mcp_agent_events` **contracts** from
+[`multi-agent-mcp-decision.md`](multi-agent-mcp-decision.md). Further MCP work is sequenced in
+[`mcp-capability-plan.md`](mcp-capability-plan.md) (Waves 26–30).
 
 ### Card index (coordination and network)
 
@@ -320,13 +321,12 @@ blockers without opening every MCP session log.
 
 ---
 
-### C113 — Network MCP behind operator auth
+### C113 — Network MCP behind operator auth (shipped)
 
-**Type / branch:** `feat/<issue>-mcp-network`
-**Size:** L · **Estimate:** 4–8 hours · **Wave / milestone:** 24 — Network MCP (deferred; may join Cloud Hosting) · **Labels:** `enhancement` `size-l` `tier-1-security` `blocked` `deferred`
+**Type / branch:** `feat/340-mcp-network`
+**Size:** L · **Estimate:** 4–8 hours · **Wave / milestone:** 24 — Network MCP · **Labels:** `enhancement` `size-l` `tier-1-security`
 **Issue:** #340
-**Depends on:** C108, C111 (coordination tools included in network surface), C51 (#177), C53
-(#179), C55 (#181).
+**Depends on:** C111, C51 (#177), C53 (#179), C55 (#181). MCP-C108 remains unbuilt.
 **Blocks:** none.
 
 #### Problem
@@ -605,6 +605,8 @@ Provider publish never runs inside steps 1–4.
   surface MCP-C106–MCP-C108, network C113.
 - [`cloud-hosting.md`](cloud-hosting.md) §5 — operator auth prerequisite for C113.
 - [`AGENTS.md`](../AGENTS.md) — Signal authority, integration log rules.
+- [`mcp-capability-plan.md`](mcp-capability-plan.md) — Waves 26–30 MCP hardening, reads, writes,
+  and catalog corrections (C116–C134).
 
 ---
 

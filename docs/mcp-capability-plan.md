@@ -106,9 +106,7 @@ nothing but prose distinguishes them.
 | [`AGENTS.md`](../AGENTS.md) `server/mcp/` | "local stdio MCP surface" | stdio **and** authenticated HTTP |
 | [`work-summary.md`](work-summary.md) | 16 Aug snapshot at 4.3.0 | 27 Aug, 5.4.2, production |
 
-The three capability reports and `work-summary.md` are also **untracked** in the working tree. They
-are the inputs to this plan and are committed by C119 before any code card starts.
-**Fixed by:** C119.
+**Fixed by:** C119 (shipped).
 
 ---
 
