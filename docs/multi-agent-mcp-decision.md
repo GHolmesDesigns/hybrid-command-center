@@ -285,7 +285,7 @@ already owns the behaviour.
 | `workspace_manage_tag` | L | `server/domain/tags` | Operator | `mcp_agent_events` |
 | `workspace_list_categories` | R | `server/domain/categories` | Operator | — |
 | `workspace_manage_category` | L | `server/domain/categories` | Operator | `mcp_agent_events` |
-| `workspace_dashboard_summary` | R | `server/app.ts` (inline `/api/dashboard` at line 1825; **C121** extracts `server/domain/dashboard.ts`) | Operator | — |
+| `workspace_dashboard_summary` | R | `server/domain/dashboard.ts` | Operator | — |
 | `workspace_calendar_range` | R | `server/calendar.ts` | Operator | — |
 
 ### 9.3 Signal — planning and reads

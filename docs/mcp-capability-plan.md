@@ -30,14 +30,12 @@ Every row below was checked against the tree at `8617968`, not taken from the re
 | `clientRequestId` on post only | Yes | `postArgsSchema` in [`server/mcp/coordination.ts`](../server/mcp/coordination.ts); note/complete/cancel schemas omit it |
 | Agent label is client-asserted per request | Yes | `applyAgentLabel` reads `x-agent-label` on every POST ([`server/mcp/http.ts:83`](../server/mcp/http.ts)) |
 
-Two facts the reports did not record, found while grounding this plan — both are prerequisites,
-covered by C121 and C122:
+Two facts the reports did not record, found while grounding this plan — one is resolved, one
+remains for C122:
 
-- **`workspace_dashboard_summary` has no owner module.** §9.2 of the decision record assigns it to
-  `server/domain/dashboard`, which does not exist. The composition lives inline in the route handler
-  at [`server/app.ts:1752`](../server/app.ts). Shipping the tool against today's tree would be a
-  second implementation of the deadline buckets — exactly what "one tool, one service method"
-  forbids.
+- **`workspace_dashboard_summary` now has an owner module.** C121 extracted
+  [`server/domain/dashboard.ts`](../server/domain/dashboard.ts); `GET /api/dashboard` and the
+  upcoming MCP tool both call `buildDashboardSummary`.
 - **The tool dispatcher is synchronous.** `callCoordinationTool` returns `McpToolCallResult`, and
   [`server/mcp/stdio.ts:118`](../server/mcp/stdio.ts) calls it without `await`. `PublishService.preview`
   ([`server/publish/service.ts:159`](../server/publish/service.ts)) is `async`. `signal_publish_preview`
