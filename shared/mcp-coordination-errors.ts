@@ -9,6 +9,8 @@ import type { AgentHandoffState } from './agent-coordination.ts';
 export const MCP_COORDINATION_ERROR_CODES = [
   'COORDINATION_AGENT_LABEL_REQUIRED',
   'COORDINATION_SESSION_LABEL_MISMATCH',
+  'COORDINATION_CREDENTIAL_LABEL_MISMATCH',
+  'COORDINATION_SCOPE_REQUIRED',
   'COORDINATION_RATE_LIMIT_EXCEEDED',
   'COORDINATION_UNAUTHORIZED',
   'COORDINATION_INVALID_STATE',
@@ -44,6 +46,22 @@ export const mcpCoordinationSessionLabelMismatch = (): McpCoordinationErrorDetai
     code: 'COORDINATION_SESSION_LABEL_MISMATCH',
     retryable: false,
     requiredAction: 'Omit from_agent_label or set it to the MCP session agent_label.',
+  });
+
+export const mcpCoordinationCredentialLabelMismatch = (): McpCoordinationErrorDetail =>
+  mcpCoordinationErrorDetail({
+    code: 'COORDINATION_CREDENTIAL_LABEL_MISMATCH',
+    retryable: false,
+    requiredAction: 'Use the label bound to this credential or omit x-agent-label.',
+  });
+
+export const mcpCoordinationScopeRequired = (
+  scope: 'coordination:read' | 'coordination:write',
+): McpCoordinationErrorDetail =>
+  mcpCoordinationErrorDetail({
+    code: 'COORDINATION_SCOPE_REQUIRED',
+    retryable: false,
+    requiredAction: `Ask the operator to issue a credential with ${scope}.`,
   });
 
 export const mcpCoordinationRateLimitExceeded = (

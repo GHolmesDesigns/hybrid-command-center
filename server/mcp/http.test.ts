@@ -71,6 +71,24 @@ describe('network MCP (C113)', () => {
     return res.body.bearerToken as string;
   }
 
+  async function issueScopedBearer(
+    cookie: string,
+    csrfToken: string,
+    label: string,
+    scopes: string[],
+  ) {
+    const res = await request(app())
+      .post('/api/auth/mcp-agents')
+      .set('Cookie', cookie)
+      .set(CSRF_HEADER_NAME, csrfToken)
+      .send({ label, scopes, expiresAt: new Date(Date.now() + 60_000).toISOString() });
+    expect(res.status).toBe(201);
+    return res.body as {
+      bearerToken: string;
+      credential: { id: string; agentId: string };
+    };
+  }
+
   it('refuses unauthenticated MCP requests', async () => {
     const res = await request(app())
       .post(MCP_HTTP_PATH)
@@ -128,6 +146,116 @@ describe('network MCP (C113)', () => {
     expect(res.body.result.isError).toBe(false);
     const payload = JSON.parse(res.body.result.content[0].text);
     expect(payload.state).toBe('OPEN');
+  });
+
+  it('binds a scoped credential to its server-side label and audits header impersonation', async () => {
+    const { cookie, csrfToken } = await login();
+    const issued = await issueScopedBearer(cookie, csrfToken, 'cursor-planning', [
+      'coordination:read',
+      'coordination:write',
+    ]);
+
+    const refused = await request(app())
+      .post(MCP_HTTP_PATH)
+      .set('Authorization', `Bearer ${issued.bearerToken}`)
+      .set(MCP_AGENT_LABEL_HEADER, 'codex-release')
+      .send({ jsonrpc: '2.0', id: 20, method: 'tools/list' });
+    expect(refused.status).toBe(400);
+    expect(refused.body.error.data).toMatchObject({
+      code: 'COORDINATION_CREDENTIAL_LABEL_MISMATCH',
+      retryable: false,
+    });
+    expect(listMcpAgentEvents(db)[0]).toMatchObject({
+      agentLabel: 'cursor-planning',
+      outcome: 'REFUSED',
+    });
+
+    const accepted = await request(app())
+      .post(MCP_HTTP_PATH)
+      .set('Authorization', `Bearer ${issued.bearerToken}`)
+      .send({
+        jsonrpc: '2.0',
+        id: 21,
+        method: 'tools/call',
+        params: {
+          name: 'coordination_post_handoff',
+          arguments: { subjectType: 'freeform', message: 'Server-bound identity.' },
+        },
+      });
+    expect(accepted.status).toBe(200);
+    expect(JSON.parse(accepted.body.result.content[0].text).fromAgentLabel).toBe('cursor-planning');
+  });
+
+  it('allows reads but refuses writes without coordination:write', async () => {
+    const { cookie, csrfToken } = await login();
+    const issued = await issueScopedBearer(cookie, csrfToken, 'read-only-agent', [
+      'coordination:read',
+    ]);
+
+    const read = await request(app())
+      .post(MCP_HTTP_PATH)
+      .set('Authorization', `Bearer ${issued.bearerToken}`)
+      .send({
+        jsonrpc: '2.0',
+        id: 22,
+        method: 'tools/call',
+        params: { name: 'coordination_list_handoffs', arguments: {} },
+      });
+    expect(read.status).toBe(200);
+    expect(read.body.result.isError).toBe(false);
+
+    const write = await request(app())
+      .post(MCP_HTTP_PATH)
+      .set('Authorization', `Bearer ${issued.bearerToken}`)
+      .send({
+        jsonrpc: '2.0',
+        id: 23,
+        method: 'tools/call',
+        params: {
+          name: 'coordination_post_handoff',
+          arguments: { subjectType: 'freeform', message: 'Must be refused.' },
+        },
+      });
+    expect(write.status).toBe(403);
+    expect(write.body.error.data.code).toBe('COORDINATION_SCOPE_REQUIRED');
+    expect(db.prepare('SELECT COUNT(*) AS total FROM agent_handoffs').get()).toEqual({ total: 0 });
+  });
+
+  it('revokes one scoped credential without interrupting another', async () => {
+    const { cookie, csrfToken } = await login();
+    const first = await issueScopedBearer(cookie, csrfToken, 'cursor', ['coordination:read']);
+    const second = await issueScopedBearer(cookie, csrfToken, 'codex', ['coordination:read']);
+
+    const revoked = await request(app())
+      .post(`/api/auth/mcp-credentials/${first.credential.id}/revoke`)
+      .set('Cookie', cookie)
+      .set(CSRF_HEADER_NAME, csrfToken);
+    expect(revoked.status).toBe(200);
+
+    const firstCall = await request(app())
+      .post(MCP_HTTP_PATH)
+      .set('Authorization', `Bearer ${first.bearerToken}`)
+      .send({ jsonrpc: '2.0', id: 24, method: 'ping' });
+    const secondCall = await request(app())
+      .post(MCP_HTTP_PATH)
+      .set('Authorization', `Bearer ${second.bearerToken}`)
+      .send({ jsonrpc: '2.0', id: 25, method: 'ping' });
+    expect(firstCall.status).toBe(401);
+    expect(secondCall.status).toBe(200);
+  });
+
+  it('keeps scoped credential lifetime independent from its issuing operator session', async () => {
+    const { cookie, csrfToken } = await login();
+    const issued = await issueScopedBearer(cookie, csrfToken, 'independent-agent', [
+      'coordination:read',
+    ]);
+    await request(app()).post('/api/auth/logout').set('Cookie', cookie);
+
+    const call = await request(app())
+      .post(MCP_HTTP_PATH)
+      .set('Authorization', `Bearer ${issued.bearerToken}`)
+      .send({ jsonrpc: '2.0', id: 26, method: 'ping' });
+    expect(call.status).toBe(200);
   });
 
   it('refuses coordination writes without agent_label header', async () => {

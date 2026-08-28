@@ -203,6 +203,8 @@ describe('additive schema migration', () => {
         'project_categories',
         'settings',
         'operator_sessions',
+        'agent_registrations',
+        'agent_credentials',
         'drive_steps',
         'import_receipts',
         'integration_events',
@@ -249,6 +251,10 @@ describe('additive schema migration', () => {
     ]);
     // MCP audit arrives empty: a migration invents no agent tool history.
     expect(rows(db, 'SELECT COUNT(*) AS total FROM mcp_agent_events')).toEqual([{ total: 0 }]);
+    expect(rows(db, 'SELECT id FROM agent_registrations')).toEqual([
+      { id: 'operator-session-bootstrap' },
+    ]);
+    expect(rows(db, 'SELECT COUNT(*) AS total FROM agent_credentials')).toEqual([{ total: 0 }]);
     // Figures arrive empty as well, and the delivery rows gain the provider result identity as a
     // nullable column: a migration cannot know what the provider called a delivery it never asked
     // about, and inventing an id would be inventing something to ask analytics for.

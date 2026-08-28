@@ -104,6 +104,25 @@ CREATE TABLE IF NOT EXISTS operator_mcp_bearers (
   issued_at TEXT NOT NULL,
   revoked_at TEXT
 );
+-- Server-bound network MCP identities (C118). Registration labels are editable, IDs are not;
+-- credential secrets never enter SQLite, only the peppered HMAC in token_hash does.
+CREATE TABLE IF NOT EXISTS agent_registrations (
+  id TEXT PRIMARY KEY,
+  display_label TEXT NOT NULL CHECK(length(display_label) BETWEEN 1 AND 64),
+  created_at TEXT NOT NULL,
+  last_used_at TEXT,
+  last_origin TEXT
+);
+CREATE TABLE IF NOT EXISTS agent_credentials (
+  id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL REFERENCES agent_registrations(id) ON DELETE RESTRICT,
+  token_hash TEXT NOT NULL UNIQUE,
+  scopes TEXT NOT NULL,
+  issued_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  last_used_at TEXT,
+  revoked_at TEXT
+);
 -- Drive OAuth pending states (C52): one row per connect attempt, bound to a session when auth is on.
 -- Keep in sync with OAUTH_PENDING_STATES_TABLE_SQL in server/drive/oauth.ts.
 CREATE TABLE IF NOT EXISTS oauth_pending_states (
@@ -622,6 +641,10 @@ CREATE INDEX IF NOT EXISTS idx_import_receipts_created ON import_receipts(create
 -- Purge walks idle expiry; absolute and revoked rows are filtered in the same DELETE.
 CREATE INDEX IF NOT EXISTS idx_operator_sessions_idle ON operator_sessions(idle_expires_at);
 CREATE INDEX IF NOT EXISTS idx_operator_mcp_bearers_session ON operator_mcp_bearers(session_token_hash);
+CREATE INDEX IF NOT EXISTS idx_agent_credentials_agent ON agent_credentials(agent_id);
+CREATE INDEX IF NOT EXISTS idx_agent_credentials_expiry ON agent_credentials(expires_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_registrations_label
+  ON agent_registrations(display_label COLLATE NOCASE);
 -- Expired OAuth pending rows are deleted by expires_at on begin/consume and on a periodic purge.
 CREATE INDEX IF NOT EXISTS idx_oauth_pending_expires ON oauth_pending_states(expires_at);
 CREATE INDEX IF NOT EXISTS idx_integration_events_created ON integration_events(created_at DESC);
@@ -1339,6 +1362,14 @@ export function createDb(
   // instead of making BEGIN IMMEDIATE fail as soon as it meets the lock.
   db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;');
   db.exec(tableSchema);
+  // Imported lazily at module load above would create a db/auth cycle; the built-in row is data,
+  // not schema, and this idempotent statement keeps old operator-session bearers mapped after
+  // every additive migration.
+  db.prepare(
+    `INSERT OR IGNORE INTO agent_registrations(
+       id, display_label, created_at, last_used_at, last_origin
+     ) VALUES('operator-session-bootstrap','operator-session','1970-01-01T00:00:00.000Z',NULL,NULL)`,
+  ).run();
   const applied = applyAdditiveMigrations(db);
   relaxPublicationScheduledInstant(db);
   backfillProjectActivity(db);

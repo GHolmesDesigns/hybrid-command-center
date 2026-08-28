@@ -2035,6 +2035,69 @@ button.tag-chip.toggle.active {
   line-height: 1.6;
 }
 
+.agent-credential-form fieldset {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.agent-credential-form legend {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  padding: 0 4px;
+}
+.agent-credential-form .checkbox-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.agent-credential-form .checkbox-row input {
+  width: auto;
+}
+.issued-credential {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid var(--green);
+  border-radius: 10px;
+  background: #f2f7f4;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.issued-credential code {
+  overflow-wrap: anywhere;
+}
+.agent-credential-list {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.agent-credential-list li {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.agent-credential-list li > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.agent-credential-list span,
+.agent-credential-list small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
 /* Operator coordination inbox (C112) — lives on Settings beside the other workspace cards. */
 .handoff-group {
   margin-top: 18px;
