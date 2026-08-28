@@ -264,7 +264,7 @@ export async function handleMcpHttpPost(
       responses.push(message);
     },
     options.db,
-    { grantedScopes, now: new Date(nowMs) },
+    { grantedScopes, now: new Date(nowMs), transport: 'http', authenticated: true },
   );
 
   const reply = responses[0];

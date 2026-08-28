@@ -32,7 +32,7 @@ export type McpToolRegistryEntry = {
   requiredScope: McpAgentScope | null;
   owner: string;
   /** When set, `tools/call` routes to the named handler module. */
-  handler: 'coordination' | 'system_capabilities' | 'workspace_read';
+  handler: 'coordination' | 'system_capabilities' | 'system_connection_status' | 'workspace_read';
 };
 
 const coordinationScope = (name: CoordinationTool): McpAgentScope =>
@@ -319,10 +319,22 @@ const workspaceReadTools: McpToolRegistryEntry[] = [
   },
 ];
 
+const systemConnectionStatusTool: McpToolRegistryEntry = {
+  name: 'system_connection_status',
+  description:
+    'Read-only connection diagnostic: auth context, tools/list, resources/list, one bounded resource read, server version, capability version, and server clock. Never creates a handoff.',
+  inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  class: 'R',
+  requiredScope: null,
+  owner: 'server/mcp/connection-status.ts',
+  handler: 'system_connection_status',
+};
+
 export const MCP_TOOL_REGISTRY: readonly McpToolRegistryEntry[] = [
   ...coordinationTools,
   ...workspaceReadTools,
   systemCapabilitiesTool,
+  systemConnectionStatusTool,
 ];
 
 export const MCP_CAPABILITY_VERSION = computeMcpCapabilityVersion(

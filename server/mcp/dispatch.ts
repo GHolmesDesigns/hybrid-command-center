@@ -23,11 +23,14 @@ import {
 import { callWorkspaceReadTool, type McpWorkspaceReadDeps } from './workspace-read.ts';
 import { redactToolResult } from './redact.ts';
 import type { McpSession } from './session.ts';
+import { buildConnectionStatus } from './connection-status.ts';
 
 export type McpToolDispatchOptions = {
   grantedScopes: readonly McpAgentScope[];
   now?: Date;
   workspaceReadDeps?: McpWorkspaceReadDeps;
+  transport?: 'stdio' | 'http';
+  authenticated?: boolean;
 };
 
 const refused = (
@@ -87,6 +90,16 @@ export async function callMcpTool(
       const payload = buildWorkspaceContextDescriptor(db, {
         grantedScopes: options.grantedScopes,
         filters: workspaceContextFiltersFromToolArgs(rawArgs),
+        now,
+      });
+      return { outcome: 'SUCCESS', data: redactToolResult(payload) };
+    }
+    case 'system_connection_status': {
+      const payload = buildConnectionStatus(db, {
+        transport: options.transport ?? 'stdio',
+        authenticated: options.authenticated ?? true,
+        agentLabel: session.agentLabel,
+        grantedScopes: options.grantedScopes,
         now,
       });
       return { outcome: 'SUCCESS', data: redactToolResult(payload) };

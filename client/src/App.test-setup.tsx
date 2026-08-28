@@ -243,6 +243,38 @@ export const testState = {
     enabled: boolean;
     credentials: import('../../shared/mcp-agent-registry').McpAgentCredentialSummary[];
   },
+  mcpHealthPanelPayload: {
+    enabled: true,
+    state: 'never_connected',
+    stateReason: null,
+    generatedAt: '2026-08-28T12:00:00.000Z',
+    agents: [],
+    errorSummary: [],
+    staleHandoffs: [],
+    auditEventCount: 0,
+  } as import('../../shared/mcp-health').McpHealthPanel,
+  mcpHealthTestPayload: {
+    ok: true,
+    status: {
+      ok: true,
+      transport: 'operator',
+      authenticated: true,
+      protocolVersion: '2024-11-05',
+      agentLabel: null,
+      grantedScopes: ['coordination:read', 'coordination:write'],
+      serverVersion: APP_VERSION,
+      capabilityVersion: 'mcp-test',
+      serverClock: '2026-08-28T12:00:00.000Z',
+      checks: {
+        toolsList: { ok: true, toolCount: 17 },
+        resourcesList: { ok: true, resourceCount: 2 },
+        resourceRead: { ok: true, uri: 'hcc://workspace/context', byteLength: 100 },
+      },
+      testedAt: '2026-08-28T12:00:00.000Z',
+    },
+    workspaceChecksumUnchanged: true,
+    lastUsedAt: '2026-08-28T12:00:00.000Z',
+  },
   /**
    * What `GET /api/projects/:id/files` answers, per request, so a suite can vary the page
    * by folder and by cursor the way real Drive does. Unset means a Drive nobody connected.
@@ -705,6 +737,7 @@ const payloadFor = (url: string) => {
       }
     );
   if (url.endsWith('/api/auth/mcp-agents')) return testState.mcpAgentRegistryPayload;
+  if (url.endsWith('/api/mcp/health')) return testState.mcpHealthPanelPayload;
   if (url.endsWith('/api/projects')) return testState.projectsPayload;
   if (url.endsWith('/api/clients')) return testState.clientsPayload;
   if (url.endsWith('/api/tasks')) return testState.tasksPayload;
@@ -751,6 +784,9 @@ const respondTo = (url: string, init?: RequestInit) => {
   }
   if (url.endsWith('/api/settings/drive') && testState.driveSettingsError)
     return reply(503, { error: testState.driveSettingsError });
+  if (url.endsWith('/api/mcp/health/test') && method === 'POST') {
+    return testState.mcpHealthTestPayload;
+  }
   if (url.endsWith('/api/auth/mcp-agents') && method === 'POST') {
     const credential = {
       id: 'credential-issued',
@@ -1672,6 +1708,16 @@ beforeEach(() => {
   testState.agentHandoffDetailPayload = null;
   testState.agentHandoffDetailError = null;
   testState.mcpAgentRegistryPayload = { enabled: false, credentials: [] };
+  testState.mcpHealthPanelPayload = {
+    enabled: true,
+    state: 'never_connected',
+    stateReason: null,
+    generatedAt: '2026-08-28T12:00:00.000Z',
+    agents: [],
+    errorSummary: [],
+    staleHandoffs: [],
+    auditEventCount: 0,
+  };
   testState.driveListingPayload = null;
   testState.calendarPayload = null;
   testState.signalPostsPayload = [];

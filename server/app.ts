@@ -33,6 +33,10 @@ import {
   updateMcpAgentRegistrationSchema,
 } from '../shared/mcp-agent-registry.ts';
 import { createMcpHttpHandler } from './mcp/http.ts';
+import { buildMcpHealthPanel } from './mcp/health-panel.ts';
+import { buildConnectionStatus } from './mcp/connection-status.ts';
+import { workspaceDataChecksum } from './mcp/workspace-checksum.ts';
+import { MCP_AGENT_SCOPES } from '../shared/mcp-agent-registry.ts';
 import { McpWriteLimiterRegistry } from './mcp/write-limiter-registry.ts';
 import { DRIVE_OAUTH_SCOPE } from '../shared/drive-oauth.ts';
 import {
@@ -1004,6 +1008,47 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       return;
     }
     res.json({ ok: true });
+  });
+
+  app.get('/api/mcp/health', (_req, res) => {
+    try {
+      res.json(buildMcpHealthPanel(db, { enabled: authRequired, now: new Date(authNowMs()) }));
+    } catch (error) {
+      res.status(500).json({
+        enabled: authRequired,
+        state: 'unavailable',
+        stateReason:
+          error instanceof Error ? error.message : 'The MCP health panel could not be loaded.',
+        generatedAt: new Date(authNowMs()).toISOString(),
+        agents: [],
+        errorSummary: [],
+        staleHandoffs: [],
+        auditEventCount: 0,
+      });
+    }
+  });
+
+  app.post('/api/mcp/health/test', (req, res) => {
+    if (!authRequired) {
+      res.status(400).json({ error: 'Authentication is not required on this host.' });
+      return;
+    }
+    const checksumBefore = workspaceDataChecksum(db);
+    const now = new Date(authNowMs());
+    const status = buildConnectionStatus(db, {
+      transport: 'operator',
+      authenticated: true,
+      agentLabel: null,
+      grantedScopes: MCP_AGENT_SCOPES,
+      now,
+    });
+    const checksumAfter = workspaceDataChecksum(db);
+    res.json({
+      ok: status.ok,
+      status,
+      workspaceChecksumUnchanged: checksumBefore === checksumAfter,
+      lastUsedAt: now.toISOString(),
+    });
   });
 
   app.post('/api/auth/password', async (req, res, next) => {

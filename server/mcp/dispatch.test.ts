@@ -20,7 +20,9 @@ describe('callMcpTool', () => {
   it('lists thirteen coordination and workspace read tools plus system_capabilities', () => {
     const names = mcpToolsListPayload().map((tool) => tool.name);
     expect(names).toHaveLength(MCP_TOOL_REGISTRY.length);
-    expect(names.filter((name) => name !== 'system_capabilities')).toHaveLength(15);
+    expect(
+      names.filter((name) => name !== 'system_capabilities' && name !== 'system_connection_status'),
+    ).toHaveLength(15);
     for (const tool of [...COORDINATION_READ_TOOLS, ...COORDINATION_WRITE_TOOLS]) {
       expect(names).toContain(tool);
     }
