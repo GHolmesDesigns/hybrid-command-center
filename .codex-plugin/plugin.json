@@ -1,0 +1,11 @@
+{
+  "name": "hybrid-command-center",
+  "version": "0.1.0",
+  "description": "MCP coordination workflow for Hybrid Command Center — claim, work, prove.",
+  "skills": "./skills",
+  "interface": {
+    "displayName": "Hybrid Command Center",
+    "shortDescription": "Claim → work → prove coordination over HCC MCP.",
+    "longDescription": "Bundles the Hybrid Command Center coordination skill. Read docs/mcp-agent-workflow.md for the canonical policy; configure MCP separately through Settings → Agent connection setup."
+  }
+}

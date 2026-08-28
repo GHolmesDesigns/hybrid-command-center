@@ -968,7 +968,7 @@
 
     <div class="railfoot">
       <b>G.Holmes Designs</b><br />
-      Version 5.7.1<br />
+      Version 5.7.2<br />
       Local-first &middot; hosted-capable
     </div>
   </aside>
@@ -978,7 +978,7 @@
       <div class="inner">
         <p class="eyebrow">
           <span>G.Holmes Designs &middot; Studio operations</span>
-          <span class="draft">Release 5.7.1</span>
+          <span class="draft">Release 5.7.2</span>
         </p>
         <h1>Hybrid Command Center</h1>
         <p class="deck">
@@ -989,7 +989,7 @@
         <dl class="stats">
           <div class="stat">
             <dt>Version</dt>
-            <dd>5.7.1</dd>
+            <dd>5.7.2</dd>
           </div>
           <div class="stat">
             <dt>Runtime</dt>
@@ -2836,10 +2836,11 @@ MCP_AGENT_LABEL = "codex-release"</code></pre>
             <p>
               Both transports implement the same deliberately small JSON-RPC subset:
               <code>initialize</code>, <code>notifications/initialized</code>, <code>ping</code>,
-              <code>tools/list</code>, <code>tools/call</code>, <code>resources/list</code>, and
-              <code>resources/read</code>. Nothing else is served. A client that expects
-              <code>prompts/*</code>, <code>completion/*</code>, sampling, or server-initiated
-              notifications will not find them &mdash; configure it for tools and resources only.
+              <code>tools/list</code>, <code>tools/call</code>, <code>resources/list</code>,
+              <code>resources/read</code>, <code>prompts/list</code>, and
+              <code>prompts/get</code>. Nothing else is served. A client that expects
+              <code>completion/*</code>, sampling, or server-initiated notifications will not find
+              them &mdash; configure it for tools, resources, and workflow prompts.
               Network MCP accepts one JSON-RPC request per <code>POST</code> and answers with one
               response.
             </p>
@@ -3879,7 +3880,7 @@ npm run cutover:rehearse -- --plan</code></pre>
     <footer class="footer">
       <div class="inner">
         <p>
-          Hybrid Command Center 5.7.1 &mdash; operating manual, updated 2026-08-28. Compiled from
+          Hybrid Command Center 5.7.2 &mdash; operating manual, updated 2026-08-28. Compiled from
           <code>USER_MANUAL.md</code>, <code>README.md</code>, and <code>AGENTS.md</code>. Where
           this page and those files disagree, the repository is correct.
         </p>

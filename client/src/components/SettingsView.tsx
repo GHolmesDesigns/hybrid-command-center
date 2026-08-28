@@ -48,7 +48,7 @@ import { CategoriesCard } from './CategoriesCard';
 import { SignalCampaignsCard } from './SignalCampaignsCard';
 import { TagsCard } from './TagsCard';
 import { AgentHandoffsCard } from './AgentHandoffsCard';
-import { McpAgentCredentialsCard } from './McpAgentCredentialsCard';
+import { McpConnectionSetupCard } from './McpConnectionSetupCard';
 import { McpHealthPanelCard } from './McpHealthPanelCard';
 
 const COLOR_LABEL: Record<BrandingColorField, string> = {
@@ -326,7 +326,7 @@ export function SettingsView({
               campaigns label Signal posts, categories label projects, tags label tasks. */}
           <SignalCampaignsCard flash={flash} />
           <AgentHandoffsCard tasks={tasks} flash={flash} />
-          <McpAgentCredentialsCard flash={flash} />
+          <McpConnectionSetupCard flash={flash} />
           <McpHealthPanelCard flash={flash} />
         </div>
         <div className="settings-column">
