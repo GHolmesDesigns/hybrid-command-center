@@ -8,6 +8,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.5.2] - 2026-08-28
+
+### Fixed
+
+- Operating manual current-version stamps now agree with the application version after the 5.5.1
+  release.
+
+### Changed
+
+- Ignore superseded `.docx` sources under `docs/iterations/` in version control.
+
+### Breaking changes
+
+None.
+
 ## [5.5.1] - 2026-08-27
 
 ### Fixed
