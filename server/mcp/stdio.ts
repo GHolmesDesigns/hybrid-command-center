@@ -7,13 +7,17 @@
  */
 import { getDb, type Db } from '../db.ts';
 import { APP_VERSION } from '../../shared/branding.ts';
+import { MCP_AGENT_SCOPES, type McpAgentScope } from '../../shared/mcp-agent-registry.ts';
+import { callCoordinationTool, mcpToolCallErrorPayload } from './coordination.ts';
+import { MCP_RESOURCE_DEFINITIONS, readMcpResource } from './resources.ts';
 import {
-  callCoordinationTool,
-  COORDINATION_TOOL_DEFINITIONS,
-  mcpToolCallErrorPayload,
-} from './coordination.ts';
-import { COORDINATION_RESOURCE_DEFINITIONS, readCoordinationResource } from './resources.ts';
+  mcpToolRegistryEntry,
+  mcpToolsListPayload,
+  workspaceContextFiltersFromToolArgs,
+} from './registry.ts';
 import { setMcpSessionAgentLabel, type McpSession } from './session.ts';
+import { buildWorkspaceContextDescriptor } from './workspace-context.ts';
+import { redactToolResult } from './redact.ts';
 
 export interface JsonRpcRequest {
   jsonrpc?: string;
@@ -29,7 +33,14 @@ export interface JsonRpcResponse {
   error?: { code: number; message: string; data?: unknown };
 }
 
+export type McpJsonRpcOptions = {
+  grantedScopes?: readonly McpAgentScope[];
+  now?: Date;
+};
+
 const PROTOCOL_VERSION = '2024-11-05';
+
+const defaultGrantedScopes = (): readonly McpAgentScope[] => MCP_AGENT_SCOPES;
 
 function agentLabelFromInitialize(params: unknown): string | null {
   if (!params || typeof params !== 'object') return null;
@@ -54,8 +65,11 @@ export async function handleMcpJsonRpc(
     process.stdout.write(`${JSON.stringify(message)}\n`);
   },
   db: Db = getDb(),
+  options: McpJsonRpcOptions = {},
 ): Promise<void> {
   const { id, method, params } = request;
+  const grantedScopes = options.grantedScopes ?? defaultGrantedScopes();
+  const now = options.now ?? new Date();
   if (!method) {
     if (id !== undefined) {
       write({
@@ -105,13 +119,7 @@ export async function handleMcpJsonRpc(
         reply({});
         return;
       case 'tools/list':
-        reply({
-          tools: COORDINATION_TOOL_DEFINITIONS.map((tool) => ({
-            name: tool.name,
-            description: tool.description,
-            inputSchema: tool.inputSchema,
-          })),
-        });
+        reply({ tools: mcpToolsListPayload() });
         return;
       case 'tools/call': {
         const call = (params ?? {}) as { name?: string; arguments?: unknown };
@@ -119,7 +127,20 @@ export async function handleMcpJsonRpc(
           fail(-32602, 'tools/call requires a tool name.');
           return;
         }
-        const result = callCoordinationTool(db, session, call.name, call.arguments ?? {});
+        const entry = mcpToolRegistryEntry(call.name);
+        if (entry?.handler === 'system_capabilities') {
+          const payload = buildWorkspaceContextDescriptor(db, {
+            grantedScopes,
+            filters: workspaceContextFiltersFromToolArgs(call.arguments ?? {}),
+            now,
+          });
+          reply({
+            content: [{ type: 'text', text: JSON.stringify(redactToolResult(payload)) }],
+            isError: false,
+          });
+          return;
+        }
+        const result = callCoordinationTool(db, session, call.name, call.arguments ?? {}, now);
         const text =
           result.outcome === 'SUCCESS'
             ? JSON.stringify(result.data ?? null)
@@ -132,7 +153,7 @@ export async function handleMcpJsonRpc(
       }
       case 'resources/list':
         reply({
-          resources: COORDINATION_RESOURCE_DEFINITIONS.map((resource) => ({ ...resource })),
+          resources: MCP_RESOURCE_DEFINITIONS.map((resource) => ({ ...resource })),
         });
         return;
       case 'resources/read': {
@@ -141,7 +162,7 @@ export async function handleMcpJsonRpc(
           fail(-32602, 'resources/read requires a uri.');
           return;
         }
-        const body = readCoordinationResource(db, read.uri);
+        const body = readMcpResource(db, read.uri, { grantedScopes, now });
         reply({
           contents: [{ uri: body.uri, mimeType: body.mimeType, text: body.text }],
         });
