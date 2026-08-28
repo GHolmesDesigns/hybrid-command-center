@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   mcpCoordinationAgentLabelRequired,
   mcpCoordinationErrorFromMessage,
+  mcpCoordinationInvalidArguments,
+  mcpCoordinationNotFound,
   mcpCoordinationRateLimitExceeded,
+  mcpCoordinationSessionLabelMismatch,
+  mcpCoordinationToolFailed,
+  mcpCoordinationUnknownTool,
   MCP_COORDINATION_ERROR_CODES,
 } from './mcp-coordination-errors.ts';
 
@@ -44,6 +49,50 @@ describe('mcpCoordinationErrorDetail', () => {
       code: 'COORDINATION_INVALID_STATE',
       retryable: false,
       currentState: 'OPEN',
+    });
+  });
+
+  it('maps HTTP status codes before message heuristics', () => {
+    expect(mcpCoordinationErrorFromMessage('missing', 404)).toEqual(mcpCoordinationNotFound());
+    expect(mcpCoordinationErrorFromMessage('bad args', 400)).toEqual(
+      mcpCoordinationInvalidArguments(),
+    );
+  });
+
+  it('maps completion and cancellation failures without a requiredAction', () => {
+    expect(
+      mcpCoordinationErrorFromMessage('Handoff could not be completed.', 409, 'CLAIMED'),
+    ).toMatchObject({
+      code: 'COORDINATION_INVALID_STATE',
+      retryable: false,
+      currentState: 'CLAIMED',
+    });
+    expect(mcpCoordinationErrorFromMessage('Handoff could not be cancelled.', 409)).toMatchObject({
+      code: 'COORDINATION_INVALID_STATE',
+      retryable: false,
+    });
+  });
+
+  it('falls back to invalid state for unmatched 409 prose', () => {
+    expect(mcpCoordinationErrorFromMessage('Unexpected conflict.', 409, 'DONE')).toMatchObject({
+      code: 'COORDINATION_INVALID_STATE',
+      retryable: false,
+      currentState: 'DONE',
+    });
+  });
+
+  it('exposes static refusal helpers for session and tool errors', () => {
+    expect(mcpCoordinationSessionLabelMismatch()).toMatchObject({
+      code: 'COORDINATION_SESSION_LABEL_MISMATCH',
+      retryable: false,
+    });
+    expect(mcpCoordinationUnknownTool()).toMatchObject({
+      code: 'COORDINATION_UNKNOWN_TOOL',
+      retryable: false,
+    });
+    expect(mcpCoordinationToolFailed()).toMatchObject({
+      code: 'COORDINATION_TOOL_FAILED',
+      retryable: false,
     });
   });
 });
