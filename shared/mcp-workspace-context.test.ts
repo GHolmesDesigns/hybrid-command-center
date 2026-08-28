@@ -40,8 +40,25 @@ describe('parseWorkspaceContextUri', () => {
     });
   });
 
-  it('refuses unknown resources', () => {
-    expect(() => parseWorkspaceContextUri('hcc://workspace/other')).toThrow(/Unknown workspace/);
+  it('parses repeated section and include query params', () => {
+    expect(
+      parseWorkspaceContextUri('hcc://workspace/context?section=tools&section=workspace'),
+    ).toEqual({
+      sections: ['tools', 'workspace'],
+    });
+    expect(
+      parseWorkspaceContextUri('hcc://workspace/context?include=clients&include=projects'),
+    ).toEqual({
+      include: ['clients', 'projects'],
+    });
+  });
+
+  it('refuses malformed workspace context paths', () => {
+    expect(() => parseWorkspaceContextUri('hcc://workspace/contextextra')).toThrow(
+      /Unknown workspace/,
+    );
+    expect(() => parseWorkspaceContextUri('hcc://other/context')).toThrow(/Unknown workspace/);
+    expect(() => parseWorkspaceContextUri('not-even-a-uri')).toThrow(/Unknown workspace/);
   });
 });
 

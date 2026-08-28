@@ -111,12 +111,7 @@ export function parseWorkspaceContextUri(uri: string): WorkspaceContextFilters {
   if (!normalized.startsWith('hcc://workspace/context')) {
     throw new Error(`Unknown workspace resource: ${uri}`);
   }
-  let parsed: URL;
-  try {
-    parsed = new URL(normalized);
-  } catch {
-    throw new Error(`Unknown workspace resource: ${uri}`);
-  }
+  const parsed = new URL(normalized);
   if (
     parsed.protocol !== 'hcc:' ||
     parsed.hostname !== 'workspace' ||

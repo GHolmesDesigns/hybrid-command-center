@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { format, subDays } from 'date-fns';
 import { createDb, type Db } from '../db.ts';
 import { buildWorkspaceContextDescriptor } from './workspace-context.ts';
@@ -7,6 +7,7 @@ import {
   utf8ByteLength,
   WORKSPACE_CONTEXT_BYTE_CEILING,
 } from '../../shared/mcp-workspace-context.ts';
+import { readMcpResource } from './resources.ts';
 
 const NOW = new Date('2026-08-11T12:00:00.000Z');
 const past = format(subDays(NOW, 3), 'yyyy-MM-dd');
@@ -122,5 +123,46 @@ describe('buildWorkspaceContextDescriptor', () => {
     expect(descriptor.truncation?.trimmed.length).toBeGreaterThan(0);
     const bytes = utf8ByteLength(JSON.stringify(descriptor));
     expect(bytes).toBeLessThanOrEqual(WORKSPACE_CONTEXT_BYTE_CEILING);
+  });
+
+  it('includes handoffs and queue health when those sections are requested', () => {
+    const descriptor = buildWorkspaceContextDescriptor(db, {
+      filters: { sections: ['handoffs', 'queueHealth'] },
+      now: NOW,
+    });
+    expect(descriptor.handoffs).toEqual({ open: 0, claimed: 0 });
+    expect(descriptor.queueHealth?.headline).toMatch(/Nothing needs attention/);
+  });
+
+  it('reads workspace context through the MCP resource adapter', () => {
+    const body = readMcpResource(db, 'hcc://workspace/context?sections=workspace', {
+      grantedScopes: ['coordination:read'],
+      now: NOW,
+    });
+    const payload = JSON.parse(body.text);
+    expect(body.uri).toBe('hcc://workspace/context');
+    expect(payload.grantedScopes).toEqual(['coordination:read']);
+    expect(payload.workspace?.activeClients).toBe(1);
+  });
+
+  it('drops optional sections in order when a low ceiling is in force', async () => {
+    vi.resetModules();
+    vi.doMock('../../shared/mcp-workspace-context.ts', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('../../shared/mcp-workspace-context.ts')>();
+      return { ...actual, WORKSPACE_CONTEXT_BYTE_CEILING: 900 };
+    });
+    const { buildWorkspaceContextDescriptor: buildWithLowCeiling } = await import(
+      './workspace-context.ts'
+    );
+    const descriptor = buildWithLowCeiling(db, {
+      filters: { sections: ['workspace', 'handoffs', 'queueHealth', 'tools'] },
+      now: NOW,
+    });
+    expect(descriptor.truncation?.applied).toBe(true);
+    expect(descriptor.truncation?.trimmed).toEqual(
+      expect.arrayContaining(['queueHealth', 'handoffs']),
+    );
+    vi.doUnmock('../../shared/mcp-workspace-context.ts');
+    vi.resetModules();
   });
 });
