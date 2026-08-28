@@ -172,6 +172,10 @@ export async function callWorkspaceReadTool(
       }
       case 'signal_publish_preview': {
         const args = mcpSignalPublishPreviewArgsSchema.parse(rawArgs ?? {});
+        const exists = db.prepare('SELECT id FROM signal_posts WHERE id=?').get(args.postId);
+        if (!exists) {
+          return failed('Signal post not found.', mcpCoordinationNotFound());
+        }
         const publisher = deps.previewPublisher ?? defaultPreviewPublisher(db, now);
         const preview = await publisher.preview(args.postId, [], args.driveOverride ?? false);
         return success(preview);
