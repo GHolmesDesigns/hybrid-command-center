@@ -160,17 +160,105 @@ describe('callWorkspaceReadTool', () => {
     expect(result.data).toMatchObject({ postId: post.id, available: expect.any(Boolean) });
   });
 
-  it('refuses invalid date ranges and missing posts', async () => {
-    const range = await callWorkspaceReadTool(db, 'signal_list_posts', {
-      from: '2027-08-31',
-      to: '2027-08-01',
+  it('returns an uncapped dashboard when buckets stay under the limit', async () => {
+    addTask('small-1', 'p1', 'One overdue');
+    const result = await callWorkspaceReadTool(db, 'workspace_dashboard_summary', {}, { now: NOW });
+    expect(result.outcome).toBe('SUCCESS');
+    const data = result.data as { truncated?: unknown };
+    expect(data.truncated).toBeUndefined();
+  });
+
+  it('filters active tasks and reports an uncapped page', async () => {
+    addTask('live', 'p1', 'Live task');
+    addProject('p2', 'c1', 'Archived project', 'ARCHIVED');
+    db.prepare(
+      `INSERT INTO tasks (id, project_id, title, description, status, priority, due_date,
+         position, created_at, updated_at)
+       VALUES ('archived', 'p2', 'Archived task', NULL, 'TODO', 'HIGH', NULL, 0, ?, ?)`,
+    ).run(NOW.toISOString(), NOW.toISOString());
+
+    const filtered = await callWorkspaceReadTool(db, 'workspace_list_tasks', {
+      projectId: 'p1',
+      clientId: 'c1',
+      status: 'TODO',
+      priority: 'MEDIUM',
+      limit: 10,
+      offset: 0,
     });
-    expect(range.outcome).toBe('FAILURE');
+    expect(filtered.outcome).toBe('SUCCESS');
+    const payload = filtered.data as {
+      tasks: Array<{ id: string }>;
+      truncated: boolean;
+    };
+    expect(payload.tasks.map((task) => task.id)).toEqual(['live']);
+    expect(payload.truncated).toBe(false);
+  });
+
+  it('honours lifecycle filters and refuses invalid queue snapshot ranges', async () => {
+    seedSignalPost(db, { id: 'retired-post', date: '2027-08-14', lifecycle: 'RETIRED' });
+    const retired = await callWorkspaceReadTool(db, 'signal_list_posts', {
+      from: '2027-08-01',
+      to: '2027-08-31',
+      lifecycle: 'retired',
+    });
+    expect(retired.outcome).toBe('SUCCESS');
+    expect((retired.data as { posts: Array<{ id: string }> }).posts[0]?.id).toBe('retired-post');
+
+    const badSnapshot = await callWorkspaceReadTool(db, 'signal_queue_snapshot', {
+      from: '2026-08-31',
+      to: '2026-08-01',
+    });
+    expect(badSnapshot.outcome).toBe('FAILURE');
+  });
+
+  it('returns a small queue snapshot without truncation flags', async () => {
+    seedSignalPost(db, { id: 'queue-one', date: null, position: 0 });
+    const result = await callWorkspaceReadTool(db, 'signal_queue_snapshot', {
+      from: '2026-08-11',
+      to: '2026-08-12',
+    });
+    expect(result.outcome).toBe('SUCCESS');
+    const data = result.data as {
+      unscheduled: unknown[];
+      truncated: { unscheduled: boolean; upcoming: boolean };
+    };
+    expect(data.unscheduled).toHaveLength(1);
+    expect(data.truncated.unscheduled).toBe(false);
+    expect(data.truncated.upcoming).toBe(false);
+  });
+
+  it('maps validation, unknown-tool, and preview failures to structured errors', async () => {
+    const invalid = await callWorkspaceReadTool(db, 'workspace_list_tasks', { limit: 0 });
+    expect(invalid.outcome).toBe('FAILURE');
+    expect(invalid.errorDetail?.code).toBe('COORDINATION_INVALID_ARGUMENTS');
+
+    const unknown = await callWorkspaceReadTool(db, 'not_a_workspace_read_tool', {});
+    expect(unknown.outcome).toBe('FAILURE');
+    expect(unknown.errorDetail?.code).toBe('COORDINATION_TOOL_FAILED');
+
+    const post = seedSignalPost(db, { date: '2027-08-14' });
+    const publisher = {
+      preview: vi.fn().mockRejectedValue(new Error('preview blew up')),
+    } as unknown as PublishService;
+    const previewFailure = await callWorkspaceReadTool(
+      db,
+      'signal_publish_preview',
+      { postId: post.id },
+      { previewPublisher: publisher, now: NOW },
+    );
+    expect(previewFailure.outcome).toBe('FAILURE');
+    expect(previewFailure.error).toBe('preview blew up');
 
     const missing = await callWorkspaceReadTool(db, 'signal_publish_preview', {
       postId: 'missing-post',
     });
     expect(missing.outcome).toBe('FAILURE');
     expect(missing.errorDetail?.code).toBe('COORDINATION_NOT_FOUND');
+
+    const range = await callWorkspaceReadTool(db, 'signal_list_posts', {
+      from: '2027-08-31',
+      to: '2027-08-01',
+    });
+    expect(range.outcome).toBe('FAILURE');
   });
 });

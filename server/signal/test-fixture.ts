@@ -33,8 +33,10 @@ export function seedSignalPost(db: Db, overrides: Partial<SignalPost> = {}): Sig
     overrides.media ?? (overrides.mediaUrls ?? base.mediaUrls).map((url) => urlPostMedia(url));
   const post: SignalPost = { ...base, media, mediaUrls: media.map((item) => item.url) };
   db.prepare(
-    `INSERT INTO signal_posts(id,text,date,time,format,status,cta,position,created_at,updated_at)
-    VALUES(?,?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO signal_posts(
+       id,text,date,time,format,status,cta,position,lifecycle,retired_at,delivery_provenance,
+       created_at,updated_at
+     ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
   ).run(
     post.id,
     post.text,
@@ -44,6 +46,9 @@ export function seedSignalPost(db: Db, overrides: Partial<SignalPost> = {}): Sig
     post.status,
     post.cta,
     post.position,
+    post.lifecycle,
+    post.retiredAt,
+    post.deliveryProvenance,
     post.createdAt,
     post.updatedAt,
   );
