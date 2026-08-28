@@ -206,6 +206,7 @@ import {
   DRIVE_BUDGET,
   DRIVE_OAUTH_BUDGET,
   DRIVE_SYNC_BUDGET,
+  MCP_HEALTH_BUDGET,
   IMPORT_BUDGET,
   IMPORT_BUSY_MESSAGE,
   IMPORT_CONCURRENCY,
@@ -843,6 +844,18 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       standardHeaders: 'draft-7',
       legacyHeaders: false,
       message: { error: DRIVE_OAUTH_BUDGET.message },
+      keyGenerator: (req) => authKey(req),
+      validate: { xForwardedForHeader: false },
+    }),
+  );
+  app.use(
+    '/api/mcp/health',
+    rateLimit({
+      windowMs: MCP_HEALTH_BUDGET.windowMs,
+      limit: MCP_HEALTH_BUDGET.limit,
+      standardHeaders: 'draft-7',
+      legacyHeaders: false,
+      message: { error: MCP_HEALTH_BUDGET.message },
       keyGenerator: (req) => authKey(req),
       validate: { xForwardedForHeader: false },
     }),

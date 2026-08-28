@@ -123,4 +123,107 @@ describe('buildMcpHealthPanel', () => {
     expect(panel.state).toBe('unavailable');
     vi.restoreAllMocks();
   });
+
+  it('omits registry rows when operator auth is disabled', () => {
+    createMcpAgentCredential(db, {
+      label: 'cursor-planning',
+      scopes: ['coordination:read'],
+      expiresAt: '2026-12-01T00:00:00.000Z',
+      sessionSecret: SECRET,
+      now: NOW.getTime(),
+    });
+    const panel = buildMcpHealthPanel(db, { enabled: false, now: NOW });
+    expect(panel.enabled).toBe(false);
+    expect(panel.agents).toEqual([]);
+  });
+
+  it('reports all_failed and healthy states from audit rows', () => {
+    createMcpAgentCredential(db, {
+      label: 'healthy-agent',
+      scopes: ['coordination:read'],
+      expiresAt: '2026-12-01T00:00:00.000Z',
+      sessionSecret: SECRET,
+      now: NOW.getTime(),
+    });
+    recordMcpAgentEvent(db, {
+      agentLabel: 'healthy-agent',
+      tool: 'coordination_list_handoffs',
+      outcome: 'SUCCESS',
+      summary: 'coordination_list_handoffs succeeded.',
+      at: '2026-08-28T12:00:00.000Z',
+    });
+    recordMcpAgentEvent(db, {
+      agentLabel: 'failed-agent',
+      tool: 'coordination_list_handoffs',
+      outcome: 'FAILURE',
+      summary: 'Something else entirely.',
+      at: '2026-08-28T12:00:00.000Z',
+    });
+    recordMcpAgentEvent(db, {
+      agentLabel: null,
+      tool: 'coordination_list_handoffs',
+      outcome: 'FAILURE',
+      summary: 'Missing agent_label on write.',
+      at: '2026-08-28T11:30:00.000Z',
+    });
+    const panel = buildMcpHealthPanel(db, { enabled: true, now: NOW });
+    expect(panel.state).toBe('mixed');
+    expect(panel.agents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: 'healthy-agent',
+          failureCount: 0,
+          lastSuccessAt: '2026-08-28T12:00:00.000Z',
+        }),
+        expect.objectContaining({
+          label: 'failed-agent',
+          failureCount: 1,
+          lastFailureAt: '2026-08-28T12:00:00.000Z',
+        }),
+      ]),
+    );
+    expect(panel.errorSummary).toEqual([
+      expect.objectContaining({ code: 'COORDINATION_AGENT_LABEL_REQUIRED', count: 1 }),
+    ]);
+  });
+
+  it('keeps the newest success and failure timestamps per agent', () => {
+    recordMcpAgentEvent(db, {
+      agentLabel: 'cursor',
+      tool: 'coordination_list_handoffs',
+      outcome: 'SUCCESS',
+      summary: 'coordination_list_handoffs succeeded.',
+      at: '2026-08-28T10:00:00.000Z',
+    });
+    recordMcpAgentEvent(db, {
+      agentLabel: 'cursor',
+      tool: 'coordination_list_handoffs',
+      outcome: 'SUCCESS',
+      summary: 'coordination_list_handoffs succeeded.',
+      at: '2026-08-28T11:00:00.000Z',
+    });
+    recordMcpAgentEvent(db, {
+      agentLabel: 'cursor',
+      tool: 'coordination_post_handoff',
+      outcome: 'REFUSED',
+      summary: 'Invalid state for complete.',
+      at: '2026-08-28T09:00:00.000Z',
+    });
+    recordMcpAgentEvent(db, {
+      agentLabel: 'cursor',
+      tool: 'coordination_post_handoff',
+      outcome: 'REFUSED',
+      summary: 'Invalid state for complete.',
+      at: '2026-08-28T12:00:00.000Z',
+    });
+    const panel = buildMcpHealthPanel(db, { enabled: true, now: NOW });
+    expect(panel.agents).toEqual([
+      expect.objectContaining({
+        label: 'cursor',
+        lastSuccessAt: '2026-08-28T11:00:00.000Z',
+        lastFailureAt: '2026-08-28T12:00:00.000Z',
+        refusalCount: 2,
+      }),
+    ]);
+  });
 });

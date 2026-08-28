@@ -130,9 +130,9 @@ test('each Settings column stacks on its own at desktop width', async ({ page })
 
   const cards = await cardBoxes(page);
   expect(cards.map((card) => card.heading)).toEqual(READING_ORDER);
-  // Six cards in the left stack and four in the right, and every card in one — a card left as
+  // Seven cards in the left stack and four in the right, and every card in one — a card left as
   // the grid's own child would report column -1 and be back in a shared row track.
-  expect(cards.map((card) => card.column)).toEqual([0, 0, 0, 0, 0, 0, 1, 1, 1, 1]);
+  expect(cards.map((card) => card.column)).toEqual([0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1]);
 
   const [left, right] = [0, 1].map((column) => cards.filter((card) => card.column === column));
 
@@ -230,7 +230,9 @@ test('the keyboard reaches the Settings cards in the order they are read', async
   // placeholder. Wait for that stable state before snapshotting focusable controls, or a slower
   // runner can replace the form halfway through the Tab walk.
   await expect(
-    page.getByText('Available when operator authentication enables network MCP.'),
+    page
+      .getByLabel('Agent credentials')
+      .getByText('Available when operator authentication enables network MCP.'),
   ).toBeVisible();
 
   // Every control the layout offers, in document order, tagged so the walk below can say which

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDb, type Db } from '../db.ts';
 import { buildConnectionStatus } from './connection-status.ts';
 import { callMcpTool } from './dispatch.ts';
@@ -6,6 +6,7 @@ import { createMcpSession } from './session.ts';
 import { workspaceDataChecksum } from './workspace-checksum.ts';
 import { MCP_AGENT_SCOPES } from '../../shared/mcp-agent-registry.ts';
 import { postHandoff } from '../agent-coordination/service.ts';
+import * as resourcesModule from './resources.ts';
 
 const NOW = new Date('2026-08-28T12:00:00.000Z');
 
@@ -44,6 +45,38 @@ describe('buildConnectionStatus', () => {
     });
     expect(status.ok).toBe(false);
     expect(status.authenticated).toBe(false);
+  });
+
+  it('records resource read failures without throwing', () => {
+    vi.spyOn(resourcesModule, 'readMcpResource').mockImplementation(() => {
+      throw new Error('workspace:read required');
+    });
+    const status = buildConnectionStatus(db, {
+      transport: 'http',
+      authenticated: true,
+      agentLabel: 'cursor',
+      grantedScopes: MCP_AGENT_SCOPES,
+      now: NOW,
+    });
+    expect(status.ok).toBe(false);
+    expect(status.checks.resourceRead.ok).toBe(false);
+    expect(status.checks.resourceRead.detail).toBe('workspace:read required');
+    vi.restoreAllMocks();
+  });
+
+  it('handles non-Error resource read failures', () => {
+    vi.spyOn(resourcesModule, 'readMcpResource').mockImplementation(() => {
+      throw 'broken';
+    });
+    const status = buildConnectionStatus(db, {
+      transport: 'stdio',
+      authenticated: true,
+      agentLabel: 'cursor',
+      grantedScopes: MCP_AGENT_SCOPES,
+      now: NOW,
+    });
+    expect(status.checks.resourceRead.detail).toBe('Resource read failed.');
+    vi.restoreAllMocks();
   });
 });
 

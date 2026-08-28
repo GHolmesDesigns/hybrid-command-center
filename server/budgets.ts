@@ -117,6 +117,17 @@ export const DRIVE_OAUTH_BUDGET: Budget = {
 };
 
 /**
+ * Operator MCP health panel under `/api/mcp/health`. Uses `express-rate-limit` in `app.ts` (like
+ * auth) so CodeQL's missing-rate-limiting query can see the limiter. Sixty a minute is above a
+ * person opening Settings and pressing Test connection a few times.
+ */
+export const MCP_HEALTH_BUDGET: Budget = {
+  limit: 60,
+  windowMs: 60_000,
+  message: 'Too many MCP health requests. Wait a moment and try again.',
+};
+
+/**
  * How many import requests may be in flight at once. One, because the point of the cap is that a
  * caller cannot hold several multi-megabyte bodies in memory simultaneously — and it only holds
  * if the gate runs *before* the body parser, which is where `app.ts` mounts it.
