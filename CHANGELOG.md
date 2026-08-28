@@ -8,6 +8,22 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.7.2] - 2026-08-28
+
+### Added
+
+- Canonical MCP agent workflow document at `docs/mcp-agent-workflow.md` — the single source for the
+  claim → work → prove loop, approval boundaries, and when to stop for the operator.
+- Thin skill wrappers for Cursor (`.cursor/skills`), Claude Code (`.claude/skills`), and Codex
+  (`.codex-plugin/`) that point at the workflow document without restating policy.
+- **Settings → Agent connection setup** guided flow: register an agent, issue a scoped credential
+  once, generate copy-ready client configuration for Cursor, Claude Code, or Codex, run the
+  read-only connection diagnostic, and see the agent's last successful connection.
+
+### Breaking changes
+
+None.
+
 ## [5.7.1] - 2026-08-28
 
 ### Added
