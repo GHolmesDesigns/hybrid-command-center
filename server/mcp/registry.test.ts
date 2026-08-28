@@ -15,7 +15,7 @@ describe('mcp tool registry', () => {
     expect(names).toContain('coordination_list_handoffs');
     expect(names).toContain('workspace_dashboard_summary');
     expect(names).toContain('signal_queue_health');
-    expect(names.filter((name) => name !== 'system_capabilities')).toHaveLength(13);
+    expect(names.filter((name) => name !== 'system_capabilities')).toHaveLength(15);
     expect(isRegisteredMcpTool('system_capabilities')).toBe(true);
     expect(isRegisteredMcpTool('not_a_tool')).toBe(false);
   });

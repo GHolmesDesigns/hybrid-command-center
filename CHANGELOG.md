@@ -8,6 +8,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.6.10] - 2026-08-28
+
+### Added
+
+- MCP tools `workspace_get_subject_context` and `workspace_search`, gated on `workspace:read`, so an agent can resolve a claimed handoff subject in one call or find a subject by name without list-and-filter loops.
+- Server-side result caps declared in each payload, structured not-found responses for unknown subjects, and redaction on both tool results.
+
+### Changed
+
+- `tools/list` now generates sixteen tools from the registry (seven coordination, eight workspace and Signal reads, plus `system_capabilities`).
+
+### Breaking changes
+
+None.
+
 ## [5.6.9] - 2026-08-28
 
 ### Added

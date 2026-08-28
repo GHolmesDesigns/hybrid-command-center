@@ -31,10 +31,13 @@ import {
   mcpSignalListPostsArgsSchema,
   mcpSignalPublishPreviewArgsSchema,
   mcpSignalQueueSnapshotArgsSchema,
+  mcpSubjectContextArgsSchema,
   mcpTaskListArgsSchema,
+  mcpWorkspaceSearchArgsSchema,
 } from '../../shared/mcp-read-tools.ts';
 import type { McpToolCallResult } from './coordination.ts';
 import { redactToolResult } from './redact.ts';
+import { buildSubjectContext, buildWorkspaceSearch } from './workspace-subject-context.ts';
 
 export type McpWorkspaceReadDeps = {
   previewPublisher?: PublishService;
@@ -179,6 +182,18 @@ export async function callWorkspaceReadTool(
         const publisher = deps.previewPublisher ?? defaultPreviewPublisher(db, now);
         const preview = await publisher.preview(args.postId, [], args.driveOverride ?? false);
         return success(preview);
+      }
+      case 'workspace_get_subject_context': {
+        const args = mcpSubjectContextArgsSchema.parse(rawArgs ?? {});
+        const context = buildSubjectContext(db, args);
+        if (!context) {
+          return failed('Subject not found.', mcpCoordinationNotFound());
+        }
+        return success(context);
+      }
+      case 'workspace_search': {
+        const args = mcpWorkspaceSearchArgsSchema.parse(rawArgs ?? {});
+        return success(buildWorkspaceSearch(db, args));
       }
       default:
         return failed(`Unknown workspace read tool: ${tool}.`, mcpCoordinationToolFailed());

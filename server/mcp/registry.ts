@@ -282,6 +282,41 @@ const workspaceReadTools: McpToolRegistryEntry[] = [
     owner: 'server/publish/service.ts',
     handler: 'workspace_read',
   },
+  {
+    name: 'workspace_get_subject_context',
+    description:
+      'Return one bounded context package for a handoff subject — entity, parents, blocking dependencies, related handoffs, and recent activity.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        subjectType: { type: 'string', enum: [...AGENT_HANDOFF_SUBJECT_TYPES] },
+        subjectId: { type: 'string' },
+      },
+      required: ['subjectType', 'subjectId'],
+      additionalProperties: false,
+    },
+    class: 'R',
+    requiredScope: 'workspace:read',
+    owner: 'server/mcp/workspace-subject-context.ts',
+    handler: 'workspace_read',
+  },
+  {
+    name: 'workspace_search',
+    description:
+      'Search clients, projects, tasks, and Signal posts by name or caption with hard result caps.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', minLength: 2, maxLength: 100 },
+      },
+      required: ['query'],
+      additionalProperties: false,
+    },
+    class: 'R',
+    requiredScope: 'workspace:read',
+    owner: 'server/mcp/workspace-subject-context.ts',
+    handler: 'workspace_read',
+  },
 ];
 
 export const MCP_TOOL_REGISTRY: readonly McpToolRegistryEntry[] = [
