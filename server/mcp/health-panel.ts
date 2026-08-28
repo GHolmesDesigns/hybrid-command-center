@@ -17,7 +17,7 @@ import {
   type McpHealthPanel,
   type McpHealthStaleHandoff,
 } from '../../shared/mcp-health.ts';
-import { isStaleOpenHandoff } from '../../shared/agent-coordination.ts';
+import { handoffInInboxHistory, isStaleOpenHandoff } from '../../shared/agent-coordination.ts';
 import { MCP_AGENT_EVENT_LIMIT } from '../../shared/mcp-agent-events.ts';
 import { listMcpAgentEvents } from './events.ts';
 
@@ -52,6 +52,14 @@ export function buildMcpHealthPanel(
   const agents = aggregateAgentStats(registry, events);
   const errorSummary = aggregateErrorSummary(events);
   const staleHandoffs = gatherStaleHandoffs(db, now);
+  const recentCompletions = listHandoffs(db, { state: 'COMPLETED' })
+    .filter((handoff) => handoffInInboxHistory(handoff, now))
+    .map((handoff) => ({
+      id: handoff.id,
+      outcome: handoff.outcome ?? null,
+      resultSummary: handoff.resultSummary ?? null,
+      completedAt: handoff.completedAt!,
+    }));
   const { state, reason } = deriveMcpHealthPanelState({
     registry,
     agents,
@@ -66,6 +74,7 @@ export function buildMcpHealthPanel(
     agents,
     errorSummary,
     staleHandoffs,
+    recentCompletions,
     auditEventCount: events.length,
   };
 }

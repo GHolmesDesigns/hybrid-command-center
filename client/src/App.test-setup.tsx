@@ -251,6 +251,7 @@ export const testState = {
     agents: [],
     errorSummary: [],
     staleHandoffs: [],
+    recentCompletions: [],
     auditEventCount: 0,
   } as import('../../shared/mcp-health').McpHealthPanel,
   mcpHealthTestPayload: {
@@ -1716,6 +1717,7 @@ beforeEach(() => {
     agents: [],
     errorSummary: [],
     staleHandoffs: [],
+    recentCompletions: [],
     auditEventCount: 0,
   };
   testState.driveListingPayload = null;

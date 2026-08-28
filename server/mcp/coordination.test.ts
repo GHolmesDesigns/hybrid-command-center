@@ -301,8 +301,13 @@ describe('coordination MCP tools', () => {
     );
 
     expect(
-      callCoordinationTool(db, claimer, 'coordination_complete_handoff', { handoffId }, NOW)
-        .outcome,
+      callCoordinationTool(
+        db,
+        claimer,
+        'coordination_complete_handoff',
+        { handoffId, resultSummary: 'Implemented and verified.', outcome: 'SUCCEEDED' },
+        NOW,
+      ).outcome,
     ).toBe('SUCCESS');
 
     const other = callCoordinationTool(
@@ -374,7 +379,12 @@ describe('coordination MCP tools', () => {
       db,
       claimer,
       'coordination_complete_handoff',
-      { handoffId, clientRequestId: 'complete-req-1' },
+      {
+        handoffId,
+        clientRequestId: 'complete-req-1',
+        resultSummary: 'Implemented.',
+        outcome: 'SUCCEEDED',
+      },
       NOW,
     );
     expect(firstComplete.outcome).toBe('SUCCESS');
@@ -384,7 +394,12 @@ describe('coordination MCP tools', () => {
       db,
       claimer,
       'coordination_complete_handoff',
-      { handoffId, clientRequestId: 'complete-req-1' },
+      {
+        handoffId,
+        clientRequestId: 'complete-req-1',
+        resultSummary: 'Ignored on replay.',
+        outcome: 'BLOCKED',
+      },
       NOW,
     );
     expect(replayComplete.outcome).toBe('SUCCESS');

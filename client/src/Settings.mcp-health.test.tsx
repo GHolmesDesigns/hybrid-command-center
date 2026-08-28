@@ -27,6 +27,7 @@ describe('Settings MCP health panel', () => {
       agents: [],
       errorSummary: [],
       staleHandoffs: [],
+      recentCompletions: [],
       auditEventCount: 0,
     };
 
@@ -48,5 +49,43 @@ describe('Settings MCP health panel', () => {
       ),
     ).toBe(true);
     await waitFor(() => expect(screen.getByText(/Capability version:/)).toBeVisible());
+  });
+
+  it('shows recent classified and legacy handoff results', async () => {
+    testState.mcpAgentRegistryPayload = { enabled: true, credentials: [] };
+    testState.mcpHealthPanelPayload = {
+      enabled: true,
+      state: 'healthy',
+      stateReason: null,
+      generatedAt: '2026-08-28T12:00:00.000Z',
+      agents: [],
+      errorSummary: [],
+      staleHandoffs: [],
+      auditEventCount: 2,
+      recentCompletions: [
+        {
+          id: 'done-1',
+          outcome: 'SUCCEEDED',
+          resultSummary: 'Draft PR opened.',
+          completedAt: '2026-08-28T11:00:00.000Z',
+        },
+        {
+          id: 'done-old',
+          outcome: null,
+          resultSummary: null,
+          completedAt: '2026-08-28T10:00:00.000Z',
+        },
+      ],
+    };
+    render(
+      <MemoryRouter initialEntries={['/settings']}>
+        <App />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('heading', { name: 'Recent handoff results' })).toBeVisible();
+    expect(screen.getByText('SUCCEEDED').closest('li')).toHaveTextContent('Draft PR opened.');
+    expect(screen.getByText('Legacy completion').closest('li')).toHaveTextContent(
+      'No recorded evidence',
+    );
   });
 });

@@ -81,6 +81,13 @@ export const mcpHealthStaleHandoffSchema = z.object({
 
 export type McpHealthStaleHandoff = z.infer<typeof mcpHealthStaleHandoffSchema>;
 
+export const mcpHealthCompletionSchema = z.object({
+  id: z.string(),
+  outcome: z.enum(['SUCCEEDED', 'PARTIALLY_SUCCEEDED', 'BLOCKED', 'SUPERSEDED']).nullable(),
+  resultSummary: z.string().nullable(),
+  completedAt: z.string(),
+});
+
 export const mcpHealthPanelSchema = z.object({
   enabled: z.boolean(),
   state: z.enum(MCP_HEALTH_PANEL_STATES),
@@ -89,6 +96,7 @@ export const mcpHealthPanelSchema = z.object({
   agents: z.array(mcpHealthAgentStatsSchema),
   errorSummary: z.array(mcpHealthErrorSummarySchema),
   staleHandoffs: z.array(mcpHealthStaleHandoffSchema),
+  recentCompletions: z.array(mcpHealthCompletionSchema),
   auditEventCount: z.number(),
 });
 

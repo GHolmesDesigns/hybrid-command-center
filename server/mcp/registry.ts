@@ -111,14 +111,35 @@ const coordinationTools: McpToolRegistryEntry[] = [
   {
     name: 'coordination_complete_handoff',
     description:
-      'Complete a CLAIMED handoff as the claimer. Never publishes or contacts Drive. Optional client_request_id is idempotent.',
+      'Complete a CLAIMED handoff as the claimer with a classified outcome and evidence. Never publishes or contacts Drive. Optional client_request_id is idempotent.',
     inputSchema: {
       type: 'object',
       properties: {
         handoffId: { type: 'string' },
         clientRequestId: { type: 'string' },
+        resultSummary: { type: 'string', maxLength: 2000 },
+        outcome: {
+          type: 'string',
+          enum: ['SUCCEEDED', 'PARTIALLY_SUCCEEDED', 'BLOCKED', 'SUPERSEDED'],
+        },
+        changedPaths: { type: 'array', items: { type: 'string', maxLength: 500 }, maxItems: 50 },
+        references: { type: 'array', items: { type: 'string', maxLength: 500 }, maxItems: 50 },
+        validations: {
+          type: 'array',
+          maxItems: 50,
+          items: {
+            type: 'object',
+            properties: {
+              command: { type: 'string', maxLength: 500 },
+              outcome: { type: 'string', maxLength: 500 },
+            },
+            required: ['command', 'outcome'],
+            additionalProperties: false,
+          },
+        },
+        remainingRisks: { type: 'array', items: { type: 'string', maxLength: 500 }, maxItems: 50 },
       },
-      required: ['handoffId'],
+      required: ['handoffId', 'resultSummary', 'outcome'],
       additionalProperties: false,
     },
     class: 'L',

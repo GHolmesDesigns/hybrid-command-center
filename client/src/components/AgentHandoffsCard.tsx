@@ -210,7 +210,44 @@ export function AgentHandoffsCard({
                     </dd>
                   </div>
                 )}
+                {detail.state === 'COMPLETED' && (
+                  <div>
+                    <dt>Outcome</dt>
+                    <dd>{detail.outcome ?? 'Legacy completion — no outcome recorded'}</dd>
+                  </div>
+                )}
               </dl>
+
+              {detail.resultSummary && (
+                <div className="handoff-evidence">
+                  <h3>Completion evidence</h3>
+                  <p>{detail.resultSummary}</p>
+                  {detail.changedPaths?.length ? (
+                    <p>
+                      <strong>Changed paths:</strong> {detail.changedPaths.join(', ')}
+                    </p>
+                  ) : null}
+                  {detail.references?.length ? (
+                    <p>
+                      <strong>References:</strong> {detail.references.join(', ')}
+                    </p>
+                  ) : null}
+                  {detail.validations?.length ? (
+                    <ul>
+                      {detail.validations.map((item, index) => (
+                        <li key={`${item.command}-${index}`}>
+                          <code>{item.command}</code> — {item.outcome}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {detail.remainingRisks?.length ? (
+                    <p>
+                      <strong>Remaining risks:</strong> {detail.remainingRisks.join('; ')}
+                    </p>
+                  ) : null}
+                </div>
+              )}
 
               <h3 className="handoff-notes-title">Notes</h3>
               {detail.notes.length === 0 ? (
@@ -303,6 +340,9 @@ function HandoffGroup({
                   <span>{row.toAgentLabel ?? 'any agent'}</span>
                 </span>
                 <span className="handoff-excerpt">{handoffMessageExcerpt(row.message)}</span>
+                {row.state === 'COMPLETED' && (
+                  <span className="handoff-outcome">{row.outcome ?? 'Legacy completion'}</span>
+                )}
                 <span className="handoff-row-meta">
                   <SubjectLine handoff={row} tasks={tasks} inline />
                   {row.claimedBy && <span>Claimed by {row.claimedBy}</span>}

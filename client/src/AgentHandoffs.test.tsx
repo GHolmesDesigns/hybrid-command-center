@@ -102,4 +102,38 @@ describe('Settings Agent handoffs card', () => {
     expect(await screen.findByText('Handoffs unavailable')).toBeVisible();
     expect(screen.getByText('Coordination store is offline.')).toBeVisible();
   });
+
+  it('shows classified completion evidence and preserves legacy completed rows', async () => {
+    const completed = openHandoff({
+      id: 'completed-1',
+      state: 'COMPLETED',
+      claimedBy: 'claude',
+      claimedAt: '2026-08-26T12:30:00.000Z',
+      completedAt: new Date().toISOString(),
+      outcome: 'SUPERSEDED',
+      resultSummary: 'Replaced by the workbook retry.',
+      changedPaths: ['server/import.ts'],
+      references: ['PR #410'],
+      validations: [{ command: 'npm test', outcome: 'passed' }],
+      remainingRisks: ['Owner import remains.'],
+    });
+    const legacy = openHandoff({
+      id: 'completed-legacy',
+      state: 'COMPLETED',
+      completedAt: new Date().toISOString(),
+    });
+    testState.agentHandoffsPayload = [completed, legacy];
+    testState.agentHandoffDetailPayload = { ...completed, notes: [] };
+
+    await openSettings();
+    expect(await screen.findByText('SUPERSEDED')).toBeVisible();
+    expect(await screen.findByText('Legacy completion')).toBeVisible();
+    fireEvent.click(screen.getByText('SUPERSEDED').closest('button')!);
+    const detail = await screen.findByRole('region', { name: 'Handoff detail' });
+    expect(detail).toHaveTextContent('Replaced by the workbook retry.');
+    expect(detail).toHaveTextContent('server/import.ts');
+    expect(detail).toHaveTextContent('PR #410');
+    expect(detail).toHaveTextContent('npm test');
+    expect(detail).toHaveTextContent('Owner import remains.');
+  });
 });
