@@ -8,6 +8,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.7.0] - 2026-08-28
+
+### Added
+
+- Handoff completion now records a required result summary, a machine-readable outcome, and optional changed paths, references, validation results, and remaining risks in the operator inbox and MCP health panel.
+
+### Breaking changes
+
+- MCP callers of `coordination_complete_handoff` must now provide `resultSummary` and `outcome`.
+
 ## [5.6.11] - 2026-08-28
 
 ### Added
