@@ -8,6 +8,7 @@ import {
   mcpCoordinationSessionLabelMismatch,
   mcpCoordinationToolFailed,
   mcpCoordinationUnknownTool,
+  mcpWorkspaceScopeRequired,
   MCP_COORDINATION_ERROR_CODES,
 } from './mcp-coordination-errors.ts';
 
@@ -81,6 +82,13 @@ describe('mcpCoordinationErrorDetail', () => {
         currentState: 'COMPLETED',
       },
     );
+  });
+
+  it('exposes workspace scope refusals beside coordination scope refusals', () => {
+    expect(mcpWorkspaceScopeRequired('workspace:read')).toMatchObject({
+      code: 'WORKSPACE_SCOPE_REQUIRED',
+      retryable: false,
+    });
   });
 
   it('exposes static refusal helpers for session and tool errors', () => {

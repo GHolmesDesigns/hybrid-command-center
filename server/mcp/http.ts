@@ -28,12 +28,14 @@ import { MCP_AGENT_SCOPES } from '../../shared/mcp-agent-registry.ts';
 import { handleMcpJsonRpc, type JsonRpcRequest, type JsonRpcResponse } from './stdio.ts';
 import { createMcpSession, setMcpSessionAgentLabel, type McpSession } from './session.ts';
 import type { McpWriteLimiterRegistry } from './write-limiter-registry.ts';
-import { COORDINATION_WRITE_TOOLS } from '../../shared/mcp-agent-events.ts';
 import {
   mcpCoordinationCredentialLabelMismatch,
   mcpCoordinationScopeRequired,
+  mcpWorkspaceScopeRequired,
 } from '../../shared/mcp-coordination-errors.ts';
 import { recordMcpAgentEvent } from './events.ts';
+import { mcpToolRegistryEntry } from './registry.ts';
+import type { McpAgentScope } from '../../shared/mcp-agent-registry.ts';
 
 export type McpHttpAuthContext = {
   session: OperatorSessionRecord | null;
@@ -154,18 +156,15 @@ function applyAgentLabel(
   return session.agentLabel;
 }
 
-const WRITE_TOOLS = new Set<string>(COORDINATION_WRITE_TOOLS);
-
 function requestedTool(request: JsonRpcRequest): string {
   if (request.method !== 'tools/call') return request.method ?? 'unknown';
   const params = request.params as { name?: unknown } | undefined;
   return typeof params?.name === 'string' ? params.name : 'tools/call';
 }
 
-function requiredCoordinationScope(
-  request: JsonRpcRequest,
-): 'coordination:read' | 'coordination:write' {
-  return WRITE_TOOLS.has(requestedTool(request)) ? 'coordination:write' : 'coordination:read';
+function requiredToolScope(request: JsonRpcRequest): McpAgentScope | null {
+  if (request.method !== 'tools/call') return null;
+  return mcpToolRegistryEntry(requestedTool(request))?.requiredScope ?? null;
 }
 
 export async function handleMcpHttpPost(
@@ -224,9 +223,12 @@ export async function handleMcpHttpPost(
     return;
   }
   if (auth.agentCredential) {
-    const required = requiredCoordinationScope(request);
-    if (!hasMcpAgentScope(auth.agentCredential.scopes, required)) {
-      const detail = mcpCoordinationScopeRequired(required);
+    const required = requiredToolScope(request);
+    if (required && !hasMcpAgentScope(auth.agentCredential.scopes, required)) {
+      const detail =
+        required === 'workspace:read' || required === 'workspace:write'
+          ? mcpWorkspaceScopeRequired(required)
+          : mcpCoordinationScopeRequired(required);
       recordMcpAgentEvent(options.db, {
         agentLabel: auth.agentCredential.agentLabel,
         tool: requestedTool(request),

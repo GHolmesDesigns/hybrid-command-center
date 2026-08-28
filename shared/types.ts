@@ -1,5 +1,6 @@
 export const TASK_STATUSES = ['BACKLOG', 'TODO', 'IN_PROGRESS', 'REVIEW', 'COMPLETE'] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
+export const TASK_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const;
 /**
  * What kind of studio work a task is, following the weekly workflow: content
  * production, then scheduling and publish, then QA and wrap. Optional — a task
@@ -73,7 +74,7 @@ export const TASK_CHECKLIST_TEMPLATES: Partial<Record<TaskType, readonly string[
   // implementation, so a generic checklist would add boilerplate rather than useful guidance.
 };
 
-export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+export type Priority = (typeof TASK_PRIORITIES)[number];
 export type DriveStatus = 'DISCONNECTED' | 'PENDING' | 'CONNECTED' | 'FAILED';
 
 export interface Client {

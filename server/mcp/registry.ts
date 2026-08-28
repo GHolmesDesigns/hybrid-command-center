@@ -20,6 +20,9 @@ import {
   type McpToolClass,
   type WorkspaceContextFilters,
 } from '../../shared/mcp-workspace-context.ts';
+import { SIGNAL_LIFECYCLE_FILTERS } from '../../shared/signal.ts';
+import { TASK_PRIORITIES, TASK_STATUSES } from '../../shared/types.ts';
+import { MCP_TASK_LIST_MAX_LIMIT } from '../../shared/mcp-read-tools.ts';
 
 export type McpToolRegistryEntry = {
   name: string;
@@ -29,7 +32,7 @@ export type McpToolRegistryEntry = {
   requiredScope: McpAgentScope | null;
   owner: string;
   /** When set, `tools/call` routes to the named handler module. */
-  handler: 'coordination' | 'system_capabilities';
+  handler: 'coordination' | 'system_capabilities' | 'workspace_read';
 };
 
 const coordinationScope = (name: CoordinationTool): McpAgentScope =>
@@ -187,8 +190,103 @@ const systemCapabilitiesTool: McpToolRegistryEntry = {
   handler: 'system_capabilities',
 };
 
+const workspaceReadTools: McpToolRegistryEntry[] = [
+  {
+    name: 'workspace_dashboard_summary',
+    description: 'Dashboard counts and capped task buckets for active clients and projects.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    class: 'R',
+    requiredScope: 'workspace:read',
+    owner: 'server/domain/dashboard.ts',
+    handler: 'workspace_read',
+  },
+  {
+    name: 'workspace_list_tasks',
+    description: 'List active-scope tasks with optional filters and pagination.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: { type: 'string' },
+        clientId: { type: 'string' },
+        status: { type: 'string', enum: [...TASK_STATUSES] },
+        priority: { type: 'string', enum: [...TASK_PRIORITIES] },
+        limit: { type: 'number', minimum: 1, maximum: MCP_TASK_LIST_MAX_LIMIT },
+        offset: { type: 'number', minimum: 0 },
+      },
+      additionalProperties: false,
+    },
+    class: 'R',
+    requiredScope: 'workspace:read',
+    owner: 'server/repositories.ts',
+    handler: 'workspace_read',
+  },
+  {
+    name: 'signal_list_posts',
+    description: 'List dated Signal posts in an inclusive YYYY-MM-DD range.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        from: { type: 'string', description: 'YYYY-MM-DD' },
+        to: { type: 'string', description: 'YYYY-MM-DD' },
+        lifecycle: { type: 'string', enum: [...SIGNAL_LIFECYCLE_FILTERS] },
+      },
+      required: ['from', 'to'],
+      additionalProperties: false,
+    },
+    class: 'R',
+    requiredScope: 'workspace:read',
+    owner: 'server/signal/read.ts',
+    handler: 'workspace_read',
+  },
+  {
+    name: 'signal_queue_snapshot',
+    description: 'Unscheduled queue plus upcoming dated posts (default next 30 days).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        from: { type: 'string', description: 'YYYY-MM-DD start for upcoming posts' },
+        to: { type: 'string', description: 'YYYY-MM-DD end for upcoming posts' },
+        lifecycle: { type: 'string', enum: [...SIGNAL_LIFECYCLE_FILTERS] },
+      },
+      additionalProperties: false,
+    },
+    class: 'R',
+    requiredScope: 'workspace:read',
+    owner: 'server/signal/read.ts',
+    handler: 'workspace_read',
+  },
+  {
+    name: 'signal_queue_health',
+    description: 'Derived queue-health alerts from local rows.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    class: 'R',
+    requiredScope: 'workspace:read',
+    owner: 'server/signal/queue-health.ts',
+    handler: 'workspace_read',
+  },
+  {
+    name: 'signal_publish_preview',
+    description:
+      'Build a publish preview from stored post data. Preflight only — no provider or Drive network.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        postId: { type: 'string' },
+        driveOverride: { type: 'boolean' },
+      },
+      required: ['postId'],
+      additionalProperties: false,
+    },
+    class: 'R',
+    requiredScope: 'workspace:read',
+    owner: 'server/publish/service.ts',
+    handler: 'workspace_read',
+  },
+];
+
 export const MCP_TOOL_REGISTRY: readonly McpToolRegistryEntry[] = [
   ...coordinationTools,
+  ...workspaceReadTools,
   systemCapabilitiesTool,
 ];
 
