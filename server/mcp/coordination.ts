@@ -22,6 +22,7 @@ import {
   AGENT_HANDOFF_STATES,
   agentHandoffCancelReasonSchema,
   agentHandoffClientRequestIdSchema,
+  agentHandoffCompletionInputSchema,
   agentHandoffMessageSchema,
   agentHandoffNoteBodySchema,
   agentHandoffSubjectIdSchema,
@@ -94,6 +95,7 @@ const completeArgsSchema = z
   .object({
     handoffId: z.string().trim().min(1).max(200),
     clientRequestId: agentHandoffClientRequestIdSchema.optional(),
+    ...agentHandoffCompletionInputSchema.shape,
   })
   .strict();
 
@@ -266,10 +268,24 @@ export function callCoordinationTool(
       }
       case 'coordination_complete_handoff': {
         const args = completeArgsSchema.parse(rawArgs ?? {});
-        const data = completeHandoff(db, args.handoffId, session.agentLabel!, now, {
-          clientRequestId: args.clientRequestId,
-          mutationTool: 'coordination_complete_handoff',
-        });
+        const data = completeHandoff(
+          db,
+          args.handoffId,
+          session.agentLabel!,
+          {
+            resultSummary: args.resultSummary,
+            outcome: args.outcome,
+            changedPaths: args.changedPaths,
+            references: args.references,
+            validations: args.validations,
+            remainingRisks: args.remainingRisks,
+          },
+          now,
+          {
+            clientRequestId: args.clientRequestId,
+            mutationTool: 'coordination_complete_handoff',
+          },
+        );
         return finish(
           db,
           session,

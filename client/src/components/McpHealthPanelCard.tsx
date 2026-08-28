@@ -206,6 +206,21 @@ export function McpHealthPanelCard({
               </ul>
             </div>
           ) : null}
+          {panel?.recentCompletions?.length ? (
+            <div className="mcp-health-completions">
+              <h3>Recent handoff results</h3>
+              <ul>
+                {panel.recentCompletions.map((handoff) => (
+                  <li key={handoff.id}>
+                    <strong>{handoff.outcome ?? 'Legacy completion'}</strong>
+                    {handoff.resultSummary
+                      ? ` · ${handoff.resultSummary}`
+                      : ' · No recorded evidence'}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </>
       )}
       {testResult && (

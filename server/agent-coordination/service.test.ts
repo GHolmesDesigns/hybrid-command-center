@@ -85,15 +85,80 @@ describe('complete, cancel, and notes', () => {
   it('completes only as the claimer and does not write integration events', () => {
     const handoff = post();
     claimHandoff(db, handoff.id, 'claude', NOW);
-    expect(() => completeHandoff(db, handoff.id, 'cursor', NOW)).toThrow(AgentCoordinationError);
-    const done = completeHandoff(db, handoff.id, 'claude', NOW);
+    expect(() =>
+      completeHandoff(
+        db,
+        handoff.id,
+        'cursor',
+        { resultSummary: 'Done.', outcome: 'SUCCEEDED' },
+        NOW,
+      ),
+    ).toThrow(AgentCoordinationError);
+    const done = completeHandoff(
+      db,
+      handoff.id,
+      'claude',
+      {
+        resultSummary: 'Implemented the requested change.',
+        outcome: 'SUCCEEDED',
+        changedPaths: ['server/example.ts'],
+        references: ['PR #123'],
+        validations: [{ command: 'npm test', outcome: 'passed' }],
+        remainingRisks: ['Owner deployment remains.'],
+      },
+      NOW,
+    );
     expect(done.state).toBe('COMPLETED');
     expect(done.completedAt).toBe(NOW.toISOString());
+    expect(done).toMatchObject({
+      outcome: 'SUCCEEDED',
+      resultSummary: 'Implemented the requested change.',
+      changedPaths: ['server/example.ts'],
+      references: ['PR #123'],
+      validations: [{ command: 'npm test', outcome: 'passed' }],
+      remainingRisks: ['Owner deployment remains.'],
+    });
     expect(db.prepare('SELECT COUNT(*) AS n FROM integration_events').get()).toMatchObject({
       n: 0,
     });
     expect(db.prepare('SELECT COUNT(*) AS n FROM tasks').get()).toMatchObject({ n: 0 });
     expect(db.prepare('SELECT COUNT(*) AS n FROM signal_posts').get()).toMatchObject({ n: 0 });
+  });
+
+  it.each(['SUCCEEDED', 'PARTIALLY_SUCCEEDED', 'BLOCKED', 'SUPERSEDED'] as const)(
+    'stores the %s outcome as a machine-readable field',
+    (outcome) => {
+      const handoff = post();
+      claimHandoff(db, handoff.id, 'claude', NOW);
+      expect(
+        completeHandoff(db, handoff.id, 'claude', { resultSummary: 'Result.', outcome }, NOW)
+          .outcome,
+      ).toBe(outcome);
+    },
+  );
+
+  it('refuses oversized evidence at Zod and SQLite boundaries', () => {
+    const handoff = post();
+    claimHandoff(db, handoff.id, 'claude', NOW);
+    expect(() =>
+      completeHandoff(
+        db,
+        handoff.id,
+        'claude',
+        {
+          resultSummary: 'x'.repeat(2001),
+          outcome: 'SUCCEEDED',
+        },
+        NOW,
+      ),
+    ).toThrow();
+    expect(() =>
+      db
+        .prepare(
+          "UPDATE agent_handoffs SET state='COMPLETED', outcome='SUCCEEDED', result_summary=? WHERE id=?",
+        )
+        .run('x'.repeat(2001), handoff.id),
+    ).toThrow(/completion evidence exceeds/i);
   });
 
   it('cancels as agent from OPEN and refuses notes after cancel', () => {
@@ -122,7 +187,13 @@ describe('complete, cancel, and notes', () => {
     expect(note.body).toBe('Draft is in the composer.');
     expect(getHandoff(db, handoff.id).state).toBe('OPEN');
     claimHandoff(db, handoff.id, 'claude', NOW);
-    completeHandoff(db, handoff.id, 'claude', NOW);
+    completeHandoff(
+      db,
+      handoff.id,
+      'claude',
+      { resultSummary: 'Done.', outcome: 'SUCCEEDED' },
+      NOW,
+    );
     addHandoffNote(db, handoff.id, { agentLabel: 'claude', body: 'Done.' }, NOW);
     expect(getHandoff(db, handoff.id).notes).toHaveLength(2);
   });
@@ -144,7 +215,13 @@ describe('operator HTTP cancel', () => {
     claimHandoff(db, claimed.id, 'claude', NOW);
     const completed = post({ message: 'Third handoff.' });
     claimHandoff(db, completed.id, 'claude', NOW);
-    completeHandoff(db, completed.id, 'claude', NOW);
+    completeHandoff(
+      db,
+      completed.id,
+      'claude',
+      { resultSummary: 'Done.', outcome: 'SUCCEEDED' },
+      NOW,
+    );
 
     const listed = await request(app).get('/api/agent-handoffs');
     expect(listed.status).toBe(200);
@@ -205,14 +282,28 @@ describe('clientRequestId mutation idempotency', () => {
     expect(replayNote.id).toBe(firstNote.id);
     expect(getHandoff(db, handoff.id).notes).toHaveLength(1);
 
-    const done = completeHandoff(db, handoff.id, 'claude', NOW, {
-      clientRequestId: 'complete-req-1',
-      mutationTool: 'coordination_complete_handoff',
-    });
-    const replayDone = completeHandoff(db, handoff.id, 'claude', NOW, {
-      clientRequestId: 'complete-req-1',
-      mutationTool: 'coordination_complete_handoff',
-    });
+    const done = completeHandoff(
+      db,
+      handoff.id,
+      'claude',
+      { resultSummary: 'Done.', outcome: 'SUCCEEDED' },
+      NOW,
+      {
+        clientRequestId: 'complete-req-1',
+        mutationTool: 'coordination_complete_handoff',
+      },
+    );
+    const replayDone = completeHandoff(
+      db,
+      handoff.id,
+      'claude',
+      { resultSummary: 'Ignored replay.', outcome: 'BLOCKED' },
+      NOW,
+      {
+        clientRequestId: 'complete-req-1',
+        mutationTool: 'coordination_complete_handoff',
+      },
+    );
     expect(replayDone.id).toBe(done.id);
     expect(replayDone.state).toBe('COMPLETED');
 

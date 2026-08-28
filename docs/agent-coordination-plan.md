@@ -404,6 +404,8 @@ entity. Binding is a pointer for the inbox UI — claim and complete **never** m
 | `agent_label` / `from_agent_label` / `to_agent_label` / `claimed_by` | Non-empty, trimmed, max 64 chars; charset and init validation are MCP-C106's to ship and C110 reuses |
 | `client_request_id` | Max 64 chars; optional |
 | `cancel_reason` | Required on cancel; 1–500 Unicode characters |
+| Completion result summary | Required; 1–2000 Unicode characters |
+| Completion evidence | At most 50 changed paths, references, validations, and remaining risks per field; each item is 1–500 Unicode characters |
 
 Bodies pass through `redactSecrets` on write. Credential-shaped substrings are refused or scrubbed
 at the Zod boundary before insert; URLs without credentials remain allowed.
@@ -432,6 +434,14 @@ coordination claim/complete/cancel among agents, the label is the authorization 
 directed handoff means something. Agents are still not tenants — one operator workspace.
 
 ### 5.2 Lifecycle
+
+Completing a claimed handoff requires a result summary and one machine-readable outcome:
+`SUCCEEDED`, `PARTIALLY_SUCCEEDED`, `BLOCKED`, or `SUPERSEDED`. Optional changed paths,
+commit/PR/issue references, validation commands with outcomes, and remaining risks are stored on the
+handoff row and shown in the operator inbox and MCP health panel. Historical `COMPLETED` rows remain
+readable with a null outcome and no evidence. Every free-text evidence field passes through
+`redactSecrets`; completion remains a coordination-only state transition and applies no workspace or
+provider change.
 
 ```
                     ┌─────────────┐

@@ -22,12 +22,15 @@ import {
 } from '../domain/agent-coordination.ts';
 import {
   agentHandoffCancelInputSchema,
+  agentHandoffCompletionInputSchema,
   agentHandoffNoteInputSchema,
   agentHandoffPostInputSchema,
   agentLabelSchema,
   type AgentHandoff,
   type AgentHandoffCancelInput,
   type AgentHandoffDetail,
+  type AgentHandoffCompletionInput,
+  type AgentHandoffOutcome,
   type AgentHandoffNote,
   type AgentHandoffNoteInput,
   type AgentHandoffPostInput,
@@ -58,7 +61,15 @@ interface HandoffRow {
   cancelled_at: string | null;
   cancel_reason: string | null;
   client_request_id: string | null;
+  outcome: string | null;
+  result_summary: string | null;
+  changed_paths_json: string | null;
+  references_json: string | null;
+  validations_json: string | null;
+  remaining_risks_json: string | null;
 }
+
+const jsonArray = <T>(value: string | null): T[] => (value ? (JSON.parse(value) as T[]) : []);
 
 interface NoteRow {
   id: string;
@@ -84,6 +95,12 @@ const toHandoff = (row: HandoffRow): AgentHandoff => ({
   cancelledAt: row.cancelled_at,
   cancelReason: row.cancel_reason,
   clientRequestId: row.client_request_id,
+  outcome: row.outcome as AgentHandoffOutcome | null,
+  resultSummary: row.result_summary,
+  changedPaths: jsonArray<string>(row.changed_paths_json),
+  references: jsonArray<string>(row.references_json),
+  validations: jsonArray<{ command: string; outcome: string }>(row.validations_json),
+  remainingRisks: jsonArray<string>(row.remaining_risks_json),
 });
 
 const toNote = (row: NoteRow): AgentHandoffNote => ({
@@ -250,10 +267,22 @@ export function completeHandoff(
   db: Db,
   handoffId: string,
   agentLabelRaw: string,
+  raw: AgentHandoffCompletionInput,
   now: Date = new Date(),
   options: HandoffMutationOptions = {},
 ): AgentHandoff {
   const agentLabel = agentLabelSchema.parse(agentLabelRaw);
+  const input = agentHandoffCompletionInputSchema.parse(raw);
+  const evidence = {
+    resultSummary: redactSecrets(input.resultSummary),
+    changedPaths: (input.changedPaths ?? []).map(redactSecrets),
+    references: (input.references ?? []).map(redactSecrets),
+    validations: (input.validations ?? []).map((item) => ({
+      command: redactSecrets(item.command),
+      outcome: redactSecrets(item.outcome),
+    })),
+    remainingRisks: (input.remainingRisks ?? []).map(redactSecrets),
+  };
   const clientRequestId = options.clientRequestId ?? null;
   const mutationTool = options.mutationTool ?? 'coordination_complete_handoff';
   const instant = now.toISOString();
@@ -282,9 +311,21 @@ export function completeHandoff(
     if (decision.kind === 'refused') refuse(decision.reason);
     db.prepare(
       `UPDATE agent_handoffs
-       SET state = 'COMPLETED', completed_at = ?, updated_at = ?
+       SET state = 'COMPLETED', completed_at = ?, updated_at = ?, outcome = ?, result_summary = ?,
+           changed_paths_json = ?, references_json = ?, validations_json = ?, remaining_risks_json = ?
        WHERE id = ? AND state = 'CLAIMED' AND claimed_by = ?`,
-    ).run(instant, instant, handoffId, agentLabel);
+    ).run(
+      instant,
+      instant,
+      input.outcome,
+      evidence.resultSummary,
+      JSON.stringify(evidence.changedPaths),
+      JSON.stringify(evidence.references),
+      JSON.stringify(evidence.validations),
+      JSON.stringify(evidence.remainingRisks),
+      handoffId,
+      agentLabel,
+    );
     const next = requireHandoff(db, handoffId);
     if (next.state !== 'COMPLETED') refuse('The handoff could not be completed.');
     if (clientRequestId) {

@@ -1036,6 +1036,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         agents: [],
         errorSummary: [],
         staleHandoffs: [],
+        recentCompletions: [],
         auditEventCount: 0,
       });
     }

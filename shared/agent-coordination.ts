@@ -30,7 +30,18 @@ export const AGENT_COORDINATION_LIMITS = {
   noteBody: 2000,
   cancelReason: 500,
   subjectId: 200,
+  resultSummary: 2000,
+  evidenceItem: 500,
+  evidenceItems: 50,
 } as const;
+
+export const AGENT_HANDOFF_OUTCOMES = [
+  'SUCCEEDED',
+  'PARTIALLY_SUCCEEDED',
+  'BLOCKED',
+  'SUPERSEDED',
+] as const;
+export type AgentHandoffOutcome = (typeof AGENT_HANDOFF_OUTCOMES)[number];
 
 /**
  * Portable agent label: non-empty, trimmed, max 64, letters/digits plus `.` `_` `-`.
@@ -62,6 +73,51 @@ const withoutCredentials = (field: string) => (value: string, context: z.Refinem
     });
   }
 };
+
+const completionTextSchema = (label: string) =>
+  z
+    .string()
+    .trim()
+    .min(1, `${label} must not be empty.`)
+    .max(AGENT_COORDINATION_LIMITS.evidenceItem, `${label} is too long.`)
+    .superRefine(withoutCredentials(label));
+
+export const agentHandoffCompletionInputSchema = z
+  .object({
+    resultSummary: z
+      .string()
+      .trim()
+      .min(1, 'A result summary is required.')
+      .max(AGENT_COORDINATION_LIMITS.resultSummary)
+      .superRefine(withoutCredentials('A result summary')),
+    outcome: z.enum(AGENT_HANDOFF_OUTCOMES),
+    changedPaths: z
+      .array(completionTextSchema('A changed path'))
+      .max(AGENT_COORDINATION_LIMITS.evidenceItems)
+      .optional(),
+    references: z
+      .array(completionTextSchema('A reference'))
+      .max(AGENT_COORDINATION_LIMITS.evidenceItems)
+      .optional(),
+    validations: z
+      .array(
+        z
+          .object({
+            command: completionTextSchema('A validation command'),
+            outcome: completionTextSchema('A validation outcome'),
+          })
+          .strict(),
+      )
+      .max(AGENT_COORDINATION_LIMITS.evidenceItems)
+      .optional(),
+    remainingRisks: z
+      .array(completionTextSchema('A remaining risk'))
+      .max(AGENT_COORDINATION_LIMITS.evidenceItems)
+      .optional(),
+  })
+  .strict();
+
+export type AgentHandoffCompletionInput = z.infer<typeof agentHandoffCompletionInputSchema>;
 
 export const agentLabelSchema = z
   .string()
@@ -170,6 +226,12 @@ export interface AgentHandoff {
   cancelledAt: string | null;
   cancelReason: string | null;
   clientRequestId: string | null;
+  outcome?: AgentHandoffOutcome | null;
+  resultSummary?: string | null;
+  changedPaths?: string[];
+  references?: string[];
+  validations?: Array<{ command: string; outcome: string }>;
+  remainingRisks?: string[];
 }
 
 export interface AgentHandoffNote {

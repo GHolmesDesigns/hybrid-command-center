@@ -579,7 +579,13 @@ CREATE TABLE IF NOT EXISTS agent_handoffs (
   completed_at TEXT,
   cancelled_at TEXT,
   cancel_reason TEXT CHECK(cancel_reason IS NULL OR length(cancel_reason) BETWEEN 1 AND 500),
-  client_request_id TEXT
+  client_request_id TEXT,
+  outcome TEXT CHECK(outcome IS NULL OR outcome IN ('SUCCEEDED','PARTIALLY_SUCCEEDED','BLOCKED','SUPERSEDED')),
+  result_summary TEXT,
+  changed_paths_json TEXT,
+  references_json TEXT,
+  validations_json TEXT,
+  remaining_risks_json TEXT
 );
 -- Append-only comments on a handoff. Never change handoff state; refused on CANCELLED in the service.
 CREATE TABLE IF NOT EXISTS agent_handoff_notes (
@@ -777,6 +783,27 @@ export const triggerSchema = `${mediaSourceTriggers('signal_post_media')}${media
 `;
 
 const handoffLengthTriggers = `
+CREATE TRIGGER IF NOT EXISTS agent_handoffs_completion_evidence_insert
+BEFORE INSERT ON agent_handoffs FOR EACH ROW
+WHEN (NEW.result_summary IS NOT NULL AND (length(NEW.result_summary) < 1 OR length(NEW.result_summary) > 2000))
+  OR (NEW.changed_paths_json IS NOT NULL AND length(NEW.changed_paths_json) > 25001)
+  OR (NEW.references_json IS NOT NULL AND length(NEW.references_json) > 25001)
+  OR (NEW.validations_json IS NOT NULL AND length(NEW.validations_json) > 50001)
+  OR (NEW.remaining_risks_json IS NOT NULL AND length(NEW.remaining_risks_json) > 25001)
+BEGIN
+  SELECT RAISE(ABORT, 'agent_handoffs: completion evidence exceeds its bound.');
+END;
+CREATE TRIGGER IF NOT EXISTS agent_handoffs_completion_evidence_update
+BEFORE UPDATE ON agent_handoffs FOR EACH ROW
+WHEN (NEW.state = 'COMPLETED' AND OLD.state <> 'COMPLETED' AND (NEW.outcome IS NULL OR NEW.result_summary IS NULL))
+  OR (NEW.result_summary IS NOT NULL AND (length(NEW.result_summary) < 1 OR length(NEW.result_summary) > 2000))
+  OR (NEW.changed_paths_json IS NOT NULL AND length(NEW.changed_paths_json) > 25001)
+  OR (NEW.references_json IS NOT NULL AND length(NEW.references_json) > 25001)
+  OR (NEW.validations_json IS NOT NULL AND length(NEW.validations_json) > 50001)
+  OR (NEW.remaining_risks_json IS NOT NULL AND length(NEW.remaining_risks_json) > 25001)
+BEGIN
+  SELECT RAISE(ABORT, 'agent_handoffs: completion evidence exceeds its bound.');
+END;
 CREATE TRIGGER IF NOT EXISTS agent_handoffs_message_length_insert
 BEFORE INSERT ON agent_handoffs FOR EACH ROW
 WHEN length(NEW.message) < 1 OR length(NEW.message) > 2000
