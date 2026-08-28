@@ -49,6 +49,7 @@ import { SignalCampaignsCard } from './SignalCampaignsCard';
 import { TagsCard } from './TagsCard';
 import { AgentHandoffsCard } from './AgentHandoffsCard';
 import { McpAgentCredentialsCard } from './McpAgentCredentialsCard';
+import { McpHealthPanelCard } from './McpHealthPanelCard';
 
 const COLOR_LABEL: Record<BrandingColorField, string> = {
   background: 'Sidebar background',
@@ -326,6 +327,7 @@ export function SettingsView({
           <SignalCampaignsCard flash={flash} />
           <AgentHandoffsCard tasks={tasks} flash={flash} />
           <McpAgentCredentialsCard flash={flash} />
+          <McpHealthPanelCard flash={flash} />
         </div>
         <div className="settings-column">
           <section className="panel settings-card">

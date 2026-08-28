@@ -31,6 +31,8 @@ export interface JsonRpcResponse {
 export type McpJsonRpcOptions = {
   grantedScopes?: readonly McpAgentScope[];
   now?: Date;
+  transport?: 'stdio' | 'http';
+  authenticated?: boolean;
 };
 
 const PROTOCOL_VERSION = '2024-11-05';
@@ -125,6 +127,8 @@ export async function handleMcpJsonRpc(
         const result = await callMcpTool(db, session, call.name, call.arguments ?? {}, {
           grantedScopes,
           now,
+          transport: options.transport ?? 'stdio',
+          authenticated: options.authenticated ?? true,
         });
         const text =
           result.outcome === 'SUCCESS'

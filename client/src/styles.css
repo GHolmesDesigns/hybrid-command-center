@@ -2097,6 +2097,71 @@ button.tag-chip.toggle.active {
   color: var(--muted);
   overflow-wrap: anywhere;
 }
+.mcp-health-card .section-title {
+  align-items: center;
+}
+.mcp-health-headline {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.mcp-health-headline svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.mcp-health-note {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+.mcp-health-actions {
+  margin-bottom: 12px;
+}
+.mcp-health-test-result {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 0.92rem;
+}
+.mcp-health-agent-list,
+.mcp-health-errors ul,
+.mcp-health-stale ul {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mcp-health-agent-list li,
+.mcp-health-errors li,
+.mcp-health-stale li {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.mcp-health-agent-list span,
+.mcp-health-agent-list small,
+.mcp-health-stale small {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+.mcp-health-errors h3,
+.mcp-health-stale h3 {
+  margin: 16px 0 0;
+  font-size: 0.95rem;
+}
 
 /* Operator coordination inbox (C112) — lives on Settings beside the other workspace cards. */
 .handoff-group {

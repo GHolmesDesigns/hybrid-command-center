@@ -8,6 +8,18 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.6.11] - 2026-08-28
+
+### Added
+
+- **`system_connection_status` MCP tool** — read-only diagnostic covering authentication context, `tools/list`, `resources/list`, one bounded resource read, server version, capability version, and server clock without creating a handoff.
+- **Settings → Connection health panel** — shows recently active agents, last success and failure, request and refusal counts, rate-limit events, a bounded error-code summary, and stale handoffs past the coordination TTL.
+- **Test connection action** — runs the diagnostic from Settings without a workspace write.
+
+### Breaking changes
+
+None.
+
 ## [5.6.10] - 2026-08-28
 
 ### Added

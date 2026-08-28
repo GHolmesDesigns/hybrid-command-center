@@ -36,6 +36,7 @@ const READING_ORDER = [
   'Signal campaigns',
   'Agent handoffs',
   'Agent credentials',
+  'Connection health',
   'Branding',
   'Default views',
   'Local timezone',
@@ -77,7 +78,7 @@ const cardBoxes = (page: Page): Promise<CardBox[]> =>
 const openSettings = async (page: Page) => {
   await page.goto('/settings');
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
-  await expect(page.locator('.settings-layout .settings-card')).toHaveCount(10);
+  await expect(page.locator('.settings-layout .settings-card')).toHaveCount(11);
   // Every measurement below is taken across two separate renders and compared to the pixel, so the
   // two have to be laid out in the same font. `client/src/styles.css` fetches DM Sans and Manrope
   // with `display=swap`, which means one render can be measured in the fallback face and its
@@ -129,9 +130,9 @@ test('each Settings column stacks on its own at desktop width', async ({ page })
 
   const cards = await cardBoxes(page);
   expect(cards.map((card) => card.heading)).toEqual(READING_ORDER);
-  // Six cards in the left stack and four in the right, and every card in one — a card left as
+  // Seven cards in the left stack and four in the right, and every card in one — a card left as
   // the grid's own child would report column -1 and be back in a shared row track.
-  expect(cards.map((card) => card.column)).toEqual([0, 0, 0, 0, 0, 0, 1, 1, 1, 1]);
+  expect(cards.map((card) => card.column)).toEqual([0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1]);
 
   const [left, right] = [0, 1].map((column) => cards.filter((card) => card.column === column));
 
@@ -184,6 +185,7 @@ test('a Settings card follows its own column, and no card follows the other one'
     'Signal campaigns',
     'Agent handoffs',
     'Agent credentials',
+    'Connection health',
   ]) {
     expect(Math.round(find(connected, heading).top - find(disconnected, heading).top)).toBe(
       Math.round(shrankBy),
@@ -228,7 +230,9 @@ test('the keyboard reaches the Settings cards in the order they are read', async
   // placeholder. Wait for that stable state before snapshotting focusable controls, or a slower
   // runner can replace the form halfway through the Tab walk.
   await expect(
-    page.getByText('Available when operator authentication enables network MCP.'),
+    page
+      .getByLabel('Agent credentials')
+      .getByText('Available when operator authentication enables network MCP.'),
   ).toBeVisible();
 
   // Every control the layout offers, in document order, tagged so the walk below can say which
