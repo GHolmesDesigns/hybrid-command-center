@@ -71,7 +71,6 @@ export function McpHealthPanelCard({
     try {
       const result = await send<HealthTestResponse>('/mcp/health/test', 'POST');
       setTestResult(result);
-      await load();
       if (result.ok) {
         flash('Connection test succeeded.');
       } else {
@@ -141,20 +140,6 @@ export function McpHealthPanelCard({
               {testing ? <RefreshCw className="spin" /> : <PlugZap />} Test connection
             </button>
           </div>
-          {testResult && (
-            <div className="mcp-health-test-result" role="status">
-              <strong>
-                {testResult.ok ? 'Diagnostic passed' : 'Diagnostic reported failures'}
-              </strong>
-              <span>Server clock: {new Date(testResult.status.serverClock).toLocaleString()}</span>
-              <span>Capability version: {testResult.status.capabilityVersion}</span>
-              <span>Tools listed: {testResult.status.checks.toolsList.toolCount ?? 0}</span>
-              <span>Last tested: {new Date(testResult.lastUsedAt).toLocaleString()}</span>
-              {!testResult.workspaceChecksumUnchanged && (
-                <span role="alert">Workspace checksum changed during the test.</span>
-              )}
-            </div>
-          )}
           {panel?.agents.length ? (
             <ul className="mcp-health-agent-list">
               {panel.agents.map((agent) => (
@@ -222,6 +207,18 @@ export function McpHealthPanelCard({
             </div>
           ) : null}
         </>
+      )}
+      {testResult && (
+        <div className="mcp-health-test-result" role="status">
+          <strong>{testResult.ok ? 'Diagnostic passed' : 'Diagnostic reported failures'}</strong>
+          <span>Server clock: {new Date(testResult.status.serverClock).toLocaleString()}</span>
+          <span>Capability version: {testResult.status.capabilityVersion}</span>
+          <span>Tools listed: {testResult.status.checks.toolsList.toolCount ?? 0}</span>
+          <span>Last tested: {new Date(testResult.lastUsedAt).toLocaleString()}</span>
+          {!testResult.workspaceChecksumUnchanged && (
+            <span role="alert">Workspace checksum changed during the test.</span>
+          )}
+        </div>
       )}
     </section>
   );
