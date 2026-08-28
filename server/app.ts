@@ -39,7 +39,6 @@ import {
   getCategory,
   getTag,
   getTask,
-  listActiveTasks,
   listCategories,
   listClients,
   listProjects,
@@ -50,7 +49,7 @@ import { commitClientMerge, isMergedSource, previewClientMerge } from './client-
 import { ClientMergeError } from './domain/client-merge.ts';
 import { touchProjectActivity, touchProjectRecord } from './domain/activity.ts';
 import { wouldCreateCycle, blockingDependencies } from './domain/dependencies.ts';
-import { isDueNextSevenDays, isDueToday, isOverdue } from '../shared/deadlines.ts';
+import { buildDashboardSummary } from './domain/dashboard.ts';
 import { buildClientSlug } from './domain/client-slugs.ts';
 import {
   driveProvider,
@@ -247,10 +246,8 @@ import {
   TASK_CHECKLIST_TEMPLATES,
   TASK_STATUSES,
   TASK_TYPES,
-  compareProjectActivity,
   normalizeCategoryName,
   normalizeTagName,
-  type Project,
 } from '../shared/types.ts';
 
 const id = () => crypto.randomUUID();
@@ -1823,35 +1820,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   });
 
   app.get('/api/dashboard', (_req, res) => {
-    // Active scope only: tasks under an archived project or an archived client are still
-    // reachable everywhere else, but they are not work that needs attention now, so they
-    // belong in none of these counts or lists.
-    const tasks = listActiveTasks(db);
-    const projects = listProjects(db);
-    // Each bucket filters COMPLETE out for itself, so a task that is finished cannot reach
-    // a list through one of them.
-    const overdue = tasks.filter((t) => isOverdue(t));
-    const dueToday = tasks.filter((t) => isDueToday(t));
-    // Includes today: a task due in the next few hours is the most urgent thing in the
-    // window, not something the window has already passed. `dueToday` is a subset of it.
-    const dueNextSevenDays = tasks.filter((t) => isDueNextSevenDays(t));
-    res.json({
-      counts: {
-        activeClients: listClients(db).filter((c: any) => c.status === 'ACTIVE').length,
-        activeProjects: projects.filter((p: any) => p.status === 'ACTIVE').length,
-        dueToday: dueToday.length,
-        dueNextSevenDays: dueNextSevenDays.length,
-        overdue: overdue.length,
-        projectsOverdue: new Set(overdue.map((t) => t.projectId)).size,
-      },
-      overdueTasks: urgent(overdue),
-      dueTodayTasks: urgent(dueToday),
-      upcomingTasks: urgent(dueNextSevenDays),
-      // Ordered by activity, not by `updatedAt`: the panel is asking where work is
-      // happening, and renaming a project is not work on it. The comparator is shared with
-      // the Projects page so the two views cannot put the same projects in a different order.
-      recentProjects: (projects as Project[]).slice().sort(compareProjectActivity).slice(0, 5),
-    });
+    res.json(buildDashboardSummary(db));
   });
 
   app.get('/api/settings/branding', (_req, res) =>
@@ -2902,15 +2871,6 @@ function projectById(db: Db, projectId: string) {
 function parseFolderId(value: string) {
   const match = value.match(/folders\/([a-zA-Z0-9_-]+)/);
   return match?.[1] || value;
-}
-function urgent(tasks: any[]) {
-  const rank: any = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
-  return tasks.sort(
-    (a, b) =>
-      Number(b.overdue) - Number(a.overdue) ||
-      (a.dueDate || '9999').localeCompare(b.dueDate || '9999') ||
-      rank[a.priority] - rank[b.priority],
-  );
 }
 /**
  * Branding as stored, completed from the defaults. Rows written before colours and logos

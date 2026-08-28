@@ -8,6 +8,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.6.8] - 2026-08-28
+
+### Changed
+
+None. This card is an internal refactor only: dashboard summary logic moves from the route
+handler into `server/domain/dashboard.ts` with no change to what `GET /api/dashboard` returns.
+
+### Breaking changes
+
+None.
+
 ## [5.6.7] - 2026-08-28
 
 ### Added
