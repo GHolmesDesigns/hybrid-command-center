@@ -223,6 +223,13 @@ test('below 1100px the two Settings stacks read as one, in document order', asyn
 test('the keyboard reaches the Settings cards in the order they are read', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openSettings(page);
+  // The credentials card renders its form optimistically while its server capability check is in
+  // flight. In the ordinary loopback E2E server that request resolves to the non-interactive
+  // placeholder. Wait for that stable state before snapshotting focusable controls, or a slower
+  // runner can replace the form halfway through the Tab walk.
+  await expect(
+    page.getByText('Available when operator authentication enables network MCP.'),
+  ).toBeVisible();
 
   // Every control the layout offers, in document order, tagged so the walk below can say which
   // card the focus landed in. Disabled and hidden controls are left out because the browser
