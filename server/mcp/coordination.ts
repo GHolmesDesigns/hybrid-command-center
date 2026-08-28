@@ -31,6 +31,16 @@ import {
   AGENT_HANDOFF_SUBJECT_TYPES,
 } from '../../shared/agent-coordination.ts';
 import {
+  mcpCoordinationAgentLabelRequired,
+  mcpCoordinationErrorFromMessage,
+  mcpCoordinationInvalidArguments,
+  mcpCoordinationRateLimitExceeded,
+  mcpCoordinationSessionLabelMismatch,
+  mcpCoordinationToolFailed,
+  mcpCoordinationUnknownTool,
+  type McpCoordinationErrorDetail,
+} from '../../shared/mcp-coordination-errors.ts';
+import {
   COORDINATION_TOOLS,
   COORDINATION_WRITE_TOOLS,
   type CoordinationTool,
@@ -46,6 +56,8 @@ export interface McpToolCallResult {
   data?: unknown;
   /** Plain-language error for REFUSED / FAILURE; already scrubbed. */
   error?: string;
+  /** Structured refusal/failure beside the plain error string (C117). */
+  errorDetail?: McpCoordinationErrorDetail;
   /** Set only on the coordination-write rate-limit refusal path (C116). */
   retryAfterMs?: number;
 }
@@ -79,12 +91,18 @@ const claimArgsSchema = z
   })
   .strict();
 
-const completeArgsSchema = claimArgsSchema;
+const completeArgsSchema = z
+  .object({
+    handoffId: z.string().trim().min(1).max(200),
+    clientRequestId: agentHandoffClientRequestIdSchema.optional(),
+  })
+  .strict();
 
 const cancelArgsSchema = z
   .object({
     handoffId: z.string().trim().min(1).max(200),
     reason: agentHandoffCancelReasonSchema,
+    clientRequestId: agentHandoffClientRequestIdSchema.optional(),
   })
   .strict();
 
@@ -92,6 +110,7 @@ const noteArgsSchema = z
   .object({
     handoffId: z.string().trim().min(1).max(200),
     body: agentHandoffNoteBodySchema,
+    clientRequestId: agentHandoffClientRequestIdSchema.optional(),
   })
   .strict();
 
@@ -99,6 +118,43 @@ const WRITE_TOOLS = new Set<string>(COORDINATION_WRITE_TOOLS);
 
 const isCoordinationTool = (name: string): name is CoordinationTool =>
   (COORDINATION_TOOLS as readonly string[]).includes(name);
+
+const refused = (
+  error: string,
+  errorDetail: McpCoordinationErrorDetail,
+  retryAfterMs?: number,
+): McpToolCallResult => ({
+  outcome: 'REFUSED',
+  error,
+  errorDetail,
+  ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
+});
+
+const failed = (error: string, errorDetail: McpCoordinationErrorDetail): McpToolCallResult => ({
+  outcome: 'FAILURE',
+  error,
+  errorDetail,
+});
+
+/** Flatten structured error fields for MCP tool text payloads and JSON-RPC error.data. */
+export function mcpToolCallErrorPayload(result: McpToolCallResult): Record<string, unknown> {
+  return {
+    outcome: result.outcome,
+    error: result.error,
+    ...(result.errorDetail?.code ? { code: result.errorDetail.code } : {}),
+    ...(result.errorDetail?.retryable !== undefined
+      ? { retryable: result.errorDetail.retryable }
+      : {}),
+    ...(result.retryAfterMs !== undefined ? { retryAfterMs: result.retryAfterMs } : {}),
+    ...(result.errorDetail?.retryAfterMs !== undefined && result.retryAfterMs === undefined
+      ? { retryAfterMs: result.errorDetail.retryAfterMs }
+      : {}),
+    ...(result.errorDetail?.currentState ? { currentState: result.errorDetail.currentState } : {}),
+    ...(result.errorDetail?.requiredAction
+      ? { requiredAction: result.errorDetail.requiredAction }
+      : {}),
+  };
+}
 
 /**
  * Dispatch one coordination tool. Reads skip label and rate-limit checks; writes require both.
@@ -111,26 +167,39 @@ export function callCoordinationTool(
   now: Date = new Date(),
 ): McpToolCallResult {
   if (!isCoordinationTool(tool)) {
-    return finish(db, session, tool, {
-      outcome: 'FAILURE',
-      error: `Unknown coordination tool: ${tool}.`,
-    });
+    return finish(
+      db,
+      session,
+      tool,
+      failed(`Unknown coordination tool: ${tool}.`, mcpCoordinationUnknownTool()),
+    );
   }
 
   if (WRITE_TOOLS.has(tool)) {
     if (!session.agentLabel) {
-      return finish(db, session, tool, {
-        outcome: 'REFUSED',
-        error:
+      return finish(
+        db,
+        session,
+        tool,
+        refused(
           'Coordination writes require a non-empty agent_label in MCP initialization (or MCP_AGENT_LABEL).',
-      });
+          mcpCoordinationAgentLabelRequired(),
+        ),
+      );
     }
     if (!session.coordinationWrites.tryConsume(now.getTime())) {
-      return finish(db, session, tool, {
-        outcome: 'REFUSED',
-        error: 'Coordination write rate limit exceeded (10 per rolling minute).',
-        retryAfterMs: session.coordinationWrites.retryAfterMs(now.getTime()),
-      });
+      const retryAfterMs = session.coordinationWrites.retryAfterMs(now.getTime());
+      const errorDetail = mcpCoordinationRateLimitExceeded(retryAfterMs);
+      return finish(
+        db,
+        session,
+        tool,
+        refused(
+          'Coordination write rate limit exceeded (10 per rolling minute).',
+          errorDetail,
+          retryAfterMs,
+        ),
+      );
     }
   }
 
@@ -150,10 +219,15 @@ export function callCoordinationTool(
         const args = postArgsSchema.parse(rawArgs ?? {});
         const label = session.agentLabel!;
         if (args.fromAgentLabel !== undefined && args.fromAgentLabel !== label) {
-          return finish(db, session, tool, {
-            outcome: 'REFUSED',
-            error: 'from_agent_label must match the MCP session agent_label.',
-          });
+          return finish(
+            db,
+            session,
+            tool,
+            refused(
+              'from_agent_label must match the MCP session agent_label.',
+              mcpCoordinationSessionLabelMismatch(),
+            ),
+          );
         }
         const data = postHandoff(
           db,
@@ -196,7 +270,10 @@ export function callCoordinationTool(
       }
       case 'coordination_complete_handoff': {
         const args = completeArgsSchema.parse(rawArgs ?? {});
-        const data = completeHandoff(db, args.handoffId, session.agentLabel!, now);
+        const data = completeHandoff(db, args.handoffId, session.agentLabel!, now, {
+          clientRequestId: args.clientRequestId,
+          mutationTool: 'coordination_complete_handoff',
+        });
         return finish(
           db,
           session,
@@ -217,6 +294,10 @@ export function callCoordinationTool(
           session.agentLabel!,
           { reason: args.reason },
           now,
+          {
+            clientRequestId: args.clientRequestId,
+            mutationTool: 'coordination_cancel_handoff',
+          },
         );
         return finish(
           db,
@@ -237,6 +318,10 @@ export function callCoordinationTool(
           args.handoffId,
           { agentLabel: session.agentLabel!, body: args.body },
           now,
+          {
+            clientRequestId: args.clientRequestId,
+            mutationTool: 'coordination_add_note',
+          },
         );
         return finish(
           db,
@@ -254,11 +339,12 @@ export function callCoordinationTool(
   } catch (error) {
     if (error instanceof AgentCoordinationError) {
       const outcome: McpAgentEventOutcome = error.status === 409 ? 'REFUSED' : 'FAILURE';
+      const errorDetail = mcpCoordinationErrorFromMessage(error.message, error.status);
       return finish(
         db,
         session,
         tool,
-        { outcome, error: error.message },
+        { outcome, error: error.message, errorDetail },
         {
           summary: error.message,
         },
@@ -266,28 +352,16 @@ export function callCoordinationTool(
     }
     if (error instanceof z.ZodError) {
       const message = error.issues.map((issue) => issue.message).join(' ') || 'Invalid arguments.';
-      return finish(
-        db,
-        session,
-        tool,
-        { outcome: 'FAILURE', error: message },
-        {
-          summary: message,
-          audit: WRITE_TOOLS.has(tool),
-        },
-      );
-    }
-    const message = error instanceof Error ? error.message : 'Coordination tool failed.';
-    return finish(
-      db,
-      session,
-      tool,
-      { outcome: 'FAILURE', error: message },
-      {
+      return finish(db, session, tool, failed(message, mcpCoordinationInvalidArguments()), {
         summary: message,
         audit: WRITE_TOOLS.has(tool),
-      },
-    );
+      });
+    }
+    const message = error instanceof Error ? error.message : 'Coordination tool failed.';
+    return finish(db, session, tool, failed(message, mcpCoordinationToolFailed()), {
+      summary: message,
+      audit: WRITE_TOOLS.has(tool),
+    });
   }
 }
 
@@ -310,6 +384,7 @@ function finish(
     outcome: result.outcome,
     ...(result.data !== undefined ? { data: redactToolResult(result.data) } : {}),
     ...(result.error !== undefined ? { error: redactToolResult(result.error) } : {}),
+    ...(result.errorDetail ? { errorDetail: result.errorDetail } : {}),
     ...(result.retryAfterMs !== undefined ? { retryAfterMs: result.retryAfterMs } : {}),
   };
   if (shouldAudit) {
@@ -387,22 +462,28 @@ export const COORDINATION_TOOL_DEFINITIONS: ReadonlyArray<{
   },
   {
     name: 'coordination_complete_handoff',
-    description: 'Complete a CLAIMED handoff as the claimer. Never publishes or contacts Drive.',
+    description:
+      'Complete a CLAIMED handoff as the claimer. Never publishes or contacts Drive. Optional client_request_id is idempotent.',
     inputSchema: {
       type: 'object',
-      properties: { handoffId: { type: 'string' } },
+      properties: {
+        handoffId: { type: 'string' },
+        clientRequestId: { type: 'string' },
+      },
       required: ['handoffId'],
       additionalProperties: false,
     },
   },
   {
     name: 'coordination_cancel_handoff',
-    description: 'Cancel an OPEN or CLAIMED handoff as the poster or claimer.',
+    description:
+      'Cancel an OPEN or CLAIMED handoff as the poster or claimer. Optional client_request_id is idempotent.',
     inputSchema: {
       type: 'object',
       properties: {
         handoffId: { type: 'string' },
         reason: { type: 'string' },
+        clientRequestId: { type: 'string' },
       },
       required: ['handoffId', 'reason'],
       additionalProperties: false,
@@ -410,12 +491,14 @@ export const COORDINATION_TOOL_DEFINITIONS: ReadonlyArray<{
   },
   {
     name: 'coordination_add_note',
-    description: 'Append a note to a non-cancelled handoff.',
+    description:
+      'Append a note to a non-cancelled handoff. Optional client_request_id is idempotent.',
     inputSchema: {
       type: 'object',
       properties: {
         handoffId: { type: 'string' },
         body: { type: 'string' },
+        clientRequestId: { type: 'string' },
       },
       required: ['handoffId', 'body'],
       additionalProperties: false,

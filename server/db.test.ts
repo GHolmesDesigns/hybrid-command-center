@@ -218,6 +218,7 @@ describe('additive schema migration', () => {
         'signal_post_import_aliases',
         'agent_handoffs',
         'agent_handoff_notes',
+        'agent_handoff_mutations',
         'mcp_agent_events',
       ]),
     );
@@ -243,6 +244,9 @@ describe('additive schema migration', () => {
     // Agent handoffs arrive empty: a migration invents no coordination history.
     expect(rows(db, 'SELECT COUNT(*) AS total FROM agent_handoffs')).toEqual([{ total: 0 }]);
     expect(rows(db, 'SELECT COUNT(*) AS total FROM agent_handoff_notes')).toEqual([{ total: 0 }]);
+    expect(rows(db, 'SELECT COUNT(*) AS total FROM agent_handoff_mutations')).toEqual([
+      { total: 0 },
+    ]);
     // MCP audit arrives empty: a migration invents no agent tool history.
     expect(rows(db, 'SELECT COUNT(*) AS total FROM mcp_agent_events')).toEqual([{ total: 0 }]);
     // Figures arrive empty as well, and the delivery rows gain the provider result identity as a

@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createDb, type Db } from '../db.ts';
+import { getHandoff } from '../agent-coordination/service.ts';
 import { listMcpAgentEvents } from './events.ts';
-import { callCoordinationTool } from './coordination.ts';
+import { callCoordinationTool, mcpToolCallErrorPayload } from './coordination.ts';
 import { readCoordinationResource } from './resources.ts';
 import { redactToolResult } from './redact.ts';
 import { createMcpSession } from './session.ts';
@@ -83,6 +84,7 @@ describe('coordination MCP tools', () => {
     expect(wrong).toMatchObject({
       outcome: 'REFUSED',
       error: expect.stringMatching(/Only claude/),
+      errorDetail: { code: 'COORDINATION_UNAUTHORIZED', retryable: false },
     });
     expect(listMcpAgentEvents(db, { tool: 'coordination_claim_handoff' })[0]?.outcome).toBe(
       'REFUSED',
@@ -154,6 +156,7 @@ describe('coordination MCP tools', () => {
     expect(refused).toMatchObject({
       outcome: 'REFUSED',
       error: expect.stringMatching(/agent_label/),
+      errorDetail: { code: 'COORDINATION_AGENT_LABEL_REQUIRED', retryable: false },
     });
     expect(
       listMcpAgentEvents(db, { tool: 'coordination_claim_handoff' }).some(
@@ -185,6 +188,8 @@ describe('coordination MCP tools', () => {
     expect(over).toMatchObject({
       outcome: 'REFUSED',
       error: expect.stringMatching(/rate limit/i),
+      errorDetail: { code: 'COORDINATION_RATE_LIMIT_EXCEEDED', retryable: true },
+      retryAfterMs: expect.any(Number),
     });
     const refused = listMcpAgentEvents(db).filter(
       (event) => event.outcome === 'REFUSED' && event.summary.includes('rate limit'),
@@ -317,5 +322,117 @@ describe('coordination MCP tools', () => {
         NOW,
       ).outcome,
     ).toBe('SUCCESS');
+  });
+
+  it('honours clientRequestId idempotency on note, complete, and cancel', () => {
+    const poster = labeled('cursor');
+    const posted = callCoordinationTool(
+      db,
+      poster,
+      'coordination_post_handoff',
+      { subjectType: 'freeform', message: 'Idempotent lifecycle.' },
+      NOW,
+    );
+    const handoffId = (posted.data as { id: string }).id;
+    const claimer = labeled('claude');
+    expect(
+      callCoordinationTool(db, claimer, 'coordination_claim_handoff', { handoffId }, NOW).outcome,
+    ).toBe('SUCCESS');
+
+    const firstNote = callCoordinationTool(
+      db,
+      claimer,
+      'coordination_add_note',
+      { handoffId, body: 'First note.', clientRequestId: 'note-req-1' },
+      NOW,
+    );
+    expect(firstNote.outcome).toBe('SUCCESS');
+    const noteId = (firstNote.data as { id: string }).id;
+
+    const replayNote = callCoordinationTool(
+      db,
+      claimer,
+      'coordination_add_note',
+      { handoffId, body: 'Duplicate body must not append.', clientRequestId: 'note-req-1' },
+      NOW,
+    );
+    expect(replayNote.outcome).toBe('SUCCESS');
+    expect((replayNote.data as { id: string }).id).toBe(noteId);
+    expect(getHandoff(db, handoffId).notes).toHaveLength(1);
+
+    const otherLabelNote = callCoordinationTool(
+      db,
+      labeled('other'),
+      'coordination_add_note',
+      { handoffId, body: 'Different agent.', clientRequestId: 'note-req-1' },
+      NOW,
+    );
+    expect(otherLabelNote.outcome).toBe('SUCCESS');
+    expect((otherLabelNote.data as { id: string }).id).not.toBe(noteId);
+
+    const firstComplete = callCoordinationTool(
+      db,
+      claimer,
+      'coordination_complete_handoff',
+      { handoffId, clientRequestId: 'complete-req-1' },
+      NOW,
+    );
+    expect(firstComplete.outcome).toBe('SUCCESS');
+    expect((firstComplete.data as { state: string }).state).toBe('COMPLETED');
+
+    const replayComplete = callCoordinationTool(
+      db,
+      claimer,
+      'coordination_complete_handoff',
+      { handoffId, clientRequestId: 'complete-req-1' },
+      NOW,
+    );
+    expect(replayComplete.outcome).toBe('SUCCESS');
+    expect((replayComplete.data as { id: string }).id).toBe(handoffId);
+    expect((replayComplete.data as { state: string }).state).toBe('COMPLETED');
+
+    const cancelPost = callCoordinationTool(
+      db,
+      poster,
+      'coordination_post_handoff',
+      { subjectType: 'freeform', message: 'Cancel me.' },
+      NOW,
+    );
+    const cancelId = (cancelPost.data as { id: string }).id;
+    const firstCancel = callCoordinationTool(
+      db,
+      poster,
+      'coordination_cancel_handoff',
+      { handoffId: cancelId, reason: 'Done.', clientRequestId: 'cancel-req-1' },
+      NOW,
+    );
+    expect(firstCancel.outcome).toBe('SUCCESS');
+    const replayCancel = callCoordinationTool(
+      db,
+      poster,
+      'coordination_cancel_handoff',
+      { handoffId: cancelId, reason: 'Different reason.', clientRequestId: 'cancel-req-1' },
+      NOW,
+    );
+    expect(replayCancel.outcome).toBe('SUCCESS');
+    expect((replayCancel.data as { cancelReason: string }).cancelReason).toBe('Done.');
+  });
+
+  it('serializes structured error fields beside the plain error string', () => {
+    const session = labeled('cursor');
+    const result = callCoordinationTool(
+      db,
+      session,
+      'coordination_get_handoff',
+      { handoffId: 'missing' },
+      NOW,
+    );
+    expect(result.error).toBe('Handoff not found.');
+    expect(mcpToolCallErrorPayload(result)).toMatchObject({
+      outcome: 'FAILURE',
+      error: 'Handoff not found.',
+      code: 'COORDINATION_NOT_FOUND',
+      retryable: false,
+    });
   });
 });
