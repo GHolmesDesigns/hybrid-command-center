@@ -21,12 +21,12 @@ As of 28 August 2026.
 | --- | --- |
 | Repository | `GHolmesDesigns/hybrid-command-center` |
 | Branch | `main` matches `origin/main` |
-| Version | **5.6.5** (`package.json` and `APP_VERSION`) |
+| Version | **5.6.7** (`package.json` and `APP_VERSION`) |
 | Production origin | `https://hcc.gholmesdesigns.com` |
 | First commit | 10 August 2026 (`8804b00`, v2.0.0) |
 | Commits | 495 |
-| Merged pull requests | 195 |
-| Open issues | 17 (Waves 26–30 MCP capability cards) |
+| Merged pull requests | 196 |
+| Open issues | 15 (Waves 26–30 MCP capability cards) |
 
 ## Work completed (selected)
 
@@ -44,15 +44,16 @@ As of 28 August 2026.
   session management, hosted backups, and cutover rehearsal.
 - **Multi-agent MCP**: coordination handoff tools on stdio and authenticated HTTP (C111–C113),
   operator coordination inbox (C112), scoped agent credentials (C118), persisted network write rate
-  limits (C116), and structured mutation errors (C117). Workspace and Signal MCP tools
-  (MCP-C106–C108) remain unbuilt — see [`mcp-capability-plan.md`](mcp-capability-plan.md).
+  limits (C116), structured mutation errors (C117), and the workspace capability descriptor plus
+  `hcc://workspace/context` resource (C120). Workspace and Signal read/write MCP tools
+  (MCP-C106–C108, C122+) remain unbuilt — see [`mcp-capability-plan.md`](mcp-capability-plan.md).
 
 ## Current status
 
-Production is live at **5.6.5**. Open work is concentrated in Waves 26–30 of the MCP capability
+Production is live at **5.6.7**. Open work is concentrated in Waves 26–30 of the MCP capability
 plan: hardening, read tools, evidence and policy, bounded writes, and change feeds. The decision
 records in [`multi-agent-mcp-decision.md`](multi-agent-mcp-decision.md) and
-[`agent-coordination-plan.md`](agent-coordination-plan.md) reflect what shipped as of C119.
+[`agent-coordination-plan.md`](agent-coordination-plan.md) reflect what shipped through C120.
 
 For installation, daily use, and operator documentation, see [README.md](../README.md),
 [CHANGELOG.md](../CHANGELOG.md), and [USER_MANUAL.md](../USER_MANUAL.md).
