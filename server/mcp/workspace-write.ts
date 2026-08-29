@@ -171,10 +171,10 @@ function mapDomainError(error: unknown): McpToolCallResult {
       requiredAction: 'Read the entity again and choose a valid write.',
     });
   }
-  if (error instanceof Error) {
-    return failed(error.message, mcpCoordinationToolFailed());
-  }
-  return failed('Workspace write failed.', mcpCoordinationToolFailed());
+  return failed(
+    error instanceof Error ? error.message : 'Workspace write failed.',
+    mcpCoordinationToolFailed(),
+  );
 }
 
 function finish(
@@ -803,14 +803,6 @@ export async function callWorkspaceWriteTool(
           persistIdempotency: true,
         });
       }
-      default:
-        return finish(
-          db,
-          session,
-          tool,
-          failed(`Unhandled workspace write tool: ${tool}.`, mcpCoordinationUnknownTool()),
-          { summary: `Unhandled tool ${tool}.` },
-        );
     }
   } catch (error) {
     const mapped = mapDomainError(error);

@@ -535,6 +535,64 @@ describe('workspace MCP write tool matrix', () => {
     });
     expect(noClientRequestId.outcome).toBe('REFUSED');
 
+    const removeCheckUnconfirmed = await callWorkspaceWriteTool(
+      db,
+      session(),
+      'workspace_remove_checklist_item',
+      {
+        clientRequestId: 'rem-check-confirm',
+        itemId: '55555555-5555-4555-8555-555555555555',
+        confirmItemId: '55555555-5555-4555-8555-555555555555',
+        confirm: false,
+        revision: 1,
+      },
+    );
+    expect(removeCheckUnconfirmed.outcome).toBe('REFUSED');
+
+    const throwErr = await callWorkspaceWriteTool(
+      db,
+      session(),
+      'signal_update_publish_targets',
+      {
+        clientRequestId: 'tgt-throw-err',
+        postId: post.id,
+        revision: post.revision,
+        targets: [],
+      },
+      {
+        connectedAccounts: async () => {
+          throw new Error('accounts boom');
+        },
+      },
+    );
+    expect(throwErr.outcome).toBe('FAILURE');
+
+    const throwNonError = await callWorkspaceWriteTool(
+      db,
+      session(),
+      'signal_update_publish_targets',
+      {
+        clientRequestId: 'tgt-throw-str',
+        postId: post.id,
+        revision: post.revision,
+        targets: [],
+      },
+      {
+        connectedAccounts: async () => {
+          throw 'accounts boom';
+        },
+      },
+    );
+    expect(throwNonError.outcome).toBe('FAILURE');
+
+    const missingDepPeer = await callWorkspaceWriteTool(db, session(), 'workspace_add_dependency', {
+      clientRequestId: 'nf-dep-peer',
+      taskId: task.id,
+      dependencyId: '55555555-5555-4555-8555-555555555555',
+      revision: task.revision,
+    });
+    expect(missingDepPeer.outcome).toBe('FAILURE');
+
     setSetting(db, 'branding', '{not-json');
     expect(readBranding(db).title.length).toBeGreaterThan(0);
     setSetting(db, VIEW_DEFAULTS_SETTING_KEY, '{not-json');
