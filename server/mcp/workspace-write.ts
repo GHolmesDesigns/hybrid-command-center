@@ -21,10 +21,6 @@ import {
 import { WORKSPACE_WRITE_TOOLS, type WorkspaceWriteTool } from '../../shared/mcp-agent-events.ts';
 import { revisionPrecondition, RevisionConflictError } from '../domain/revisions.ts';
 import { DisconnectedDriveMediaProvider } from '../drive/media.ts';
-import { resolvePublishingTargets } from '../publish/targets.ts';
-import { UnavailablePublishProvider } from '../publish/provider.ts';
-import { BufferAccountsService } from '../publish/buffer-accounts.ts';
-import { UnavailableBufferReadProvider } from '../publish/buffer/read-provider.ts';
 import {
   SignalPostNotFoundError,
   SignalPublishTargetError,
@@ -137,25 +133,9 @@ function localConnectedAccounts(db: Db): { id: number; platform: string }[] {
   }[];
 }
 
-async function defaultConnectedAccounts(db: Db, now: Date) {
-  // Prefer already-resolved local surrogates so Class-L never refreshes a provider.
-  const local = localConnectedAccounts(db);
-  if (local.length) return local;
-  try {
-    const bufferAccounts = new BufferAccountsService(
-      db,
-      new UnavailableBufferReadProvider(),
-      () => now,
-    );
-    return await resolvePublishingTargets(
-      db,
-      new UnavailablePublishProvider(),
-      bufferAccounts,
-      () => now,
-    );
-  } catch {
-    return local;
-  }
+/** Class-L only reads already-resolved local accounts — never a provider refresh. */
+function defaultConnectedAccounts(db: Db) {
+  return localConnectedAccounts(db);
 }
 
 function mapDomainError(error: unknown): McpToolCallResult {
@@ -306,7 +286,7 @@ export async function callWorkspaceWriteTool(
     }
 
     const drive = new DisconnectedDriveMediaProvider();
-    const connectedAccounts = deps.connectedAccounts ?? (() => defaultConnectedAccounts(db, now));
+    const connectedAccounts = deps.connectedAccounts ?? (async () => defaultConnectedAccounts(db));
 
     switch (tool as WorkspaceWriteTool) {
       case 'workspace_create_task': {

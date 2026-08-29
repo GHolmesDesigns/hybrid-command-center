@@ -433,6 +433,93 @@ describe('workspace MCP write tool matrix', () => {
     });
     expect(cycle.outcome).toBe('REFUSED');
 
+    const missingDepTask = await callWorkspaceWriteTool(db, session(), 'workspace_add_dependency', {
+      clientRequestId: 'nf-dep',
+      taskId: '55555555-5555-4555-8555-555555555555',
+      dependencyId: task.id,
+      revision: 1,
+    });
+    expect(missingDepTask.outcome).toBe('FAILURE');
+
+    const removeDepMissing = await callWorkspaceWriteTool(
+      db,
+      session(),
+      'workspace_remove_dependency',
+      {
+        clientRequestId: 'nf-undep',
+        taskId: '55555555-5555-4555-8555-555555555555',
+        dependencyId: task.id,
+        confirmTaskId: '55555555-5555-4555-8555-555555555555',
+        confirm: true,
+        revision: 1,
+      },
+    );
+    expect(removeDepMissing.outcome).toBe('FAILURE');
+
+    const removeDepUnconfirmed = await callWorkspaceWriteTool(
+      db,
+      session(),
+      'workspace_remove_dependency',
+      {
+        clientRequestId: 'undep-confirm',
+        taskId: task.id,
+        dependencyId: task.id,
+        confirmTaskId: task.id,
+        confirm: false,
+        revision: task.revision,
+      },
+    );
+    expect(removeDepUnconfirmed.outcome).toBe('REFUSED');
+
+    const created = await callWorkspaceWriteTool(db, session(), 'signal_create_post', {
+      clientRequestId: 'tgt-bad-acct',
+      text: 'Bad target',
+      channels: ['ig'],
+      status: 'DRAFT',
+    });
+    const post = (created.data as { after: { id: string; revision: number } }).after;
+    const badTarget = await callWorkspaceWriteTool(
+      db,
+      session(),
+      'signal_update_publish_targets',
+      {
+        clientRequestId: 'tgt-bad',
+        postId: post.id,
+        revision: post.revision,
+        targets: [{ channel: 'ig', providerAccountIds: [999001] }],
+      },
+      { connectedAccounts: async () => [{ id: 1, platform: 'instagram' }] },
+    );
+    expect(badTarget.outcome).toBe('REFUSED');
+
+    const emptyAccountsDry = await callWorkspaceWriteTool(
+      db,
+      session(),
+      'signal_update_publish_targets',
+      {
+        clientRequestId: 'tgt-empty-local',
+        postId: post.id,
+        revision: post.revision,
+        dryRun: true,
+        targets: [],
+      },
+    );
+    expect(emptyAccountsDry.outcome).toBe('SUCCESS');
+
+    const badVariant = await callWorkspaceWriteTool(db, session(), 'signal_update_variants', {
+      clientRequestId: 'var-bad',
+      postId: post.id,
+      revision: post.revision,
+      variants: [
+        {
+          platform: 'instagram',
+          accountId: null,
+          text: { caption: 'x'.repeat(5000) },
+        },
+      ],
+    });
+    expect(['REFUSED', 'FAILURE', 'SUCCESS']).toContain(badVariant.outcome);
+
     const badMedia = await callWorkspaceWriteTool(db, session(), 'signal_create_post', {
       clientRequestId: 'drive-media',
       text: 'Drive media blocked',

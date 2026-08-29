@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createDb, type Db } from '../db.ts';
 import { RevisionConflictError } from '../domain/revisions.ts';
+import { setSetting } from '../drive/service.ts';
 import {
   addChecklistItem,
   addDependency,
@@ -21,7 +22,7 @@ import {
   readViewDefaults,
 } from './writes.ts';
 import { DEFAULT_BRANDING } from '../../shared/branding.ts';
-import { CANONICAL_VIEW_DEFAULTS } from '../../shared/view-defaults.ts';
+import { CANONICAL_VIEW_DEFAULTS, VIEW_DEFAULTS_SETTING_KEY } from '../../shared/view-defaults.ts';
 
 let db: Db;
 
@@ -164,6 +165,29 @@ describe('workspace writes', () => {
       db.prepare('SELECT revision FROM tasks WHERE id=?').get(a.id) as { revision: number }
     ).revision;
     expect(() => addDependency(db, a.id, b.id, aRev)).toThrow(/circular/i);
+  });
+
+  it('refuses dependencies on inactive projects and recovers bad settings', () => {
+    const project = seedProject();
+    const a = createTask(db, {
+      projectId: project.id,
+      title: 'Task A',
+      status: 'TODO',
+      priority: 'MEDIUM',
+    });
+    const b = createTask(db, {
+      projectId: project.id,
+      title: 'Task B',
+      status: 'TODO',
+      priority: 'MEDIUM',
+    });
+    db.prepare("UPDATE projects SET status='ARCHIVED' WHERE id=?").run(project.id);
+    expect(() => addDependency(db, a.id, b.id, a.revision)).toThrow(WorkspaceValidationError);
+
+    setSetting(db, 'branding', JSON.stringify({ title: 12, mark: 'OK' }));
+    expect(readBranding(db).mark).toBeTruthy();
+    setSetting(db, VIEW_DEFAULTS_SETTING_KEY, JSON.stringify({ not: 'view-defaults' }));
+    expect(readViewDefaults(db)).toEqual(CANONICAL_VIEW_DEFAULTS);
   });
 
   it('deletes a task and a project without touching Drive', () => {
