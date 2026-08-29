@@ -12,6 +12,8 @@ export const MCP_COORDINATION_ERROR_CODES = [
   'COORDINATION_CREDENTIAL_LABEL_MISMATCH',
   'COORDINATION_SCOPE_REQUIRED',
   'WORKSPACE_SCOPE_REQUIRED',
+  'WORKSPACE_REVISION_CONFLICT',
+  'WORKSPACE_CONFIRMATION_REQUIRED',
   'COORDINATION_RATE_LIMIT_EXCEEDED',
   'COORDINATION_UNAUTHORIZED',
   'COORDINATION_INVALID_STATE',
@@ -29,6 +31,9 @@ export interface McpCoordinationErrorDetail {
   retryAfterMs?: number;
   currentState?: AgentHandoffState;
   requiredAction?: string;
+  /** Present on WORKSPACE_REVISION_CONFLICT (C129/C130). */
+  currentRevision?: number;
+  changedFields?: string[];
 }
 
 export const mcpCoordinationErrorDetail = (
@@ -72,6 +77,26 @@ export const mcpWorkspaceScopeRequired = (
     code: 'WORKSPACE_SCOPE_REQUIRED',
     retryable: false,
     requiredAction: `Ask the operator to issue a credential with ${scope}.`,
+  });
+
+export const mcpWorkspaceRevisionConflict = (
+  currentRevision: number,
+  changedFields: string[],
+): McpCoordinationErrorDetail =>
+  mcpCoordinationErrorDetail({
+    code: 'WORKSPACE_REVISION_CONFLICT',
+    retryable: false,
+    currentRevision,
+    changedFields,
+    requiredAction: 'Read the entity again and re-plan the write with the current revision.',
+  });
+
+export const mcpWorkspaceConfirmationRequired = (): McpCoordinationErrorDetail =>
+  mcpCoordinationErrorDetail({
+    code: 'WORKSPACE_CONFIRMATION_REQUIRED',
+    retryable: false,
+    requiredAction:
+      'Pass confirm: true and the matching entity id to perform this destructive write.',
   });
 
 export const mcpCoordinationRateLimitExceeded = (

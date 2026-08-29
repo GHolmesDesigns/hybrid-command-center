@@ -33,6 +33,31 @@ export const COORDINATION_WRITE_TOOLS = [
 ] as const;
 export type CoordinationWriteTool = (typeof COORDINATION_WRITE_TOOLS)[number];
 
+/** Class-L workspace/Signal/settings writes (C130). Share the coordination write budget. */
+export const WORKSPACE_WRITE_TOOLS = [
+  'workspace_create_task',
+  'workspace_update_task',
+  'workspace_add_checklist_item',
+  'workspace_update_checklist_item',
+  'workspace_remove_checklist_item',
+  'workspace_add_dependency',
+  'workspace_remove_dependency',
+  'workspace_create_project',
+  'workspace_update_project',
+  'workspace_delete_task',
+  'workspace_delete_project',
+  'signal_create_post',
+  'signal_update_post',
+  'signal_set_slot',
+  'signal_update_variants',
+  'signal_update_publish_targets',
+  'signal_duplicate_post',
+  'signal_ack_alert',
+  'settings_update_branding',
+  'settings_update_view_defaults',
+] as const;
+export type WorkspaceWriteTool = (typeof WORKSPACE_WRITE_TOOLS)[number];
+
 export const COORDINATION_READ_TOOLS = [
   'coordination_list_handoffs',
   'coordination_get_handoff',

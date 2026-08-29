@@ -644,6 +644,18 @@ CREATE TABLE IF NOT EXISTS agent_handoff_mutations (
   result_kind TEXT NOT NULL CHECK(result_kind IN ('note', 'handoff')),
   result_id TEXT NOT NULL
 );
+-- MCP local-write idempotency (C130). Replay key is (agent_label, client_request_id, tool).
+-- Append-only: one INSERT in server/mcp/write-mutations.ts, retention deletes oldest rows.
+CREATE TABLE IF NOT EXISTS mcp_write_mutations (
+  id TEXT PRIMARY KEY,
+  created_at TEXT NOT NULL,
+  agent_label TEXT NOT NULL,
+  client_request_id TEXT NOT NULL CHECK(length(client_request_id) BETWEEN 1 AND 64),
+  tool TEXT NOT NULL,
+  entity_type TEXT,
+  entity_id TEXT,
+  result_json TEXT NOT NULL
+);
 -- MCP local-write audit (MCP-C106 contract; first writers are C111 coordination tools).
 -- Append-only: one INSERT in server/mcp/events.ts, retention deletes oldest rows, nothing updates.
 CREATE TABLE IF NOT EXISTS mcp_agent_events (
@@ -755,6 +767,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_handoff_mutations_replay
   ON agent_handoff_mutations(agent_label, client_request_id, tool);
 CREATE INDEX IF NOT EXISTS idx_agent_handoff_mutations_created
   ON agent_handoff_mutations(created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_mcp_write_mutations_replay
+  ON mcp_write_mutations(agent_label, client_request_id, tool);
+CREATE INDEX IF NOT EXISTS idx_mcp_write_mutations_created
+  ON mcp_write_mutations(created_at);
 -- Retention over MCP audit keeps the newest rows and prunes the rest.
 CREATE INDEX IF NOT EXISTS idx_mcp_agent_events_at ON mcp_agent_events(at);
 `;

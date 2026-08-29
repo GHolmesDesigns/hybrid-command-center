@@ -25,6 +25,8 @@ const ERROR_CODE_LABEL: Record<McpCoordinationErrorCode, string> = {
   COORDINATION_CREDENTIAL_LABEL_MISMATCH: 'Credential label mismatch',
   COORDINATION_SCOPE_REQUIRED: 'Coordination scope required',
   WORKSPACE_SCOPE_REQUIRED: 'Workspace scope required',
+  WORKSPACE_REVISION_CONFLICT: 'Revision conflict',
+  WORKSPACE_CONFIRMATION_REQUIRED: 'Confirmation required',
   COORDINATION_RATE_LIMIT_EXCEEDED: 'Rate limit exceeded',
   COORDINATION_UNAUTHORIZED: 'Unauthorized',
   COORDINATION_INVALID_STATE: 'Invalid handoff state',

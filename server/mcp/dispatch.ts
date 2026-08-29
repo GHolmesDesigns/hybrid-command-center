@@ -21,6 +21,7 @@ import {
   type McpToolRegistryEntry,
 } from './registry.ts';
 import { callWorkspaceReadTool, type McpWorkspaceReadDeps } from './workspace-read.ts';
+import { callWorkspaceWriteTool, type McpWorkspaceWriteDeps } from './workspace-write.ts';
 import { redactToolResult } from './redact.ts';
 import type { McpSession } from './session.ts';
 import { buildConnectionStatus } from './connection-status.ts';
@@ -29,6 +30,7 @@ export type McpToolDispatchOptions = {
   grantedScopes: readonly McpAgentScope[];
   now?: Date;
   workspaceReadDeps?: McpWorkspaceReadDeps;
+  workspaceWriteDeps?: McpWorkspaceWriteDeps;
   transport?: 'stdio' | 'http';
   authenticated?: boolean;
 };
@@ -84,6 +86,11 @@ export async function callMcpTool(
     case 'workspace_read':
       return callWorkspaceReadTool(db, tool, rawArgs, {
         ...options.workspaceReadDeps,
+        now,
+      });
+    case 'workspace_write':
+      return callWorkspaceWriteTool(db, session, tool, rawArgs, {
+        ...options.workspaceWriteDeps,
         now,
       });
     case 'system_capabilities': {

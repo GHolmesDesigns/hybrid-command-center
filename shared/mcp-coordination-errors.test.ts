@@ -8,6 +8,8 @@ import {
   mcpCoordinationSessionLabelMismatch,
   mcpCoordinationToolFailed,
   mcpCoordinationUnknownTool,
+  mcpWorkspaceConfirmationRequired,
+  mcpWorkspaceRevisionConflict,
   mcpWorkspaceScopeRequired,
   MCP_COORDINATION_ERROR_CODES,
 } from './mcp-coordination-errors.ts';
@@ -29,6 +31,19 @@ describe('mcpCoordinationErrorDetail', () => {
   it('marks missing agent label refusals non-retryable', () => {
     expect(mcpCoordinationAgentLabelRequired()).toMatchObject({
       code: 'COORDINATION_AGENT_LABEL_REQUIRED',
+      retryable: false,
+    });
+  });
+
+  it('carries revision conflict fields for workspace writes', () => {
+    expect(mcpWorkspaceRevisionConflict(4, ['title', 'status'])).toMatchObject({
+      code: 'WORKSPACE_REVISION_CONFLICT',
+      retryable: false,
+      currentRevision: 4,
+      changedFields: ['title', 'status'],
+    });
+    expect(mcpWorkspaceConfirmationRequired()).toMatchObject({
+      code: 'WORKSPACE_CONFIRMATION_REQUIRED',
       retryable: false,
     });
   });
