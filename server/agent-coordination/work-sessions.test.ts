@@ -49,6 +49,13 @@ describe('leased work sessions', () => {
       { currentStep: 'implement', evidence: { changed: ['x'] } },
       t,
     );
+    expect(() =>
+      startWorkSession(
+        db,
+        { handoffId: handoff.id, agentLabel: 'agent-a', leaseSeconds: 60, baseRevision: 'main' },
+        t,
+      ),
+    ).toThrow(/live work session/);
     expect(
       heartbeatWorkSession(db, session.id, 'agent-a', 60, new Date('2026-08-28T00:00:10.000Z'))
         .currentStep,
@@ -95,6 +102,7 @@ describe('leased work sessions', () => {
     expect(releaseWorkSession(db, s.id, 'a', 'stop', t).state).toBe('ABANDONED');
     expect(() => releaseWorkSession(db, s.id, 'a', 'again', t)).toThrow(/cannot take/);
     expect(() => reclaimWorkSession(db, s.id, undefined, t)).toThrow(/expired active/);
+    expect(() => heartbeatWorkSession(db, s.id, 'a', 60, t)).toThrow(/cannot take/);
     expect(() => resumeWorkSession(db, 'missing')).toThrow(/not found/);
     db.close();
   });
@@ -226,5 +234,36 @@ describe('leased work sessions', () => {
     expect(() =>
       canMutate({ agentLabel: 'a', state: 'COMPLETED' }, 'a', ['IN_PROGRESS']),
     ).toThrow();
+  });
+
+  it('covers start refusal before a claim and for a missing handoff', () => {
+    const db = createDb(':memory:');
+    const now = new Date('2026-08-28T00:00:00.000Z');
+    const handoff = postHandoff(
+      db,
+      {
+        fromAgentLabel: 'a',
+        toAgentLabel: null,
+        subjectType: 'freeform',
+        subjectId: null,
+        message: 'open',
+      },
+      now,
+    );
+    expect(() =>
+      startWorkSession(
+        db,
+        { handoffId: handoff.id, agentLabel: 'a', leaseSeconds: 60, baseRevision: 'r' },
+        now,
+      ),
+    ).toThrow(/CLAIMED/);
+    expect(() =>
+      startWorkSession(
+        db,
+        { handoffId: 'missing', agentLabel: 'a', leaseSeconds: 60, baseRevision: 'r' },
+        now,
+      ),
+    ).toThrow(/not found/);
+    db.close();
   });
 });
