@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createDb } from '../db.ts';
 import { postHandoff, claimHandoff } from './service.ts';
+import { createMcpSession } from '../mcp/session.ts';
+import { callCoordinationTool } from '../mcp/coordination.ts';
 import {
   startWorkSession,
   heartbeatWorkSession,
@@ -90,6 +92,70 @@ describe('leased work sessions', () => {
     expect(transitionWorkSession(db, s.id, 'a', 'BLOCKED', 'blocked', t).state).toBe('BLOCKED');
     expect(releaseWorkSession(db, s.id, 'a', 'stop', t).state).toBe('ABANDONED');
     expect(() => resumeWorkSession(db, 'missing')).toThrow(/not found/);
+    db.close();
+  });
+
+  it('routes every work MCP tool through the coordination dispatcher', () => {
+    const db = createDb(':memory:');
+    const now = new Date('2026-08-28T00:00:00.000Z');
+    const handoff = postHandoff(
+      db,
+      {
+        fromAgentLabel: 'agent',
+        toAgentLabel: null,
+        subjectType: 'freeform',
+        subjectId: null,
+        message: 'dispatch',
+      },
+      now,
+    );
+    claimHandoff(db, handoff.id, 'agent', now);
+    const session = createMcpSession({ agentLabel: 'agent' });
+    const started = callCoordinationTool(
+      db,
+      session,
+      'work_start',
+      { handoffId: handoff.id, baseRevision: 'r' },
+      now,
+    );
+    expect(started.outcome).toBe('SUCCESS');
+    const id = (started.data as { id: string }).id;
+    expect(
+      callCoordinationTool(db, session, 'work_heartbeat', { sessionId: id }, now).outcome,
+    ).toBe('SUCCESS');
+    expect(
+      callCoordinationTool(
+        db,
+        session,
+        'work_checkpoint',
+        { sessionId: id, currentStep: 'step' },
+        now,
+      ).outcome,
+    ).toBe('SUCCESS');
+    expect(
+      callCoordinationTool(
+        db,
+        session,
+        'work_request_input',
+        { sessionId: id, currentStep: 'ask' },
+        now,
+      ).outcome,
+    ).toBe('SUCCESS');
+    expect(
+      callCoordinationTool(
+        db,
+        session,
+        'work_mark_blocked',
+        { sessionId: id, currentStep: 'blocked' },
+        now,
+      ).outcome,
+    ).toBe('SUCCESS');
+    expect(callCoordinationTool(db, session, 'work_complete', { sessionId: id }, now).outcome).toBe(
+      'SUCCESS',
+    );
+    expect(
+      callCoordinationTool(db, session, 'work_get_resume_context', { sessionId: id }, now).outcome,
+    ).toBe('SUCCESS');
     db.close();
   });
 });
