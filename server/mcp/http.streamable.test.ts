@@ -217,11 +217,69 @@ describe('streamable HTTP MCP lifecycle (C133)', () => {
     );
     expect(res.statusCode).toBe(405);
 
-    await handleMcpHttpDelete({ method: 'DELETE', headers: {} } as never, res as never, options);
+    await handleMcpHttpGet(
+      {
+        method: 'GET',
+        headers: {
+          accept: 'text/event-stream',
+          authorization: `Bearer ${token}`,
+        },
+      } as never,
+      res as never,
+      options,
+    );
+    expect(res.statusCode).toBe(405);
+
+    await handleMcpHttpDelete(
+      {
+        method: 'DELETE',
+        headers: { authorization: `Bearer ${token}` },
+      } as never,
+      res as never,
+      options,
+    );
+    expect(res.statusCode).toBe(405);
+
+    await handler(
+      { method: 'GET', headers: { accept: 'text/event-stream' } } as never,
+      res as never,
+    );
     expect(res.statusCode).toBe(401);
 
     await handler({ method: 'PATCH', headers: {} } as never, res as never);
     expect(res.statusCode).toBe(405);
+  });
+
+  it('refuses GET and DELETE when the session is missing or belongs to another credential', async () => {
+    const token = await bearer();
+    const sessionId = await initialize(token);
+    const other = await bearer();
+
+    const stolenGet = await request(instance)
+      .get(MCP_HTTP_PATH)
+      .set('Authorization', `Bearer ${other}`)
+      .set(MCP_SESSION_ID_HEADER, sessionId)
+      .set('Accept', 'text/event-stream');
+    expect(stolenGet.status).toBe(403);
+
+    const missingGet = await request(instance)
+      .get(MCP_HTTP_PATH)
+      .set('Authorization', `Bearer ${token}`)
+      .set(MCP_SESSION_ID_HEADER, 'missing-session')
+      .set('Accept', 'text/event-stream');
+    expect(missingGet.status).toBe(404);
+
+    const stolenDelete = await request(instance)
+      .delete(MCP_HTTP_PATH)
+      .set('Authorization', `Bearer ${other}`)
+      .set(MCP_SESSION_ID_HEADER, sessionId);
+    expect(stolenDelete.status).toBe(403);
+
+    const missingDelete = await request(instance)
+      .delete(MCP_HTTP_PATH)
+      .set('Authorization', `Bearer ${token}`)
+      .set(MCP_SESSION_ID_HEADER, 'missing-session');
+    expect(missingDelete.status).toBe(404);
   });
 
   it('replays Last-Event-ID on GET for an authenticated session', async () => {
