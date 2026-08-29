@@ -86,11 +86,14 @@ describe('leased work sessions', () => {
       { handoffId: h.id, agentLabel: 'a', leaseSeconds: 60, baseRevision: 'r' },
       t,
     );
+    expect(() => heartbeatWorkSession(db, s.id, 'other', 60, t)).toThrow(/owner/);
     expect(transitionWorkSession(db, s.id, 'a', 'NEEDS_INPUT', 'need', t).state).toBe(
       'NEEDS_INPUT',
     );
     expect(transitionWorkSession(db, s.id, 'a', 'BLOCKED', 'blocked', t).state).toBe('BLOCKED');
     expect(releaseWorkSession(db, s.id, 'a', 'stop', t).state).toBe('ABANDONED');
+    expect(() => releaseWorkSession(db, s.id, 'a', 'again', t)).toThrow(/cannot take/);
+    expect(() => reclaimWorkSession(db, s.id, undefined, t)).toThrow(/expired active/);
     expect(() => resumeWorkSession(db, 'missing')).toThrow(/not found/);
     db.close();
   });
@@ -155,6 +158,34 @@ describe('leased work sessions', () => {
     );
     expect(
       callCoordinationTool(db, session, 'work_get_resume_context', { sessionId: id }, now).outcome,
+    ).toBe('SUCCESS');
+    const second = postHandoff(
+      db,
+      {
+        fromAgentLabel: 'agent',
+        toAgentLabel: null,
+        subjectType: 'freeform',
+        subjectId: null,
+        message: 'release',
+      },
+      now,
+    );
+    claimHandoff(db, second.id, 'agent', now);
+    const secondStart = callCoordinationTool(
+      db,
+      session,
+      'work_start',
+      { handoffId: second.id, baseRevision: 'r' },
+      now,
+    );
+    expect(
+      callCoordinationTool(
+        db,
+        session,
+        'work_release',
+        { sessionId: (secondStart.data as { id: string }).id, reason: 'done' },
+        now,
+      ).outcome,
     ).toBe('SUCCESS');
     db.close();
   });
