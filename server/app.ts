@@ -38,6 +38,7 @@ import { buildConnectionStatus } from './mcp/connection-status.ts';
 import { workspaceDataChecksum } from './mcp/workspace-checksum.ts';
 import { MCP_AGENT_SCOPES } from '../shared/mcp-agent-registry.ts';
 import { McpWriteLimiterRegistry } from './mcp/write-limiter-registry.ts';
+import { INTEGRATION_WRITE_LIMIT_PER_MINUTE } from '../shared/mcp-agent-events.ts';
 import { DRIVE_OAUTH_SCOPE } from '../shared/drive-oauth.ts';
 import {
   getCategory,
@@ -756,6 +757,9 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     // One registry per app instance — process lifetime in production (one process runs one app),
     // and naturally test-isolated since each test builds its own app (C116 / #366).
     const mcpWriteLimiters = new McpWriteLimiterRegistry();
+    const mcpIntegrationWriteLimiters = new McpWriteLimiterRegistry(
+      INTEGRATION_WRITE_LIMIT_PER_MINUTE,
+    );
     app.post(
       MCP_HTTP_PATH,
       createMcpHttpHandler({
@@ -763,6 +767,14 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         sessionSecret,
         now: authNowMs,
         writeLimiters: mcpWriteLimiters,
+        integrationWriteLimiters: mcpIntegrationWriteLimiters,
+        integrationDeps: {
+          inventory,
+          analyticsWindow,
+          bufferAccounts,
+          driveMedia: () => driveMedia(),
+          drive: (database) => driveProvider(database),
+        },
       }),
     );
   }

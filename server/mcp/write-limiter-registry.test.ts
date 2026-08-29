@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { COORDINATION_WRITE_LIMIT_PER_MINUTE } from '../../shared/mcp-agent-events.ts';
+import {
+  COORDINATION_WRITE_LIMIT_PER_MINUTE,
+  INTEGRATION_WRITE_LIMIT_PER_MINUTE,
+} from '../../shared/mcp-agent-events.ts';
 import { McpWriteLimiterRegistry } from './write-limiter-registry.ts';
 
 const ONE_MINUTE_MS = 60_000;
@@ -59,5 +62,15 @@ describe('McpWriteLimiterRegistry', () => {
     registry.limiterFor('cred-a', 'cursor', 0).tryConsume(0);
     registry.limiterFor('cred-b', 'cursor', 0).tryConsume(0);
     expect(registry.trackedCredentialCount).toBe(2);
+  });
+
+  it('honours a custom limit of 6 for integration writes', () => {
+    const registry = new McpWriteLimiterRegistry(INTEGRATION_WRITE_LIMIT_PER_MINUTE);
+    let now = 0;
+    for (let i = 0; i < INTEGRATION_WRITE_LIMIT_PER_MINUTE; i += 1) {
+      expect(registry.limiterFor('cred-a', 'cursor', now).tryConsume(now)).toBe(true);
+      now += 1;
+    }
+    expect(registry.limiterFor('cred-a', 'cursor', now).tryConsume(now)).toBe(false);
   });
 });

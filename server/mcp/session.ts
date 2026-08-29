@@ -6,6 +6,7 @@
  */
 import {
   COORDINATION_WRITE_LIMIT_PER_MINUTE,
+  INTEGRATION_WRITE_LIMIT_PER_MINUTE,
   normalizeOptionalAgentLabel,
 } from '../../shared/mcp-agent-events.ts';
 import { RollingWindowLimiter, type CoordinationWriteLimiter } from './rate-limit.ts';
@@ -22,6 +23,11 @@ export interface McpSession {
    * make the budget a no-op.
    */
   coordinationWrites: CoordinationWriteLimiter;
+  /**
+   * Separate budget for Class-I integration writes (C131). Same HTTP registry pattern as
+   * `coordinationWrites`, with `INTEGRATION_WRITE_LIMIT_PER_MINUTE` instead of 10.
+   */
+  integrationWrites: CoordinationWriteLimiter;
 }
 
 export function createMcpSession(options: { agentLabel?: string | null } = {}): McpSession {
@@ -31,6 +37,7 @@ export function createMcpSession(options: { agentLabel?: string | null } = {}): 
       COORDINATION_WRITE_LIMIT_PER_MINUTE,
       ONE_MINUTE_MS,
     ),
+    integrationWrites: new RollingWindowLimiter(INTEGRATION_WRITE_LIMIT_PER_MINUTE, ONE_MINUTE_MS),
   };
 }
 

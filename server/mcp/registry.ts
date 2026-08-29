@@ -37,7 +37,9 @@ export type McpToolRegistryEntry = {
     | 'system_capabilities'
     | 'system_connection_status'
     | 'workspace_read'
-    | 'workspace_write';
+    | 'workspace_write'
+    | 'integration_read'
+    | 'integration_write';
 };
 
 const coordinationScope = (name: CoordinationTool): McpAgentScope =>
@@ -864,11 +866,290 @@ const workspaceWriteTools: McpToolRegistryEntry[] = [
   },
 ];
 
+const integrationTools: McpToolRegistryEntry[] = [
+  {
+    name: 'workspace_merge_clients_preview',
+    description: 'Preview merging one client into another without writing.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sourceId: { type: 'string', format: 'uuid' },
+        destinationId: { type: 'string', format: 'uuid' },
+        fields: { type: 'object' },
+      },
+      required: ['sourceId', 'destinationId'],
+      additionalProperties: false,
+    },
+    class: 'R',
+    requiredScope: 'workspace:read',
+    owner: 'server/client-merge.ts',
+    handler: 'integration_read',
+  },
+  {
+    name: 'workspace_merge_clients_commit',
+    description:
+      'Commit a client merge when planHash still matches the workspace. Shares the coordination write budget.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        clientRequestId: { type: 'string' },
+        sourceId: { type: 'string', format: 'uuid' },
+        destinationId: { type: 'string', format: 'uuid' },
+        fields: { type: 'object' },
+        planHash: { type: 'string', minLength: 64, maxLength: 64 },
+      },
+      required: ['clientRequestId', 'sourceId', 'destinationId', 'planHash'],
+      additionalProperties: false,
+    },
+    class: 'L',
+    requiredScope: 'workspace:write',
+    owner: 'server/client-merge.ts',
+    handler: 'integration_write',
+  },
+  {
+    name: 'import_playbook_preview',
+    description: 'Preview a campaign playbook import without writing.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        filename: { type: 'string' },
+        contentBase64: { type: 'string' },
+        text: { type: 'string' },
+      },
+      additionalProperties: false,
+    },
+    class: 'R',
+    requiredScope: 'workspace:read',
+    owner: 'server/import.ts',
+    handler: 'integration_read',
+  },
+  {
+    name: 'import_playbook_commit',
+    description:
+      'Commit a campaign playbook import when the preview fingerprint still matches. Shares the coordination write budget.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        clientRequestId: { type: 'string' },
+        filename: { type: 'string' },
+        contentBase64: { type: 'string' },
+        text: { type: 'string' },
+        fingerprint: { type: 'string' },
+      },
+      required: ['clientRequestId'],
+      additionalProperties: false,
+    },
+    class: 'L',
+    requiredScope: 'workspace:write',
+    owner: 'server/import.ts',
+    handler: 'integration_write',
+  },
+  {
+    name: 'import_signal_preview',
+    description: 'Preview a Signal schedule import without writing.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        filename: { type: 'string' },
+        contentBase64: { type: 'string' },
+        text: { type: 'string' },
+      },
+      additionalProperties: false,
+    },
+    class: 'R',
+    requiredScope: 'workspace:read',
+    owner: 'server/signal/import.ts',
+    handler: 'integration_read',
+  },
+  {
+    name: 'import_signal_commit',
+    description:
+      'Commit a Signal schedule import when the preview fingerprint still matches. Uses the integration write budget.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        clientRequestId: { type: 'string' },
+        filename: { type: 'string' },
+        contentBase64: { type: 'string' },
+        text: { type: 'string' },
+        fingerprint: { type: 'string' },
+      },
+      required: ['clientRequestId'],
+      additionalProperties: false,
+    },
+    class: 'I',
+    requiredScope: 'workspace:write',
+    owner: 'server/signal/import.ts',
+    handler: 'integration_write',
+  },
+  {
+    name: 'signal_resolve_drive_media',
+    description:
+      'Resolve one Drive link to Signal media metadata and version fingerprint. Never reads bytes.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        clientRequestId: { type: 'string' },
+        link: { type: 'string' },
+      },
+      required: ['clientRequestId', 'link'],
+      additionalProperties: false,
+    },
+    class: 'I',
+    requiredScope: 'workspace:write',
+    owner: 'server/drive/media.ts',
+    handler: 'integration_write',
+  },
+  {
+    name: 'signal_recheck_post_media',
+    description:
+      'Recheck one stored Drive media reference on a Signal post against current Drive metadata.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        clientRequestId: { type: 'string' },
+        postId: { type: 'string', format: 'uuid' },
+        driveFileId: { type: 'string' },
+      },
+      required: ['clientRequestId', 'postId', 'driveFileId'],
+      additionalProperties: false,
+    },
+    class: 'I',
+    requiredScope: 'workspace:write',
+    owner: 'server/signal/service.ts',
+    handler: 'integration_write',
+  },
+  {
+    name: 'signal_recheck_variant_media',
+    description:
+      'Recheck one stored Drive cover image or thumbnail on a Signal variant against current Drive metadata.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        clientRequestId: { type: 'string' },
+        postId: { type: 'string', format: 'uuid' },
+        platform: { type: 'string' },
+        accountId: { type: ['number', 'null'] },
+        role: { type: 'string', enum: ['COVER_IMAGE', 'THUMBNAIL'] },
+      },
+      required: ['clientRequestId', 'postId', 'platform', 'accountId', 'role'],
+      additionalProperties: false,
+    },
+    class: 'I',
+    requiredScope: 'workspace:write',
+    owner: 'server/signal/service.ts',
+    handler: 'integration_write',
+  },
+  {
+    name: 'drive_sync',
+    description:
+      'Provision Drive folders for active clients and projects. Records drive.sync on the integration activity log.',
+    inputSchema: {
+      type: 'object',
+      properties: { clientRequestId: { type: 'string' } },
+      required: ['clientRequestId'],
+      additionalProperties: false,
+    },
+    class: 'I',
+    requiredScope: 'workspace:write',
+    owner: 'server/drive/service.ts',
+    handler: 'integration_write',
+  },
+  {
+    name: 'signal_refresh_provider_inventory',
+    description:
+      'Refresh the stored provider inventory snapshot. A failed refresh leaves the prior generation in place.',
+    inputSchema: {
+      type: 'object',
+      properties: { clientRequestId: { type: 'string' } },
+      required: ['clientRequestId'],
+      additionalProperties: false,
+    },
+    class: 'I',
+    requiredScope: 'workspace:write',
+    owner: 'server/publish/inventory.ts',
+    handler: 'integration_write',
+  },
+  {
+    name: 'signal_refresh_analytics_window',
+    description: 'Refresh one analytics platform/timeframe window from the provider.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        clientRequestId: { type: 'string' },
+        platform: { type: 'string' },
+        timeframe: { type: 'string' },
+      },
+      required: ['clientRequestId', 'platform', 'timeframe'],
+      additionalProperties: false,
+    },
+    class: 'I',
+    requiredScope: 'workspace:write',
+    owner: 'server/publish/analytics-window.ts',
+    handler: 'integration_write',
+  },
+  {
+    name: 'signal_refresh_buffer_accounts',
+    description: 'Refresh the stored Buffer accounts snapshot.',
+    inputSchema: {
+      type: 'object',
+      properties: { clientRequestId: { type: 'string' } },
+      required: ['clientRequestId'],
+      additionalProperties: false,
+    },
+    class: 'I',
+    requiredScope: 'workspace:write',
+    owner: 'server/publish/buffer-accounts.ts',
+    handler: 'integration_write',
+  },
+  {
+    name: 'files_browse_project',
+    description:
+      'List files in a project Drive folder or one of its recorded drive_steps. Refuses any other folder id.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: { type: 'string', format: 'uuid' },
+        folderId: { type: 'string' },
+        pageToken: { type: 'string' },
+        pageSize: { type: 'integer', minimum: 1, maximum: 100 },
+      },
+      required: ['projectId'],
+      additionalProperties: false,
+    },
+    class: 'R',
+    requiredScope: 'workspace:read',
+    owner: 'server/drive/browse.ts',
+    handler: 'integration_read',
+  },
+  {
+    name: 'integration_list_activity',
+    description: 'List recent integration activity events, newest first.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        source: {
+          type: 'string',
+          enum: ['campaign-playbook', 'signal-import', 'signal-campaign', 'google-drive'],
+        },
+        correlationId: { type: 'string' },
+        limit: { type: 'integer', minimum: 1 },
+      },
+      additionalProperties: false,
+    },
+    class: 'R',
+    requiredScope: 'workspace:read',
+    owner: 'server/integration-log.ts',
+    handler: 'integration_read',
+  },
+];
+
 export const MCP_TOOL_REGISTRY: readonly McpToolRegistryEntry[] = [
   ...coordinationTools,
   ...workSessionTools,
   ...workspaceReadTools,
   ...workspaceWriteTools,
+  ...integrationTools,
   systemCapabilitiesTool,
   systemConnectionStatusTool,
 ];
