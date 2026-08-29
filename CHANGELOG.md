@@ -8,6 +8,20 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.8.2] - 2026-08-29
+
+### Added
+
+- MCP tools for campaign playbook and Signal import preview/commit, client merge preview/commit,
+  Drive media resolve and recheck, project-scoped Files browse, integration activity listing, Drive
+  sync, and provider inventory / analytics window / Buffer account refreshes.
+- A separate rolling 6-per-minute budget for MCP integration writes, independent of the existing
+  coordination write budget.
+
+### Breaking changes
+
+None.
+
 ## [5.8.1] - 2026-08-29
 
 ### Added
