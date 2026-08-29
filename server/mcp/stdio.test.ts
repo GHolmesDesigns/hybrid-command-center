@@ -303,3 +303,57 @@ describe('resources and rate limiter branches', () => {
     );
   });
 });
+
+describe('handleMcpJsonRpc subscriptions and cancellation', () => {
+  it('subscribes, unsubscribes, and ignores unknown cancel ids', async () => {
+    const session = createMcpSession({ agentLabel: 'cursor' });
+    const replies: unknown[] = [];
+    const write = (message: unknown) => replies.push(message);
+
+    await handleMcpJsonRpc(
+      session,
+      {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'resources/subscribe',
+        params: { uri: 'hcc://coordination/inbox?state=open' },
+      },
+      write,
+      db,
+    );
+    expect(session.subscriptions.size).toBe(1);
+
+    await handleMcpJsonRpc(
+      session,
+      {
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'resources/subscribe',
+        params: { uri: 'hcc://nope' },
+      },
+      write,
+      db,
+    );
+    expect(replies[1]).toMatchObject({ error: { code: -32602 } });
+
+    await handleMcpJsonRpc(
+      session,
+      {
+        jsonrpc: '2.0',
+        id: 3,
+        method: 'resources/unsubscribe',
+        params: { uri: 'hcc://coordination/inbox?state=open' },
+      },
+      write,
+      db,
+    );
+    expect(session.subscriptions.size).toBe(0);
+
+    await handleMcpJsonRpc(
+      session,
+      { jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: 'missing' } },
+      write,
+      db,
+    );
+  });
+});

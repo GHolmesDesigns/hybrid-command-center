@@ -739,9 +739,9 @@ why some clients cannot connect at all.
 
 #### Acceptance criteria
 
-- [ ] The conformance suite passes over both stdio and HTTP from one set of cases.
-- [ ] A client that only supports one-shot JSON-RPC still works unchanged.
-- [ ] Notifications never replace the durable cursor as the source of truth.
+- [x] The conformance suite passes over both stdio and HTTP from one set of cases.
+- [x] A client that only supports one-shot JSON-RPC still works unchanged.
+- [x] Notifications never replace the durable cursor as the source of truth.
 
 ---
 

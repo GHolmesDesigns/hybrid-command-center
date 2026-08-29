@@ -19,6 +19,7 @@ import {
 } from '../../shared/mcp-coordination-errors.ts';
 import { hasMcpAgentScope } from '../auth/mcp-agent-credentials.ts';
 import { redactToolResult } from './redact.ts';
+import { WORKSPACE_CONTEXT_URI } from '../../shared/mcp-workspace-context.ts';
 import {
   readWorkspaceContextResource,
   WORKSPACE_CONTEXT_RESOURCE_DEFINITION,
@@ -53,6 +54,26 @@ export const MCP_RESOURCE_DEFINITIONS = [
   WORKSPACE_CONTEXT_RESOURCE_DEFINITION,
   WORKSPACE_CHANGE_RESOURCE_DEFINITION,
 ] as const;
+
+/**
+ * Map a client-supplied URI to the canonical subscription key, or null when unknown.
+ * Change-feed query strings are stripped — the tip covers the whole feed.
+ */
+export function canonicalMcpResourceUri(uri: string): string | null {
+  const normalized = uri.trim();
+  if (!normalized) return null;
+  const feed = parseChangeFeedUri(normalized);
+  if (feed) {
+    return feed.feed === 'coordination' ? COORDINATION_CHANGES_URI : WORKSPACE_CHANGES_URI;
+  }
+  if (normalized === WORKSPACE_CONTEXT_URI || normalized.startsWith(`${WORKSPACE_CONTEXT_URI}?`)) {
+    return WORKSPACE_CONTEXT_URI;
+  }
+  if (normalized === COORDINATION_INBOX_URI || isOpenInboxUri(normalized)) {
+    return COORDINATION_INBOX_URI;
+  }
+  return null;
+}
 
 export function readCoordinationResource(
   db: Db,

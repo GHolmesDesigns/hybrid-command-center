@@ -32,7 +32,8 @@ import {
   createMcpAgentCredentialSchema,
   updateMcpAgentRegistrationSchema,
 } from '../shared/mcp-agent-registry.ts';
-import { createMcpHttpHandler } from './mcp/http.ts';
+import { createMcpHttpHandler, McpHttpSessionRegistry } from './mcp/http.ts';
+import { setMcpResourceUpdateBridge } from './mcp/resource-notifier.ts';
 import { buildMcpHealthPanel } from './mcp/health-panel.ts';
 import { buildConnectionStatus } from './mcp/connection-status.ts';
 import { workspaceDataChecksum } from './mcp/workspace-checksum.ts';
@@ -760,7 +761,11 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     const mcpIntegrationWriteLimiters = new McpWriteLimiterRegistry(
       INTEGRATION_WRITE_LIMIT_PER_MINUTE,
     );
-    app.post(
+    const mcpHttpSessions = new McpHttpSessionRegistry();
+    setMcpResourceUpdateBridge((uri) => {
+      mcpHttpSessions.notifyResourceUpdated(uri);
+    });
+    app.all(
       MCP_HTTP_PATH,
       createMcpHttpHandler({
         db,
@@ -768,6 +773,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         now: authNowMs,
         writeLimiters: mcpWriteLimiters,
         integrationWriteLimiters: mcpIntegrationWriteLimiters,
+        httpSessions: mcpHttpSessions,
         integrationDeps: {
           inventory,
           analyticsWindow,

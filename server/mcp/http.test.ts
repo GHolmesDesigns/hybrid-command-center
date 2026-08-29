@@ -417,14 +417,14 @@ describe('network MCP (C113)', () => {
     expect(res.body.error.code).toBe(-32602);
   });
 
-  it('returns 204 for notifications without an id', async () => {
+  it('returns 202 for notifications without an id', async () => {
     const { cookie, csrfToken } = await login();
     const res = await request(app())
       .post(MCP_HTTP_PATH)
       .set('Cookie', cookie)
       .set(CSRF_HEADER_NAME, csrfToken)
       .send({ jsonrpc: '2.0', method: 'notifications/initialized' });
-    expect(res.status).toBe(204);
+    expect(res.status).toBe(202);
   });
 });
 
@@ -658,7 +658,7 @@ describe('network MCP handler units', () => {
     );
   });
 
-  it('createMcpHttpHandler rejects non-POST methods', async () => {
+  it('createMcpHttpHandler rejects unsupported methods', async () => {
     const handler = createMcpHttpHandler({ db, sessionSecret: SECRET });
     const res = {
       statusCode: 200,
@@ -675,7 +675,7 @@ describe('network MCP handler units', () => {
         return this;
       },
     };
-    await handler({ method: 'GET', headers: {}, body: {} } as never, res as never);
+    await handler({ method: 'PUT', headers: {}, body: {} } as never, res as never);
     expect(res.statusCode).toBe(405);
   });
 

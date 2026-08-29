@@ -1,10 +1,11 @@
 /**
- * Streamable HTTP MCP adapter (C113 / #340).
+ * Streamable HTTP MCP adapter (C113 / #340, C133 / #383).
  *
- * POST `/api/mcp` accepts one JSON-RPC request per call and returns a JSON-RPC response on the
- * same origin as the API. Operator auth is a session cookie or a bearer bound to that session;
- * cookie mutations also require CSRF. Scoped bearer identity is resolved server-side; the label
- * header is advisory and a mismatch is refused.
+ * `POST /api/mcp` accepts JSON-RPC. One-shot clients (no session header) still get one JSON
+ * response on the same call — the compatibility floor. Clients that complete `initialize` receive
+ * an `Mcp-Session-Id` and may continue the session, open a GET SSE stream for server
+ * notifications, and DELETE the session when finished. Progress and resource-update tips never
+ * replace C132 change-feed cursors.
  */
 import type { Request, Response } from 'express';
 import type { Db } from '../db.ts';
@@ -14,6 +15,13 @@ import {
   MCP_BEARER_HEADER,
   MCP_HTTP_PATH,
 } from '../../shared/mcp-network.ts';
+import {
+  MCP_PROTOCOL_VERSION,
+  MCP_PROTOCOL_VERSION_HEADER,
+  MCP_SESSION_ID_HEADER,
+  isSupportedMcpProtocolVersion,
+  negotiateMcpProtocolVersion,
+} from '../../shared/mcp-transport.ts';
 import { readSessionToken } from '../auth/cookies.ts';
 import { readMcpBearerToken, resolveMcpBearer } from '../auth/mcp-bearers.ts';
 import {
@@ -25,7 +33,13 @@ import {
 import { sessionFromRawToken } from '../auth/service.ts';
 import type { OperatorSessionRecord } from '../auth/sessions.ts';
 import { MCP_AGENT_SCOPES } from '../../shared/mcp-agent-registry.ts';
-import { handleMcpJsonRpc, type JsonRpcRequest, type JsonRpcResponse } from './stdio.ts';
+import {
+  handleMcpJsonRpc,
+  type JsonRpcNotification,
+  type JsonRpcRequest,
+  type JsonRpcResponse,
+  type McpOutboundMessage,
+} from './stdio.ts';
 import { createMcpSession, setMcpSessionAgentLabel, type McpSession } from './session.ts';
 import type { McpWriteLimiterRegistry } from './write-limiter-registry.ts';
 import type { McpIntegrationToolDeps } from './integration-tools.ts';
@@ -39,6 +53,7 @@ import {
 import { recordMcpAgentEvent } from './events.ts';
 import { mcpToolRegistryEntry } from './registry.ts';
 import type { McpAgentScope } from '../../shared/mcp-agent-registry.ts';
+import { McpHttpSessionRegistry, type McpHttpSessionRecord } from './http-sessions.ts';
 
 export type McpHttpAuthContext = {
   session: OperatorSessionRecord | null;
@@ -63,9 +78,13 @@ export type McpHttpHandlerOptions = {
   writeLimiters?: McpWriteLimiterRegistry;
   /** Separate process-lifetime budget for Class-I integration writes (C131), typically limit 6. */
   integrationWriteLimiters?: McpWriteLimiterRegistry;
+  /** Process-lifetime streamable HTTP sessions (C133). Required in production; tests may omit. */
+  httpSessions?: McpHttpSessionRegistry;
   workspaceReadDeps?: McpWorkspaceReadDeps;
   workspaceWriteDeps?: McpWorkspaceWriteDeps;
   integrationDeps?: McpIntegrationToolDeps;
+  /** Test-only: await before tools/call work so a concurrent cancel can land. */
+  beforeToolsCall?: (signal: AbortSignal) => Promise<void>;
 };
 
 function headerValue(raw: string | string[] | undefined): string | null {
@@ -80,6 +99,35 @@ function csrfHeader(req: Request): string | null {
 
 function agentLabelHeader(req: Request): string | null {
   return headerValue(req.headers[MCP_AGENT_LABEL_HEADER]);
+}
+
+function sessionIdHeader(req: Request): string | null {
+  return headerValue(req.headers[MCP_SESSION_ID_HEADER]);
+}
+
+function protocolVersionHeader(req: Request): string | null {
+  return headerValue(req.headers[MCP_PROTOCOL_VERSION_HEADER]);
+}
+
+function acceptIncludes(req: Request, type: string): boolean {
+  const accept = headerValue(req.headers.accept) ?? '';
+  return accept.split(',').some((part) => part.trim().toLowerCase().startsWith(type));
+}
+
+function wantsEventStream(req: Request): boolean {
+  return acceptIncludes(req, 'text/event-stream');
+}
+
+function isJsonRpcNotification(message: JsonRpcRequest): boolean {
+  return message.id === undefined && typeof message.method === 'string';
+}
+
+function isJsonRpcResponseMessage(message: JsonRpcRequest): boolean {
+  return (
+    message.id !== undefined &&
+    message.method === undefined &&
+    ('result' in message || 'error' in message)
+  );
 }
 
 /** Resolve operator session from bearer or cookie. */
@@ -175,6 +223,112 @@ function requiredToolScope(request: JsonRpcRequest): McpAgentScope | null {
   return mcpToolRegistryEntry(requestedTool(request))?.requiredScope ?? null;
 }
 
+function writeSseEvent(res: Response, event: { id?: string; message: unknown }): void {
+  if (event.id) res.write(`id: ${event.id}\n`);
+  res.write(`data: ${JSON.stringify(event.message)}\n\n`);
+}
+
+function attachWriteLimiters(
+  session: McpSession,
+  auth: McpHttpAuthContext,
+  options: McpHttpHandlerOptions,
+  nowMs: number,
+): void {
+  if (options.writeLimiters) {
+    session.coordinationWrites = options.writeLimiters.limiterFor(
+      auth.credentialKey,
+      session.agentLabel ?? '',
+      nowMs,
+    );
+  }
+  if (options.integrationWriteLimiters) {
+    session.integrationWrites = options.integrationWriteLimiters.limiterFor(
+      auth.credentialKey,
+      session.agentLabel ?? '',
+      nowMs,
+    );
+  }
+}
+
+function refuseLabelMismatch(
+  res: Response,
+  options: McpHttpHandlerOptions,
+  auth: McpHttpAuthContext,
+  request: JsonRpcRequest,
+  error: unknown,
+): void {
+  const detail = (error as { detail?: ReturnType<typeof mcpCoordinationCredentialLabelMismatch> })
+    .detail;
+  if (detail) {
+    recordMcpAgentEvent(options.db, {
+      agentLabel: auth.agentCredential?.agentLabel ?? null,
+      tool: requestedTool(request),
+      outcome: 'REFUSED',
+      summary: 'Credential label mismatch refused.',
+    });
+  }
+  res.status(400).json({
+    jsonrpc: '2.0',
+    id: request.id ?? null,
+    error: {
+      code: -32602,
+      message: error instanceof Error ? error.message : 'Invalid agent label.',
+      ...(detail ? { data: detail } : {}),
+    },
+  });
+}
+
+function refuseScope(
+  res: Response,
+  options: McpHttpHandlerOptions,
+  auth: McpHttpAuthContext,
+  request: JsonRpcRequest,
+  required: McpAgentScope,
+): void {
+  const detail =
+    required === 'workspace:read' || required === 'workspace:write'
+      ? mcpWorkspaceScopeRequired(required)
+      : mcpCoordinationScopeRequired(required);
+  recordMcpAgentEvent(options.db, {
+    agentLabel: auth.agentCredential!.agentLabel,
+    tool: requestedTool(request),
+    outcome: 'REFUSED',
+    summary: `Credential lacks ${required}.`,
+  });
+  res.status(403).json({
+    jsonrpc: '2.0',
+    id: request.id ?? null,
+    error: { code: -32003, message: `Credential lacks ${required}.`, data: detail },
+  });
+}
+
+async function runJsonRpc(
+  mcpSession: McpSession,
+  request: JsonRpcRequest,
+  options: McpHttpHandlerOptions,
+  auth: McpHttpAuthContext,
+  nowMs: number,
+  onMessage: (message: McpOutboundMessage) => void,
+  httpRecord?: McpHttpSessionRecord | null,
+): Promise<void> {
+  const grantedScopes = auth.agentCredential?.scopes ?? MCP_AGENT_SCOPES;
+  const notify = (message: JsonRpcNotification) => {
+    onMessage(message);
+    if (httpRecord) options.httpSessions?.publish(httpRecord, message);
+  };
+  await handleMcpJsonRpc(mcpSession, request, onMessage, options.db, {
+    grantedScopes,
+    now: new Date(nowMs),
+    transport: 'http',
+    authenticated: true,
+    workspaceReadDeps: options.workspaceReadDeps,
+    workspaceWriteDeps: options.workspaceWriteDeps,
+    integrationDeps: options.integrationDeps,
+    notify,
+    beforeToolsCall: options.beforeToolsCall,
+  });
+}
+
 export async function handleMcpHttpPost(
   req: Request,
   res: Response,
@@ -190,9 +344,28 @@ export async function handleMcpHttpPost(
     return;
   }
 
+  const protocolHeader = protocolVersionHeader(req);
+  if (protocolHeader && !isSupportedMcpProtocolVersion(protocolHeader)) {
+    res.status(400).json({ error: `Unsupported MCP-Protocol-Version: ${protocolHeader}` });
+    return;
+  }
+
+  const body = req.body;
+  if (Array.isArray(body)) {
+    res.status(400).json({
+      jsonrpc: '2.0',
+      id: null,
+      error: {
+        code: -32600,
+        message: 'Invalid Request: JSON-RPC batches are not supported; send one message per POST.',
+      },
+    });
+    return;
+  }
+
   let request: JsonRpcRequest;
   try {
-    request = req.body as JsonRpcRequest;
+    request = body as JsonRpcRequest;
     if (!request || typeof request !== 'object') {
       throw new Error('Invalid JSON-RPC body.');
     }
@@ -205,108 +378,249 @@ export async function handleMcpHttpPost(
     return;
   }
 
-  const session = createMcpSession();
-  try {
-    applyAgentLabel(session, req, auth.agentCredential);
-  } catch (error) {
-    const detail = (error as { detail?: ReturnType<typeof mcpCoordinationCredentialLabelMismatch> })
-      .detail;
-    if (detail) {
-      recordMcpAgentEvent(options.db, {
-        agentLabel: auth.agentCredential?.agentLabel ?? null,
-        tool: requestedTool(request),
-        outcome: 'REFUSED',
-        summary: 'Credential label mismatch refused.',
-      });
-    }
-    res.status(400).json({
-      jsonrpc: '2.0',
-      id: request.id ?? null,
-      error: {
-        code: -32602,
-        message: error instanceof Error ? error.message : 'Invalid agent label.',
-        ...(detail ? { data: detail } : {}),
-      },
-    });
+  // Client → server responses are accepted with 202 and ignored (no server-originated requests yet).
+  if (isJsonRpcResponseMessage(request)) {
+    res.status(202).end();
     return;
   }
+
+  const nowMs = options.now?.() ?? Date.now();
+  const sessions = options.httpSessions;
+  const existingSessionId = sessionIdHeader(req);
+  let httpRecord: McpHttpSessionRecord | null = null;
+  let mcpSession: McpSession;
+  let issuedSessionId: string | null = null;
+
+  if (existingSessionId) {
+    if (!sessions) {
+      res.status(400).json({ error: 'MCP sessions are not available on this server.' });
+      return;
+    }
+    httpRecord = sessions.get(existingSessionId, nowMs);
+    if (!httpRecord) {
+      res.status(404).json({ error: 'MCP session not found.' });
+      return;
+    }
+    if (httpRecord.credentialKey !== auth.credentialKey) {
+      res.status(403).json({ error: 'MCP session does not belong to this credential.' });
+      return;
+    }
+    mcpSession = httpRecord.mcp;
+  } else if (request.method === 'initialize' && sessions) {
+    const requested =
+      request.params && typeof request.params === 'object'
+        ? (request.params as Record<string, unknown>).protocolVersion
+        : undefined;
+    const protocolVersion = negotiateMcpProtocolVersion(requested);
+    httpRecord = sessions.create({
+      credentialKey: auth.credentialKey,
+      protocolVersion,
+      nowMs,
+    });
+    mcpSession = httpRecord.mcp;
+    issuedSessionId = httpRecord.id;
+  } else {
+    // Compatibility floor: one-shot JSON-RPC with a fresh session per POST.
+    mcpSession = createMcpSession();
+  }
+
+  try {
+    applyAgentLabel(mcpSession, req, auth.agentCredential);
+  } catch (error) {
+    refuseLabelMismatch(res, options, auth, request, error);
+    return;
+  }
+
   if (auth.agentCredential) {
     const required = requiredToolScope(request);
     if (required && !hasMcpAgentScope(auth.agentCredential.scopes, required)) {
-      const detail =
-        required === 'workspace:read' || required === 'workspace:write'
-          ? mcpWorkspaceScopeRequired(required)
-          : mcpCoordinationScopeRequired(required);
-      recordMcpAgentEvent(options.db, {
-        agentLabel: auth.agentCredential.agentLabel,
-        tool: requestedTool(request),
-        outcome: 'REFUSED',
-        summary: `Credential lacks ${required}.`,
-      });
-      res.status(403).json({
-        jsonrpc: '2.0',
-        id: request.id ?? null,
-        error: { code: -32003, message: `Credential lacks ${required}.`, data: detail },
-      });
+      refuseScope(res, options, auth, request, required);
       return;
     }
   }
-  const nowMs = options.now?.() ?? Date.now();
-  // Replace the per-request no-op limiter with one backed by the process-lifetime registry, so
-  // coordination writes actually accumulate across requests (C116). Label may still be null here
-  // (coordination.ts refuses writes without one before ever consulting the limiter).
-  if (options.writeLimiters) {
-    session.coordinationWrites = options.writeLimiters.limiterFor(
-      auth.credentialKey,
-      session.agentLabel ?? '',
-      nowMs,
-    );
-  }
-  if (options.integrationWriteLimiters) {
-    session.integrationWrites = options.integrationWriteLimiters.limiterFor(
-      auth.credentialKey,
-      session.agentLabel ?? '',
-      nowMs,
-    );
+
+  attachWriteLimiters(mcpSession, auth, options, nowMs);
+
+  if (isJsonRpcNotification(request)) {
+    await runJsonRpc(mcpSession, request, options, auth, nowMs, () => {}, httpRecord);
+    res.status(202).end();
+    return;
   }
 
+  const useSse = wantsEventStream(req);
   const responses: JsonRpcResponse[] = [];
-  const grantedScopes = auth.agentCredential?.scopes ?? MCP_AGENT_SCOPES;
-  await handleMcpJsonRpc(
-    session,
+  const notifications: JsonRpcNotification[] = [];
+
+  if (useSse) {
+    res.status(200);
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    if (issuedSessionId) res.setHeader(MCP_SESSION_ID_HEADER, issuedSessionId);
+    if (typeof (res as Response & { flushHeaders?: () => void }).flushHeaders === 'function') {
+      (res as Response & { flushHeaders: () => void }).flushHeaders();
+    }
+
+    await runJsonRpc(
+      mcpSession,
+      request,
+      options,
+      auth,
+      nowMs,
+      (message) => {
+        writeSseEvent(res, { message });
+      },
+      httpRecord,
+    );
+    res.end();
+    return;
+  }
+
+  await runJsonRpc(
+    mcpSession,
     request,
+    options,
+    auth,
+    nowMs,
     (message) => {
-      responses.push(message);
+      if ('method' in message && !('id' in message)) {
+        notifications.push(message as JsonRpcNotification);
+        return;
+      }
+      responses.push(message as JsonRpcResponse);
     },
-    options.db,
-    {
-      grantedScopes,
-      now: new Date(nowMs),
-      transport: 'http',
-      authenticated: true,
-      workspaceReadDeps: options.workspaceReadDeps,
-      workspaceWriteDeps: options.workspaceWriteDeps,
-      integrationDeps: options.integrationDeps,
-    },
+    httpRecord,
   );
 
   const reply = responses[0];
   if (!reply) {
+    if (issuedSessionId) res.setHeader(MCP_SESSION_ID_HEADER, issuedSessionId);
     res.status(204).end();
     return;
   }
+  if (issuedSessionId) res.setHeader(MCP_SESSION_ID_HEADER, issuedSessionId);
+  // One-shot JSON clients do not receive mid-request notifications on this path; progress is
+  // available when Accept includes text/event-stream (or via the GET stream on a session).
+  void notifications;
   res.status(200).json(reply);
 }
 
-/** Express handler factory for `POST ${MCP_HTTP_PATH}`. */
+export async function handleMcpHttpGet(
+  req: Request,
+  res: Response,
+  options: McpHttpHandlerOptions,
+): Promise<void> {
+  const auth = resolveMcpHttpAuth(req, options);
+  if (!auth) {
+    res.status(401).json({ error: 'Authentication required.' });
+    return;
+  }
+  if (!wantsEventStream(req)) {
+    res.status(405).json({ error: 'GET requires Accept: text/event-stream.' });
+    return;
+  }
+  const sessions = options.httpSessions;
+  const sessionId = sessionIdHeader(req);
+  if (!sessions || !sessionId) {
+    res.status(405).json({ error: 'SSE listen requires an MCP session.' });
+    return;
+  }
+  const nowMs = options.now?.() ?? Date.now();
+  const record = sessions.get(sessionId, nowMs);
+  if (!record) {
+    res.status(404).json({ error: 'MCP session not found.' });
+    return;
+  }
+  if (record.credentialKey !== auth.credentialKey) {
+    res.status(403).json({ error: 'MCP session does not belong to this credential.' });
+    return;
+  }
+
+  res.status(200);
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader(MCP_SESSION_ID_HEADER, record.id);
+  if (typeof (res as Response & { flushHeaders?: () => void }).flushHeaders === 'function') {
+    (res as Response & { flushHeaders: () => void }).flushHeaders();
+  }
+
+  const lastEventId = headerValue(req.headers['last-event-id']);
+  for (const event of sessions.eventsAfter(record, lastEventId)) {
+    writeSseEvent(res, event);
+  }
+
+  const onEvent = (event: { id: string; message: unknown }) => {
+    if (!res.writableEnded) writeSseEvent(res, event);
+  };
+  record.streamListeners.add(onEvent);
+
+  const keepAlive = setInterval(() => {
+    if (!res.writableEnded) res.write(': keepalive\n\n');
+  }, 15_000);
+
+  const cleanup = () => {
+    clearInterval(keepAlive);
+    record.streamListeners.delete(onEvent);
+  };
+  req.on('close', cleanup);
+  res.on('close', cleanup);
+}
+
+export async function handleMcpHttpDelete(
+  req: Request,
+  res: Response,
+  options: McpHttpHandlerOptions,
+): Promise<void> {
+  const auth = resolveMcpHttpAuth(req, options);
+  if (!auth) {
+    res.status(401).json({ error: 'Authentication required.' });
+    return;
+  }
+  if (!mcpHttpCsrfOk(auth, req)) {
+    res.status(403).json({ error: 'CSRF token missing or invalid.' });
+    return;
+  }
+  const sessions = options.httpSessions;
+  const sessionId = sessionIdHeader(req);
+  if (!sessions || !sessionId) {
+    res.status(405).json({ error: 'DELETE requires an MCP session.' });
+    return;
+  }
+  const nowMs = options.now?.() ?? Date.now();
+  const record = sessions.get(sessionId, nowMs);
+  if (!record) {
+    res.status(404).json({ error: 'MCP session not found.' });
+    return;
+  }
+  if (record.credentialKey !== auth.credentialKey) {
+    res.status(403).json({ error: 'MCP session does not belong to this credential.' });
+    return;
+  }
+  sessions.delete(sessionId);
+  res.status(204).end();
+}
+
+/** Express handler factory for `${MCP_HTTP_PATH}` (POST / GET / DELETE). */
 export function createMcpHttpHandler(options: McpHttpHandlerOptions) {
+  const sessions = options.httpSessions ?? new McpHttpSessionRegistry();
+  const resolved: McpHttpHandlerOptions = { ...options, httpSessions: sessions };
+
   return async (req: Request, res: Response): Promise<void> => {
-    if (req.method !== 'POST') {
-      res.status(405).json({ error: 'Method not allowed.' });
+    if (req.method === 'POST') {
+      await handleMcpHttpPost(req, res, resolved);
       return;
     }
-    await handleMcpHttpPost(req, res, options);
+    if (req.method === 'GET') {
+      await handleMcpHttpGet(req, res, resolved);
+      return;
+    }
+    if (req.method === 'DELETE') {
+      await handleMcpHttpDelete(req, res, resolved);
+      return;
+    }
+    res.status(405).json({ error: 'Method not allowed.' });
   };
 }
 
-export { MCP_HTTP_PATH };
+export { MCP_HTTP_PATH, MCP_PROTOCOL_VERSION, McpHttpSessionRegistry };

@@ -21,12 +21,15 @@
   `server/domain/agent-coordination.ts`; persistence in `service.ts`. Claim/complete never mutate
   tasks, Signal posts, or any provider path; audit is the handoff row and notes, not
   `integration_events`. MCP tools are C111; operator inbox UI is C112.
-- `server/mcp/`: stdio and authenticated HTTP MCP (`stdio.ts`, `http.ts`). **Coordination shipped
-  first (C111–C113):** handoff tools and `hcc://coordination/inbox` on both transports; workspace
-  and Signal MCP tools remain MCP-C106–C108. Each coordination tool maps to one
-  `agent-coordination` service method. `mcp_agent_events` is append-only (500-row retention).
-  Coordination writes require a non-empty init `agent_label` and share a 10/minute session budget
-  on stdio; network writes use the persisted limiter registry (C116).
+- `server/mcp/`: stdio and authenticated streamable HTTP MCP (`stdio.ts`, `http.ts`).
+  **Coordination shipped first (C111–C113):** handoff tools and `hcc://coordination/inbox` on
+  both transports; workspace and Signal MCP tools remain MCP-C106–C108. Each coordination tool
+  maps to one `agent-coordination` service method. `mcp_agent_events` is append-only (500-row
+  retention). Coordination writes require a non-empty init `agent_label` and share a 10/minute
+  session budget on stdio; network writes use the persisted limiter registry (C116). C133 adds
+  stateful HTTP sessions (`Mcp-Session-Id`), GET SSE notifications, progress, cancellation, and
+  a dual-transport protocol conformance suite — notifications tip listeners only; durable resume
+  stays on C132 change-feed cursors. One-shot JSON-RPC without a session header remains valid.
 - `server/import.ts`: campaign playbook import — workspace snapshot, transactional commit, receipts.
 - `server/integration-log.ts`: the append-only integration activity records every integration writes.
 - `server/change-feeds.ts`: durable, per-feed monotonic change logs for MCP resume

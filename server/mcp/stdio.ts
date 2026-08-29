@@ -1,20 +1,32 @@
 /**
  * Local stdio MCP JSON-RPC adapter for coordination tools (C111).
  *
- * Minimal MCP subset: initialize, tools/*, resources/*, and ping. Workspace and Signal tools
- * remain MCP-C106–C108. The stdin loop lives in `server/scripts/mcp.ts` (`npm run mcp`); set
- * `MCP_AGENT_LABEL` (or pass `_meta.agent_label` on initialize) for writes.
+ * Minimal MCP subset: initialize, tools/*, resources/*, prompts/*, ping, progress, cancellation,
+ * and resource subscriptions (C133). The stdin loop lives in `server/scripts/mcp.ts`
+ * (`npm run mcp`); set `MCP_AGENT_LABEL` (or pass `_meta.agent_label` on initialize) for writes.
  */
 import { getDb, type Db } from '../db.ts';
 import { APP_VERSION } from '../../shared/branding.ts';
 import { MCP_AGENT_SCOPES, type McpAgentScope } from '../../shared/mcp-agent-registry.ts';
+import { negotiateMcpProtocolVersion } from '../../shared/mcp-transport.ts';
+import { COORDINATION_INBOX_URI } from '../../shared/mcp-agent-events.ts';
+import { COORDINATION_CHANGES_URI, WORKSPACE_CHANGES_URI } from '../../shared/mcp-change-feeds.ts';
+import { WORKSPACE_CONTEXT_URI } from '../../shared/mcp-workspace-context.ts';
 import { callMcpTool } from './dispatch.ts';
 import { mcpToolCallErrorPayload } from './coordination.ts';
 import type { McpIntegrationToolDeps } from './integration-tools.ts';
-import { MCP_RESOURCE_DEFINITIONS, readMcpResource } from './resources.ts';
+import { MCP_RESOURCE_DEFINITIONS, canonicalMcpResourceUri, readMcpResource } from './resources.ts';
 import { mcpToolsListPayload } from './registry.ts';
 import { getMcpPrompt, mcpPromptsListPayload } from './prompts.ts';
-import { setMcpSessionAgentLabel, type McpSession } from './session.ts';
+import { notifyMcpResourceUpdated } from './resource-notifier.ts';
+import {
+  cancelMcpInFlight,
+  clearMcpInFlight,
+  mcpRequestCancelled,
+  registerMcpInFlight,
+  setMcpSessionAgentLabel,
+  type McpSession,
+} from './session.ts';
 import type { McpWorkspaceReadDeps } from './workspace-read.ts';
 import type { McpWorkspaceWriteDeps } from './workspace-write.ts';
 
@@ -32,6 +44,14 @@ export interface JsonRpcResponse {
   error?: { code: number; message: string; data?: unknown };
 }
 
+export interface JsonRpcNotification {
+  jsonrpc: '2.0';
+  method: string;
+  params?: unknown;
+}
+
+export type McpOutboundMessage = JsonRpcResponse | JsonRpcNotification;
+
 export type McpJsonRpcOptions = {
   grantedScopes?: readonly McpAgentScope[];
   now?: Date;
@@ -40,11 +60,35 @@ export type McpJsonRpcOptions = {
   workspaceReadDeps?: McpWorkspaceReadDeps;
   workspaceWriteDeps?: McpWorkspaceWriteDeps;
   integrationDeps?: McpIntegrationToolDeps;
+  /**
+   * Optional sink for server notifications (progress, resource updates). Defaults to the same
+   * `write` used for responses so stdio clients see them on stdout.
+   */
+  notify?: (message: JsonRpcNotification) => void;
+  /** Test-only: await before tools/call work so a concurrent cancel can land. */
+  beforeToolsCall?: (signal: AbortSignal) => Promise<void>;
 };
 
-const PROTOCOL_VERSION = '2024-11-05';
-
 const defaultGrantedScopes = (): readonly McpAgentScope[] => MCP_AGENT_SCOPES;
+
+const RESOURCE_TIP_BY_TOOL: Record<string, readonly string[]> = {
+  coordination_post_handoff: [COORDINATION_INBOX_URI, COORDINATION_CHANGES_URI],
+  coordination_claim_handoff: [COORDINATION_INBOX_URI, COORDINATION_CHANGES_URI],
+  coordination_complete_handoff: [COORDINATION_INBOX_URI, COORDINATION_CHANGES_URI],
+  coordination_cancel_handoff: [COORDINATION_INBOX_URI, COORDINATION_CHANGES_URI],
+  coordination_add_note: [COORDINATION_INBOX_URI, COORDINATION_CHANGES_URI],
+  workspace_create_task: [WORKSPACE_CHANGES_URI, WORKSPACE_CONTEXT_URI],
+  workspace_update_task: [WORKSPACE_CHANGES_URI, WORKSPACE_CONTEXT_URI],
+  workspace_delete_task: [WORKSPACE_CHANGES_URI, WORKSPACE_CONTEXT_URI],
+  workspace_create_project: [WORKSPACE_CHANGES_URI, WORKSPACE_CONTEXT_URI],
+  workspace_update_project: [WORKSPACE_CHANGES_URI, WORKSPACE_CONTEXT_URI],
+  workspace_delete_project: [WORKSPACE_CHANGES_URI, WORKSPACE_CONTEXT_URI],
+  workspace_add_checklist_item: [WORKSPACE_CHANGES_URI, WORKSPACE_CONTEXT_URI],
+  workspace_update_checklist_item: [WORKSPACE_CHANGES_URI, WORKSPACE_CONTEXT_URI],
+  workspace_remove_checklist_item: [WORKSPACE_CHANGES_URI, WORKSPACE_CONTEXT_URI],
+  workspace_add_dependency: [WORKSPACE_CHANGES_URI, WORKSPACE_CONTEXT_URI],
+  workspace_remove_dependency: [WORKSPACE_CHANGES_URI, WORKSPACE_CONTEXT_URI],
+};
 
 function agentLabelFromInitialize(params: unknown): string | null {
   if (!params || typeof params !== 'object') return null;
@@ -62,10 +106,32 @@ function agentLabelFromInitialize(params: unknown): string | null {
   return null;
 }
 
+function progressTokenFromParams(params: unknown): string | number | null {
+  if (!params || typeof params !== 'object') return null;
+  const meta = (params as Record<string, unknown>)._meta;
+  if (!meta || typeof meta !== 'object') return null;
+  const token = (meta as Record<string, unknown>).progressToken;
+  if (typeof token === 'string' || typeof token === 'number') return token;
+  return null;
+}
+
+function cancelRequestId(params: unknown): string | number | null {
+  if (!params || typeof params !== 'object') return null;
+  const id = (params as Record<string, unknown>).requestId;
+  if (typeof id === 'string' || typeof id === 'number') return id;
+  return null;
+}
+
+function tipResourcesForTool(toolName: string): void {
+  const uris = RESOURCE_TIP_BY_TOOL[toolName];
+  if (!uris) return;
+  for (const uri of uris) notifyMcpResourceUpdated(uri);
+}
+
 export async function handleMcpJsonRpc(
   session: McpSession,
   request: JsonRpcRequest,
-  write: (message: JsonRpcResponse) => void = (message) => {
+  write: (message: McpOutboundMessage) => void = (message) => {
     process.stdout.write(`${JSON.stringify(message)}\n`);
   },
   db: Db = getDb(),
@@ -74,6 +140,12 @@ export async function handleMcpJsonRpc(
   const { id, method, params } = request;
   const grantedScopes = options.grantedScopes ?? defaultGrantedScopes();
   const now = options.now ?? new Date();
+  const notify =
+    options.notify ??
+    ((message: JsonRpcNotification) => {
+      write(message);
+    });
+
   if (!method) {
     if (id !== undefined) {
       write({
@@ -109,9 +181,17 @@ export async function handleMcpJsonRpc(
           fail(-32602, error instanceof Error ? error.message : 'Invalid agent_label.');
           return;
         }
+        const requested =
+          params && typeof params === 'object'
+            ? (params as Record<string, unknown>).protocolVersion
+            : undefined;
         reply({
-          protocolVersion: PROTOCOL_VERSION,
-          capabilities: { tools: {}, resources: {}, prompts: {} },
+          protocolVersion: negotiateMcpProtocolVersion(requested),
+          capabilities: {
+            tools: {},
+            resources: { subscribe: true },
+            prompts: {},
+          },
           serverInfo: { name: 'hybrid-command-center', version: APP_VERSION },
         });
         return;
@@ -119,6 +199,17 @@ export async function handleMcpJsonRpc(
       case 'notifications/initialized':
       case 'initialized':
         return;
+      case 'notifications/cancelled': {
+        const requestId = cancelRequestId(params);
+        if (requestId !== null) {
+          const reason =
+            params && typeof params === 'object'
+              ? (params as Record<string, unknown>).reason
+              : undefined;
+          cancelMcpInFlight(session, requestId, typeof reason === 'string' ? reason : undefined);
+        }
+        return;
+      }
       case 'ping':
         reply({});
         return;
@@ -154,23 +245,83 @@ export async function handleMcpJsonRpc(
           fail(-32602, 'tools/call requires a tool name.');
           return;
         }
-        const result = await callMcpTool(db, session, call.name, call.arguments ?? {}, {
-          grantedScopes,
-          now,
-          transport: options.transport ?? 'stdio',
-          authenticated: options.authenticated ?? true,
-          workspaceReadDeps: options.workspaceReadDeps,
-          workspaceWriteDeps: options.workspaceWriteDeps,
-          integrationDeps: options.integrationDeps,
-        });
-        const text =
-          result.outcome === 'SUCCESS'
-            ? JSON.stringify(result.data ?? null)
-            : JSON.stringify(mcpToolCallErrorPayload(result));
-        reply({
-          content: [{ type: 'text', text }],
-          isError: result.outcome !== 'SUCCESS',
-        });
+        if (id === undefined || id === null) {
+          fail(-32600, 'tools/call requires a request id.');
+          return;
+        }
+
+        const abort = registerMcpInFlight(session, id);
+        try {
+          if (options.beforeToolsCall) {
+            await options.beforeToolsCall(abort.signal);
+          } else {
+            // One turn of the event loop so a concurrent HTTP cancel POST can land.
+            await Promise.resolve();
+          }
+          if (mcpRequestCancelled(abort.signal)) {
+            // Spec: do not send a response for a cancelled request.
+            return;
+          }
+
+          const progressToken = progressTokenFromParams(params);
+          if (progressToken !== null) {
+            notify({
+              jsonrpc: '2.0',
+              method: 'notifications/progress',
+              params: {
+                progressToken,
+                progress: 0,
+                total: 1,
+                message: `Running ${call.name}`,
+              },
+            });
+          }
+
+          const result = await callMcpTool(db, session, call.name, call.arguments ?? {}, {
+            grantedScopes,
+            now,
+            transport: options.transport ?? 'stdio',
+            authenticated: options.authenticated ?? true,
+            workspaceReadDeps: options.workspaceReadDeps,
+            workspaceWriteDeps: options.workspaceWriteDeps,
+            integrationDeps: options.integrationDeps,
+          });
+
+          if (mcpRequestCancelled(abort.signal)) {
+            // Cancel won the race after the tool returned. If the tool wrote, the write was
+            // already a full transaction — we still suppress the response so the client does not
+            // treat a cancelled call as acknowledged.
+            return;
+          }
+
+          if (progressToken !== null) {
+            notify({
+              jsonrpc: '2.0',
+              method: 'notifications/progress',
+              params: {
+                progressToken,
+                progress: 1,
+                total: 1,
+                message: `Finished ${call.name}`,
+              },
+            });
+          }
+
+          if (result.outcome === 'SUCCESS') {
+            tipResourcesForTool(call.name);
+          }
+
+          const text =
+            result.outcome === 'SUCCESS'
+              ? JSON.stringify(result.data ?? null)
+              : JSON.stringify(mcpToolCallErrorPayload(result));
+          reply({
+            content: [{ type: 'text', text }],
+            isError: result.outcome !== 'SUCCESS',
+          });
+        } finally {
+          clearMcpInFlight(session, id);
+        }
         return;
       }
       case 'resources/list':
@@ -188,6 +339,32 @@ export async function handleMcpJsonRpc(
         reply({
           contents: [{ uri: body.uri, mimeType: body.mimeType, text: body.text }],
         });
+        return;
+      }
+      case 'resources/subscribe': {
+        const sub = (params ?? {}) as { uri?: string };
+        if (!sub.uri || typeof sub.uri !== 'string') {
+          fail(-32602, 'resources/subscribe requires a uri.');
+          return;
+        }
+        const canonical = canonicalMcpResourceUri(sub.uri);
+        if (!canonical) {
+          fail(-32602, `Unknown resource: ${sub.uri}`);
+          return;
+        }
+        session.subscriptions.add(canonical);
+        reply({});
+        return;
+      }
+      case 'resources/unsubscribe': {
+        const sub = (params ?? {}) as { uri?: string };
+        if (!sub.uri || typeof sub.uri !== 'string') {
+          fail(-32602, 'resources/unsubscribe requires a uri.');
+          return;
+        }
+        const canonical = canonicalMcpResourceUri(sub.uri);
+        if (canonical) session.subscriptions.delete(canonical);
+        reply({});
         return;
       }
       default:

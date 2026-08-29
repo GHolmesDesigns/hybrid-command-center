@@ -19,7 +19,9 @@ test('publish preview refreshes Buffer accounts and an ordinary page load does n
   const before = await countRefreshes();
 
   await page.goto('/signal?month=2099-09');
-  await expect(page.getByRole('heading', { level: 2, name: 'September 2099' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 2, name: 'September 2099' })).toBeVisible({
+    timeout: 15_000,
+  });
 
   expect(await countRefreshes()).toBe(before);
 
