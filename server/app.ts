@@ -231,6 +231,7 @@ import {
   listHandoffs,
   postHandoff,
 } from './agent-coordination/service.ts';
+import { reclaimableWorkSessions, reclaimWorkSession } from './agent-coordination/work-sessions.ts';
 import { INTEGRATION_EVENT_PAGE_MAX, INTEGRATION_SOURCES } from '../shared/integration-log.ts';
 import {
   APP_VERSION,
@@ -2721,6 +2722,23 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     try {
       const body = agentHandoffCancelInputSchema.parse(req.body);
       res.json(cancelHandoffAsOperator(db, req.params.id, body, clock()));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.get('/api/agent-work-sessions', (req, res, next) => {
+    try {
+      res.json(reclaimableWorkSessions(db, clock()));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/agent-work-sessions/:id/reclaim', (req, res, next) => {
+    try {
+      const reason = z
+        .object({ reason: z.string().trim().min(1).max(500).optional() })
+        .parse(req.body ?? {});
+      res.json(reclaimWorkSession(db, req.params.id, reason.reason, clock()));
     } catch (error) {
       next(error);
     }

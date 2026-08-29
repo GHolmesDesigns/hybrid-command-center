@@ -17,7 +17,7 @@ describe('mcp tool registry', () => {
     expect(names).toContain('signal_queue_health');
     expect(
       names.filter((name) => name !== 'system_capabilities' && name !== 'system_connection_status'),
-    ).toHaveLength(15);
+    ).toHaveLength(23);
     expect(names).toContain('system_connection_status');
     expect(isRegisteredMcpTool('system_capabilities')).toBe(true);
     expect(isRegisteredMcpTool('not_a_tool')).toBe(false);

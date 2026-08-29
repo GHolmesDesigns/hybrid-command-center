@@ -187,6 +187,70 @@ const coordinationTools: McpToolRegistryEntry[] = [
   },
 ];
 
+const workSessionTools: McpToolRegistryEntry[] = [
+  [
+    'work_start',
+    'Start a leased execution session for a claimed handoff.',
+    ['handoffId', 'baseRevision'],
+    ['leaseSeconds', 'branch', 'worktree', 'currentStep', 'clientRequestId'],
+  ],
+  [
+    'work_heartbeat',
+    'Renew a work-session lease.',
+    ['sessionId'],
+    ['leaseSeconds', 'clientRequestId'],
+  ],
+  [
+    'work_checkpoint',
+    'Record resumable progress and validation evidence.',
+    ['sessionId'],
+    ['currentStep', 'evidence', 'validations', 'clientRequestId'],
+  ],
+  [
+    'work_request_input',
+    'Pause a session while requesting operator input.',
+    ['sessionId'],
+    ['currentStep', 'evidence', 'clientRequestId'],
+  ],
+  [
+    'work_mark_blocked',
+    'Mark a session blocked with evidence.',
+    ['sessionId'],
+    ['currentStep', 'evidence', 'clientRequestId'],
+  ],
+  [
+    'work_release',
+    'Abandon a session with an operator-visible reason.',
+    ['sessionId'],
+    ['clientRequestId'],
+  ],
+  [
+    'work_complete',
+    'Complete a session and feed completion evidence to its handoff.',
+    ['sessionId'],
+    ['currentStep', 'evidence', 'validations', 'clientRequestId'],
+  ],
+  ['work_get_resume_context', 'Read bounded resume context for a work session.', ['sessionId'], []],
+].map(([name, description, required, optional]) => ({
+  name: name as string,
+  description: description as string,
+  inputSchema: {
+    type: 'object',
+    properties: Object.fromEntries(
+      [...(required as string[]), ...(optional as string[])].map((key) => [
+        key,
+        { type: 'string' },
+      ]),
+    ),
+    required: required as string[],
+    additionalProperties: false,
+  },
+  class: (name === 'work_get_resume_context' ? 'R' : 'L') as McpToolClass,
+  requiredScope: coordinationScope(name as CoordinationTool),
+  owner: 'server/agent-coordination/work-sessions.ts',
+  handler: 'coordination' as const,
+}));
+
 const systemCapabilitiesTool: McpToolRegistryEntry = {
   name: 'system_capabilities',
   description:
@@ -353,6 +417,7 @@ const systemConnectionStatusTool: McpToolRegistryEntry = {
 
 export const MCP_TOOL_REGISTRY: readonly McpToolRegistryEntry[] = [
   ...coordinationTools,
+  ...workSessionTools,
   ...workspaceReadTools,
   systemCapabilitiesTool,
   systemConnectionStatusTool,
