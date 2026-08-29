@@ -23,12 +23,20 @@ export const COORDINATION_WRITE_TOOLS = [
   'coordination_complete_handoff',
   'coordination_cancel_handoff',
   'coordination_add_note',
+  'work_start',
+  'work_heartbeat',
+  'work_checkpoint',
+  'work_request_input',
+  'work_mark_blocked',
+  'work_release',
+  'work_complete',
 ] as const;
 export type CoordinationWriteTool = (typeof COORDINATION_WRITE_TOOLS)[number];
 
 export const COORDINATION_READ_TOOLS = [
   'coordination_list_handoffs',
   'coordination_get_handoff',
+  'work_get_resume_context',
 ] as const;
 export type CoordinationReadTool = (typeof COORDINATION_READ_TOOLS)[number];
 

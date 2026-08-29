@@ -595,6 +595,29 @@ CREATE TABLE IF NOT EXISTS agent_handoff_notes (
   body TEXT NOT NULL CHECK(length(body) BETWEEN 1 AND 2000),
   at TEXT NOT NULL
 );
+-- Leased execution attempts are separate from the handoff request (C128). Expiry is visible and
+-- reclaimable; it never changes the handoff row or silently reassigns ownership.
+CREATE TABLE IF NOT EXISTS agent_work_sessions (
+  id TEXT PRIMARY KEY,
+  handoff_id TEXT NOT NULL REFERENCES agent_handoffs(id) ON DELETE CASCADE,
+  subject_type TEXT NOT NULL,
+  subject_id TEXT,
+  agent_label TEXT NOT NULL,
+  state TEXT NOT NULL CHECK(state IN ('PLANNED','CLAIMED','IN_PROGRESS','NEEDS_INPUT','BLOCKED','COMPLETED','ABANDONED')),
+  lease_expires_at TEXT,
+  last_heartbeat_at TEXT,
+  base_revision TEXT NOT NULL,
+  branch TEXT,
+  worktree TEXT,
+  current_step TEXT,
+  checkpoints_json TEXT NOT NULL DEFAULT '[]',
+  evidence_json TEXT NOT NULL DEFAULT '{}',
+  validations_json TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  abandoned_at TEXT,
+  abandon_reason TEXT
+);
 -- MCP mutation idempotency for note, complete, and cancel (C117). One row per
 -- (agent_label, client_request_id, tool); retention in server/agent-coordination/mutations.ts.
 CREATE TABLE IF NOT EXISTS agent_handoff_mutations (
@@ -715,6 +738,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_handoffs_client_request
   WHERE client_request_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_agent_handoff_notes_handoff
   ON agent_handoff_notes(handoff_id, at);
+CREATE INDEX IF NOT EXISTS idx_agent_work_sessions_handoff ON agent_work_sessions(handoff_id, state);
+CREATE INDEX IF NOT EXISTS idx_agent_work_sessions_lease ON agent_work_sessions(state, lease_expires_at);
 -- Mutation replay: duplicate (agent_label, client_request_id, tool) returns the stored outcome.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_handoff_mutations_replay
   ON agent_handoff_mutations(agent_label, client_request_id, tool);

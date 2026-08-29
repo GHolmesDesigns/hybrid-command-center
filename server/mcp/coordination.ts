@@ -19,6 +19,19 @@ import {
   postHandoff,
 } from '../agent-coordination/service.ts';
 import {
+  startWorkSession,
+  heartbeatWorkSession,
+  checkpointWorkSession,
+  transitionWorkSession,
+  releaseWorkSession,
+  resumeWorkSession,
+} from '../agent-coordination/work-sessions.ts';
+import {
+  workSessionStartSchema,
+  workSessionMutationSchema,
+  workSessionReleaseSchema,
+} from '../../shared/agent-work-sessions.ts';
+import {
   AGENT_HANDOFF_STATES,
   agentHandoffCancelReasonSchema,
   agentHandoffClientRequestIdSchema,
@@ -345,6 +358,146 @@ export function callCoordinationTool(
             entityId: data.id,
             summary: `Added note on handoff ${data.handoffId}.`,
           },
+        );
+      }
+      case 'work_start': {
+        const args = workSessionStartSchema.parse(rawArgs ?? {});
+        const data = startWorkSession(db, { ...args, agentLabel: session.agentLabel! }, now);
+        return finish(
+          db,
+          session,
+          tool,
+          { outcome: 'SUCCESS', data },
+          {
+            entityType: 'agent_work_session',
+            entityId: data.id,
+            summary: `Started work session ${data.id}.`,
+          },
+        );
+      }
+      case 'work_heartbeat': {
+        const args = workSessionMutationSchema.parse(rawArgs ?? {});
+        const data = heartbeatWorkSession(
+          db,
+          args.sessionId,
+          session.agentLabel!,
+          args.leaseSeconds ?? 900,
+          now,
+        );
+        return finish(
+          db,
+          session,
+          tool,
+          { outcome: 'SUCCESS', data },
+          { entityType: 'agent_work_session', entityId: data.id },
+        );
+      }
+      case 'work_checkpoint': {
+        const args = workSessionMutationSchema.parse(rawArgs ?? {});
+        const data = checkpointWorkSession(
+          db,
+          args.sessionId,
+          session.agentLabel!,
+          { currentStep: args.currentStep, evidence: args.evidence, validations: args.validations },
+          now,
+        );
+        return finish(
+          db,
+          session,
+          tool,
+          { outcome: 'SUCCESS', data },
+          { entityType: 'agent_work_session', entityId: data.id },
+        );
+      }
+      case 'work_request_input': {
+        const args = workSessionMutationSchema.parse(rawArgs ?? {});
+        const data = transitionWorkSession(
+          db,
+          args.sessionId,
+          session.agentLabel!,
+          'NEEDS_INPUT',
+          args.currentStep,
+          now,
+        );
+        return finish(
+          db,
+          session,
+          tool,
+          { outcome: 'SUCCESS', data },
+          { entityType: 'agent_work_session', entityId: data.id },
+        );
+      }
+      case 'work_mark_blocked': {
+        const args = workSessionMutationSchema.parse(rawArgs ?? {});
+        const data = transitionWorkSession(
+          db,
+          args.sessionId,
+          session.agentLabel!,
+          'BLOCKED',
+          args.currentStep,
+          now,
+        );
+        return finish(
+          db,
+          session,
+          tool,
+          { outcome: 'SUCCESS', data },
+          { entityType: 'agent_work_session', entityId: data.id },
+        );
+      }
+      case 'work_release': {
+        const args = workSessionReleaseSchema.parse(rawArgs ?? {});
+        const data = releaseWorkSession(db, args.sessionId, session.agentLabel!, args.reason, now);
+        return finish(
+          db,
+          session,
+          tool,
+          { outcome: 'SUCCESS', data },
+          { entityType: 'agent_work_session', entityId: data.id },
+        );
+      }
+      case 'work_complete': {
+        const args = workSessionMutationSchema.parse(rawArgs ?? {});
+        if (
+          args.currentStep !== undefined ||
+          args.evidence !== undefined ||
+          args.validations !== undefined
+        )
+          checkpointWorkSession(
+            db,
+            args.sessionId,
+            session.agentLabel!,
+            {
+              currentStep: args.currentStep,
+              evidence: args.evidence,
+              validations: args.validations,
+            },
+            now,
+          );
+        const data = transitionWorkSession(
+          db,
+          args.sessionId,
+          session.agentLabel!,
+          'COMPLETED',
+          undefined,
+          now,
+        );
+        return finish(
+          db,
+          session,
+          tool,
+          { outcome: 'SUCCESS', data },
+          { entityType: 'agent_work_session', entityId: data.id },
+        );
+      }
+      case 'work_get_resume_context': {
+        const args = workSessionMutationSchema.pick({ sessionId: true }).parse(rawArgs ?? {});
+        return finish(
+          db,
+          session,
+          tool,
+          { outcome: 'SUCCESS', data: resumeWorkSession(db, args.sessionId) },
+          { audit: false },
         );
       }
     }

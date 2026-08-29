@@ -22,7 +22,7 @@ describe('callMcpTool', () => {
     expect(names).toHaveLength(MCP_TOOL_REGISTRY.length);
     expect(
       names.filter((name) => name !== 'system_capabilities' && name !== 'system_connection_status'),
-    ).toHaveLength(15);
+    ).toHaveLength(23);
     for (const tool of [...COORDINATION_READ_TOOLS, ...COORDINATION_WRITE_TOOLS]) {
       expect(names).toContain(tool);
     }
