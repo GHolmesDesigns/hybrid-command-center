@@ -8,6 +8,22 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.8.1] - 2026-08-29
+
+### Added
+
+- Agents with `workspace:write` can create and update tasks (including checklist and
+  dependencies), projects, Signal drafts (slot, variants, targets, duplicate), acknowledge
+  queue alerts, and update branding and view defaults over MCP — each write carries an
+  idempotency key, a revision where the entity has one, and a before/after summary.
+- Destructive MCP deletes for tasks and projects refuse unless `confirm: true` and a matching
+  typed id are supplied. Compound Signal variant and target writes support a dry-run preview.
+- MCP Signal creates stay Class-L: Drive media resolve and provider publish remain unavailable.
+
+### Breaking changes
+
+None.
+
 ## [5.8.0] - 2026-08-29
 
 ### Added
