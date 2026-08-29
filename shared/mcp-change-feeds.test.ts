@@ -28,9 +28,7 @@ describe('change-feed cursors', () => {
     expect(decodeChangeFeedCursor('not-a-cursor')).toBeNull();
     expect(decodeChangeFeedCursor('hcc_cf_')).toBeNull();
     expect(
-      decodeChangeFeedCursor(
-        'hcc_cf_' + Buffer.from('v1|coordination|nope').toString('base64url'),
-      ),
+      decodeChangeFeedCursor('hcc_cf_' + Buffer.from('v1|coordination|nope').toString('base64url')),
     ).toBeNull();
     expect(
       decodeChangeFeedCursor(
