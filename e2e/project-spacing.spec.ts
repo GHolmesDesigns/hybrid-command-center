@@ -141,7 +141,9 @@ test('a project tile spaces its blocks the same way at every category count', as
         data: { projectId: wrapped.id, title: `E2E spacing task ${title} ${run}` },
       })
     ).json();
-    await page.request.patch(`/api/tasks/${created.id}`, { data: { status: 'COMPLETE' } });
+    await page.request.patch(`/api/tasks/${created.id}`, {
+      data: { status: 'COMPLETE', revision: created.revision },
+    });
   }
 
   await page.setViewportSize({ width: 1440, height: 900 });

@@ -15,7 +15,8 @@ test('Buffer targets retain partial delivery, edit independently, cancel indepen
     },
   });
   expect(created.ok()).toBe(true);
-  const postId = (await created.json()).id as string;
+  const createdPost = (await created.json()) as { id: string; revision: number };
+  const postId = createdPost.id;
 
   const firstPreview = await page.request.post(`/api/signal/posts/${postId}/publish/preview`);
   const listed = (await firstPreview.json()).connectedAccounts as {
@@ -34,6 +35,7 @@ test('Buffer targets retain partial delivery, edit independently, cancel indepen
 
   const selected = await page.request.put(`/api/signal/posts/${postId}/publish-targets`, {
     data: {
+      revision: createdPost.revision,
       targets: [
         { channel: 'tt', providerAccountIds: [tiktok?.id] },
         { channel: 'yt', providerAccountIds: [youtube?.id] },
@@ -60,8 +62,11 @@ test('Buffer targets retain partial delivery, edit independently, cancel indepen
   expect(reconciled.state).toBe('PARTIAL');
 
   const editedText = `${text} edited`;
+  const currentPost = (await (await page.request.get(`/api/signal/posts/${postId}`)).json()) as {
+    revision: number;
+  };
   const editSignal = await page.request.patch(`/api/signal/posts/${postId}`, {
-    data: { text: editedText },
+    data: { text: editedText, revision: currentPost.revision },
   });
   expect(editSignal.ok()).toBe(true);
   const contentPreviewResponse = await page.request.post(
