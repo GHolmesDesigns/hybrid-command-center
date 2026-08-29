@@ -3,6 +3,7 @@ import { createDb } from '../db.ts';
 import { postHandoff, claimHandoff } from './service.ts';
 import { createMcpSession } from '../mcp/session.ts';
 import { callCoordinationTool } from '../mcp/coordination.ts';
+import { leaseLive, canMutate } from '../domain/agent-work-sessions.ts';
 import {
   startWorkSession,
   heartbeatWorkSession,
@@ -188,5 +189,42 @@ describe('leased work sessions', () => {
       ).outcome,
     ).toBe('SUCCESS');
     db.close();
+  });
+
+  it('refuses invalid work arguments and missing labels through the shared envelope', () => {
+    const db = createDb(':memory:');
+    expect(callCoordinationTool(db, createMcpSession(), 'work_start', {}, new Date()).outcome).toBe(
+      'REFUSED',
+    );
+    expect(
+      callCoordinationTool(
+        db,
+        createMcpSession({ agentLabel: 'agent' }),
+        'work_start',
+        {},
+        new Date(),
+      ).outcome,
+    ).toBe('FAILURE');
+    expect(
+      callCoordinationTool(
+        db,
+        createMcpSession({ agentLabel: 'agent' }),
+        'not-a-tool',
+        {},
+        new Date(),
+      ).outcome,
+    ).toBe('FAILURE');
+    db.close();
+  });
+
+  it('covers the framework-free lease decisions', () => {
+    const now = new Date('2026-08-28T00:00:00.000Z');
+    expect(leaseLive({ leaseExpiresAt: '2026-08-28T00:01:00.000Z' }, now)).toBe(true);
+    expect(leaseLive({ leaseExpiresAt: '2026-08-27T23:59:00.000Z' }, now)).toBe(false);
+    expect(leaseLive({ leaseExpiresAt: null }, now)).toBe(false);
+    expect(() => canMutate({ agentLabel: 'a', state: 'COMPLETED' }, 'b', ['COMPLETED'])).toThrow();
+    expect(() =>
+      canMutate({ agentLabel: 'a', state: 'COMPLETED' }, 'a', ['IN_PROGRESS']),
+    ).toThrow();
   });
 });
