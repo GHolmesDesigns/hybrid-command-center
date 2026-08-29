@@ -21,7 +21,16 @@ test('critical project workflow is visible and interactive', async ({ page }) =>
   const projectDialog = page.getByRole('dialog');
   await projectDialog.locator('select[name="clientId"]').selectOption(clientId);
   await projectDialog.getByLabel('Project name').fill(projectName);
-  await projectDialog.getByRole('button', { name: 'Create project' }).click();
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/api/projects') &&
+        response.request().method() === 'POST' &&
+        response.status() === 201,
+    ),
+    projectDialog.getByRole('button', { name: 'Create project' }).click(),
+  ]);
+  await expect(projectDialog).toBeHidden();
   await page.goto('/status');
   await page.getByRole('button', { name: 'New task' }).first().click();
   const projects = await (await page.request.get('/api/projects')).json();

@@ -2234,9 +2234,9 @@ export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
   }, [posts]);
 
   const refreshed = async () => {
-    closeComposer();
     setHealthKey((key) => key + 1);
     await load();
+    closeComposer();
   };
 
   const days = dateLabels(bounds.from, bounds.to);
