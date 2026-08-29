@@ -64,6 +64,7 @@ const post = (overrides: Partial<SignalPost> = {}): SignalPost => ({
   createdAt: '2026-08-01T00:00:00.000Z',
   updatedAt: '2026-08-01T00:00:00.000Z',
   ...overrides,
+  revision: overrides.revision ?? 1,
 });
 
 const target = (overrides: Partial<SignalPublicationTarget> = {}): SignalPublicationTarget => ({

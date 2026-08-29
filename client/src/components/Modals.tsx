@@ -183,7 +183,11 @@ function ClientForm({ value, saved }: { value?: Client; saved: (s: string) => Pr
     setBusy(true);
     const data = Object.fromEntries(new FormData(e.currentTarget));
     try {
-      await send(value ? `/clients/${value.id}` : '/clients', value ? 'PATCH' : 'POST', data);
+      await send(
+        value ? `/clients/${value.id}` : '/clients',
+        value ? 'PATCH' : 'POST',
+        value ? { ...data, revision: value.revision } : data,
+      );
       await saved(
         value ? 'Client updated.' : 'Client created. Drive setup is continuing in the background.',
       );
@@ -236,7 +240,7 @@ function ProjectForm({
       const project = await send<Project>(
         value ? `/projects/${value.id}` : '/projects',
         value ? 'PATCH' : 'POST',
-        data,
+        value ? { ...data, revision: value.revision } : data,
       );
       await syncProjectCategories(project.id, chosen, value?.categories ?? []);
       await saved(
@@ -333,7 +337,7 @@ function TaskForm({
       const task = await send<Task>(
         value ? `/tasks/${value.id}` : '/tasks',
         value ? 'PATCH' : 'POST',
-        data,
+        value ? { ...data, revision: value.revision } : data,
       );
       await syncTaskTags(task.id, chosen, value?.tags ?? []);
       await saved(value ? 'Task updated.' : 'Task added to the board.');

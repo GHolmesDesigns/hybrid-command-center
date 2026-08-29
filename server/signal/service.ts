@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { Db } from '../db.ts';
+import { advanceRevision, requireRevision } from '../domain/revisions.ts';
 import {
   SIGNAL_CHANNELS,
   SIGNAL_CHANNEL_LABEL,
@@ -511,6 +512,7 @@ function writePost(
   postId: string,
   patch: SignalPostPatch,
   media: SignalPostMedia[] | undefined,
+  expectedRevision?: number,
 ): SignalPost {
   const existing = readRow(db, postId);
   if (!existing) throw new SignalPostNotFoundError(`No Signal post ${postId}.`);
@@ -531,6 +533,9 @@ function writePost(
 
   db.exec('BEGIN');
   try {
+    if (expectedRevision !== undefined)
+      requireRevision(db, 'signal_post', postId, expectedRevision);
+    const timestamp = now();
     db.prepare(
       `UPDATE signal_posts SET text=?,date=?,time=?,format=?,status=?,cta=?,position=?,delivery_provenance=?,updated_at=?
        WHERE id=?`,
@@ -543,7 +548,7 @@ function writePost(
       next.cta,
       position,
       next.deliveryProvenance,
-      now(),
+      timestamp,
       postId,
     );
     if (patch.channels !== undefined) writeChannels(db, postId, patch.channels);
@@ -551,6 +556,15 @@ function writePost(
     // A patch changes only what it names, campaigns included: an edit to the time leaves the
     // campaigns alone, and `[]` is the deliberate answer *this post belongs to none*.
     if (patch.campaigns !== undefined) writePostCampaigns(db, postId, patch.campaigns);
+    if (expectedRevision !== undefined)
+      advanceRevision(
+        db,
+        'signal_post',
+        postId,
+        expectedRevision,
+        [...Object.keys(patch), ...(media !== undefined ? ['media'] : [])],
+        timestamp,
+      );
     db.exec('COMMIT');
   } catch (error) {
     db.exec('ROLLBACK');
@@ -574,6 +588,21 @@ export async function updatePost(
   const media =
     items === undefined ? undefined : await resolveMediaItems(db, postId, items, provider);
   return writePost(db, postId, patch, media);
+}
+
+/** HTTP/UI and MCP entry point: the domain write plus the shared required precondition. */
+export async function updatePostWithRevision(
+  db: Db,
+  postId: string,
+  patch: SignalPostPatch,
+  expectedRevision: number,
+  provider: DriveMediaProvider = driveMediaProvider(db),
+): Promise<SignalPost> {
+  if (!readRow(db, postId)) throw new SignalPostNotFoundError(`No Signal post ${postId}.`);
+  const items = mediaItemsOf(patch);
+  const media =
+    items === undefined ? undefined : await resolveMediaItems(db, postId, items, provider);
+  return writePost(db, postId, patch, media, expectedRevision);
 }
 
 /**
@@ -920,6 +949,7 @@ export async function replacePostVariants(
   input: SignalVariantsInput,
   provider: DriveMediaProvider = driveMediaProvider(db),
   recheck: ReadonlySet<string> = new Set(),
+  expectedRevision?: number,
 ): Promise<PublishVariantRecord[]> {
   const post = getPost(db, postId);
   if (!post) throw new SignalPostNotFoundError(`No Signal post ${postId}.`);
@@ -954,6 +984,8 @@ export async function replacePostVariants(
   const timestamp = now();
   db.exec('BEGIN');
   try {
+    if (expectedRevision !== undefined)
+      requireRevision(db, 'signal_post', postId, expectedRevision);
     db.prepare('DELETE FROM signal_post_variants WHERE post_id=?').run(postId);
     db.prepare('DELETE FROM signal_post_variant_media WHERE post_id=?').run(postId);
     const insert = db.prepare(
@@ -1021,8 +1053,10 @@ export async function replacePostVariants(
     // open publish confirmation stops matching — the same thing a recheck of the post's own media
     // does, through the same column, for the same reason. Text overrides need no bump: the plan hash
     // already covers the configurations they become.
-    if (rolesMoved)
+    if (rolesMoved || expectedRevision !== undefined)
       db.prepare('UPDATE signal_posts SET updated_at=? WHERE id=?').run(timestamp, postId);
+    if (expectedRevision !== undefined)
+      advanceRevision(db, 'signal_post', postId, expectedRevision, ['variants'], timestamp);
     db.exec('COMMIT');
   } catch (error) {
     db.exec('ROLLBACK');
@@ -1171,6 +1205,25 @@ export function applyPostSlot(db: Db, postId: string, input: SignalSlotInput): S
   return writePost(db, postId, { date: input.date, time: input.time }, undefined);
 }
 
+export function applyPostSlotWithRevision(
+  db: Db,
+  postId: string,
+  input: SignalSlotInput,
+  expectedRevision: number,
+): SignalPost {
+  const post = getPost(db, postId);
+  if (!post) throw new SignalPostNotFoundError(`No Signal post ${postId}.`);
+  const occupied = occupiedSlots(db, postId);
+  const confirmed = { date: input.date, time: input.time };
+  if (signalSlotOccupied(occupied, confirmed)) {
+    throw new SignalSlotConflictError(
+      'That slot is no longer open.',
+      suggestionFor(post, occupied, input.from),
+    );
+  }
+  return writePost(db, postId, { date: input.date, time: input.time }, undefined, expectedRevision);
+}
+
 /**
  * A selection the provider's current account list does not support (C77).
  *
@@ -1235,6 +1288,7 @@ export function replacePostPublishTargets(
   input: SignalPublishTargetsInput,
   connected: readonly { id: number; platform: string }[],
   now: () => Date = () => new Date(),
+  expectedRevision?: number,
 ): PublishTargetSelection[] {
   const post = getPost(db, postId);
   if (!post) throw new SignalPostNotFoundError(`No Signal post ${postId}.`);
@@ -1279,12 +1333,18 @@ export function replacePostPublishTargets(
   const timestamp = now().toISOString();
   db.exec('BEGIN');
   try {
+    if (expectedRevision !== undefined)
+      requireRevision(db, 'signal_post', postId, expectedRevision);
     db.prepare('DELETE FROM signal_post_publish_targets WHERE post_id=?').run(postId);
     const insert = db.prepare(
       `INSERT INTO signal_post_publish_targets(post_id, channel, provider_account_id, created_at)
        VALUES(?,?,?,?)`,
     );
     for (const row of rows) insert.run(postId, row.channel, row.providerAccountId, timestamp);
+    if (expectedRevision !== undefined) {
+      db.prepare('UPDATE signal_posts SET updated_at=? WHERE id=?').run(timestamp, postId);
+      advanceRevision(db, 'signal_post', postId, expectedRevision, ['targets'], timestamp);
+    }
     db.exec('COMMIT');
   } catch (error) {
     db.exec('ROLLBACK');

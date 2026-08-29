@@ -46,7 +46,16 @@ test('a Drive PDF publishes to LinkedIn as a document post with its title', asyn
   await editor.getByRole('button', { name: 'Add Drive file' }).click();
   await expect(editor.getByText('e2e-drive-report.pdf')).toBeVisible();
   await expect(editor.getByText('application/pdf · 5 B')).toBeVisible();
-  await editor.getByRole('button', { name: 'Save post' }).click();
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.url().endsWith(`/api/signal/posts/${post.id}`) &&
+        response.request().method() === 'PATCH' &&
+        response.status() === 200,
+    ),
+    editor.getByRole('button', { name: 'Save post' }).click(),
+  ]);
+  await expect(editor).toBeHidden();
 
   await open();
   const linkedin = editor.locator('details[data-platform="linkedin"]');

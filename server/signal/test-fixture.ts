@@ -25,6 +25,7 @@ export function seedSignalPost(db: Db, overrides: Partial<SignalPost> = {}): Sig
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     ...overrides,
+    revision: overrides.revision ?? 1,
   };
   // A fixture may state its media either way, and the two stay consistent whichever it chose:
   // `media` is the descriptors, `mediaUrls` is derived from them, exactly as the row reader does

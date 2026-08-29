@@ -139,8 +139,12 @@ test('two chosen Facebook accounts each receive their own caption in one request
   await expect(preview.getByRole('button', { name: 'Confirm and submit' })).toBeDisabled();
 
   // Give each page its own words through the account layer, one tab at a time.
+  const currentPost = (await (await page.request.get(`/api/signal/posts/${postId}`)).json()) as {
+    revision: number;
+  };
   const stored = await page.request.put(`/api/signal/posts/${postId}/variants`, {
     data: {
+      revision: currentPost.revision,
       variants: [
         { platform: 'facebook', accountId: 902, caption: 'For the studio’s own page.' },
         { platform: 'facebook', accountId: 906, caption: 'For the photography page.' },

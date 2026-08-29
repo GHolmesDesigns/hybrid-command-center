@@ -585,6 +585,8 @@ export interface SignalPost {
   position: number;
   createdAt: string;
   updatedAt: string;
+  /** Monotonic optimistic-concurrency token shared by post, variant, and target writes. */
+  revision: number;
 }
 
 /** The default time a post takes when one is not given. */

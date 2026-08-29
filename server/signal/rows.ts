@@ -47,6 +47,7 @@ export interface SignalPostRow {
   delivery_provenance: string;
   created_at: string;
   updated_at: string;
+  revision: number;
 }
 
 /**
@@ -187,6 +188,7 @@ export function toSignalPost(
     position: row.position,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    revision: Number(row.revision),
   };
 }
 

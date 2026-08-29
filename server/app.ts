@@ -57,6 +57,12 @@ import { wouldCreateCycle, blockingDependencies } from './domain/dependencies.ts
 import { buildDashboardSummary } from './domain/dashboard.ts';
 import { buildClientSlug } from './domain/client-slugs.ts';
 import {
+  advanceRevision,
+  requireRevision,
+  revisionPrecondition,
+  RevisionConflictError,
+} from './domain/revisions.ts';
+import {
   driveProvider,
   getSetting,
   provisionClient,
@@ -83,7 +89,7 @@ import {
   SignalPublishTargetError,
   SignalVariantError,
   SignalSlotConflictError,
-  applyPostSlot,
+  applyPostSlotWithRevision,
   createPost,
   deletePost,
   duplicatePost,
@@ -106,7 +112,7 @@ import {
   signalSlotFromQuery,
   signalSlotInput,
   suggestPostSlot,
-  updatePost,
+  updatePostWithRevision,
 } from './signal/service.ts';
 import { listPostsInRange, signalProvider } from './signal/read.ts';
 import { readCalendarRange } from './calendar.ts';
@@ -1139,21 +1145,27 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   app.patch('/api/clients/:id', (req, res, next) => {
     try {
       const data = clientPatch.parse(req.body);
+      const revision = revisionPrecondition.parse(req.body?.revision);
       const current = db.prepare('SELECT * FROM clients WHERE id=?').get(req.params.id) as any;
       if (!current) return res.status(404).json({ error: 'Client not found.' });
-      db.prepare(
-        `UPDATE clients SET name=?,slug=?,contact_name=?,email=?,phone=?,website=?,notes=?,updated_at=? WHERE id=?`,
-      ).run(
-        patch(data.name, current.name),
-        data.name === undefined ? current.slug : buildClientSlug(data.name, current.id),
-        patch(data.contactName, current.contact_name),
-        patch(data.email, current.email),
-        patch(data.phone, current.phone),
-        patch(data.website, current.website),
-        patch(data.notes, current.notes),
-        now(),
-        req.params.id,
-      );
+      const stamp = now();
+      transaction(db, () => {
+        requireRevision(db, 'client', current.id, revision);
+        db.prepare(
+          `UPDATE clients SET name=?,slug=?,contact_name=?,email=?,phone=?,website=?,notes=?,updated_at=? WHERE id=?`,
+        ).run(
+          patch(data.name, current.name),
+          data.name === undefined ? current.slug : buildClientSlug(data.name, current.id),
+          patch(data.contactName, current.contact_name),
+          patch(data.email, current.email),
+          patch(data.phone, current.phone),
+          patch(data.website, current.website),
+          patch(data.notes, current.notes),
+          stamp,
+          req.params.id,
+        );
+        advanceRevision(db, 'client', current.id, revision, Object.keys(data), stamp);
+      });
       res.json(listClients(db).find((c: any) => c.id === req.params.id));
     } catch (error) {
       next(error);
@@ -1263,6 +1275,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   app.patch('/api/projects/:id', (req, res, next) => {
     try {
       const data = projectPatch.parse(req.body);
+      const revision = revisionPrecondition.parse(req.body?.revision);
       const p = db.prepare('SELECT * FROM projects WHERE id=?').get(req.params.id) as any;
       if (!p) return res.status(404).json({ error: 'Project not found.' });
       /**
@@ -1283,21 +1296,25 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       }
       // Editing the project record is both an edit and activity, so it stamps both fields.
       const stamp = now();
-      db.prepare(
-        `UPDATE projects SET client_id=?,name=?,description=?,status=?,start_date=?,target_deadline=?,priority=?,notes=?,updated_at=?,last_activity_at=? WHERE id=?`,
-      ).run(
-        patch(data.clientId, p.client_id),
-        patch(data.name, p.name),
-        patch(data.description, p.description),
-        patch(data.status, p.status),
-        patch(data.startDate, p.start_date),
-        patch(data.targetDeadline, p.target_deadline),
-        patch(data.priority, p.priority),
-        patch(data.notes, p.notes),
-        stamp,
-        stamp,
-        req.params.id,
-      );
+      transaction(db, () => {
+        requireRevision(db, 'project', p.id, revision);
+        db.prepare(
+          `UPDATE projects SET client_id=?,name=?,description=?,status=?,start_date=?,target_deadline=?,priority=?,notes=?,updated_at=?,last_activity_at=? WHERE id=?`,
+        ).run(
+          patch(data.clientId, p.client_id),
+          patch(data.name, p.name),
+          patch(data.description, p.description),
+          patch(data.status, p.status),
+          patch(data.startDate, p.start_date),
+          patch(data.targetDeadline, p.target_deadline),
+          patch(data.priority, p.priority),
+          patch(data.notes, p.notes),
+          stamp,
+          stamp,
+          req.params.id,
+        );
+        advanceRevision(db, 'project', p.id, revision, Object.keys(data), stamp);
+      });
       res.json(projectById(db, req.params.id));
     } catch (e) {
       next(e);
@@ -1458,6 +1475,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   app.patch('/api/tasks/:id', (req, res, next) => {
     try {
       const data = taskPatch.extend({ overrideBlocked: z.boolean().optional() }).parse(req.body);
+      const revision = revisionPrecondition.parse(req.body?.revision);
       const t = db.prepare('SELECT * FROM tasks WHERE id=?').get(req.params.id) as any;
       if (!t) return res.status(404).json({ error: 'Task not found.' });
       const nextStatus = patch(data.status, t.status);
@@ -1474,6 +1492,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       const stamp = now();
       const nextProjectId = patch(data.projectId, t.project_id);
       transaction(db, () => {
+        requireRevision(db, 'task', t.id, revision);
         db.prepare(
           `UPDATE tasks SET project_id=?,title=?,description=?,status=?,priority=?,task_type=?,due_date=?,start_date=?,notes=?,completed_at=?,updated_at=? WHERE id=?`,
         ).run(
@@ -1493,6 +1512,14 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         touchProjectActivity(db, t.project_id, stamp);
         // Moving a task between projects is activity in both: one lost the work, one gained it.
         if (nextProjectId !== t.project_id) touchProjectActivity(db, nextProjectId, stamp);
+        advanceRevision(
+          db,
+          'task',
+          t.id,
+          revision,
+          Object.keys(data).filter((field) => field !== 'overrideBlocked'),
+          stamp,
+        );
       });
       res.json(getTask(db, t.id));
     } catch (e) {
@@ -2314,6 +2341,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   });
   app.put('/api/signal/posts/:id/variants', async (req, res, next) => {
     try {
+      const revision = revisionPrecondition.parse(req.body?.revision);
       // Asynchronous since C76: a layer may carry a cover image or a thumbnail, and a Drive-backed
       // one has to be resolved through the media capability before it can be stored. A set whose
       // roles are all public URLs, or which has none, still contacts nothing.
@@ -2323,6 +2351,8 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
           req.params.id,
           signalVariantsInput.parse(req.body),
           driveMedia(),
+          new Set(),
+          revision,
         ),
       );
     } catch (error) {
@@ -2356,6 +2386,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
    */
   app.put('/api/signal/posts/:id/publish-targets', async (req, res, next) => {
     try {
+      const revision = revisionPrecondition.parse(req.body?.revision);
       res.json(
         replacePostPublishTargets(
           db,
@@ -2363,6 +2394,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
           signalPublishTargetsInput.parse(req.body),
           await resolvePublishingTargets(db, publishProvider, bufferAccounts, clock),
           clock,
+          revision,
         ),
       );
     } catch (error) {
@@ -2422,7 +2454,10 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
    */
   app.post('/api/signal/posts/:id/slot', (req, res, next) => {
     try {
-      res.json(applyPostSlot(db, req.params.id, signalSlotInput.parse(req.body)));
+      const revision = revisionPrecondition.parse(req.body?.revision);
+      res.json(
+        applyPostSlotWithRevision(db, req.params.id, signalSlotInput.parse(req.body), revision),
+      );
     } catch (error) {
       next(error);
     }
@@ -2615,7 +2650,16 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   });
   app.patch('/api/signal/posts/:id', async (req, res, next) => {
     try {
-      res.json(await updatePost(db, req.params.id, signalPostPatch.parse(req.body), driveMedia()));
+      const revision = revisionPrecondition.parse(req.body?.revision);
+      res.json(
+        await updatePostWithRevision(
+          db,
+          req.params.id,
+          signalPostPatch.parse(req.body),
+          revision,
+          driveMedia(),
+        ),
+      );
     } catch (error) {
       next(error);
     }
@@ -2894,6 +2938,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
             error instanceof PublishRequestError ||
               error instanceof ClientMergeError ||
               error instanceof AgentCoordinationError ||
+              error instanceof RevisionConflictError ||
               error instanceof SignalSlotConflictError ||
               error instanceof SignalPostProtectedError
             ? error.status
@@ -2937,6 +2982,13 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       // detached, which is the only thing that makes confirming it a decision.
       ...(error instanceof SignalCampaignInUseError
         ? { code: 'SIGNAL_CAMPAIGN_IN_USE', attachedPostCount: error.attachedPostCount }
+        : {}),
+      ...(error instanceof RevisionConflictError
+        ? {
+            code: error.code,
+            currentRevision: error.currentRevision,
+            changedFields: error.changedFields,
+          }
         : {}),
       ...(error instanceof McpAgentLabelTakenError ? { code: 'MCP_AGENT_LABEL_TAKEN' } : {}),
     });

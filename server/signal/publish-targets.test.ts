@@ -197,7 +197,10 @@ describe('the route', () => {
     const post = seedSignalPost(db, { channels: ['fb'] });
     const response = await request(app())
       .put(`/api/signal/posts/${post.id}/publish-targets`)
-      .send({ targets: [{ channel: 'fb', providerAccountIds: [FB_GHD, FB_WILD] }] });
+      .send({
+        targets: [{ channel: 'fb', providerAccountIds: [FB_GHD, FB_WILD] }],
+        revision: post.revision,
+      });
     expect(response.status).toBe(200);
     expect(response.body).toEqual([
       { channel: 'fb', providerAccountId: FB_GHD },
@@ -209,7 +212,10 @@ describe('the route', () => {
     const post = seedSignalPost(db, { channels: ['fb'] });
     const response = await request(app())
       .put(`/api/signal/posts/${post.id}/publish-targets`)
-      .send({ targets: [{ channel: 'fb', providerAccountIds: [424242] }] });
+      .send({
+        targets: [{ channel: 'fb', providerAccountIds: [424242] }],
+        revision: post.revision,
+      });
     expect(response.status).toBe(400);
   });
 
@@ -217,14 +223,17 @@ describe('the route', () => {
     const post = seedSignalPost(db, { channels: ['fb'] });
     const response = await request(app())
       .put(`/api/signal/posts/${post.id}/publish-targets`)
-      .send({ targets: [{ channel: 'mastodon', providerAccountIds: [FB_GHD] }] });
+      .send({
+        targets: [{ channel: 'mastodon', providerAccountIds: [FB_GHD] }],
+        revision: post.revision,
+      });
     expect(response.status).toBe(400);
   });
 
   it('answers 404 for a post that is not there', async () => {
     const response = await request(app())
       .put('/api/signal/posts/no-such-post/publish-targets')
-      .send({ targets: [] });
+      .send({ targets: [], revision: 1 });
     expect(response.status).toBe(404);
   });
 
@@ -232,7 +241,10 @@ describe('the route', () => {
     const post = seedSignalPost(db, { channels: ['fb'] });
     await request(app())
       .put(`/api/signal/posts/${post.id}/publish-targets`)
-      .send({ targets: [{ channel: 'fb', providerAccountIds: [FB_GHD] }] });
+      .send({
+        targets: [{ channel: 'fb', providerAccountIds: [FB_GHD] }],
+        revision: post.revision,
+      });
     const events = db.prepare('SELECT COUNT(*) AS n FROM integration_events').get() as {
       n: number;
     };

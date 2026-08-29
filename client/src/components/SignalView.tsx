@@ -797,10 +797,11 @@ function Editor({
         // The roles go out as `{ source, url }` rather than as whole descriptors: Drive metadata is
         // never accepted from a request, so a Drive role is stated as its link and resolved again by
         // the server (`server/signal/service.ts`).
-        { variants: variantList(layers).map(variantRolePayload) },
+        { variants: variantList(layers).map(variantRolePayload), revision: post.revision },
       );
       setSavedLayers(variantMap(stored));
       setLayers(variantMap(stored));
+      await opened(await api<SignalPost>(`/signal/posts/${post.id}`));
       return true;
     } catch (reason) {
       setError((reason as Error).message);
@@ -916,7 +917,11 @@ function Editor({
     setBusy(true);
     setError('');
     try {
-      await send(`/signal/posts/${post.id}/publish-targets`, 'PUT', { targets });
+      await send(`/signal/posts/${post.id}/publish-targets`, 'PUT', {
+        targets,
+        revision: post.revision,
+      });
+      await opened(await api<SignalPost>(`/signal/posts/${post.id}`));
       const previewPath =
         publishPreview?.timing === 'now'
           ? `/signal/posts/${post.id}/publish-now/preview`
@@ -1169,7 +1174,10 @@ function Editor({
     try {
       const next = creating
         ? await send<SignalPost>('/signal/posts', 'POST', body)
-        : await send<SignalPost>(`/signal/posts/${post.id}`, 'PATCH', body);
+        : await send<SignalPost>(`/signal/posts/${post.id}`, 'PATCH', {
+            ...body,
+            revision: post.revision,
+          });
       await saved(next);
     } catch (reason) {
       setError((reason as Error).message);
@@ -1229,6 +1237,7 @@ function Editor({
       const next = await send<SignalPost>(`/signal/posts/${post.id}/slot`, 'POST', {
         ...suggestedSlot,
         from: today(),
+        revision: post.revision,
       });
       setSuggestedSlot(null);
       await opened(next);
@@ -2225,9 +2234,9 @@ export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
   }, [posts]);
 
   const refreshed = async () => {
-    closeComposer();
     setHealthKey((key) => key + 1);
     await load();
+    closeComposer();
   };
 
   const days = dateLabels(bounds.from, bounds.to);

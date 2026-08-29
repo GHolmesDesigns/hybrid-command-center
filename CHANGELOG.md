@@ -8,6 +8,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.8.0] - 2026-08-29
+
+### Added
+
+- Added optimistic revision preconditions to workspace and Signal mutations so concurrent UI and agent edits are refused with the current revision and changed fields instead of silently overwriting newer work.
+
+### Breaking changes
+
+- Existing HTTP update clients must include the latest positive integer `revision` returned by the corresponding read. Missing revisions are refused.
+
 ## [5.7.3] - 2026-08-29
 
 ### Added

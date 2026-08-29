@@ -71,7 +71,13 @@ export function TaskDetail({
     }
   };
   const patchField = async (body: Record<string, string>, message: string, done: () => void) => {
-    if (await mutate(() => send(`/tasks/${task.id}`, 'PATCH', body), message)) done();
+    if (
+      await mutate(
+        () => send(`/tasks/${task.id}`, 'PATCH', { ...body, revision: task.revision }),
+        message,
+      )
+    )
+      done();
   };
   const saveDescription = () => {
     const next = description.trim();
@@ -111,13 +117,17 @@ export function TaskDetail({
   };
   const complete = async () => {
     try {
-      await send(`/tasks/${task.id}`, 'PATCH', { status: 'COMPLETE' });
+      await send(`/tasks/${task.id}`, 'PATCH', { status: 'COMPLETE', revision: task.revision });
       await refresh();
       flash('Task completed.');
       close();
     } catch (e: any) {
       if (e.status === 409 && confirm(`${e.message}\n\nOverride the block and complete anyway?`)) {
-        await send(`/tasks/${task.id}`, 'PATCH', { status: 'COMPLETE', overrideBlocked: true });
+        await send(`/tasks/${task.id}`, 'PATCH', {
+          status: 'COMPLETE',
+          overrideBlocked: true,
+          revision: task.revision,
+        });
         await refresh();
         flash('Task completed with override.');
         close();
@@ -133,7 +143,7 @@ export function TaskDetail({
       return;
     }
     try {
-      await send(`/tasks/${task.id}`, 'PATCH', { title: next });
+      await send(`/tasks/${task.id}`, 'PATCH', { title: next, revision: task.revision });
       await refresh();
       setRenaming(false);
       flash('Task renamed.');
