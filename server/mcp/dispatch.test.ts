@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createDb, type Db } from '../db.ts';
+import { MockDriveProvider } from '../drive/mock-provider.ts';
 import { callMcpTool } from './dispatch.ts';
 import { createMcpSession } from './session.ts';
 import { MCP_TOOL_REGISTRY, mcpToolsListPayload } from './registry.ts';
@@ -121,5 +122,36 @@ describe('callMcpTool', () => {
     );
     expect(result.outcome).toBe('SUCCESS');
     expect((result.data as { counts: unknown }).counts).toBeDefined();
+  });
+
+  it('routes integration read and write tools when workspace scopes are granted', async () => {
+    const session = createMcpSession({ agentLabel: 'cursor' });
+    const read = await callMcpTool(
+      db,
+      session,
+      'integration_list_activity',
+      { limit: 1 },
+      {
+        grantedScopes: ['workspace:read'],
+        now: NOW,
+      },
+    );
+    expect(read.outcome).toBe('SUCCESS');
+    expect(Array.isArray(read.data)).toBe(true);
+
+    const drive = new MockDriveProvider();
+    drive.connected = false;
+    const write = await callMcpTool(
+      db,
+      session,
+      'drive_sync',
+      { clientRequestId: 'dispatch-drive-sync' },
+      {
+        grantedScopes: ['workspace:write'],
+        now: NOW,
+        integrationDeps: { drive },
+      },
+    );
+    expect(write.outcome).toBe('SUCCESS');
   });
 });

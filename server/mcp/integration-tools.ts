@@ -281,11 +281,7 @@ function mapDomainError(error: unknown): McpToolCallResult {
   }
   if (error instanceof Error) {
     const msg = error.message;
-    if (
-      msg.includes('changed since it was previewed') ||
-      msg.includes('preview expired') ||
-      msg.includes('Review the new preview')
-    ) {
+    if (msg.includes('changed since it was previewed') || msg.includes('preview expired')) {
       return refused(msg, mcpCoordinationInvalidArguments());
     }
   }
@@ -306,7 +302,6 @@ function finish(
     summary: string;
     clientRequestId?: string;
     persistIdempotency?: boolean;
-    recordEvent?: boolean;
   },
 ): McpToolCallResult {
   if (
@@ -324,7 +319,7 @@ function finish(
       result: result.data,
     });
   }
-  if (meta.recordEvent !== false && !READ_TOOLS.has(tool)) {
+  if (!READ_TOOLS.has(tool)) {
     recordMcpAgentEvent(db, {
       agentLabel: session.agentLabel,
       tool,
@@ -394,7 +389,7 @@ async function runWrite(
 
     switch (tool as IntegrationLocalWriteTool | IntegrationWriteTool) {
       case 'workspace_merge_clients_commit': {
-        const args = mergeCommitArgs.parse(rawArgs ?? {});
+        const args = mergeCommitArgs.parse(rawArgs);
         const data = commitClientMerge(
           db,
           args.sourceId,
@@ -411,7 +406,7 @@ async function runWrite(
         });
       }
       case 'import_playbook_commit': {
-        const args = playbookCommitArgs.parse(rawArgs ?? {});
+        const args = playbookCommitArgs.parse(rawArgs);
         const { clientRequestId: _id, ...input } = args;
         void _id;
         const data = commitPlaybook(db, input);
@@ -424,7 +419,7 @@ async function runWrite(
         });
       }
       case 'import_signal_commit': {
-        const args = signalImportCommitArgs.parse(rawArgs ?? {});
+        const args = signalImportCommitArgs.parse(rawArgs);
         const { clientRequestId: _id, ...input } = args;
         void _id;
         const data = await commitSignalImport(db, input, media);
@@ -437,7 +432,7 @@ async function runWrite(
         });
       }
       case 'signal_resolve_drive_media': {
-        const args = resolveDriveMediaArgs.parse(rawArgs ?? {});
+        const args = resolveDriveMediaArgs.parse(rawArgs);
         const data = await resolveDriveMedia({ link: args.link, provider: media });
         return finish(db, session, tool, success(data), {
           entityType: 'drive_file',
@@ -448,7 +443,7 @@ async function runWrite(
         });
       }
       case 'signal_recheck_post_media': {
-        const args = recheckPostMediaArgs.parse(rawArgs ?? {});
+        const args = recheckPostMediaArgs.parse(rawArgs);
         const data = await recheckPostMedia(db, args.postId, args.driveFileId, media);
         return finish(db, session, tool, success(data), {
           entityType: 'signal_post',
@@ -459,7 +454,7 @@ async function runWrite(
         });
       }
       case 'signal_recheck_variant_media': {
-        const args = recheckVariantMediaArgs.parse(rawArgs ?? {});
+        const args = recheckVariantMediaArgs.parse(rawArgs);
         const data = await recheckVariantMedia(
           db,
           args.postId,
@@ -475,7 +470,7 @@ async function runWrite(
         });
       }
       case 'drive_sync': {
-        clientRequestOnlyArgs.parse(rawArgs ?? {});
+        clientRequestOnlyArgs.parse(rawArgs);
         const data = await syncAllToDrive(db, drive);
         return finish(db, session, tool, success(data), {
           summary: data.message,
@@ -484,7 +479,7 @@ async function runWrite(
         });
       }
       case 'signal_refresh_provider_inventory': {
-        clientRequestOnlyArgs.parse(rawArgs ?? {});
+        clientRequestOnlyArgs.parse(rawArgs);
         const inventory = resolveInventory(db, deps, now);
         const priorEntries = inventory.read().entries;
         const data = await inventory.refresh();
@@ -497,7 +492,7 @@ async function runWrite(
         });
       }
       case 'signal_refresh_analytics_window': {
-        const args = refreshAnalyticsArgs.parse(rawArgs ?? {});
+        const args = refreshAnalyticsArgs.parse(rawArgs);
         const analyticsWindow = resolveAnalyticsWindow(db, deps, now);
         const data = await analyticsWindow.refresh(args.platform, args.timeframe);
         return finish(db, session, tool, success(data), {
@@ -509,7 +504,7 @@ async function runWrite(
         });
       }
       case 'signal_refresh_buffer_accounts': {
-        clientRequestOnlyArgs.parse(rawArgs ?? {});
+        clientRequestOnlyArgs.parse(rawArgs);
         const bufferAccounts = resolveBufferAccounts(db, deps, now);
         const data = await bufferAccounts.refresh();
         return finish(db, session, tool, success(data), {
@@ -520,14 +515,6 @@ async function runWrite(
           persistIdempotency: true,
         });
       }
-      default:
-        return finish(
-          db,
-          session,
-          tool,
-          failed(`Unknown integration write tool: ${tool}.`, mcpCoordinationUnknownTool()),
-          { summary: `Unknown tool ${tool}.` },
-        );
     }
   } catch (error) {
     return finish(db, session, tool, mapDomainError(error), {
@@ -583,8 +570,6 @@ async function runRead(
         const args = integrationListArgs.parse(rawArgs ?? {});
         return success(listIntegrationEvents(db, args));
       }
-      default:
-        return failed(`Unknown integration read tool: ${tool}.`, mcpCoordinationUnknownTool());
     }
   } catch (error) {
     return mapDomainError(error);
@@ -604,7 +589,7 @@ export async function callIntegrationTool(
       session,
       tool,
       failed(`Unknown integration tool: ${tool}.`, mcpCoordinationUnknownTool()),
-      { summary: `Unknown tool ${tool}.`, recordEvent: true },
+      { summary: `Unknown tool ${tool}.` },
     );
   }
 

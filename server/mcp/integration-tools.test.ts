@@ -802,4 +802,70 @@ describe('MCP integration tools', () => {
     expect(result.outcome).toBe('REFUSED');
     expect(result.errorDetail?.code).toBe('COORDINATION_INVALID_ARGUMENTS');
   });
+
+  it('commits a merge with a CUSTOM empty field value', async () => {
+    const { sourceId, destinationId } = seedClients();
+    const preview = await callIntegrationTool(db, session(), 'workspace_merge_clients_preview', {
+      sourceId,
+      destinationId,
+      fields: { notes: { choice: 'CUSTOM', value: '   ' } },
+    });
+    expect(preview.outcome).toBe('SUCCESS');
+    const planHash = (preview.data as { planHash: string }).planHash;
+    const commit = await callIntegrationTool(db, session(), 'workspace_merge_clients_commit', {
+      clientRequestId: 'merge-custom-empty',
+      sourceId,
+      destinationId,
+      fields: { notes: { choice: 'CUSTOM', value: '   ' } },
+      planHash,
+    });
+    expect(commit.outcome).toBe('SUCCESS');
+    const row = db.prepare('SELECT notes FROM clients WHERE id=?').get(destinationId) as {
+      notes: string | null;
+    };
+    expect(row.notes).toBeNull();
+  });
+
+  it('lists integration activity when args are omitted', async () => {
+    const result = await callIntegrationTool(db, session(), 'integration_list_activity', undefined);
+    expect(result.outcome).toBe('SUCCESS');
+    expect(Array.isArray(result.data)).toBe(true);
+  });
+
+  it('maps a provider throw that is not an Error into FAILURE', async () => {
+    const inventory = {
+      read: () => ({ entries: [], snapshotAt: null as string | null }),
+      refresh: async () => {
+        throw 'provider blew up';
+      },
+    };
+    const result = await callIntegrationTool(
+      db,
+      session(),
+      'signal_refresh_provider_inventory',
+      { clientRequestId: 'non-error-throw' },
+      { inventory: inventory as never },
+    );
+    expect(result.outcome).toBe('FAILURE');
+    expect(result.error).toBe('Integration tool failed.');
+    expect(result.errorDetail?.code).toBe('COORDINATION_TOOL_FAILED');
+  });
+
+  it('maps a plain Error from an integration write into FAILURE', async () => {
+    const inventory = {
+      read: () => ({ entries: [], snapshotAt: null as string | null }),
+      refresh: async () => {
+        throw new Error('transient inventory outage');
+      },
+    };
+    const result = await callIntegrationTool(
+      db,
+      session(),
+      'signal_refresh_provider_inventory',
+      { clientRequestId: 'plain-error-throw' },
+      { inventory: inventory as never },
+    );
+    expect(result.outcome).toBe('FAILURE');
+    expect(result.error).toBe('transient inventory outage');
+  });
 });
