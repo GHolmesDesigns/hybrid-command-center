@@ -8,6 +8,25 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.9.2] - 2026-08-29
+
+### Added
+
+- Streamable HTTP MCP lifecycle on `/api/mcp`: session id on initialize, GET SSE listen,
+  DELETE teardown, progress notifications, resource subscriptions, and cancellation that does
+  not leave a partial write.
+- A protocol conformance suite that runs the same cases over stdio and HTTP.
+
+### Changed
+
+- `initialize` advertises `resources.subscribe`. Resource-update tips are an optimization on top
+  of C132 change-feed cursors — an agent that ignores every notification still converges by
+  cursor.
+
+### Breaking changes
+
+None.
+
 ## [5.9.1] - 2026-08-29
 
 ### Fixed
