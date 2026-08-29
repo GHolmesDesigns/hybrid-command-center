@@ -37,10 +37,29 @@ import {
   type TaskInput,
   type TaskPatch,
 } from './schemas.ts';
+import { recordChangeFeedEvent } from '../change-feeds.ts';
 
 const id = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
 const patch = <T>(next: T | undefined, current: T): T => (next === undefined ? current : next);
+
+const recordWorkspaceChange = (
+  db: Db,
+  kind: string,
+  entityType: string,
+  entityId: string,
+  summary: string,
+  at?: string,
+) => {
+  recordChangeFeedEvent(db, {
+    feed: 'workspace',
+    kind,
+    entityType,
+    entityId,
+    summary,
+    at,
+  });
+};
 
 export class WorkspaceNotFoundError extends Error {
   readonly status = 404;
@@ -134,6 +153,7 @@ export function createProject(db: Db, raw: z.input<typeof projectInput> | Projec
     stamp,
     stamp,
   );
+  recordWorkspaceChange(db, 'project.created', 'project', projectId, 'Project created.', stamp);
   const project = getProjectById(db, projectId);
   if (!project) throw new WorkspaceNotFoundError('Project not found.');
   return project;
@@ -171,6 +191,7 @@ export function updateProject(db: Db, projectId: string, data: ProjectPatch, rev
       projectId,
     );
     advanceRevision(db, 'project', projectId, revision, Object.keys(data), stamp);
+    recordWorkspaceChange(db, 'project.updated', 'project', projectId, 'Project updated.', stamp);
   });
   const project = getProjectById(db, projectId);
   if (!project) throw new WorkspaceNotFoundError('Project not found.');
@@ -187,6 +208,7 @@ export function deleteProject(db: Db, projectId: string) {
       project.id,
     );
     db.prepare('DELETE FROM projects WHERE id=?').run(project.id);
+    recordWorkspaceChange(db, 'project.deleted', 'project', project.id, 'Project deleted.');
   });
   return {
     ok: true as const,
@@ -241,6 +263,7 @@ export function createTask(db: Db, raw: z.input<typeof taskInput> | TaskInput): 
       template.forEach((text, position) => insertChecklistItem.run(id(), taskId, text, position));
     }
     touchProjectActivity(db, data.projectId, stamp);
+    recordWorkspaceChange(db, 'task.created', 'task', taskId, 'Task created.', stamp);
   });
   const task = getTask(db, taskId);
   if (!task) throw new WorkspaceNotFoundError('Task not found.');
@@ -288,6 +311,7 @@ export function updateTask(db: Db, taskId: string, data: TaskPatch, revision: nu
       Object.keys(data).filter((field) => field !== 'overrideBlocked'),
       stamp,
     );
+    recordWorkspaceChange(db, 'task.updated', 'task', taskId, 'Task updated.', stamp);
   });
   const task = getTask(db, taskId);
   if (!task) throw new WorkspaceNotFoundError('Task not found.');
@@ -302,6 +326,7 @@ export function deleteTask(db: Db, taskId: string) {
   transaction(db, () => {
     db.prepare('DELETE FROM tasks WHERE id=?').run(task.id);
     touchProjectActivity(db, task.project_id, stamp);
+    recordWorkspaceChange(db, 'task.deleted', 'task', task.id, 'Task deleted.', stamp);
   });
   return { ok: true as const, deleted: 'task' as const, title: task.title, driveTouched: false };
 }

@@ -8,6 +8,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.9.0] - 2026-08-29
+
+### Added
+
+- Cursor-based MCP change feeds at `hcc://coordination/changes` and `hcc://workspace/changes`, so an
+  agent that disconnects can resume from an opaque cursor instead of re-reading the whole inbox.
+  Cursors survive process restart, replay is gap-free within retention, and an expired cursor returns
+  an explicit reload-snapshot result rather than a silent partial feed.
+
+### Breaking changes
+
+None.
+
 ## [5.8.2] - 2026-08-29
 
 ### Added

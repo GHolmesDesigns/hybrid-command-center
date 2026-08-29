@@ -42,8 +42,26 @@ import {
   recordHandoffMutation,
   type AgentHandoffMutationTool,
 } from './mutations.ts';
+import { recordChangeFeedEvent } from '../change-feeds.ts';
 
 const id = () => crypto.randomUUID();
+
+const recordCoordinationChange = (
+  db: Db,
+  kind: string,
+  handoffId: string,
+  summary: string,
+  at: string,
+) => {
+  recordChangeFeedEvent(db, {
+    feed: 'coordination',
+    kind,
+    entityType: 'handoff',
+    entityId: handoffId,
+    summary,
+    at,
+  });
+};
 
 interface HandoffRow {
   id: string;
@@ -232,6 +250,7 @@ export function postHandoff(
       message,
       clientRequestId,
     );
+    recordCoordinationChange(db, 'handoff.posted', handoffId, 'Handoff posted.', instant);
     return requireHandoff(db, handoffId);
   });
 }
@@ -259,6 +278,7 @@ export function claimHandoff(
     if (next.state !== 'CLAIMED' || next.claimedBy !== agentLabel) {
       refuse('Another agent claimed this handoff first.');
     }
+    recordCoordinationChange(db, 'handoff.claimed', handoffId, 'Handoff claimed.', instant);
     return next;
   });
 }
@@ -328,6 +348,7 @@ export function completeHandoff(
     );
     const next = requireHandoff(db, handoffId);
     if (next.state !== 'COMPLETED') refuse('The handoff could not be completed.');
+    recordCoordinationChange(db, 'handoff.completed', handoffId, 'Handoff completed.', instant);
     if (clientRequestId) {
       recordHandoffMutation(db, {
         agentLabel,
@@ -387,6 +408,7 @@ export function cancelHandoffAsAgent(
     ).run(instant, cancelReason, instant, handoffId);
     const next = requireHandoff(db, handoffId);
     if (next.state !== 'CANCELLED') refuse('The handoff could not be cancelled.');
+    recordCoordinationChange(db, 'handoff.cancelled', handoffId, 'Handoff cancelled.', instant);
     if (clientRequestId) {
       recordHandoffMutation(db, {
         agentLabel,
@@ -424,6 +446,7 @@ export function cancelHandoffAsOperator(
     ).run(instant, cancelReason, instant, handoffId);
     const next = requireHandoff(db, handoffId);
     if (next.state !== 'CANCELLED') refuse('The handoff could not be cancelled.');
+    recordCoordinationChange(db, 'handoff.cancelled', handoffId, 'Handoff cancelled.', instant);
     return next;
   });
 }
@@ -456,6 +479,7 @@ export function addHandoffNote(
     ).run(noteId, handoffId, input.agentLabel, body, instant);
     // Touch updated_at so list views notice activity without changing handoff state.
     db.prepare('UPDATE agent_handoffs SET updated_at = ? WHERE id = ?').run(instant, handoffId);
+    recordCoordinationChange(db, 'handoff.note_added', handoffId, 'Handoff note added.', instant);
     const row = db
       .prepare('SELECT * FROM agent_handoff_notes WHERE id = ?')
       .get(noteId) as unknown as NoteRow;

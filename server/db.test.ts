@@ -222,6 +222,7 @@ describe('additive schema migration', () => {
         'agent_handoff_notes',
         'agent_handoff_mutations',
         'mcp_agent_events',
+        'mcp_change_feed',
       ]),
     );
     // The integration activity log arrives empty: a migration invents no history.
@@ -251,6 +252,8 @@ describe('additive schema migration', () => {
     ]);
     // MCP audit arrives empty: a migration invents no agent tool history.
     expect(rows(db, 'SELECT COUNT(*) AS total FROM mcp_agent_events')).toEqual([{ total: 0 }]);
+    // Change feeds arrive empty: a migration invents no missed-work history.
+    expect(rows(db, 'SELECT COUNT(*) AS total FROM mcp_change_feed')).toEqual([{ total: 0 }]);
     expect(rows(db, 'SELECT id FROM agent_registrations')).toEqual([
       { id: 'operator-session-bootstrap' },
     ]);
