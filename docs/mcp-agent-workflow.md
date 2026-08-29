@@ -21,7 +21,9 @@ Network MCP requires operator authentication on the host. Local stdio transport 
 Every handoff follows the same loop:
 
 1. **Inspect** — Read `hcc://coordination/inbox?state=open` or call `coordination_list_handoffs`
-   before taking work. Prefer handoffs directed at your label.
+   before taking work. Prefer handoffs directed at your label. After a disconnect, resume with
+   `hcc://coordination/changes?after=<cursor>` instead of re-reading the whole inbox; an expired
+   cursor means reload a snapshot first.
 2. **Claim** — Call `coordination_claim_handoff` before doing any work. If the claim is refused or
    another agent owns it, stop.
 3. **Context** — Call `coordination_get_handoff`, then `workspace_get_subject_context` when the

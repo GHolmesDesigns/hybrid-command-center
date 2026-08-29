@@ -668,6 +668,18 @@ CREATE TABLE IF NOT EXISTS mcp_agent_events (
   entity_id TEXT,
   summary TEXT NOT NULL
 );
+-- Durable MCP change feeds (C132). Per-feed monotonic seq is the cursor material;
+-- append-only: one INSERT in server/change-feeds.ts, retention deletes oldest rows per feed.
+CREATE TABLE IF NOT EXISTS mcp_change_feed (
+  feed TEXT NOT NULL CHECK(feed IN ('coordination','workspace')),
+  seq INTEGER NOT NULL CHECK(seq > 0),
+  at TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  entity_type TEXT,
+  entity_id TEXT,
+  summary TEXT NOT NULL,
+  PRIMARY KEY (feed, seq)
+);
 `;
 /**
  * Indexes, applied after the additive migration so that an index over a
@@ -773,6 +785,8 @@ CREATE INDEX IF NOT EXISTS idx_mcp_write_mutations_created
   ON mcp_write_mutations(created_at);
 -- Retention over MCP audit keeps the newest rows and prunes the rest.
 CREATE INDEX IF NOT EXISTS idx_mcp_agent_events_at ON mcp_agent_events(at);
+-- Change-feed replay walks one feed by ascending seq after a cursor.
+CREATE INDEX IF NOT EXISTS idx_mcp_change_feed_feed_seq ON mcp_change_feed(feed, seq);
 `;
 /**
  * The cross-field rule on `signal_post_media` and `signal_post_variant_media`, in the strongest

@@ -29,6 +29,9 @@
   on stdio; network writes use the persisted limiter registry (C116).
 - `server/import.ts`: campaign playbook import — workspace snapshot, transactional commit, receipts.
 - `server/integration-log.ts`: the append-only integration activity records every integration writes.
+- `server/change-feeds.ts`: durable, per-feed monotonic change logs for MCP resume
+  (`hcc://coordination/changes`, `hcc://workspace/changes`). Append-only with bounded retention;
+  an expired cursor returns an explicit reload-snapshot result rather than a silent gap.
 - `server/app.ts`: validated HTTP boundary; keep data writes transaction-safe.
 - `server/db.ts`: local SQLite schema and indexes.
 - `shared/`: stable cross-layer types and workflow constants.

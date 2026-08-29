@@ -1,10 +1,23 @@
 /**
- * MCP resource adapters (C111 coordination inbox, C120 workspace context).
+ * MCP resource adapters (C111 coordination inbox, C120 workspace context, C132 change feeds).
  */
 import type { Db } from '../db.ts';
 import { listHandoffs } from '../agent-coordination/service.ts';
+import { readChangeFeed } from '../change-feeds.ts';
 import { COORDINATION_INBOX_URI } from '../../shared/mcp-agent-events.ts';
+import {
+  COORDINATION_CHANGES_URI,
+  MCP_CHANGE_FEED_SCOPE,
+  WORKSPACE_CHANGES_URI,
+  parseChangeFeedUri,
+} from '../../shared/mcp-change-feeds.ts';
 import type { McpAgentScope } from '../../shared/mcp-agent-registry.ts';
+import { MCP_AGENT_SCOPES } from '../../shared/mcp-agent-registry.ts';
+import {
+  mcpCoordinationScopeRequired,
+  mcpWorkspaceScopeRequired,
+} from '../../shared/mcp-coordination-errors.ts';
+import { hasMcpAgentScope } from '../auth/mcp-agent-credentials.ts';
 import { redactToolResult } from './redact.ts';
 import {
   readWorkspaceContextResource,
@@ -18,11 +31,27 @@ export const COORDINATION_RESOURCE_DEFINITIONS = [
     description: 'Open and claimed agent handoffs (active inbox).',
     mimeType: 'application/json',
   },
+  {
+    uri: COORDINATION_CHANGES_URI,
+    name: 'Coordination change feed',
+    description:
+      'Resumable coordination changes after an opaque cursor (?after=). Expired cursors return cursor_expired.',
+    mimeType: 'application/json',
+  },
 ] as const;
+
+export const WORKSPACE_CHANGE_RESOURCE_DEFINITION = {
+  uri: WORKSPACE_CHANGES_URI,
+  name: 'Workspace change feed',
+  description:
+    'Resumable workspace changes after an opaque cursor (?after=). Expired cursors return cursor_expired.',
+  mimeType: 'application/json',
+} as const;
 
 export const MCP_RESOURCE_DEFINITIONS = [
   ...COORDINATION_RESOURCE_DEFINITIONS,
   WORKSPACE_CONTEXT_RESOURCE_DEFINITION,
+  WORKSPACE_CHANGE_RESOURCE_DEFINITION,
 ] as const;
 
 export function readCoordinationResource(
@@ -53,6 +82,42 @@ export function readCoordinationResource(
   };
 }
 
+export function readChangeFeedResource(
+  db: Db,
+  uri: string,
+  grantedScopes: readonly McpAgentScope[] = MCP_AGENT_SCOPES,
+): {
+  uri: string;
+  mimeType: string;
+  text: string;
+} {
+  const parsed = parseChangeFeedUri(uri);
+  if (!parsed) {
+    throw new Error(`Unknown change-feed resource: ${uri}`);
+  }
+  const required = MCP_CHANGE_FEED_SCOPE[parsed.feed];
+  if (!hasMcpAgentScope(grantedScopes, required)) {
+    const detail =
+      parsed.feed === 'coordination'
+        ? mcpCoordinationScopeRequired('coordination:read')
+        : mcpWorkspaceScopeRequired('workspace:read');
+    throw new Error(
+      `Missing MCP scope ${required}. ${detail.requiredAction ?? 'Ask the operator for access.'}`,
+    );
+  }
+  const result = readChangeFeed(db, parsed.feed, {
+    after: parsed.after,
+    limit: parsed.limit,
+  });
+  const canonical =
+    parsed.feed === 'coordination' ? COORDINATION_CHANGES_URI : WORKSPACE_CHANGES_URI;
+  return {
+    uri: canonical,
+    mimeType: 'application/json',
+    text: JSON.stringify(redactToolResult(result)),
+  };
+}
+
 export function readMcpResource(
   db: Db,
   uri: string,
@@ -63,6 +128,10 @@ export function readMcpResource(
   text: string;
 } {
   const normalized = uri.trim();
+  const grantedScopes = options.grantedScopes ?? MCP_AGENT_SCOPES;
+  if (parseChangeFeedUri(normalized)) {
+    return readChangeFeedResource(db, normalized, grantedScopes);
+  }
   if (normalized.startsWith('hcc://workspace/context')) {
     return readWorkspaceContextResource(db, normalized, options.grantedScopes, options.now);
   }
