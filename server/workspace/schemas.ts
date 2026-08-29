@@ -16,7 +16,6 @@ import { viewDefaultsIssues, type ViewDefaults } from '../../shared/view-default
 
 export { APP_VERSION };
 
-const text = z.string().trim();
 /** Optional text: omitted keeps stored value on PATCH; empty string clears to null. */
 const nullable = z
   .union([z.string(), z.null()])
