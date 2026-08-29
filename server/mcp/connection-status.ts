@@ -6,12 +6,11 @@
 import { APP_VERSION } from '../../shared/branding.ts';
 import type { McpAgentScope } from '../../shared/mcp-agent-registry.ts';
 import type { McpConnectionStatus } from '../../shared/mcp-health.ts';
+import { MCP_PROTOCOL_VERSION } from '../../shared/mcp-transport.ts';
 import { WORKSPACE_CONTEXT_URI } from '../../shared/mcp-workspace-context.ts';
 import type { Db } from '../db.ts';
 import { MCP_CAPABILITY_VERSION, mcpToolsListPayload } from './registry.ts';
 import { MCP_RESOURCE_DEFINITIONS, readMcpResource } from './resources.ts';
-
-const PROTOCOL_VERSION = '2024-11-05';
 
 export type ConnectionStatusOptions = {
   transport: McpConnectionStatus['transport'];
@@ -72,7 +71,7 @@ export function buildConnectionStatus(
     ok,
     transport: options.transport,
     authenticated: options.authenticated,
-    protocolVersion: PROTOCOL_VERSION,
+    protocolVersion: MCP_PROTOCOL_VERSION,
     agentLabel: options.agentLabel,
     grantedScopes: [...options.grantedScopes],
     serverVersion: APP_VERSION,

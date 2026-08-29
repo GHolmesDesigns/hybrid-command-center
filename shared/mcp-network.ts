@@ -1,9 +1,9 @@
 /**
- * Network MCP constants (C113 / #340).
+ * Network MCP constants (C113 / #340, C133 / #383).
  *
- * Streamable HTTP MCP shares the API origin at `/api/mcp`. Agents authenticate with the operator
- * session cookie or a server-issued bearer bound to that session; coordination writes also require
- * the agent label header on every request.
+ * Streamable HTTP MCP shares the API origin at `/api/mcp` (POST, GET SSE, DELETE). Agents
+ * authenticate with the operator session cookie or a server-issued bearer; coordination writes
+ * also require the agent label header. Session headers live in `shared/mcp-transport.ts`.
  */
 
 /** Same-origin MCP JSON-RPC endpoint — no second port or origin. */

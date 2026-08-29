@@ -9,14 +9,19 @@
 import type { Db } from './db.ts';
 import { redactSecrets } from './integration-log.ts';
 import {
+  COORDINATION_CHANGES_URI,
   MCP_CHANGE_FEED_EXPIRED_MESSAGE,
   MCP_CHANGE_FEED_RETENTION,
+  WORKSPACE_CHANGES_URI,
   decodeChangeFeedCursor,
   encodeChangeFeedCursor,
   type McpChangeFeed,
   type McpChangeFeedEvent,
   type McpChangeFeedResult,
 } from '../shared/mcp-change-feeds.ts';
+import { COORDINATION_INBOX_URI } from '../shared/mcp-agent-events.ts';
+import { WORKSPACE_CONTEXT_URI } from '../shared/mcp-workspace-context.ts';
+import { notifyMcpResourceUpdated } from './mcp/resource-notifier.ts';
 
 export interface ChangeFeedEventInput {
   feed: McpChangeFeed;
@@ -53,6 +58,14 @@ export function recordChangeFeedEvent(db: Db, input: ChangeFeedEventInput): McpC
        SELECT seq FROM mcp_change_feed WHERE feed = ? ORDER BY seq DESC LIMIT ?
      )`,
   ).run(input.feed, input.feed, MCP_CHANGE_FEED_RETENTION);
+  // Tip subscribed MCP sessions (C133). Cursors remain the durable resume path (C132).
+  if (input.feed === 'coordination') {
+    notifyMcpResourceUpdated(COORDINATION_CHANGES_URI);
+    notifyMcpResourceUpdated(COORDINATION_INBOX_URI);
+  } else {
+    notifyMcpResourceUpdated(WORKSPACE_CHANGES_URI);
+    notifyMcpResourceUpdated(WORKSPACE_CONTEXT_URI);
+  }
   return {
     cursor: encodeChangeFeedCursor(input.feed, seq),
     at,
