@@ -344,7 +344,7 @@ describe('the campaign HTTP boundary', () => {
 
     const patched = await request(app())
       .patch(`/api/signal/posts/${created.body.id}`)
-      .send({ campaigns: [] })
+      .send({ campaigns: [], revision: created.body.revision })
       .expect(200);
     expect(patched.body.campaigns).toEqual([]);
     // Detaching a post leaves the workspace's list alone.

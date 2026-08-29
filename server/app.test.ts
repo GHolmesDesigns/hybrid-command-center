@@ -33,6 +33,9 @@ let db: Db;
 beforeEach(() => {
   db = createDb(':memory:');
 });
+const revisionOf = (table: 'clients' | 'projects' | 'tasks', entityId: string) =>
+  (db.prepare(`SELECT revision FROM ${table} WHERE id=?`).get(entityId) as { revision: number })
+    .revision;
 /** Today's local calendar day, the shape due dates are stored in. */
 const today = format(new Date(), 'yyyy-MM-dd');
 const createClient = (name = 'Acme Studio') =>
@@ -141,14 +144,47 @@ describe('command center API', () => {
     const originalSlug = client.slug;
 
     const detailsOnly = (
-      await request(app).patch(`/api/clients/${client.id}`).send({ notes: 'Updated details' })
+      await request(app)
+        .patch(`/api/clients/${client.id}`)
+        .send({ notes: 'Updated details', revision: revisionOf('clients', client.id) })
     ).body;
     expect(detailsOnly.slug).toBe(originalSlug);
 
     const renamed = (
-      await request(app).patch(`/api/clients/${client.id}`).send({ name: 'G.Holmes Designs' })
+      await request(app)
+        .patch(`/api/clients/${client.id}`)
+        .send({ name: 'G.Holmes Designs', revision: revisionOf('clients', client.id) })
     ).body;
     expect(renamed.slug).toBe(`g-holmes-designs-${client.id.slice(0, 6)}`);
+  });
+  it('refuses missing and stale revisions with structured conflict evidence', async () => {
+    const app = createApp(db);
+    const client = (await createClient('Concurrent Client')).body;
+
+    await request(app)
+      .patch(`/api/clients/${client.id}`)
+      .send({ notes: 'No precondition' })
+      .expect(400);
+
+    const first = await request(app)
+      .patch(`/api/clients/${client.id}`)
+      .send({ notes: 'Writer one', revision: client.revision })
+      .expect(200);
+    expect(first.body.revision).toBe(client.revision + 1);
+
+    const stale = await request(app)
+      .patch(`/api/clients/${client.id}`)
+      .send({ name: 'Writer two', revision: client.revision })
+      .expect(409);
+    expect(stale.body).toMatchObject({
+      code: 'conflict',
+      currentRevision: client.revision + 1,
+      changedFields: ['notes'],
+    });
+    expect((await request(app).get('/api/clients')).body[0]).toMatchObject({
+      name: 'Concurrent Client',
+      revision: client.revision + 1,
+    });
   });
   it('creates tasks, reorders columns, and calculates checklist progress', async () => {
     const { p } = await setup();
@@ -182,7 +218,10 @@ describe('command center API', () => {
       .post(`/api/tasks/${b.id}/dependencies`)
       .send({ dependencyId: a.id })
       .expect(201);
-    await request(app).patch(`/api/tasks/${b.id}`).send({ status: 'COMPLETE' }).expect(409);
+    await request(app)
+      .patch(`/api/tasks/${b.id}`)
+      .send({ status: 'COMPLETE', revision: revisionOf('tasks', b.id) })
+      .expect(409);
     await request(app)
       .post(`/api/tasks/${a.id}/dependencies`)
       .send({ dependencyId: b.id })
@@ -891,13 +930,17 @@ describe('command center API', () => {
     expect(task.dueDate).toBe('2026-08-20');
     // Omitting a key must preserve the stored value.
     const renamed = (
-      await request(app).patch(`/api/tasks/${task.id}`).send({ title: 'Renamed task' })
+      await request(app)
+        .patch(`/api/tasks/${task.id}`)
+        .send({ title: 'Renamed task', revision: revisionOf('tasks', task.id) })
     ).body;
     expect(renamed.dueDate).toBe('2026-08-20');
     expect(renamed.notes).toBe('Keep me');
     // Sending an empty string must clear it.
     const cleared = (
-      await request(app).patch(`/api/tasks/${task.id}`).send({ dueDate: '', notes: '' })
+      await request(app)
+        .patch(`/api/tasks/${task.id}`)
+        .send({ dueDate: '', notes: '', revision: revisionOf('tasks', task.id) })
     ).body;
     expect(cleared.dueDate).toBeUndefined();
     expect(cleared.notes).toBeUndefined();
@@ -916,7 +959,7 @@ describe('command center API', () => {
     const wiped = (
       await request(app)
         .patch(`/api/clients/${client.id}`)
-        .send({ contactName: '', phone: '', notes: '' })
+        .send({ contactName: '', phone: '', notes: '', revision: revisionOf('clients', client.id) })
     ).body;
     expect(wiped.contactName).toBeUndefined();
     expect(wiped.phone).toBeUndefined();
@@ -928,7 +971,9 @@ describe('command center API', () => {
         .send({ clientId: client.id, name: 'Dated Project', targetDeadline: '2026-09-01' })
     ).body;
     const noDeadline = (
-      await request(app).patch(`/api/projects/${project.id}`).send({ targetDeadline: '' })
+      await request(app)
+        .patch(`/api/projects/${project.id}`)
+        .send({ targetDeadline: '', revision: revisionOf('projects', project.id) })
     ).body;
     expect(noDeadline.targetDeadline).toBeUndefined();
     expect(noDeadline.name).toBe('Dated Project');
@@ -944,7 +989,9 @@ describe('command center API', () => {
         .send({ clientId: c.id, name: 'Held Project', status: 'ON_HOLD', priority: 'URGENT' })
     ).body;
     const renamedProject = (
-      await request(app).patch(`/api/projects/${project.id}`).send({ name: 'Held Project v2' })
+      await request(app)
+        .patch(`/api/projects/${project.id}`)
+        .send({ name: 'Held Project v2', revision: revisionOf('projects', project.id) })
     ).body;
     expect(renamedProject.status).toBe('ON_HOLD');
     expect(renamedProject.priority).toBe('URGENT');
@@ -959,14 +1006,18 @@ describe('command center API', () => {
       })
     ).body;
     const renamedTask = (
-      await request(app).patch(`/api/tasks/${task.id}`).send({ title: 'In flight v2' })
+      await request(app)
+        .patch(`/api/tasks/${task.id}`)
+        .send({ title: 'In flight v2', revision: revisionOf('tasks', task.id) })
     ).body;
     expect(renamedTask.status).toBe('IN_PROGRESS');
     expect(renamedTask.priority).toBe('HIGH');
     expect(renamedTask.taskType).toBe('BLOG_POST');
     // Completing from the modal sends only { status }.
     const completed = (
-      await request(app).patch(`/api/tasks/${task.id}`).send({ status: 'COMPLETE' })
+      await request(app)
+        .patch(`/api/tasks/${task.id}`)
+        .send({ status: 'COMPLETE', revision: revisionOf('tasks', task.id) })
     ).body;
     expect(completed.priority).toBe('HIGH');
     expect(completed.taskType).toBe('BLOG_POST');
@@ -982,20 +1033,29 @@ describe('command center API', () => {
     ).body;
     expect(untyped.taskType).toBeUndefined();
     const renamed = (
-      await request(app).patch(`/api/tasks/${untyped.id}`).send({ title: 'Legacy task v2' })
+      await request(app)
+        .patch(`/api/tasks/${untyped.id}`)
+        .send({ title: 'Legacy task v2', revision: revisionOf('tasks', untyped.id) })
     ).body;
     expect(renamed.taskType).toBeUndefined();
     expect(renamed.title).toBe('Legacy task v2');
     // A type set later sticks, and the empty string the form posts for "No type" clears it.
     const typed = (
-      await request(app).patch(`/api/tasks/${untyped.id}`).send({ taskType: 'QA_BRAND_PASS' })
+      await request(app)
+        .patch(`/api/tasks/${untyped.id}`)
+        .send({ taskType: 'QA_BRAND_PASS', revision: revisionOf('tasks', untyped.id) })
     ).body;
     expect(typed.taskType).toBe('QA_BRAND_PASS');
-    const cleared = (await request(app).patch(`/api/tasks/${untyped.id}`).send({ taskType: '' }))
-      .body;
+    const cleared = (
+      await request(app)
+        .patch(`/api/tasks/${untyped.id}`)
+        .send({ taskType: '', revision: revisionOf('tasks', untyped.id) })
+    ).body;
     expect(cleared.taskType).toBeUndefined();
     // The type survives a round trip through the list endpoint.
-    await request(app).patch(`/api/tasks/${untyped.id}`).send({ taskType: 'VIDEO' });
+    await request(app)
+      .patch(`/api/tasks/${untyped.id}`)
+      .send({ taskType: 'VIDEO', revision: revisionOf('tasks', untyped.id) });
     const listed = (await request(app).get('/api/tasks')).body.find(
       (t: any) => t.id === untyped.id,
     );
@@ -1132,7 +1192,7 @@ describe('project activity', () => {
 
     await request(createApp(db))
       .patch(`/api/projects/${p.id}`)
-      .send({ notes: 'Kickoff moved to Monday' })
+      .send({ notes: 'Kickoff moved to Monday', revision: revisionOf('projects', p.id) })
       .expect(200);
 
     const after = stampsOf(p.id);
@@ -1201,7 +1261,10 @@ describe('project activity', () => {
       {
         label: 'task patch',
         write: () =>
-          request(app).patch(`/api/tasks/${task.id}`).send({ title: 'Anchor task v2' }).expect(200),
+          request(app)
+            .patch(`/api/tasks/${task.id}`)
+            .send({ title: 'Anchor task v2', revision: revisionOf('tasks', task.id) })
+            .expect(200),
       },
       {
         label: 'task status change',
@@ -1214,7 +1277,10 @@ describe('project activity', () => {
       {
         label: 'task complete',
         write: () =>
-          request(app).patch(`/api/tasks/${task.id}`).send({ status: 'COMPLETE' }).expect(200),
+          request(app)
+            .patch(`/api/tasks/${task.id}`)
+            .send({ status: 'COMPLETE', revision: revisionOf('tasks', task.id) })
+            .expect(200),
       },
       {
         label: 'checklist create',
@@ -1297,7 +1363,7 @@ describe('project activity', () => {
 
     await request(app)
       .patch(`/api/tasks/${task.id}`)
-      .send({ projectId: destination.id })
+      .send({ projectId: destination.id, revision: revisionOf('tasks', task.id) })
       .expect(200);
 
     // One project lost the work, the other gained it.

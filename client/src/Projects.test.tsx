@@ -69,6 +69,7 @@ describe('Projects sorting', () => {
       driveStatus: 'DISCONNECTED',
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
+      revision: 1,
     },
     {
       id: 'client-two',
@@ -78,6 +79,7 @@ describe('Projects sorting', () => {
       driveStatus: 'DISCONNECTED',
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
+      revision: 1,
     },
   ];
 
@@ -431,6 +433,7 @@ describe('Projects presentation and live-status filters', () => {
       driveStatus: 'DISCONNECTED',
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
+      revision: 1,
     },
     {
       id: 'client-two',
@@ -440,6 +443,7 @@ describe('Projects presentation and live-status filters', () => {
       driveStatus: 'DISCONNECTED',
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
+      revision: 1,
     },
   ];
 

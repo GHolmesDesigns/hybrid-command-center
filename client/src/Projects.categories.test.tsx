@@ -26,6 +26,7 @@ describe('Filtering projects by category', () => {
     driveStatus: 'DISCONNECTED',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
+    revision: 1,
   };
 
   /** One router entry per render: the address is what a reload would come back to. */

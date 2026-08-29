@@ -38,6 +38,7 @@ describe('Task detail inline editing', () => {
         driveStatus: 'DISCONNECTED',
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z',
+        revision: 1,
       },
     ];
     testState.tasksPayload = [task('t1', 'Recap post')];
@@ -112,7 +113,7 @@ describe('Task detail inline editing', () => {
     fireEvent.click(detail().getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(taskPatches()).toHaveLength(1));
-    expect(taskPatches()[0].body).toEqual({ description: 'New copy' });
+    expect(taskPatches()[0].body).toEqual({ description: 'New copy', revision: 1 });
     expect(detail().getByText('New copy')).toBeVisible();
     expect(detail().getByRole('button', { name: 'Edit due date' })).toHaveTextContent(
       'Sep 1, 2026',
@@ -128,19 +129,19 @@ describe('Task detail inline editing', () => {
     fireEvent.change(detail().getByLabelText('Due date'), { target: { value: '2026-10-15' } });
     fireEvent.click(detail().getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(taskPatches()).toHaveLength(1));
-    expect(taskPatches()[0].body).toEqual({ dueDate: '2026-10-15' });
+    expect(taskPatches()[0].body).toEqual({ dueDate: '2026-10-15', revision: 1 });
 
     fireEvent.click(detail().getByRole('button', { name: 'Add start date' }));
     fireEvent.change(detail().getByLabelText('Start date'), { target: { value: '2026-10-01' } });
     fireEvent.click(detail().getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(taskPatches()).toHaveLength(2));
-    expect(taskPatches()[1].body).toEqual({ startDate: '2026-10-01' });
+    expect(taskPatches()[1].body).toEqual({ startDate: '2026-10-01', revision: 1 });
 
     fireEvent.click(detail().getByRole('button', { name: 'Add notes' }));
     fireEvent.change(detail().getByLabelText('Notes'), { target: { value: 'Call the printer' } });
     fireEvent.click(detail().getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(taskPatches()).toHaveLength(3));
-    expect(taskPatches()[2].body).toEqual({ notes: 'Call the printer' });
+    expect(taskPatches()[2].body).toEqual({ notes: 'Call the printer', revision: 1 });
 
     expect(detail().getByRole('button', { name: 'Edit due date' })).toHaveTextContent(
       'Oct 15, 2026',

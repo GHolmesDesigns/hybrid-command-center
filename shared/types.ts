@@ -98,6 +98,8 @@ export interface Client {
   mergedInto?: { id: string; name: string; mergedAt: string };
   createdAt: string;
   updatedAt: string;
+  /** Monotonic optimistic-concurrency token required by every persisted mutation. */
+  revision: number;
 }
 export interface Project {
   id: string;
@@ -119,6 +121,8 @@ export interface Project {
   createdAt: string;
   /** When the project record itself was last edited. Tile drags and Drive retries do not move it. */
   updatedAt: string;
+  /** Monotonic optimistic-concurrency token required by every persisted mutation. */
+  revision: number;
   /**
    * When work last happened on this project: its own edits plus every write to its
    * children — tasks, checklists, task tags, dependencies. This is what the dashboard's
@@ -202,6 +206,8 @@ export interface Task {
   completedAt?: string;
   createdAt: string;
   updatedAt: string;
+  /** Monotonic optimistic-concurrency token required by every persisted mutation. */
+  revision: number;
   tags: Tag[];
   checklist: ChecklistItem[];
   dependencyIds: string[];

@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS clients (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, slug TEXT NOT NULL UNIQUE, contact_name TEXT, email TEXT,
   phone TEXT, website TEXT, notes TEXT, status TEXT NOT NULL DEFAULT 'ACTIVE', drive_folder_id TEXT,
   drive_folder_url TEXT, drive_status TEXT NOT NULL DEFAULT 'DISCONNECTED', drive_error TEXT,
-  created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1
 );
 -- One row per client that was merged into another. Clients are archive-only, so a merge never
 -- deletes the source: it archives it and records the survivor here, which is what lets a later
@@ -50,13 +50,13 @@ CREATE TABLE IF NOT EXISTS projects (
   status TEXT NOT NULL DEFAULT 'ACTIVE', start_date TEXT, target_deadline TEXT, priority TEXT NOT NULL DEFAULT 'MEDIUM',
   notes TEXT, position INTEGER NOT NULL DEFAULT 0, drive_folder_id TEXT, drive_folder_url TEXT,
   drive_status TEXT NOT NULL DEFAULT 'DISCONNECTED', drive_error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-  last_activity_at TEXT
+  last_activity_at TEXT, revision INTEGER NOT NULL DEFAULT 1
 );
 CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), title TEXT NOT NULL, description TEXT,
   status TEXT NOT NULL DEFAULT 'BACKLOG', priority TEXT NOT NULL DEFAULT 'MEDIUM', task_type TEXT,
   due_date TEXT, start_date TEXT, notes TEXT, position INTEGER NOT NULL DEFAULT 0, completed_at TEXT,
-  created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1
 );
 CREATE TABLE IF NOT EXISTS checklist_items (
   id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, text TEXT NOT NULL,
@@ -176,7 +176,17 @@ CREATE TABLE IF NOT EXISTS signal_posts (
   lifecycle TEXT NOT NULL DEFAULT 'ACTIVE',
   retired_at TEXT,
   delivery_provenance TEXT NOT NULL DEFAULT 'IN_SIGNAL',
-  created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1
+);
+-- Per-revision field evidence lets a stale writer distinguish the fields that moved after its read.
+-- Rows are deleted with their mutable entity by application transactions where hard deletion exists.
+CREATE TABLE IF NOT EXISTS entity_revision_changes (
+  entity_type TEXT NOT NULL CHECK(entity_type IN ('client','project','task','signal_post')),
+  entity_id TEXT NOT NULL,
+  revision INTEGER NOT NULL CHECK(revision > 1),
+  changed_fields TEXT NOT NULL,
+  changed_at TEXT NOT NULL,
+  PRIMARY KEY(entity_type, entity_id, revision)
 );
 -- One row per stable identity a Signal post carries at an authoring source. Copy and schedule are
 -- deliberately absent from this key: both are ordinary edits, so neither can identify the post

@@ -143,6 +143,7 @@ export const client = (
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
   ...overrides,
+  revision: overrides.revision ?? 1,
 });
 
 export const project = (
@@ -164,6 +165,7 @@ export const project = (
   lastActivityAt: '2026-01-01T00:00:00.000Z',
   categories: [],
   ...overrides,
+  revision: overrides.revision ?? 1,
 });
 
 export const projects: Project[] = [
@@ -193,6 +195,7 @@ export const task = (id: string, title: string, overrides: Partial<Task> = {}): 
   checklistCompleted: 0,
   checklistTotal: 0,
   ...overrides,
+  revision: overrides.revision ?? 1,
 });
 
 export const testState = {
@@ -705,6 +708,7 @@ export const signalPost = (
     createdAt: '2026-08-01T09:00:00.000Z',
     updatedAt: '2026-08-01T09:00:00.000Z',
     ...overrides,
+    revision: overrides.revision ?? 1,
     media,
     mediaUrls: media.map((item) => item.url),
   };

@@ -1747,7 +1747,10 @@ describe('storing content variants', () => {
     const post = add({ channels: ['x'], mediaUrls: media });
     await request(app())
       .put(`/api/signal/posts/${post.id}/variants`)
-      .send({ variants: [{ platform: 'twitter', accountId: null, caption: 'The short version' }] })
+      .send({
+        variants: [{ platform: 'twitter', accountId: null, caption: 'The short version' }],
+        revision: post.revision,
+      })
       .expect(200)
       .expect((response) => expect(response.body[0].caption).toBe('The short version'));
     await request(app())
@@ -1756,7 +1759,7 @@ describe('storing content variants', () => {
       .expect((response) => expect(response.body).toHaveLength(1));
     await request(app())
       .put(`/api/signal/posts/${post.id}/variants`)
-      .send({ variants: [{ platform: 'bluesky', accountId: null, title: 'Nowhere' }] })
+      .send({ variants: [{ platform: 'bluesky', accountId: null, title: 'Nowhere' }], revision: 2 })
       .expect(400)
       .expect((response) => expect(response.body.error).toMatch(/Bluesky takes no title/));
     await request(app()).get('/api/signal/posts/missing/variants').expect(404);
@@ -2235,7 +2238,13 @@ describe('the provider reconciliation over HTTP', () => {
     // than as a lone field the route would read as clearing the rest.
     const edited = await request(app)
       .patch(`/api/signal/posts/${post.id}`)
-      .send({ text: 'Rewritten in Signal', channels: ['x'], date: post.date, time: post.time });
+      .send({
+        text: 'Rewritten in Signal',
+        channels: ['x'],
+        date: post.date,
+        time: post.time,
+        revision: post.revision,
+      });
     expect(edited.status).toBe(200);
 
     const preview = await request(app)

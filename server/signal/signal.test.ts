@@ -469,6 +469,7 @@ describe('the HTTP boundary', () => {
       .send({
         status: 'SCHEDULED',
         mediaUrls: ['https://cdn.example.com/second.mp4', 'https://cdn.example.com/first.jpg'],
+        revision: created.body.revision,
       })
       .expect(200);
     expect(patched.body.status).toBe('SCHEDULED');
@@ -482,7 +483,10 @@ describe('the HTTP boundary', () => {
   });
 
   it('answers 404 for a patch or delete against a post that is not there', async () => {
-    await request(app()).patch('/api/signal/posts/nope').send({ text: 'x' }).expect(404);
+    await request(app())
+      .patch('/api/signal/posts/nope')
+      .send({ text: 'x', revision: 1 })
+      .expect(404);
     await request(app()).delete('/api/signal/posts/nope').expect(404);
   });
 
@@ -572,7 +576,7 @@ describe('the HTTP boundary', () => {
 
     const refused = await request(app())
       .post(`/api/signal/posts/${copy.body.id}/slot`)
-      .send({ date: '2026-09-15', time: '09:00', from: '2026-09-14' })
+      .send({ date: '2026-09-15', time: '09:00', from: '2026-09-14', revision: copy.body.revision })
       .expect(409);
     expect(refused.body).toMatchObject({
       error: 'That slot is no longer open.',
@@ -582,7 +586,7 @@ describe('the HTTP boundary', () => {
 
     const placed = await request(app())
       .post(`/api/signal/posts/${copy.body.id}/slot`)
-      .send({ ...refused.body.suggestion, from: '2026-09-14' })
+      .send({ ...refused.body.suggestion, from: '2026-09-14', revision: copy.body.revision })
       .expect(200);
     expect(placed.body).toMatchObject({ date: '2026-09-16', time: '09:00', id: copy.body.id });
     expect(

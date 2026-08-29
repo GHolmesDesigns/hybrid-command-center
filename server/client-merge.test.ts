@@ -20,6 +20,9 @@ beforeEach(() => {
 });
 
 const app = () => createApp(db);
+const revisionOf = (table: 'clients' | 'projects', entityId: string) =>
+  (db.prepare(`SELECT revision FROM ${table} WHERE id=?`).get(entityId) as { revision: number })
+    .revision;
 const createClient = async (name: string, details: Record<string, string> = {}) =>
   (
     await request(app())
@@ -344,7 +347,9 @@ describe('committing a client merge', () => {
     const destination = await createClient('Steady');
     const project = await createProject(source.id, 'Original name');
     const stale = (await preview(source.id, destination.id)).body.planHash;
-    await request(app()).patch(`/api/projects/${project.id}`).send({ name: 'Renamed since' });
+    await request(app())
+      .patch(`/api/projects/${project.id}`)
+      .send({ name: 'Renamed since', revision: revisionOf('projects', project.id) });
 
     const refused = await merge(source.id, destination.id, stale);
 
@@ -551,7 +556,9 @@ describe('committing a client merge', () => {
     });
     expect(listed.find((client) => client.id === destination.id)?.mergedInto).toBeUndefined();
     // The survivor's live name, not a snapshot of it.
-    await request(app()).patch(`/api/clients/${destination.id}`).send({ name: 'Renamed Survivor' });
+    await request(app())
+      .patch(`/api/clients/${destination.id}`)
+      .send({ name: 'Renamed Survivor', revision: revisionOf('clients', destination.id) });
     const relisted = (await request(app()).get('/api/clients')).body as {
       id: string;
       mergedInto?: { name: string };
@@ -756,7 +763,9 @@ describe('choosing which field wins', () => {
     const planned = await preview(source.id, destination.id, { phone: { choice: 'SOURCE' } });
     // Someone edits the source's phone number in another tab: the value on offer is not the
     // value that was shown, and a confirmation applies to what was shown.
-    await request(app()).patch(`/api/clients/${source.id}`).send({ phone: '020 7946 9999' });
+    await request(app())
+      .patch(`/api/clients/${source.id}`)
+      .send({ phone: '020 7946 9999', revision: revisionOf('clients', source.id) });
 
     const refused = await merge(source.id, destination.id, planned.body.planHash, {
       phone: { choice: 'SOURCE' },
@@ -867,12 +876,12 @@ describe('the guards a merge puts on other routes', () => {
 
     const toMerged = await request(app())
       .patch(`/api/projects/${project.id}`)
-      .send({ clientId: merged.id });
+      .send({ clientId: merged.id, revision: revisionOf('projects', project.id) });
     expect(toMerged.status).toBe(409);
     expect(toMerged.body.code).toBe('CLIENT_MERGED');
     const toArchived = await request(app())
       .patch(`/api/projects/${project.id}`)
-      .send({ clientId: archived.id });
+      .send({ clientId: archived.id, revision: revisionOf('projects', project.id) });
     expect(toArchived.status).toBe(400);
     expect(toArchived.body.error).toBe('Choose an active client.');
     // The merge stands, and an edit that names no client is unaffected.
@@ -880,7 +889,11 @@ describe('the guards a merge puts on other routes', () => {
       client_id: survivor.id,
     });
     expect(
-      (await request(app()).patch(`/api/projects/${project.id}`).send({ name: 'Renamed' })).status,
+      (
+        await request(app())
+          .patch(`/api/projects/${project.id}`)
+          .send({ name: 'Renamed', revision: revisionOf('projects', project.id) })
+      ).status,
     ).toBe(200);
   });
 

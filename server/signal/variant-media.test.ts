@@ -322,6 +322,7 @@ describe('writing a role', () => {
     await request(app())
       .put(`/api/signal/posts/${post.id}/variants`)
       .send({
+        revision: post.revision,
         variants: [
           {
             platform: 'instagram',
@@ -337,6 +338,7 @@ describe('writing a role', () => {
     await request(app())
       .put(`/api/signal/posts/${post.id}/variants`)
       .send({
+        revision: 2,
         variants: [
           {
             platform: 'instagram',
