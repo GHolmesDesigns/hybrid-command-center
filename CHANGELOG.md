@@ -8,6 +8,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.9.1] - 2026-08-29
+
+### Fixed
+
+- Re-issuing an MCP agent credential after revoke no longer fails when you reuse the same agent
+  name. Settings kept the registration row for audit, which blocked the unique label; issue now
+  reuses that registration when nothing active still holds the name, and refuses a clear conflict
+  when one does.
+
+### Breaking changes
+
+None.
+
 ## [5.9.0] - 2026-08-29
 
 ### Added
