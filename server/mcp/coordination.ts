@@ -164,6 +164,12 @@ export function mcpToolCallErrorPayload(result: McpToolCallResult): Record<strin
     ...(result.errorDetail?.requiredAction
       ? { requiredAction: result.errorDetail.requiredAction }
       : {}),
+    ...(result.errorDetail?.currentRevision !== undefined
+      ? { currentRevision: result.errorDetail.currentRevision }
+      : {}),
+    ...(result.errorDetail?.changedFields
+      ? { changedFields: result.errorDetail.changedFields }
+      : {}),
   };
 }
 

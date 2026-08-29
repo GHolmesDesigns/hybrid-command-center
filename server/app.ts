@@ -4,7 +4,6 @@ import cors from 'cors';
 import helmet from 'helmet';
 import pinoHttp, { stdSerializers } from 'pino-http';
 import type { DestinationStream } from 'pino';
-import { isValid, parseISO } from 'date-fns';
 import { z } from 'zod';
 import type { Db } from './db.ts';
 import { getDb, transaction } from './db.ts';
@@ -53,7 +52,6 @@ import {
 import { commitClientMerge, isMergedSource, previewClientMerge } from './client-merge.ts';
 import { ClientMergeError } from './domain/client-merge.ts';
 import { touchProjectActivity, touchProjectRecord } from './domain/activity.ts';
-import { wouldCreateCycle, blockingDependencies } from './domain/dependencies.ts';
 import { buildDashboardSummary } from './domain/dashboard.ts';
 import { buildClientSlug } from './domain/client-slugs.ts';
 import {
@@ -226,6 +224,36 @@ import { rateLimit } from 'express-rate-limit';
 import { SAMPLE_PLAYBOOK_DOWNLOAD_PATH, SAMPLE_PLAYBOOK_FILENAME } from '../shared/playbook.ts';
 import { listIntegrationEvents } from './integration-log.ts';
 import {
+  APP_VERSION,
+  brandingInput,
+  projectInput,
+  projectPatch,
+  taskInput,
+  taskPatch,
+  viewDefaultsInput,
+} from './workspace/schemas.ts';
+import {
+  addChecklistItem,
+  addDependency,
+  createProject,
+  createTask,
+  deleteProject,
+  deleteTask,
+  getProjectById,
+  readBranding,
+  readViewDefaults,
+  removeChecklistItem,
+  removeDependency,
+  updateBranding,
+  updateChecklistItem,
+  updateProject,
+  updateTask,
+  updateViewDefaults,
+  WorkspaceConflictError,
+  WorkspaceNotFoundError,
+  WorkspaceValidationError,
+} from './workspace/writes.ts';
+import {
   AGENT_HANDOFF_STATES,
   agentHandoffCancelInputSchema,
   agentHandoffPostInputSchema,
@@ -239,29 +267,7 @@ import {
 } from './agent-coordination/service.ts';
 import { reclaimableWorkSessions, reclaimWorkSession } from './agent-coordination/work-sessions.ts';
 import { INTEGRATION_EVENT_PAGE_MAX, INTEGRATION_SOURCES } from '../shared/integration-log.ts';
-import {
-  APP_VERSION,
-  BRANDING_SETTING_KEY,
-  DEFAULT_BRANDING,
-  LOGO_URL_MAX,
-  brandingIssues,
-  type Branding,
-} from '../shared/branding.ts';
-import {
-  CANONICAL_VIEW_DEFAULTS,
-  VIEW_DEFAULTS_SETTING_KEY,
-  isViewDefaults,
-  viewDefaultsIssues,
-  type ViewDefaults,
-} from '../shared/view-defaults.ts';
-import { normalizeHex } from '../shared/contrast.ts';
-import {
-  TASK_CHECKLIST_TEMPLATES,
-  TASK_STATUSES,
-  TASK_TYPES,
-  normalizeCategoryName,
-  normalizeTagName,
-} from '../shared/types.ts';
+import { normalizeCategoryName, normalizeTagName } from '../shared/types.ts';
 
 const id = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
@@ -473,38 +479,8 @@ const nullableEmail = emailText
   .optional()
   .transform((v) => (v === undefined ? undefined : v || null));
 const nullableUrl = urlText.optional().transform((v) => (v === undefined ? undefined : v || null));
-/**
- * Optional calendar date. User-supplied dates are `YYYY-MM-DD` values interpreted in local
- * time, so the pattern is checked first and `isValid` then rejects real-looking impossibilities
- * such as `2026-02-30`. Without both, junk reaches `shared/deadlines.ts`, where
- * `parseISO` yields an `Invalid Date` and every deadline rule silently answers `false`.
- * Server-generated timestamps (`created_at`, `updated_at`, `completed_at`) are full ISO
- * strings and never pass through here.
- */
-const nullableDate = z
-  .union([
-    z.literal(''),
-    z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected a date in YYYY-MM-DD format')
-      .refine((v) => isValid(parseISO(v)), 'Not a real calendar date'),
-  ])
-  .optional()
-  .transform((v) => (v === undefined ? undefined : v || null));
-/**
- * Optional task type. The form posts `''` for the "No type" option, so the empty string
- * is accepted and stored as NULL, the same shape the other optional fields use. Anything
- * outside the vocabulary is rejected with a 400 rather than written through.
- */
-const nullableTaskType = z
-  .union([z.literal(''), z.enum(TASK_TYPES)])
-  .optional()
-  .transform((v) => (v === undefined ? undefined : v || null));
 /** Resolve one PATCH field: an omitted key keeps the stored value, `null` clears it. */
 const patch = <T>(next: T | undefined, current: T): T => (next === undefined ? current : next);
-
-const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const;
-const PROJECT_STATUSES = ['PLANNING', 'ACTIVE', 'ON_HOLD', 'COMPLETE'] as const;
 
 const clientFields = {
   name: z.string().trim().min(2).max(120),
@@ -516,101 +492,6 @@ const clientFields = {
 };
 const clientInput = z.object(clientFields);
 const clientPatch = z.object(clientFields).partial();
-
-// PATCH schemas deliberately drop the `.default()` calls. `.partial()` still applies a
-// default when the key is absent, so sharing the create schema would silently reset
-// status and priority on any PATCH that did not name them.
-const projectFields = {
-  clientId: z.string().uuid(),
-  name: z.string().trim().min(2).max(160),
-  description: nullable,
-  startDate: nullableDate,
-  targetDeadline: nullableDate,
-  notes: nullable,
-};
-const projectInput = z.object({
-  ...projectFields,
-  status: z.enum(PROJECT_STATUSES).default('ACTIVE'),
-  priority: z.enum(PRIORITIES).default('MEDIUM'),
-});
-const projectPatch = z
-  .object({ ...projectFields, status: z.enum(PROJECT_STATUSES), priority: z.enum(PRIORITIES) })
-  .partial();
-
-// `taskType` belongs here rather than on `taskInput`: it carries no `.default()`, so
-// `.partial()` leaves it absent on a PATCH that omits it and the stored type survives.
-const taskFields = {
-  projectId: z.string().uuid(),
-  title: z.string().trim().min(2).max(200),
-  description: nullable,
-  taskType: nullableTaskType,
-  dueDate: nullableDate,
-  startDate: nullableDate,
-  notes: nullable,
-};
-const taskInput = z.object({
-  ...taskFields,
-  status: z.enum(TASK_STATUSES).default('BACKLOG'),
-  priority: z.enum(PRIORITIES).default('MEDIUM'),
-});
-const taskPatch = z
-  .object({ ...taskFields, status: z.enum(TASK_STATUSES), priority: z.enum(PRIORITIES) })
-  .partial();
-
-/**
- * A `#rrggbb` colour, accepting `#RGB` and uppercase on the way in and storing one shape.
- * Colours and logo fields carry defaults because this is a PUT of the whole resource: a
- * payload that names only the text fields — the shape every client sent before colours
- * existed — replaces the branding with the default palette rather than being refused.
- */
-const hexColor = (fallback: string) =>
-  z
-    .string()
-    .trim()
-    .default(fallback)
-    .transform((value) => normalizeHex(value) ?? value)
-    .pipe(z.string().regex(/^#[0-9a-f]{6}$/, 'Expected a hex colour such as #18201d'));
-
-/**
- * Contrast is enforced here, not only in the form, so no client can store a sidebar its
- * own text cannot be read against (issue #71). `brandingIssues()` is the same function the
- * Settings form warns with, so the two cannot disagree about what is allowed.
- */
-const brandingInput = z
-  .object({
-    mark: z.string().trim().min(1).max(4),
-    title: z.string().trim().min(1).max(40),
-    subtitle: z.string().trim().min(1).max(60),
-    tagline: z.string().trim().min(1).max(80),
-    background: hexColor(DEFAULT_BRANDING.background),
-    foreground: hexColor(DEFAULT_BRANDING.foreground),
-    accent: hexColor(DEFAULT_BRANDING.accent),
-    logoUrl: z.string().trim().max(LOGO_URL_MAX).default(''),
-    logoAlt: z.string().trim().max(120).default(''),
-  })
-  // Alt text describes a logo, so without one there is nothing for it to describe.
-  .transform((branding) => ({ ...branding, logoAlt: branding.logoUrl ? branding.logoAlt : '' }))
-  .superRefine((branding, ctx) => {
-    for (const issue of brandingIssues(branding))
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [issue.field], message: issue.message });
-  });
-
-/**
- * View defaults are one bounded object. Unknown pages and values are refused rather than
- * dropped, so a stale payload cannot leave half a preference applied. `viewDefaultsIssues`
- * is the same function Settings uses, so the form and the API cannot disagree.
- */
-const viewDefaultsInput = z
-  .unknown()
-  .superRefine((value, ctx) => {
-    for (const issue of viewDefaultsIssues(value))
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: issue.path ? issue.path.split('.') : [],
-        message: issue.message,
-      });
-  })
-  .transform((value) => value as ViewDefaults);
 
 const normalizedTagName = z.string().transform(normalizeTagName).pipe(z.string().min(1).max(60));
 /** Optional decoration on a tag or category chip. The name always carries the meaning. */
@@ -1236,38 +1117,13 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   app.post('/api/projects', async (req, res, next) => {
     try {
       const data = projectInput.parse(req.body);
-      if (!db.prepare("SELECT id FROM clients WHERE id=? AND status='ACTIVE'").get(data.clientId))
-        return res.status(400).json({ error: 'Choose an active client.' });
-      const projectId = id();
-      const stamp = now();
-      // A new project lands last in the manual tile order, as a new task does in its column.
-      const position = (
-        db.prepare('SELECT COALESCE(MAX(position),-1)+1 next FROM projects').get() as any
-      ).next;
-      db.prepare(
-        `INSERT INTO projects(id,client_id,name,description,status,start_date,target_deadline,priority,notes,position,drive_status,created_at,updated_at,last_activity_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      ).run(
-        projectId,
-        data.clientId,
-        data.name,
-        data.description ?? null,
-        data.status,
-        data.startDate ?? null,
-        data.targetDeadline ?? null,
-        data.priority,
-        data.notes ?? null,
-        position,
-        'PENDING',
-        stamp,
-        stamp,
-        stamp,
-      );
+      const project = createProject(db, data);
       try {
-        await provisionProject(db, projectId);
+        await provisionProject(db, project.id);
       } catch (error) {
-        req.log.error({ err: error, projectId }, 'Drive project provisioning failed');
+        req.log.error({ err: error, projectId: project.id }, 'Drive project provisioning failed');
       }
-      res.status(201).json(projectById(db, projectId));
+      res.status(201).json(getProjectById(db, project.id));
     } catch (error) {
       next(error);
     }
@@ -1276,46 +1132,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     try {
       const data = projectPatch.parse(req.body);
       const revision = revisionPrecondition.parse(req.body?.revision);
-      const p = db.prepare('SELECT * FROM projects WHERE id=?').get(req.params.id) as any;
-      if (!p) return res.status(404).json({ error: 'Project not found.' });
-      /**
-       * A named client is held to what creating a project requires — it must be active — and,
-       * on top of that, must not be a client that was merged away. Without the second check a
-       * project edit could hand work back to a client the merge just emptied, undoing it one
-       * project at a time; without the first, a PATCH could put a project somewhere POST would
-       * refuse to.
-       */
-      if (data.clientId !== undefined) {
-        if (isMergedSource(db, data.clientId))
-          return res.status(409).json({
-            error: 'That client was merged into another client. Choose the surviving client.',
-            code: 'CLIENT_MERGED',
-          });
-        if (!db.prepare("SELECT id FROM clients WHERE id=? AND status='ACTIVE'").get(data.clientId))
-          return res.status(400).json({ error: 'Choose an active client.' });
-      }
-      // Editing the project record is both an edit and activity, so it stamps both fields.
-      const stamp = now();
-      transaction(db, () => {
-        requireRevision(db, 'project', p.id, revision);
-        db.prepare(
-          `UPDATE projects SET client_id=?,name=?,description=?,status=?,start_date=?,target_deadline=?,priority=?,notes=?,updated_at=?,last_activity_at=? WHERE id=?`,
-        ).run(
-          patch(data.clientId, p.client_id),
-          patch(data.name, p.name),
-          patch(data.description, p.description),
-          patch(data.status, p.status),
-          patch(data.startDate, p.start_date),
-          patch(data.targetDeadline, p.target_deadline),
-          patch(data.priority, p.priority),
-          patch(data.notes, p.notes),
-          stamp,
-          stamp,
-          req.params.id,
-        );
-        advanceRevision(db, 'project', p.id, revision, Object.keys(data), stamp);
-      });
-      res.json(projectById(db, req.params.id));
+      res.json(updateProject(db, req.params.id, data, revision));
     } catch (e) {
       next(e);
     }
@@ -1328,19 +1145,12 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     if (!r.changes) return res.status(404).json({ error: 'Project not found.' });
     res.json({ ok: true });
   });
-  app.delete('/api/projects/:id', (req, res) => {
-    const project = db.prepare('SELECT id, name FROM projects WHERE id=?').get(req.params.id) as
-      { id: string; name: string } | undefined;
-    if (!project) return res.status(404).json({ error: 'Project not found.' });
-    // Removes local project + tasks only. Drive folders and files are intentionally left untouched.
-    transaction(db, () => {
-      db.prepare('DELETE FROM tasks WHERE project_id=?').run(project.id);
-      db.prepare("DELETE FROM drive_steps WHERE entity_type='project' AND entity_id=?").run(
-        project.id,
-      );
-      db.prepare('DELETE FROM projects WHERE id=?').run(project.id);
-    });
-    res.json({ ok: true, deleted: 'project', name: project.name, driveTouched: false });
+  app.delete('/api/projects/:id', (req, res, next) => {
+    try {
+      res.json(deleteProject(db, req.params.id));
+    } catch (error) {
+      next(error);
+    }
   });
   app.post('/api/projects/reorder', (req, res, next) => {
     try {
@@ -1365,7 +1175,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   app.post('/api/projects/:id/retry-drive', async (req, res, next) => {
     try {
       await provisionProject(db, req.params.id);
-      res.json(projectById(db, req.params.id));
+      res.json(getProjectById(db, req.params.id));
     } catch (e) {
       next(e);
     }
@@ -1420,54 +1230,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   });
   app.post('/api/tasks', (req, res, next) => {
     try {
-      const data = taskInput.parse(req.body);
-      if (
-        !db
-          .prepare(
-            `SELECT p.id FROM projects p JOIN clients c ON c.id=p.client_id
-             WHERE p.id=? AND p.status<>'ARCHIVED' AND c.status='ACTIVE'`,
-          )
-          .get(data.projectId)
-      )
-        return res.status(400).json({ error: 'Choose an active project.' });
-      const taskId = id();
-      const stamp = now();
-      const max = (
-        db
-          .prepare('SELECT COALESCE(MAX(position),-1)+1 next FROM tasks WHERE status=?')
-          .get(data.status) as any
-      ).next;
-      transaction(db, () => {
-        db.prepare(
-          `INSERT INTO tasks(id,project_id,title,description,status,priority,task_type,due_date,start_date,notes,position,completed_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        ).run(
-          taskId,
-          data.projectId,
-          data.title,
-          data.description ?? null,
-          data.status,
-          data.priority,
-          data.taskType ?? null,
-          data.dueDate ?? null,
-          data.startDate ?? null,
-          data.notes ?? null,
-          max,
-          data.status === 'COMPLETE' ? stamp : null,
-          stamp,
-          stamp,
-        );
-        const template = data.taskType ? TASK_CHECKLIST_TEMPLATES[data.taskType] : undefined;
-        if (template) {
-          const insertChecklistItem = db.prepare(
-            'INSERT INTO checklist_items(id,task_id,text,position) VALUES(?,?,?,?)',
-          );
-          template.forEach((text, position) =>
-            insertChecklistItem.run(id(), taskId, text, position),
-          );
-        }
-        touchProjectActivity(db, data.projectId, stamp);
-      });
-      res.status(201).json(getTask(db, taskId));
+      res.status(201).json(createTask(db, taskInput.parse(req.body)));
     } catch (e) {
       next(e);
     }
@@ -1476,68 +1239,17 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     try {
       const data = taskPatch.extend({ overrideBlocked: z.boolean().optional() }).parse(req.body);
       const revision = revisionPrecondition.parse(req.body?.revision);
-      const t = db.prepare('SELECT * FROM tasks WHERE id=?').get(req.params.id) as any;
-      if (!t) return res.status(404).json({ error: 'Task not found.' });
-      const nextStatus = patch(data.status, t.status);
-      if (
-        nextStatus === 'COMPLETE' &&
-        !data.overrideBlocked &&
-        blockingDependencies(db, t.id).length
-      )
-        return res.status(409).json({
-          error: 'This task is blocked by incomplete dependencies.',
-          code: 'TASK_BLOCKED',
-          blockingDependencies: blockingDependencies(db, t.id),
-        });
-      const stamp = now();
-      const nextProjectId = patch(data.projectId, t.project_id);
-      transaction(db, () => {
-        requireRevision(db, 'task', t.id, revision);
-        db.prepare(
-          `UPDATE tasks SET project_id=?,title=?,description=?,status=?,priority=?,task_type=?,due_date=?,start_date=?,notes=?,completed_at=?,updated_at=? WHERE id=?`,
-        ).run(
-          nextProjectId,
-          patch(data.title, t.title),
-          patch(data.description, t.description),
-          nextStatus,
-          patch(data.priority, t.priority),
-          patch(data.taskType, t.task_type),
-          patch(data.dueDate, t.due_date),
-          patch(data.startDate, t.start_date),
-          patch(data.notes, t.notes),
-          nextStatus === 'COMPLETE' ? t.completed_at || stamp : null,
-          stamp,
-          t.id,
-        );
-        touchProjectActivity(db, t.project_id, stamp);
-        // Moving a task between projects is activity in both: one lost the work, one gained it.
-        if (nextProjectId !== t.project_id) touchProjectActivity(db, nextProjectId, stamp);
-        advanceRevision(
-          db,
-          'task',
-          t.id,
-          revision,
-          Object.keys(data).filter((field) => field !== 'overrideBlocked'),
-          stamp,
-        );
-      });
-      res.json(getTask(db, t.id));
+      res.json(updateTask(db, req.params.id, data, revision));
     } catch (e) {
       next(e);
     }
   });
-  app.delete('/api/tasks/:id', (req, res) => {
-    const task = db
-      .prepare('SELECT id, title, project_id FROM tasks WHERE id=?')
-      .get(req.params.id) as { id: string; title: string; project_id: string } | undefined;
-    if (!task) return res.status(404).json({ error: 'Task not found.' });
-    const stamp = now();
-    // Checklist/deps cascade in SQLite. Drive files are never touched.
-    transaction(db, () => {
-      db.prepare('DELETE FROM tasks WHERE id=?').run(task.id);
-      touchProjectActivity(db, task.project_id, stamp);
-    });
-    res.json({ ok: true, deleted: 'task', title: task.title, driveTouched: false });
+  app.delete('/api/tasks/:id', (req, res, next) => {
+    try {
+      res.json(deleteTask(db, req.params.id));
+    } catch (e) {
+      next(e);
+    }
   });
 
   app.get('/api/tags', (_req, res) => res.json(listTags(db)));
@@ -1691,7 +1403,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         if (result.changes) touchProjectRecord(db, req.params.id, stamp);
         return result.changes;
       });
-      res.status(attached ? 201 : 200).json(projectById(db, req.params.id));
+      res.status(attached ? 201 : 200).json(getProjectById(db, req.params.id));
     } catch (error) {
       next(error);
     }
@@ -1706,7 +1418,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         .run(req.params.id, req.params.categoryId);
       if (result.changes) touchProjectRecord(db, req.params.id, stamp);
     });
-    res.json(projectById(db, req.params.id));
+    res.json(getProjectById(db, req.params.id));
   });
   app.post('/api/tasks/reorder', (req, res, next) => {
     try {
@@ -1749,26 +1461,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   app.post('/api/tasks/:id/checklist', (req, res, next) => {
     try {
       const data = z.object({ text: z.string().trim().min(1).max(300) }).parse(req.body);
-      const task = db.prepare('SELECT project_id FROM tasks WHERE id=?').get(req.params.id) as
-        { project_id: string } | undefined;
-      if (!task) return res.status(404).json({ error: 'Task not found.' });
-      const itemId = id();
-      const stamp = now();
-      const pos = (
-        db
-          .prepare('SELECT COALESCE(MAX(position),-1)+1 next FROM checklist_items WHERE task_id=?')
-          .get(req.params.id) as any
-      ).next;
-      transaction(db, () => {
-        db.prepare('INSERT INTO checklist_items(id,task_id,text,position) VALUES(?,?,?,?)').run(
-          itemId,
-          req.params.id,
-          data.text,
-          pos,
-        );
-        touchProjectActivity(db, task.project_id, stamp);
-      });
-      res.status(201).json(getTask(db, req.params.id));
+      res.status(201).json(addChecklistItem(db, req.params.id, data.text));
     } catch (e) {
       next(e);
     }
@@ -1782,44 +1475,17 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
           position: z.number().int().min(0).optional(),
         })
         .parse(req.body);
-      // The parent project comes along for the activity stamp, so ticking an item costs
-      // one query rather than walking checklist item to task to project.
-      const item = db
-        .prepare(
-          `SELECT c.*, t.project_id FROM checklist_items c JOIN tasks t ON t.id=c.task_id
-           WHERE c.id=?`,
-        )
-        .get(req.params.id) as any;
-      if (!item) return res.status(404).json({ error: 'Checklist item not found.' });
-      const stamp = now();
-      transaction(db, () => {
-        db.prepare('UPDATE checklist_items SET text=?,completed=?,position=? WHERE id=?').run(
-          data.text ?? item.text,
-          data.completed === undefined ? item.completed : Number(data.completed),
-          data.position ?? item.position,
-          item.id,
-        );
-        touchProjectActivity(db, item.project_id, stamp);
-      });
-      res.json(getTask(db, item.task_id));
+      res.json(updateChecklistItem(db, req.params.id, data));
     } catch (e) {
       next(e);
     }
   });
-  app.delete('/api/checklist/:id', (req, res) => {
-    const item = db
-      .prepare(
-        `SELECT c.task_id, t.project_id FROM checklist_items c JOIN tasks t ON t.id=c.task_id
-         WHERE c.id=?`,
-      )
-      .get(req.params.id) as any;
-    if (!item) return res.status(404).json({ error: 'Checklist item not found.' });
-    const stamp = now();
-    transaction(db, () => {
-      db.prepare('DELETE FROM checklist_items WHERE id=?').run(req.params.id);
-      touchProjectActivity(db, item.project_id, stamp);
-    });
-    res.json(getTask(db, item.task_id));
+  app.delete('/api/checklist/:id', (req, res, next) => {
+    try {
+      res.json(removeChecklistItem(db, req.params.id));
+    } catch (e) {
+      next(e);
+    }
   });
   app.post('/api/tasks/:id/tags', (req, res, next) => {
     try {
@@ -1859,52 +1525,17 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   app.post('/api/tasks/:id/dependencies', (req, res, next) => {
     try {
       const data = z.object({ dependencyId: z.string().uuid() }).parse(req.body);
-      const task = db.prepare('SELECT project_id FROM tasks WHERE id=?').get(req.params.id) as any;
-      const dep = db
-        .prepare('SELECT project_id FROM tasks WHERE id=?')
-        .get(data.dependencyId) as any;
-      if (!task || !dep) return res.status(404).json({ error: 'Task not found.' });
-      if (wouldCreateCycle(db, req.params.id, data.dependencyId))
-        return res.status(409).json({
-          error: 'That dependency would create a circular relationship.',
-          code: 'CIRCULAR_DEPENDENCY',
-        });
-      const activeTaskCount = (
-        db
-          .prepare(
-            `SELECT COUNT(*) count FROM tasks t
-             JOIN projects p ON p.id=t.project_id
-             JOIN clients c ON c.id=p.client_id
-             WHERE t.id IN (?,?) AND p.status<>'ARCHIVED' AND c.status='ACTIVE'`,
-          )
-          .get(req.params.id, data.dependencyId) as { count: number }
-      ).count;
-      if (activeTaskCount !== 2)
-        return res.status(400).json({ error: 'Choose tasks under active clients and projects.' });
-      const stamp = now();
-      transaction(db, () => {
-        const result = db
-          .prepare('INSERT OR IGNORE INTO task_dependencies(task_id,dependency_id) VALUES(?,?)')
-          .run(req.params.id, data.dependencyId);
-        // The dependent task's project only. The task being depended on is unchanged.
-        if (result.changes) touchProjectActivity(db, task.project_id, stamp);
-      });
-      res.status(201).json(getTask(db, req.params.id));
+      res.status(201).json(addDependency(db, req.params.id, data.dependencyId));
     } catch (e) {
       next(e);
     }
   });
-  app.delete('/api/tasks/:id/dependencies/:dependencyId', (req, res) => {
-    const task = db.prepare('SELECT project_id FROM tasks WHERE id=?').get(req.params.id) as
-      { project_id: string } | undefined;
-    const stamp = now();
-    transaction(db, () => {
-      const result = db
-        .prepare('DELETE FROM task_dependencies WHERE task_id=? AND dependency_id=?')
-        .run(req.params.id, req.params.dependencyId);
-      if (task && result.changes) touchProjectActivity(db, task.project_id, stamp);
-    });
-    res.json(getTask(db, req.params.id));
+  app.delete('/api/tasks/:id/dependencies/:dependencyId', (req, res, next) => {
+    try {
+      res.json(removeDependency(db, req.params.id, req.params.dependencyId));
+    } catch (e) {
+      next(e);
+    }
   });
 
   app.get('/api/dashboard', (_req, res) => {
@@ -1916,9 +1547,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   );
   app.put('/api/settings/branding', (req, res, next) => {
     try {
-      const data = brandingInput.parse(req.body);
-      setSetting(db, BRANDING_SETTING_KEY, JSON.stringify(data));
-      res.json({ version: APP_VERSION, branding: data });
+      res.json(updateBranding(db, brandingInput.parse(req.body)));
     } catch (error) {
       next(error);
     }
@@ -1928,9 +1557,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   );
   app.put('/api/settings/view-defaults', (req, res, next) => {
     try {
-      const data = viewDefaultsInput.parse(req.body);
-      setSetting(db, VIEW_DEFAULTS_SETTING_KEY, JSON.stringify(data));
-      res.json({ viewDefaults: data });
+      res.json(updateViewDefaults(db, viewDefaultsInput.parse(req.body)));
     } catch (error) {
       next(error);
     }
@@ -2922,7 +2549,8 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       // Both carry the specific reason and both are answered rather than logged as a fault: the
       // person pasted something, and what to paste instead is the whole content of the message.
       error instanceof DriveMediaError ||
-      error instanceof SignalMediaError
+      error instanceof SignalMediaError ||
+      error instanceof WorkspaceValidationError
         ? 400
         : // Editing or deleting a post that is not there is the caller addressing something
           // that does not exist, not a failure of the write.
@@ -2930,7 +2558,8 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
             // Acknowledging an alert that is not in the summary is the same kind of miss: the
             // summary is derived, so an id with nothing behind it names a fact that has moved on.
             error instanceof QueueAlertNotFoundError ||
-            error instanceof SignalCampaignNotFoundError
+            error instanceof SignalCampaignNotFoundError ||
+            error instanceof WorkspaceNotFoundError
           ? 404
           : // A refused merge is the caller's problem — the wrong pair, or a preview the
             // workspace moved out from under — and each case carries its own status. A slot
@@ -2940,7 +2569,8 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
               error instanceof AgentCoordinationError ||
               error instanceof RevisionConflictError ||
               error instanceof SignalSlotConflictError ||
-              error instanceof SignalPostProtectedError
+              error instanceof SignalPostProtectedError ||
+              error instanceof WorkspaceConflictError
             ? error.status
             : // A rename onto a name another campaign holds, and a deletion that would detach
               // posts before the caller has confirmed it: both are the same *this needs an answer
@@ -2990,53 +2620,21 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
             changedFields: error.changedFields,
           }
         : {}),
+      ...(error instanceof WorkspaceConflictError
+        ? {
+            code: error.code,
+            ...(error.blockingDependencies
+              ? { blockingDependencies: error.blockingDependencies }
+              : {}),
+          }
+        : {}),
       ...(error instanceof McpAgentLabelTakenError ? { code: 'MCP_AGENT_LABEL_TAKEN' } : {}),
     });
   });
   return app;
 }
 
-/** One project in the shape every project endpoint answers with, categories included. */
-function projectById(db: Db, projectId: string) {
-  return listProjects(db).find((project: any) => project.id === projectId);
-}
 function parseFolderId(value: string) {
   const match = value.match(/folders\/([a-zA-Z0-9_-]+)/);
   return match?.[1] || value;
-}
-/**
- * Branding as stored, completed from the defaults. Rows written before colours and logos
- * existed carry only the four text fields, so every key falls back individually and the
- * saved wording survives the upgrade. A row that still fails validation after that — hand
- * edited, or from a future shape this build does not understand — is not worth guessing at
- * one field at a time, so the whole thing reverts to a palette known to be readable.
- */
-function readBranding(db: Db): Branding {
-  const raw = getSetting(db, BRANDING_SETTING_KEY);
-  if (!raw) return { ...DEFAULT_BRANDING };
-  try {
-    const stored = JSON.parse(raw) as Partial<Record<keyof Branding, unknown>>;
-    const merged = { ...DEFAULT_BRANDING };
-    for (const key of Object.keys(DEFAULT_BRANDING) as (keyof Branding)[])
-      if (typeof stored[key] === 'string') merged[key] = stored[key];
-    const parsed = brandingInput.safeParse(merged);
-    return parsed.success ? parsed.data : { ...DEFAULT_BRANDING };
-  } catch {
-    return { ...DEFAULT_BRANDING };
-  }
-}
-/**
- * View defaults as stored. Unlike branding there is no field-by-field completion: a row that
- * is incomplete, unknown, or unreadable fails closed to the canonical object so a page load
- * never inherits a half-applied preference.
- */
-function readViewDefaults(db: Db): ViewDefaults {
-  const raw = getSetting(db, VIEW_DEFAULTS_SETTING_KEY);
-  if (!raw) return { ...CANONICAL_VIEW_DEFAULTS };
-  try {
-    const stored = JSON.parse(raw) as unknown;
-    return isViewDefaults(stored) ? stored : { ...CANONICAL_VIEW_DEFAULTS };
-  } catch {
-    return { ...CANONICAL_VIEW_DEFAULTS };
-  }
 }

@@ -5,6 +5,7 @@ import {
   mcpToolAvailable,
   mcpToolRegistryEntry,
   mcpToolsListPayload,
+  MCP_TOOL_REGISTRY,
   workspaceContextFiltersFromToolArgs,
 } from './registry.ts';
 
@@ -15,12 +16,39 @@ describe('mcp tool registry', () => {
     expect(names).toContain('coordination_list_handoffs');
     expect(names).toContain('workspace_dashboard_summary');
     expect(names).toContain('signal_queue_health');
+    expect(names).toContain('signal_create_post');
+    expect(names).toContain('workspace_create_task');
     expect(
       names.filter((name) => name !== 'system_capabilities' && name !== 'system_connection_status'),
-    ).toHaveLength(23);
+    ).toHaveLength(43);
     expect(names).toContain('system_connection_status');
     expect(isRegisteredMcpTool('system_capabilities')).toBe(true);
     expect(isRegisteredMcpTool('not_a_tool')).toBe(false);
+  });
+
+  it('exposes no provider-write or permanent-client-delete tools', () => {
+    const names = new Set(mcpToolsListPayload().map((tool) => tool.name));
+    for (const forbidden of [
+      'signal_publish_submit',
+      'signal_publish_now',
+      'signal_provider_apply',
+      'signal_provider_reconcile',
+      'signal_buffer_target_apply',
+      'signal_publication_finish',
+      'workspace_delete_client',
+      'workspace_destroy_client',
+    ]) {
+      expect(names.has(forbidden)).toBe(false);
+    }
+    for (const entry of [
+      mcpToolRegistryEntry('signal_create_post'),
+      mcpToolRegistryEntry('workspace_create_task'),
+    ]) {
+      expect(entry?.class).toBe('L');
+      expect(entry?.requiredScope).toBe('workspace:write');
+      expect(entry?.handler).toBe('workspace_write');
+    }
+    expect(MCP_TOOL_REGISTRY.some((tool) => tool.class === 'P')).toBe(false);
   });
 
   it('recognises coordination tools and resolves registry entries', () => {
