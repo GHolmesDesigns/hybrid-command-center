@@ -10,10 +10,13 @@ import { APP_VERSION } from '../../shared/branding.ts';
 import { MCP_AGENT_SCOPES, type McpAgentScope } from '../../shared/mcp-agent-registry.ts';
 import { callMcpTool } from './dispatch.ts';
 import { mcpToolCallErrorPayload } from './coordination.ts';
+import type { McpIntegrationToolDeps } from './integration-tools.ts';
 import { MCP_RESOURCE_DEFINITIONS, readMcpResource } from './resources.ts';
 import { mcpToolsListPayload } from './registry.ts';
 import { getMcpPrompt, mcpPromptsListPayload } from './prompts.ts';
 import { setMcpSessionAgentLabel, type McpSession } from './session.ts';
+import type { McpWorkspaceReadDeps } from './workspace-read.ts';
+import type { McpWorkspaceWriteDeps } from './workspace-write.ts';
 
 export interface JsonRpcRequest {
   jsonrpc?: string;
@@ -34,6 +37,9 @@ export type McpJsonRpcOptions = {
   now?: Date;
   transport?: 'stdio' | 'http';
   authenticated?: boolean;
+  workspaceReadDeps?: McpWorkspaceReadDeps;
+  workspaceWriteDeps?: McpWorkspaceWriteDeps;
+  integrationDeps?: McpIntegrationToolDeps;
 };
 
 const PROTOCOL_VERSION = '2024-11-05';
@@ -153,6 +159,9 @@ export async function handleMcpJsonRpc(
           now,
           transport: options.transport ?? 'stdio',
           authenticated: options.authenticated ?? true,
+          workspaceReadDeps: options.workspaceReadDeps,
+          workspaceWriteDeps: options.workspaceWriteDeps,
+          integrationDeps: options.integrationDeps,
         });
         const text =
           result.outcome === 'SUCCESS'

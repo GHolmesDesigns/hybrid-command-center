@@ -71,6 +71,40 @@ export const COORDINATION_TOOLS = [
 ] as const;
 export type CoordinationTool = (typeof COORDINATION_TOOLS)[number];
 
+/**
+ * Integration-write tools (C131 / MCP-C108) — inventory, analytics, buffer, Drive sync, Signal
+ * import commit, and Drive media resolve/recheck. Separate rolling budget from coordination.
+ */
+export const INTEGRATION_WRITE_LIMIT_PER_MINUTE = 6;
+
+export const INTEGRATION_WRITE_TOOLS = [
+  'import_signal_commit',
+  'signal_resolve_drive_media',
+  'signal_recheck_post_media',
+  'signal_recheck_variant_media',
+  'drive_sync',
+  'signal_refresh_provider_inventory',
+  'signal_refresh_analytics_window',
+  'signal_refresh_buffer_accounts',
+] as const;
+export type IntegrationWriteTool = (typeof INTEGRATION_WRITE_TOOLS)[number];
+
+/** Class-L preview commits that share the coordination write budget (C131). */
+export const INTEGRATION_LOCAL_WRITE_TOOLS = [
+  'workspace_merge_clients_commit',
+  'import_playbook_commit',
+] as const;
+export type IntegrationLocalWriteTool = (typeof INTEGRATION_LOCAL_WRITE_TOOLS)[number];
+
+export const INTEGRATION_READ_TOOLS = [
+  'workspace_merge_clients_preview',
+  'import_playbook_preview',
+  'import_signal_preview',
+  'files_browse_project',
+  'integration_list_activity',
+] as const;
+export type IntegrationReadTool = (typeof INTEGRATION_READ_TOOLS)[number];
+
 export const COORDINATION_INBOX_URI = 'hcc://coordination/inbox?state=open';
 
 export const mcpAgentEventOutcomeSchema = z.enum(MCP_AGENT_EVENT_OUTCOMES);

@@ -18,9 +18,12 @@ describe('mcp tool registry', () => {
     expect(names).toContain('signal_queue_health');
     expect(names).toContain('signal_create_post');
     expect(names).toContain('workspace_create_task');
+    expect(names).toContain('workspace_merge_clients_preview');
+    expect(names).toContain('drive_sync');
+    expect(names).toContain('files_browse_project');
     expect(
       names.filter((name) => name !== 'system_capabilities' && name !== 'system_connection_status'),
-    ).toHaveLength(43);
+    ).toHaveLength(58);
     expect(names).toContain('system_connection_status');
     expect(isRegisteredMcpTool('system_capabilities')).toBe(true);
     expect(isRegisteredMcpTool('not_a_tool')).toBe(false);
@@ -49,6 +52,22 @@ describe('mcp tool registry', () => {
       expect(entry?.handler).toBe('workspace_write');
     }
     expect(MCP_TOOL_REGISTRY.some((tool) => tool.class === 'P')).toBe(false);
+    for (const name of [
+      'import_signal_commit',
+      'signal_resolve_drive_media',
+      'drive_sync',
+      'signal_refresh_provider_inventory',
+    ] as const) {
+      const entry = mcpToolRegistryEntry(name);
+      expect(entry?.class).toBe('I');
+      expect(entry?.handler).toBe('integration_write');
+      expect(entry?.requiredScope).toBe('workspace:write');
+    }
+    expect(mcpToolRegistryEntry('files_browse_project')).toMatchObject({
+      class: 'R',
+      requiredScope: 'workspace:read',
+      handler: 'integration_read',
+    });
   });
 
   it('recognises coordination tools and resolves registry entries', () => {

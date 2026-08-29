@@ -1,5 +1,6 @@
 ﻿import type { Db } from '../db.ts';
 import { PROJECT_SUBFOLDERS, config } from '../config.ts';
+import { recordIntegrationEvent } from '../integration-log.ts';
 import { createGoogleProvider } from './google.ts';
 import { decryptJson, encryptJson } from './tokens.ts';
 import { DisconnectedDriveProvider, type DriveProvider } from './provider.ts';
@@ -176,20 +177,34 @@ export async function syncAllToDrive(db: Db, provider = driveProvider(db)) {
   const projectResults: { id: string; name: string; ok: boolean; error?: string }[] = [];
 
   if (!provider.connected) {
-    return {
+    const result = {
       connected: false,
       message: 'Connect Google Drive and choose a root folder in Settings before syncing.',
       clients: clientResults,
       projects: projectResults,
     };
+    recordIntegrationEvent(db, {
+      source: 'google-drive',
+      operation: 'drive.sync',
+      outcome: 'FAILURE',
+      summary: result.message,
+    });
+    return result;
   }
   if (!getSetting(db, 'drive_root_id')) {
-    return {
+    const result = {
       connected: true,
       message: 'Select a Command Center root folder in Settings before syncing.',
       clients: clientResults,
       projects: projectResults,
     };
+    recordIntegrationEvent(db, {
+      source: 'google-drive',
+      operation: 'drive.sync',
+      outcome: 'FAILURE',
+      summary: result.message,
+    });
+    return result;
   }
 
   for (const client of clients) {
@@ -210,7 +225,7 @@ export async function syncAllToDrive(db: Db, provider = driveProvider(db)) {
   }
 
   const failed = [...clientResults, ...projectResults].filter((r) => !r.ok).length;
-  return {
+  const result = {
     connected: true,
     message: failed
       ? `Sync finished with ${failed} issue${failed === 1 ? '' : 's'}. Local records were not removed.`
@@ -218,6 +233,17 @@ export async function syncAllToDrive(db: Db, provider = driveProvider(db)) {
     clients: clientResults,
     projects: projectResults,
   };
+  recordIntegrationEvent(db, {
+    source: 'google-drive',
+    operation: 'drive.sync',
+    outcome: failed ? 'PARTIAL' : 'SUCCESS',
+    summary: result.message,
+    entities: [
+      ...clientResults.map((row) => ({ type: 'client' as const, id: row.id, label: row.name })),
+      ...projectResults.map((row) => ({ type: 'project' as const, id: row.id, label: row.name })),
+    ],
+  });
+  return result;
 }
 
 const message = (error: unknown) =>

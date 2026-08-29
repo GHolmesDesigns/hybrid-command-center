@@ -28,6 +28,9 @@ import { MCP_AGENT_SCOPES } from '../../shared/mcp-agent-registry.ts';
 import { handleMcpJsonRpc, type JsonRpcRequest, type JsonRpcResponse } from './stdio.ts';
 import { createMcpSession, setMcpSessionAgentLabel, type McpSession } from './session.ts';
 import type { McpWriteLimiterRegistry } from './write-limiter-registry.ts';
+import type { McpIntegrationToolDeps } from './integration-tools.ts';
+import type { McpWorkspaceReadDeps } from './workspace-read.ts';
+import type { McpWorkspaceWriteDeps } from './workspace-write.ts';
 import {
   mcpCoordinationCredentialLabelMismatch,
   mcpCoordinationScopeRequired,
@@ -58,6 +61,11 @@ export type McpHttpHandlerOptions = {
    *  exercise rate limiting — coordination writes then fall back to the per-request no-op limiter
    *  that reproduced the original bug, so production wiring must always pass one. */
   writeLimiters?: McpWriteLimiterRegistry;
+  /** Separate process-lifetime budget for Class-I integration writes (C131), typically limit 6. */
+  integrationWriteLimiters?: McpWriteLimiterRegistry;
+  workspaceReadDeps?: McpWorkspaceReadDeps;
+  workspaceWriteDeps?: McpWorkspaceWriteDeps;
+  integrationDeps?: McpIntegrationToolDeps;
 };
 
 function headerValue(raw: string | string[] | undefined): string | null {
@@ -254,6 +262,13 @@ export async function handleMcpHttpPost(
       nowMs,
     );
   }
+  if (options.integrationWriteLimiters) {
+    session.integrationWrites = options.integrationWriteLimiters.limiterFor(
+      auth.credentialKey,
+      session.agentLabel ?? '',
+      nowMs,
+    );
+  }
 
   const responses: JsonRpcResponse[] = [];
   const grantedScopes = auth.agentCredential?.scopes ?? MCP_AGENT_SCOPES;
@@ -264,7 +279,15 @@ export async function handleMcpHttpPost(
       responses.push(message);
     },
     options.db,
-    { grantedScopes, now: new Date(nowMs), transport: 'http', authenticated: true },
+    {
+      grantedScopes,
+      now: new Date(nowMs),
+      transport: 'http',
+      authenticated: true,
+      workspaceReadDeps: options.workspaceReadDeps,
+      workspaceWriteDeps: options.workspaceWriteDeps,
+      integrationDeps: options.integrationDeps,
+    },
   );
 
   const reply = responses[0];
