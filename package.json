@@ -1,6 +1,6 @@
 {
   "name": "hybrid-command-center",
-  "version": "5.9.2",
+  "version": "5.9.3",
   "private": true,
   "type": "module",
   "engines": {
@@ -28,6 +28,8 @@
     "auth:bootstrap": "node --experimental-strip-types server/scripts/bootstrap-operator.ts",
     "probe:post-bridge": "node --experimental-strip-types scripts/probe-post-bridge.ts",
     "probe:buffer": "node --experimental-strip-types scripts/probe-buffer.ts",
+    "eval:mcp-smoke": "node --experimental-strip-types scripts/eval-mcp-smoke.ts",
+    "test:eval-mcp": "vitest run --project server server/mcp/agent-evaluation.test.ts",
     "signal:import": "node --experimental-strip-types server/scripts/import-signal-archive.ts",
     "mcp": "node --experimental-strip-types server/scripts/mcp.ts",
     "db:backup": "node --experimental-strip-types server/scripts/backup.ts",

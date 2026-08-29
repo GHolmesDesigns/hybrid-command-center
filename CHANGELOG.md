@@ -8,6 +8,23 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.9.3] - 2026-08-29
+
+### Added
+
+- Deterministic MCP agent evaluation suite on a non-production fixture database, covering claim
+  workflows, idempotent retries, stale revisions, leased work sessions, approval boundaries,
+  dual-agent identity, revocation, rate-limit persistence, and change-cursor recovery after
+  restart — scored on success, evidence, latency, and approximate token use.
+- Owner-run read-only production MCP smoke (`npm run eval:mcp-smoke`) that plans by default and,
+  with `--live`, runs the operator connection diagnostic and asserts workspace checksums do not
+  move.
+- Dated evaluation matrix in `docs/mcp-agent-evaluation.md` (transcript never committed).
+
+### Breaking changes
+
+None.
+
 ## [5.9.2] - 2026-08-29
 
 ### Added

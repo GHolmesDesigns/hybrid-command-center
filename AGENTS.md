@@ -72,6 +72,13 @@
   `finally`; a complete paginated read must prove absence. Its
   hard 50-request budget reserves 12 calls for cleanup. The credential and transcript are never
   committed.
+- `npm run test:eval-mcp`: deterministic MCP agent evaluation (C134) against a fixture database —
+  never production. Rides ordinary `npm test` as `server/mcp/agent-evaluation.test.ts`.
+- `npm run eval:mcp-smoke`: owner-run read-only production MCP smoke, `scripts/eval-mcp-smoke.ts`.
+  Plans by default and contacts nothing; `--live` requires `HCC_EVAL_SMOKE_PASSWORD`, `--yes`, and
+  an explicit `--base-url`. It calls only `POST /api/mcp/health/test` (discovery + one bounded read)
+  and asserts `workspaceChecksumUnchanged`. Never CI. Matrix in `docs/mcp-agent-evaluation.md`;
+  transcript never committed.
 - `npm test`: unit/integration tests with mock Drive
 - `npm run test:coverage`: the same suite with coverage and its thresholds. CI runs this rather
   than `npm test`, so a drop below any project's threshold fails the build. The thresholds are

@@ -766,9 +766,12 @@ Plus a bounded, read-only production smoke check that creates nothing.
 
 #### Acceptance criteria
 
-- [ ] The suite runs against a fixture database and never against production.
-- [ ] Every defect in §2 has a case that fails on the pre-fix commit.
-- [ ] The production smoke check performs discovery and one bounded read, and writes nothing.
+- [x] The suite runs against a fixture database and never against production.
+- [x] Every defect in §2 has a case that fails on the pre-fix commit.
+- [x] The production smoke check performs discovery and one bounded read, and writes nothing.
+
+**Shipped as:** `server/mcp/agent-evaluation.test.ts`, `npm run eval:mcp-smoke`, and the dated
+matrix in [`mcp-agent-evaluation.md`](mcp-agent-evaluation.md).
 
 ---
 

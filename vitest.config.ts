@@ -53,6 +53,11 @@ export default defineConfig({
         // injected seam. No automated test may load either file: one of them talks to Post Bridge.
         'scripts/probe-post-bridge.ts',
         'scripts/probe-post-bridge/transport.ts',
+        // Owner-run production MCP smoke entry and its live fetch transport (C134). Everything they
+        // compose — argument guards, claim scoring, matrix rendering — is measured in
+        // `scripts/eval-mcp-smoke/*.test.ts` with an injected transport.
+        'scripts/eval-mcp-smoke.ts',
+        'scripts/eval-mcp-smoke/transport.ts',
         // Operator commands — migrate, seed, backup, restore, rehearse, the Signal import.
         // Run by hand or by their own CI step, never by this suite; a threshold over them
         // would be a permanent zero that says nothing about whether they work.
