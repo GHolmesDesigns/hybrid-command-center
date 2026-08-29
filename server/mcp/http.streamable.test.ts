@@ -294,7 +294,7 @@ describe('streamable HTTP MCP lifecycle (C133)', () => {
       params: { uri: COORDINATION_INBOX_URI },
     });
 
-    let closed: (() => void) | null = null;
+    const stream = { close: null as (() => void) | null };
     const getRes = {
       statusCode: 200,
       headers: {} as Record<string, string>,
@@ -321,7 +321,7 @@ describe('streamable HTTP MCP lifecycle (C133)', () => {
         return false;
       },
       on(event: string, cb: () => void) {
-        if (event === 'close') closed = cb;
+        if (event === 'close') stream.close = cb;
         return this;
       },
       flushHeaders() {},
@@ -336,13 +336,13 @@ describe('streamable HTTP MCP lifecycle (C133)', () => {
       },
       ip: '127.0.0.1',
       on(event: string, cb: () => void) {
-        if (event === 'close') closed = cb;
+        if (event === 'close') stream.close = cb;
         return this;
       },
     };
     const getPromise = handleMcpHttpGet(getReq as never, getRes as never, options);
     await new Promise((resolve) => setTimeout(resolve, 20));
-    closed?.();
+    stream.close?.();
     await getPromise;
     expect(getRes.statusCode).toBe(200);
     expect(Buffer.concat(getRes.chunks).toString()).toContain('notifications/resources/updated');
