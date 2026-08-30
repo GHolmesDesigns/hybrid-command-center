@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type MouseEvent } from 'react';
 import {
   Activity,
   CheckCircle2,
@@ -18,13 +18,10 @@ import {
 } from '../../../shared/mcp-agent-registry';
 import {
   MCP_CLIENT_PLATFORMS,
-  MCP_CLIENT_TRANSPORTS,
   MCP_CLIENT_PLATFORM_LABEL,
-  MCP_CLIENT_TRANSPORT_LABEL,
-  buildMcpClientConfig,
   type McpClientPlatform,
-  type McpClientTransport,
 } from '../../../shared/mcp-client-config';
+import { buildMcpClientGuide, MCP_GUIDE_HEADER_HINT } from '../../../shared/mcp-client-guide';
 import type { McpConnectionStatus } from '../../../shared/mcp-health';
 
 type RegistryResponse = McpAgentCredentialList & { enabled: boolean };
@@ -47,6 +44,11 @@ const SCOPE_LABEL: Record<McpAgentScope, string> = {
   'workspace:write': 'Write workspace (reserved)',
 };
 
+const DEFAULT_SCOPES: McpAgentScope[] = ['coordination:read', 'coordination:write'];
+
+const credentialExpiryIso = (daysValid: number, nowMs: number): string =>
+  new Date(nowMs + daysValid * 86_400_000).toISOString();
+
 export function McpConnectionSetupCard({
   flash,
 }: {
@@ -54,18 +56,14 @@ export function McpConnectionSetupCard({
 }) {
   const [registry, setRegistry] = useState<RegistryResponse | null>(null);
   const [label, setLabel] = useState('');
-  const [scopes, setScopes] = useState<McpAgentScope[]>([
-    'coordination:read',
-    'coordination:write',
-  ]);
+  const [scopes, setScopes] = useState<McpAgentScope[]>(DEFAULT_SCOPES);
   const [days, setDays] = useState(30);
   const [issued, setIssued] = useState<IssuedResponse | null>(null);
   const [platform, setPlatform] = useState<McpClientPlatform>('cursor');
-  const [transport, setTransport] = useState<McpClientTransport>('stdio');
-  const [repoPath, setRepoPath] = useState('');
   const [testResult, setTestResult] = useState<HealthTestResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [rotatingId, setRotatingId] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
@@ -92,13 +90,13 @@ export function McpConnectionSetupCard({
       const result = await send<IssuedResponse>('/auth/mcp-agents', 'POST', {
         label,
         scopes,
-        expiresAt: new Date(Date.now() + days * 86_400_000).toISOString(),
+        expiresAt: credentialExpiryIso(days, Date.now()),
       });
       setIssued(result);
       setLabel('');
       setTestResult(null);
       await load();
-      flash('Agent credential issued. Generate client configuration below.');
+      flash('Credential issued. Follow the steps below — copy once; it cannot be recovered later.');
     } catch (caught) {
       flash((caught as Error).message, 'error');
     } finally {
@@ -119,33 +117,54 @@ export function McpConnectionSetupCard({
     }
   };
 
-  const generatedConfig = useMemo(() => {
+  const rotateFor =
+    (credential: McpAgentCredentialSummary) => async (event: MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      if (
+        !confirm(
+          `Rotate the credential for ${credential.label}? The old key stops working immediately. A new key is shown once.`,
+        )
+      ) {
+        return;
+      }
+      setRotatingId(credential.id);
+      try {
+        await send(`/auth/mcp-credentials/${credential.id}/revoke`, 'POST');
+        const result = await send<IssuedResponse>('/auth/mcp-agents', 'POST', {
+          label: credential.label,
+          scopes: credential.scopes,
+          expiresAt: credentialExpiryIso(days, Date.now()),
+        });
+        setIssued(result);
+        setTestResult(null);
+        await load();
+        flash(
+          `${credential.label} rotated. Copy the new setup below, update your client, then run the diagnostic.`,
+        );
+      } catch (caught) {
+        flash((caught as Error).message, 'error');
+      } finally {
+        setRotatingId(null);
+      }
+    };
+
+  const guide = useMemo(() => {
     if (!issued) return null;
     try {
-      return buildMcpClientConfig({
+      return buildMcpClientGuide({
         platform,
-        transport,
         agentLabel: issued.credential.label,
         origin: window.location.origin,
-        repoPath: repoPath.trim() || undefined,
         bearerToken: issued.bearerToken,
-        embedSecret: transport === 'http',
       });
     } catch (caught) {
       return { error: (caught as Error).message };
     }
-  }, [issued, platform, transport, repoPath]);
+  }, [issued, platform]);
 
-  const copyConfig = async () => {
-    if (!generatedConfig || 'error' in generatedConfig) return;
-    await navigator.clipboard.writeText(generatedConfig.content);
-    flash('Configuration copied.');
-  };
-
-  const copySecret = async () => {
-    if (!issued) return;
-    await navigator.clipboard.writeText(issued.bearerToken);
-    flash('Credential copied.');
+  const copyValue = async (value: string, successMessage: string) => {
+    await navigator.clipboard.writeText(value);
+    flash(successMessage);
   };
 
   const testConnection = async () => {
@@ -181,8 +200,9 @@ export function McpConnectionSetupCard({
         </div>
       </div>
       <p>
-        Register an agent, issue a scoped credential once, generate copy-ready client configuration,
-        run the read-only diagnostic, and confirm the agent&apos;s last connection here.
+        Register an agent, issue or rotate a credential, follow the numbered steps for your client,
+        and run the read-only diagnostic. Hosted HTTPS only — no terminal and no hand-edited config
+        files.
       </p>
       {error && <p role="alert">{error}</p>}
       {registry && !registry.enabled ? (
@@ -191,7 +211,7 @@ export function McpConnectionSetupCard({
         <>
           <ol className="mcp-setup-steps">
             <li>
-              <strong>Register and issue</strong>
+              <strong>1. Register and issue</strong>
               <form className="form agent-credential-form" onSubmit={issue}>
                 <label>
                   Agent label
@@ -231,86 +251,67 @@ export function McpConnectionSetupCard({
               </form>
             </li>
             <li aria-disabled={!issued}>
-              <strong>Generate client configuration</strong>
+              <strong>2. Connect your client</strong>
               {!issued ? (
-                <p className="field-hint">Issue a credential to unlock configuration generation.</p>
-              ) : (
+                <p className="field-hint">
+                  Issue or rotate a credential to unlock the connection steps.
+                </p>
+              ) : guide && 'error' in guide ? (
+                <p role="alert">{guide.error}</p>
+              ) : guide ? (
                 <>
-                  <div className="form-row">
-                    <label>
-                      Client
-                      <select
-                        value={platform}
-                        onChange={(event) => setPlatform(event.target.value as McpClientPlatform)}
+                  <label>
+                    Client
+                    <select
+                      value={platform}
+                      onChange={(event) => setPlatform(event.target.value as McpClientPlatform)}
+                    >
+                      {MCP_CLIENT_PLATFORMS.map((item) => (
+                        <option key={item} value={item}>
+                          {MCP_CLIENT_PLATFORM_LABEL[item]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <p className="field-hint" role="status">
+                    Credential for <strong>{issued.credential.label}</strong> is shown once. Copy it
+                    now. {MCP_GUIDE_HEADER_HINT}
+                  </p>
+                  <ol className="mcp-guide-steps">
+                    {guide.steps.map((step) => (
+                      <li key={step.title}>
+                        <strong>{step.title}</strong>
+                        <p>{step.body}</p>
+                      </li>
+                    ))}
+                  </ol>
+                  <div className="mcp-guide-copy-actions">
+                    {guide.copyFields.map((field) => (
+                      <button
+                        key={field.id}
+                        type="button"
+                        className={field.id === 'setup' ? 'submit' : 'secondary'}
+                        onClick={() =>
+                          void copyValue(
+                            field.value,
+                            field.id === 'setup'
+                              ? 'Ready-to-paste setup copied.'
+                              : `${field.label.replace(/^Copy /, '')} copied.`,
+                          )
+                        }
                       >
-                        {MCP_CLIENT_PLATFORMS.map((item) => (
-                          <option key={item} value={item}>
-                            {MCP_CLIENT_PLATFORM_LABEL[item]}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      Transport
-                      <select
-                        value={transport}
-                        onChange={(event) => setTransport(event.target.value as McpClientTransport)}
-                      >
-                        {MCP_CLIENT_TRANSPORTS.map((item) => (
-                          <option key={item} value={item}>
-                            {MCP_CLIENT_TRANSPORT_LABEL[item]}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                  {platform === 'codex' && transport === 'stdio' && (
-                    <label>
-                      Repository path (absolute)
-                      <input
-                        value={repoPath}
-                        onChange={(event) => setRepoPath(event.target.value)}
-                        placeholder="C:\Users\you\hybrid-command-center"
-                        required
-                      />
-                    </label>
-                  )}
-                  {generatedConfig && 'error' in generatedConfig ? (
-                    <p role="alert">{generatedConfig.error}</p>
-                  ) : generatedConfig ? (
-                    <div className="issued-credential mcp-generated-config">
-                      <strong>
-                        Copy into {generatedConfig.filename}
-                        {generatedConfig.secretEmbedded ? ' (includes credential)' : ''}
-                      </strong>
-                      <pre>{generatedConfig.content}</pre>
-                      <button type="button" className="secondary" onClick={() => void copyConfig()}>
-                        <Copy /> Copy configuration
+                        <Copy /> {field.label}
                       </button>
-                      {transport === 'http' && (
-                        <button
-                          type="button"
-                          className="secondary"
-                          onClick={() => void copySecret()}
-                        >
-                          <Copy /> Copy credential only
-                        </button>
-                      )}
-                      <ul className="mcp-config-notes">
-                        {generatedConfig.notes.map((note) => (
-                          <li key={note}>{note}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
+                    ))}
+                  </div>
                 </>
-              )}
+              ) : null}
             </li>
             <li>
-              <strong>Run diagnostic</strong>
+              <strong>3. Run diagnostic</strong>
               <p className="field-hint">
-                Safe read-only check — never creates a test handoff. After pasting configuration
-                into your client and reloading MCP, your agent&apos;s first call updates{' '}
+                Safe read-only check — never creates a test handoff. After pasting the setup into
+                your client and reloading MCP, your agent&apos;s first call updates{' '}
                 <strong>Last used</strong> below.
               </p>
               <div className="mcp-health-actions">
@@ -379,14 +380,26 @@ export function McpConnectionSetupCard({
                     {credential.lastOrigin ? ` from ${credential.lastOrigin}` : ''}
                   </small>
                 </div>
-                <button
-                  type="button"
-                  className="text-btn danger-text"
-                  onClick={() => void revoke(credential)}
-                  aria-label={`Revoke ${credential.label}`}
-                >
-                  <Trash2 /> Revoke
-                </button>
+                <div className="agent-credential-actions">
+                  <button
+                    type="button"
+                    className="text-btn"
+                    disabled={rotatingId === credential.id || busy}
+                    onClick={(event) => void rotateFor(credential)(event)}
+                    aria-label={`Rotate ${credential.label}`}
+                  >
+                    {rotatingId === credential.id ? <RefreshCw className="spin" /> : <RefreshCw />}{' '}
+                    Rotate
+                  </button>
+                  <button
+                    type="button"
+                    className="text-btn danger-text"
+                    onClick={() => void revoke(credential)}
+                    aria-label={`Revoke ${credential.label}`}
+                  >
+                    <Trash2 /> Revoke
+                  </button>
+                </div>
               </li>
             ))}
           </ul>

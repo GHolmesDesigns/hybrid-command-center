@@ -2116,6 +2116,35 @@ button.tag-chip.toggle.active {
   flex-direction: column;
   gap: 10px;
 }
+.agents-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.mcp-guide-steps {
+  margin: 12px 0 0;
+  padding-left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mcp-guide-steps p {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+.mcp-guide-copy-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.agent-credential-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
 .agent-credential-list li {
   display: flex;
   align-items: flex-start;

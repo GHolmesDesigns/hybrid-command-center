@@ -4,7 +4,7 @@ import { expect, test } from '@playwright/test';
  * Wave 27 / C124: operator MCP health panel.
  *
  * The shared e2e API stays passwordless on loopback, so this spec fakes auth-enabled
- * MCP health responses at the HTTP boundary and proves the Settings card runs test
+ * MCP health responses at the HTTP boundary and proves the Agents card runs test
  * connection and shows the last-tested timestamp. Server aggregation and diagnostics
  * are covered in unit tests against a real auth-enforced app.
  */
@@ -76,7 +76,7 @@ test('operator opens MCP health panel, runs test connection, and sees a result',
   });
 
   try {
-    await page.goto('/settings');
+    await page.goto('/agents');
     const healthCard = page.locator('.mcp-health-card');
     await expect(healthCard.getByRole('heading', { name: 'Connection health' })).toBeVisible();
     await expect(healthCard.getByText('No agent has connected yet')).toBeVisible();

@@ -86,7 +86,7 @@ test('the Settings cards size to their content at desktop width, in both Drive s
 
   // Every card in the grid sizes to its content, not to its row. The Drive card was the
   // reported one; the rule that fixed it is the layout's, so the whole layout is checked.
-  await expect(cards).toHaveCount(11);
+  await expect(cards).toHaveCount(8);
   for (const card of await cards.all()) {
     expect(await unexplainedSpaceBelowContent(card)).toBeLessThanOrEqual(2);
   }

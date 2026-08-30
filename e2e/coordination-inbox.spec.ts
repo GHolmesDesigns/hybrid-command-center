@@ -44,7 +44,7 @@ test('operator can list a seeded handoff, follow its subject link, and cancel it
   const handoff = await created.json();
   expect(handoff.state).toBe('OPEN');
 
-  await page.goto('/settings');
+  await page.goto('/agents');
   const panel = page.locator('.settings-card').filter({
     has: page.getByRole('heading', { level: 2, name: 'Agent handoffs' }),
   });

@@ -1,0 +1,34 @@
+import type { Task } from '../../../shared/types';
+import { AgentHandoffsCard } from './AgentHandoffsCard';
+import { McpConnectionSetupCard } from './McpConnectionSetupCard';
+import { McpHealthPanelCard } from './McpHealthPanelCard';
+import { PageHead } from './Shell';
+
+/**
+ * Agents module (C136 / #420): connection setup, health, and handoffs in one place.
+ *
+ * These cards used to live under Settings. The guided credential flow is HTTPS-only and written
+ * for a non-technical operator — no PowerShell and no hand-edited config files.
+ */
+export function AgentsView({
+  tasks,
+  flash,
+}: {
+  tasks: Task[];
+  flash: (message: string, type?: 'success' | 'error') => void;
+}) {
+  return (
+    <div className="page">
+      <PageHead
+        eyebrow="Agents"
+        title="Agents"
+        body="Connect Cursor, Claude, or Codex to this Command Center over hosted HTTPS, confirm the connection, and review agent handoffs. Issue and rotate credentials here — you should not need a terminal or a text editor."
+      />
+      <div className="agents-layout">
+        <McpConnectionSetupCard flash={flash} />
+        <McpHealthPanelCard flash={flash} />
+        <AgentHandoffsCard tasks={tasks} flash={flash} />
+      </div>
+    </div>
+  );
+}

@@ -17,7 +17,7 @@ the operator, and which MCP prompts to use. This file adds only Codex-specific p
 
 ## Connect in Codex
 
-1. Ask the operator to run **Settings → Agent connection setup** in HCC, issue a credential for
+1. Ask the operator to run **Agents → Agent connection setup** in HCC, issue a credential for
    your label, and copy the generated configuration.
 2. For local stdio, paste the TOML snippet into `~/.codex/config.toml`. Codex has no project
    context — use the absolute repository path the operator provides. That file is machine-local and

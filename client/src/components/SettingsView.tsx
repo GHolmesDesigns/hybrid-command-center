@@ -47,9 +47,6 @@ import { brandStyle } from './ui-shared';
 import { CategoriesCard } from './CategoriesCard';
 import { SignalCampaignsCard } from './SignalCampaignsCard';
 import { TagsCard } from './TagsCard';
-import { AgentHandoffsCard } from './AgentHandoffsCard';
-import { McpConnectionSetupCard } from './McpConnectionSetupCard';
-import { McpHealthPanelCard } from './McpHealthPanelCard';
 
 const COLOR_LABEL: Record<BrandingColorField, string> = {
   background: 'Sidebar background',
@@ -325,9 +322,6 @@ export function SettingsView({
           {/* Beside the other two label lists, because it is the same kind of thing one module over:
               campaigns label Signal posts, categories label projects, tags label tasks. */}
           <SignalCampaignsCard flash={flash} />
-          <AgentHandoffsCard tasks={tasks} flash={flash} />
-          <McpConnectionSetupCard flash={flash} />
-          <McpHealthPanelCard flash={flash} />
         </div>
         <div className="settings-column">
           <section className="panel settings-card">

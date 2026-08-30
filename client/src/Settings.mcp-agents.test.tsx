@@ -14,10 +14,10 @@ import {
   testState,
 } from './App.test-setup';
 
-describe('Settings Agent connection setup card', () => {
+describe('Agents connection setup card', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it('issues a credential, generates configuration, runs the diagnostic, and revokes', async () => {
+  it('issues a credential, shows client guide steps, runs the diagnostic, and revokes', async () => {
     testState.mcpAgentRegistryPayload = { enabled: true, credentials: [] };
     testState.mcpHealthTestPayload = {
       ok: true,
@@ -43,12 +43,18 @@ describe('Settings Agent connection setup card', () => {
       lastUsedAt: '2026-08-28T12:00:00.000Z',
     };
     vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
 
     render(
-      <MemoryRouter initialEntries={['/settings']}>
+      <MemoryRouter initialEntries={['/agents']}>
         <App />
       </MemoryRouter>,
     );
+    expect(await screen.findByRole('heading', { level: 1, name: 'Agents' })).toBeVisible();
     expect(await screen.findByRole('heading', { name: 'Agent connection setup' })).toBeVisible();
 
     fireEvent.change(screen.getByLabelText('Agent label'), {
@@ -56,8 +62,10 @@ describe('Settings Agent connection setup card', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Issue credential' }));
 
-    expect(await screen.findByText(/Copy into \.cursor\/mcp\.json/)).toBeVisible();
-    expect(screen.getByText(/"MCP_AGENT_LABEL": "cursor-planning"/)).toBeVisible();
+    expect(await screen.findByText(/Open Cursor Settings/)).toBeVisible();
+    expect(
+      screen.getByRole('button', { name: 'Copy ready-to-paste setup for Cursor' }),
+    ).toBeVisible();
     expect(
       requests.some(
         (request) =>
@@ -66,6 +74,11 @@ describe('Settings Agent connection setup card', () => {
           request.body.label === 'cursor-planning',
       ),
     ).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy ready-to-paste setup for Cursor' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalled());
+    expect(String(writeText.mock.calls[0]?.[0])).toContain('Bearer hcc_mcp_shown-once');
+    expect(String(writeText.mock.calls[0]?.[0])).toContain('"x-agent-label": "cursor-planning"');
 
     fireEvent.click(screen.getByRole('button', { name: 'Run connection diagnostic' }));
     expect(await screen.findByText('Diagnostic passed')).toBeVisible();
@@ -81,29 +94,48 @@ describe('Settings Agent connection setup card', () => {
     expect(screen.getByText('No active agent credentials.')).toBeVisible();
   });
 
-  it('generates hosted HTTPS configuration with the issued bearer', async () => {
-    testState.mcpAgentRegistryPayload = { enabled: true, credentials: [] };
+  it('rotates an existing credential and shows the new one-time setup', async () => {
+    testState.mcpAgentRegistryPayload = {
+      enabled: true,
+      credentials: [
+        {
+          id: 'cred-1',
+          agentId: 'agent-1',
+          label: 'cursor-planning',
+          scopes: ['coordination:read', 'coordination:write'],
+          issuedAt: '2026-08-28T10:00:00.000Z',
+          expiresAt: '2026-09-28T10:00:00.000Z',
+          revokedAt: null,
+          lastUsedAt: null,
+          lastOrigin: null,
+        },
+      ],
+    };
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     render(
-      <MemoryRouter initialEntries={['/settings']}>
+      <MemoryRouter initialEntries={['/agents']}>
         <App />
       </MemoryRouter>,
     );
-    expect(await screen.findByRole('heading', { name: 'Agent connection setup' })).toBeVisible();
+    expect(await screen.findByRole('button', { name: 'Rotate cursor-planning' })).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Rotate cursor-planning' }));
 
-    fireEvent.change(screen.getByLabelText('Agent label'), {
-      target: { value: 'claude-review' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Issue credential' }));
-
-    expect(await screen.findByText(/Copy into \.cursor\/mcp\.json/)).toBeVisible();
-
-    fireEvent.change(screen.getByLabelText('Transport'), {
-      target: { value: 'http' },
-    });
-
-    expect(await screen.findByText(/includes credential/)).toBeVisible();
-    expect(screen.getByText(/Bearer hcc_mcp_shown-once/)).toBeVisible();
-    expect(screen.getByText(/"x-agent-label": "claude-review"/)).toBeVisible();
+    expect(await screen.findByText(/Open Cursor Settings/)).toBeVisible();
+    expect(
+      requests.filter(
+        (request) =>
+          request.method === 'POST' &&
+          request.url.endsWith('/api/auth/mcp-credentials/cred-1/revoke'),
+      ),
+    ).toHaveLength(1);
+    expect(
+      requests.some(
+        (request) =>
+          request.method === 'POST' &&
+          request.url.endsWith('/api/auth/mcp-agents') &&
+          request.body.label === 'cursor-planning',
+      ),
+    ).toBe(true);
   });
 });

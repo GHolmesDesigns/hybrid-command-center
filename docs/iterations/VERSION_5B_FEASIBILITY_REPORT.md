@@ -4,9 +4,18 @@ Reviewed: 2026-08-23
 Source: `C:\Users\garni\Dropbox\GHD Deliverables\House\Version 5.docx`  
 Source modified: 2026-08-23 18:33:13 -04:00  
 Source SHA-256: `8AD42C739F6B7C3032D8061F38A9E5EA236CE47AC0A146A62D0D74562BFEF7EA`  
-Repository baseline: live `origin/main` at `e232626` (merged C85 / issue #259)  
+Repository baseline (5b audit): live `origin/main` at `e232626` (merged C85 / issue #259)  
 Roadmap baseline: [Project 6 - Command Center v5.1](https://github.com/users/GHolmesDesigns/projects/6), 10 cards  
 Prior report: `VERSION_5_FEASIBILITY_REPORT.md`
+
+**Version 5.5 delta reviewed:** 2026-08-30  
+**Version 5.5 source:** `C:\Users\garni\OneDrive\Desktop\Version 5.5.docx`  
+**Version 5.5 modified:** 2026-08-30 09:43:47 -04:00  
+**Version 5.5 SHA-256:** `d5f9cb5a4185fc2a9d7dfb04bbac2d3d83f7b646e0d70f9729f905d6a289923f`  
+**Repository baseline (5.5 delta):** live `origin/main` at `ed8b211`, app version `5.9.4`  
+The Version 5b strikethrough audit and Project 6 tables below are historical as of 2026-08-23. The
+[Version 5.5 delta](#version-55-delta) appends a full assessment of the new Word document without
+rewriting that audit.
 
 ## Scope and interpretation
 
@@ -115,6 +124,25 @@ Board hygiene findings:
   lifecycle requests merely because they mention Signal, media, or capabilities.
 - The live repository had no open pull request at review time. Local uncommitted work on the C86
   branch was deliberately excluded from the implemented baseline.
+
+### Status since 2026-08-23 (Project 6)
+
+As of the 2026-08-30 delta pass, the former Project 6 Todo cards above are **closed** on GitHub:
+
+| Card | Closed | Notes |
+|---|---|---|
+| [#260 / C86](https://github.com/GHolmesDesigns/hybrid-command-center/issues/260) | 2026-08-24 | Buffer media and capability boundary |
+| [#261 / C87](https://github.com/GHolmesDesigns/hybrid-command-center/issues/261) | 2026-08-24 | Confirmed Buffer publishing and reconciliation |
+| [#271 / C89](https://github.com/GHolmesDesigns/hybrid-command-center/issues/271) | 2026-08-24 | Stable imported Signal-post identity |
+| [#275 / C93](https://github.com/GHolmesDesigns/hybrid-command-center/issues/275) | 2026-08-25 | Deliberately unbuilt Signal-import documentation |
+
+Sibling Signal-import cards in the same chain are also closed:
+[#272 / C90](https://github.com/GHolmesDesigns/hybrid-command-center/issues/272),
+[#273 / C91](https://github.com/GHolmesDesigns/hybrid-command-center/issues/273),
+[#274 / C92](https://github.com/GHolmesDesigns/hybrid-command-center/issues/274)
+(2026-08-24–25). Live Buffer production writes may still be gated by evidence flags
+(`BUFFER_WRITE_EVIDENCE`); closed issues mean the *cards* shipped, not that every provider path is
+enabled in production. The historical Todo table above is left unchanged on purpose.
 
 ## Feasibility of the active items
 
@@ -255,17 +283,250 @@ not be used as a container for these unrelated Version 5b requests.
 9. What user question does `Outside of Signal` answer: provenance, manual delivery, or planning state?
 10. Is MCP local-only, networked, or development-coordination-only, and which methods may write?
 
+## Version 5.5 delta
+
+Reviewed against `Version 5.5.docx` on 2026-08-30. This section does not reopen the Version 5b
+strikethrough audit. It assesses the new document as a follow-on backlog and records where that
+backlog **drops**, **rewrites**, or **reverses** earlier Version 5b requests.
+
+### Scope and interpretation (5.5)
+
+- The document has **65 paragraphs**: 62 active, 0 fully struck, 0 partial strike, 3 empty.
+- There is **no strikethrough evidence**. Nothing in 5.5 is treated as “already done” from formatting.
+- Headings are Bugs, Paper cuts, and Feature requests. Agent-reported MCP “import headaches” are
+  included as operator evidence, including the document’s own “by design” boundary notes.
+- Same planning size guide (XS–XL) as above. Same rule: this report creates no issues and
+  implements no application behavior.
+- Repository baseline for this delta: `origin/main` at `ed8b211`, app version **5.9.4**. Recent tip
+  commit removes the stdio MCP server and standardizes on the production HTTPS endpoint — important
+  for credential UX and Drive-connection diagnosis.
+
+### Executive assessment (5.5)
+
+Version 5.5 is a **mostly new** roadmap, not a polish pass on Version 5b. It is feasible as sequenced
+work, but it mixes quick UI fixes, an operator-blocking MCP credential problem, product reversals
+(planning status, calendar editability, TikTok/YouTube routing), and several XL boundary programs
+(Drive writes, Wix blog, Buffer Drive video, multi-user).
+
+The important conclusions are:
+
+1. **Operator priority: guided MCP key issue and rotate.** The current Settings flow still ends in
+   copy-ready JSON/TOML and client-side paste. For a non-technical operator that can take hours.
+   Version 5.5 asks for an Agents-module field instead of PowerShell and hand-edited files. A guided
+   in-app flow (issue → one-time reveal → client-specific copy steps → health confirm → rotate) is
+   **high / M** and belongs in Wave A.
+2. **Most Version 5b active items are absent from 5.5.** Publishing preview/submit defects, favicon,
+   Add Post entry points, Publish Now, X→Threads, Deleted / Outside of Signal, and generic
+   multi-agent MCP do not reappear. Do not invent cards for them solely because the 5b section still
+   discusses them.
+3. **TikTok / YouTube routing is reversed.** Version 5b routed them through Buffer; Version 5.5 says
+   they now live on the Post Bridge account and asks to rewire Signal. Code on `main` still lists
+   `tt` / `yt` in `BUFFER_ROUTE_CHANNELS` (`shared/buffer.ts`). That needs an evidence-backed decision
+   before any card assumes either provider.
+4. **Two requests conflict with deliberate architecture.** Auto-setting planning status to Published
+   after a successful check, and opening the Signal editor from Calendar, both cross C65/C66 and the
+   read-only calendar composition. Feasible only after an explicit product decision.
+5. **Drive writes conflict with the doc’s own “by design” MCP walls.** Item “write ability to Drive
+   Folders” asks for the capability that paragraphs 58–60 say should stay walled off. Treat Drive
+   write as a separately approved module — never as a silent widening of Files or MCP browse.
+
+### Crosswalk: Version 5b active items → Version 5.5
+
+| Version 5b active item | In 5.5? | Notes |
+|---|---|---|
+| First Show preview error | Absent | Historical 5b defect only |
+| Account-selection alignment | Absent | Historical 5b defect only |
+| Confirm and submit error | Absent | Historical 5b defect only |
+| Delivery status on Signal calendar tiles | Absent | Not restated |
+| Project-aware Status breadcrumbs | Absent | Not restated |
+| Hide archived clients on Live Projects | Absent | Not restated |
+| Browser-tab favicon | Absent | Not restated |
+| Add Post entry points | Absent | Not restated |
+| Configurable default views / sort | Reworded | Narrowed to Grid/List in Default view settings |
+| Projects list view + status filters | Partial | Grid/List defaults only; live-status multi-filter not restated |
+| Media preview spike | Absent | Not restated |
+| Replace X with Threads; Buffer for TikTok/YouTube | **Policy reversed** | 5.5: TikTok/YouTube on Post Bridge; rewire Signal |
+| Publish Now | Absent | Not restated |
+| Delete published posts | Absent | Not restated |
+| Deleted / Outside of Signal | Absent | Not restated |
+| Reduce preview → confirm → refresh steps | Reworded | “When the check comes back success, status should automatically update to Published” |
+| Multi-agent MCP | Reworded / narrowed | Credential rotation UX + Agents nav + MCP shape quirks; not a vague multi-agent spike |
+
+### Operator priority: guided MCP key issue and rotate
+
+**Request (5.5):** improve Agent Credential rotation; put it on the Agents module, not PowerShell and
+editing JSON files. Operator feedback during this review: the current process is too technical and
+can take hours for a non-technical person.
+
+**Current state (5.9.4):**
+
+- Issue, revoke, copy config, and health test live in Settings via `McpConnectionSetupCard`
+  (`client/src/components/McpConnectionSetupCard.tsx`).
+- `buildMcpClientConfig` in `shared/mcp-client-config.ts` still emits JSON/TOML (or equivalent)
+  snippets; the operator must paste them into Cursor, Claude, or another client.
+- There is no top-level Agents nav. Connection setup, connection health, and Agent Handoffs sit among
+  Settings cards (`client/src/components/App.tsx` nav order ends at Settings).
+- `origin/main` at `ed8b211` removes the stdio MCP server and standardizes on the production HTTPS
+  endpoint, which should simplify the guided path (one transport story) but makes a clear HTTPS
+  credential flow mandatory.
+
+**Target UX to assess (chosen for this delta):** an **in-app guided flow** that covers issue / rotate /
+revoke, shows the secret once, and gives **client-specific next steps with a single copy/paste** —
+**no PowerShell and no hand-editing JSON/TOML**. One-click writing of client config files on disk is
+a later option only, not required for this card.
+
+**Feasibility:** High / **M**.
+
+**Recommendation:**
+
+1. Promote an **Agents** surface (top-level nav group or dedicated page) that owns Connection Setup,
+   Connection health, and Agent Handoffs together.
+2. Replace “generate config blob → find the right file → paste” with numbered steps per client
+   (Cursor, Claude, …): where to open settings, what to click, and one copy control for the value
+   that client needs.
+3. Keep one-time secret reveal, revoke, and reissue. After rotate, the health diagnostic must prove
+   the new credential works before the operator leaves the page.
+4. Acceptance criterion: a non-technical operator completes issue or rotate **without opening a text
+   editor or terminal**.
+5. Do not widen MCP write boundaries as part of this card. Credential UX is authentication and
+   onboarding, not Drive writes or provider publish.
+
+### Bugs (5.5)
+
+| Active item | Feasibility / size | Current-state finding | Recommendation |
+|---|---:|---|---|
+| Status drag-and-drop into empty columns fails; field selector works | High / S | Columns and “Drop tasks here” exist (`KanbanCards.tsx` / `Kanban.tsx`); empty `SortableContext` + `closestCorners` is the classic miss | Fix empty-column droppable hit area; add a regression test that drops into an empty status |
+| Line up fields with radio buttons on merge modal | High / XS | Merge modal shipped (C49/C71); `.merge-choice` uses baseline alignment | CSS/layout polish only; preserve keyboard and field-choice semantics |
+
+### Paper cuts (5.5)
+
+| Active item | Feasibility / size | Current-state finding | Recommendation |
+|---|---:|---|---|
+| Add padding below Picker button | High / XS | Google Picker control in Settings Drive card | One spacing rule under the Picker control |
+
+### Feature requests (5.5)
+
+| Active item | Feasibility / size | Current-state finding | Recommendation |
+|---|---:|---|---|
+| Rewire TikTok/YouTube to Post Bridge | Conditional / L | `BUFFER_ROUTE_CHANNELS` still owns `tt` / `yt` | Probe account evidence first. If Post Bridge now holds them, reverse the Buffer route with migration and mixed-provider refusal rules. Do not silently dual-route. |
+| Per-client branding (logo, color 1, color 2) | Feasible / L | Sidebar branding only; `clients` has no branding columns | Reuse `shared/branding.ts` contrast rules per client; HTTPS logo only; no local file store |
+| Client branding cues on Signal | Feasible after association / M-L | Signal posts have no `client_id`; campaigns have color only | Decide how a post binds to a client (project? campaign? explicit field) before painting logos on tiles |
+| Calendar click opens Signal Campaign modal | Decision-gated / M | Calendar is deliberately read-only; tasks link, posts do not | Prefer deep-link to `/signal` with the post selected, or host the editor only after accepting that Calendar becomes an edit entry point |
+| Auto-update status to Published after successful check | Decision-gated / M | Planning vs delivery are separate (C65/C66); auto-reconcile of delivery already exists | Do not mutate planning status without an explicit reversal. Safer: surface delivery success in the same panel |
+| Reorder sidebar (Dashboard… Agents… Settings) | High / S | Current order: Dashboard, Clients, Projects, Status, Import, Files, Calendar, Signal, Settings — no Agents | Implement with the MCP credential card; Agents owns setup/health/handoffs |
+| Reorder Settings columns | High / XS-S | Cards exist; left currently leads with Drive and agent cards | Left: categories, tags. Right: defaults, branding, Drive, timezones, calendar, campaigns. Move agent cards to Agents |
+| Guided MCP credential rotation on Agents | High / M | See [Operator priority](#operator-priority-guided-mcp-key-issue-and-rotate); card [C136 / #420](https://github.com/GHolmesDesigns/hybrid-command-center/issues/420) | Wave A; non-technical acceptance criterion |
+| Logo click → gholmesdesigns.com | High / XS | `BrandMark` is not a link | External link with visible new-tab affordance; keep contrast rules |
+| Signal import sample file; stack buttons in a quadrant | High / S | Sample workbook exists at `docs/examples/signal-import-format.xlsx`; UI has playbook sample, not Signal sample; buttons wrap in a row | Serve/download the Signal sample; quadrant layout for the two import actions |
+| Link to current version’s user manual | High / XS | Manual is version-gated in repo; README links it; no in-app link | Settings or Help link to the version-matched manual HTML |
+| Import page layout: helper full width; two equal scroll receipt columns | High / S | Helper left, receipts right; no column max-height scroll | Match the requested grid; keep receipts scoped to this run |
+| Write ability to Drive folders (operator and agents) | Ambiguous / XL | Files and MCP browse are read-only by design; provisioning exists | Requires a new confirmed write module, AGENTS.md + manual change, and MCP policy decision. Conflicts with 5.5’s own “by design” walls |
+| Grid and List in Default view settings | High / S | Projects grid/list is URL-durable; Settings defaults omit presentation | Store under view defaults; URL still wins when present |
+| Plan a Reports modal (basic DB queries v1) | Feasible / M-L plan-first | No `/reports` route | Plan read-only SQLite aggregates only; no provider calls; separate card after the plan |
+| Debug logging | Partial / S-M | `pino` + `LOG_LEVEL` including debug/trace | Decide operator-facing panel vs documented server env; do not log secrets |
+| Add multi-user to the roadmap | Docs / S | Explicitly out of scope in cloud-hosting docs | Roadmap note only for this horizon |
+| Username, password, forgot password, show-password eye | Partial / M | Password session shipped (C50+); login is password-only | Username/forgot/eye are UX cards; keep single-operator auth unless multi-user is approved |
+| Add scalability to the roadmap | Docs / S | Hosting docs exist | Roadmap note only |
+| Wix blog scheduling via MCP/Signal | Undetermined / XL | `blog` channel exists with null publish capabilities | New provider program; human-confirmed publish; not an MCP write by default |
+| Improve Buffer video from Drive (no silent conversion fail) | Conditional / L | Buffer refuses Drive media by design today | Needs an approved byte/transcode path or a provider-native upload; refuse silent conversion |
+| MCP Drive NOT_CONNECTED while browser Drive CONNECTED | High after diagnosis / S | Same SQLite token store when the same DB is used; stdio-local vs HTTPS-prod were different stores | With HTTPS-standardized MCP, document `storeId` / which server the agent hits; reconnect Drive on that store. Not a second OAuth by design |
+| `signal_list_posts` lacks projectId/campaign filters | Feasible / S | Args are date range + optional lifecycle only | Add optional filters; keep date window semantics |
+| `signal_resolve_drive_media` folder batch | Feasible / M after approval | One file link; folders refused | Explicit batch card; do not sneak folder resolve into the single-file tool |
+| MCP “by design” walls (no Drive write, no provider publish, no hard client delete) | Confirm | Matches AGENTS.md and approval boundaries | Do **not** file enhancement cards that erase these without a security decision. Note conflict with Drive-write request above |
+| `import_signal_commit` needs human go-ahead on preview | Confirm | Working-method rule, not a missing tool | Keep preview → confirm; no silent agent commit |
+
+### Coverage gaps that need cards or scope amendments (5.5)
+
+No current milestone card explicitly covers:
+
+- guided MCP key issue/rotate on an Agents surface (operator priority);
+- empty-column Status drag-and-drop;
+- merge-modal field/radio alignment;
+- Picker padding;
+- sidebar Agents group and Settings column reorder;
+- logo → gholmesdesigns.com;
+- in-app user-manual link;
+- Signal import sample download and Import quadrant/layout;
+- Grid/List in Default view settings;
+- MCP `signal_list_posts` campaign/project filters;
+- clarifying MCP vs web Drive store diagnosis in-product;
+
+Decision-gated or program-sized (do not quietly fold into adjacent cards):
+
+- Post Bridge rewire of TikTok/YouTube;
+- per-client branding and Signal cues;
+- Calendar → Signal editor;
+- auto Published planning status;
+- Drive folder writes;
+- Reports v1;
+- debug logging productization;
+- auth username / forgot / eye;
+- Wix blog publish;
+- Buffer Drive video path;
+- folder-batch Drive media resolve;
+- multi-user and scalability (roadmap docs only unless approved otherwise).
+
+### Recommended sequence (5.5)
+
+#### Wave A — Stabilize operator access and obvious defects
+
+1. **Guided MCP key issue/rotate** on an Agents surface (non-technical acceptance) —
+   tracked as [C136 / #420](https://github.com/GHolmesDesigns/hybrid-command-center/issues/420).
+2. Agents nav + Connection health + Handoffs placement beside that flow.
+3. MCP vs web Drive connection diagnosis (`storeId`, which base URL the agent uses).
+4. Empty-column Status drag-and-drop.
+5. Merge-modal alignment and Picker padding.
+
+#### Wave B — Contained Version 5.5 usability
+
+1. Settings column reorder after Agents leave Settings.
+2. Logo external link and in-app user-manual link.
+3. Import layout, Signal sample download, quadrant actions.
+4. Grid/List in Default view settings.
+5. `signal_list_posts` optional project/campaign filters.
+
+#### Wave C — Product decisions before coding
+
+1. TikTok/YouTube provider ownership (Post Bridge vs Buffer evidence).
+2. Client branding model and Signal association rule.
+3. Calendar deep-link vs in-calendar Signal editor.
+4. Whether “Published” means planning status, delivery, or both.
+5. Folder-batch Drive media: approve or keep one-file.
+
+#### Wave D — Boundary programs and roadmap-only items
+
+1. Drive write module (only if approved against the doc’s own walls).
+2. Reports v1 plan, then implementation.
+3. Debug logging operator story.
+4. Auth username / forgot / show-password eye.
+5. Wix blog provider program.
+6. Buffer Drive video without silent conversion failure.
+7. Multi-user and scalability as **roadmap documentation**, not this milestone’s build.
+
+### Decisions required before Version 5.5 implementation cards are written
+
+1. Confirm guided in-app MCP issue/rotate with client-specific copy steps (no PowerShell/JSON editing); defer one-click filesystem install?
+2. Are Agents a top-level nav group that owns credential setup, or only a Settings reorder?
+3. Does TikTok/YouTube move to Post Bridge, stay on Buffer, or split by live account evidence?
+4. Does “status → Published” mean planning status, delivery summary, or both?
+5. Is Drive write a new confirmed module (operator UI ± MCP), or out of scope despite the request?
+6. How does a Signal post bind to a client for branding cues?
+7. Should Calendar remain read-only with a deep link to `/signal`, or host the editor modal?
+8. Is folder-batch Drive media resolution approved, or stay one-file?
+9. Are multi-user and scalability documentation-only for this horizon?
+
 ## Verification and limitations
 
-- Read Project 6 live through the active `GHolmesDesigns` GitHub identity.
-- Verified the live main commit and the merged pull request attached to every struck requirement.
-- Inspected current types, routes, view-state convention, Signal editor/planner, Projects filters,
-  breadcrumbs, CSP, and provider decision records from `origin/main`.
+- Read Project 6 live through the active `GHolmesDesigns` GitHub identity (2026-08-23 pass).
+- Verified the live main commit and the merged pull request attached to every struck requirement
+  (2026-08-23 pass).
+- 2026-08-30 delta: re-read `Version 5.5.docx` via OOXML extraction (0 strikethroughs);
+  verified closed state of #260, #261, #271, #275; inspected `origin/main` at `ed8b211` and app
+  version `5.9.4`; inspected MCP setup UI, nav order, Buffer route constants, calendar read-only
+  composition, view defaults, and Drive media boundaries.
 - Made no live Post Bridge, Buffer, Drive, or platform call.
 - Ran no application quality gates because this is a planning artifact and changes no runtime code.
-- The supplied DOCX could not be rendered because the bundled runtime has no Word-compatible
-  renderer (`WinError 2`). Run-level OOXML extraction preserved strikethrough and paragraph order,
-  but annotated-image layout was not visually reviewed. Conclusions based on formatting are limited
-  to the extracted strike flags.
-- The working tree already contained active and unrelated changes. This report is the only file
-  intentionally added by this review.
+- Neither DOCX could be visually rendered in Word; OOXML extraction preserved paragraph order and
+  strike flags. Annotated-image layout was not visually reviewed.
+- The working tree may contain unrelated local changes. This report file is the only deliverable of
+  the 5.5 delta review.

@@ -36,12 +36,12 @@ const openHandoff = (overrides: Partial<AgentHandoff> = {}): AgentHandoff => ({
   ...overrides,
 });
 
-describe('Settings Agent handoffs card', () => {
+describe('Agents Agent handoffs card', () => {
   afterEach(() => vi.restoreAllMocks());
 
   const openSettings = async () => {
     render(
-      <MemoryRouter initialEntries={['/settings']}>
+      <MemoryRouter initialEntries={['/agents']}>
         <App />
       </MemoryRouter>,
     );

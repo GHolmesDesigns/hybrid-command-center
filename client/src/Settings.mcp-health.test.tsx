@@ -14,7 +14,7 @@ import {
   testState,
 } from './App.test-setup';
 
-describe('Settings MCP health panel', () => {
+describe('Agents MCP health panel', () => {
   afterEach(() => vi.restoreAllMocks());
 
   it('runs the connection test and shows the last-tested timestamp', async () => {
@@ -55,7 +55,7 @@ describe('Settings MCP health panel', () => {
     };
 
     render(
-      <MemoryRouter initialEntries={['/settings']}>
+      <MemoryRouter initialEntries={['/agents']}>
         <App />
       </MemoryRouter>,
     );
@@ -102,7 +102,7 @@ describe('Settings MCP health panel', () => {
       ],
     };
     render(
-      <MemoryRouter initialEntries={['/settings']}>
+      <MemoryRouter initialEntries={['/agents']}>
         <App />
       </MemoryRouter>,
     );

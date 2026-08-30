@@ -8,6 +8,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.9.5] - 2026-08-30
+
+### Added
+
+- Added an **Agents** page in the sidebar for connection setup, connection health, and agent handoffs.
+- Added a guided HTTPS credential flow with client-specific steps, one-click ready-to-paste setup, and in-app **Rotate** — no PowerShell or hand-edited config files required.
+
+### Changed
+
+- Moved Agent connection setup, Connection health, and Agent handoffs out of Settings onto the Agents page.
+
+### Breaking changes
+
+None.
+
 ## [5.9.4] - 2026-08-29
 
 ### Fixed

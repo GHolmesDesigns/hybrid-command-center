@@ -1162,18 +1162,20 @@ Settings contains, in the order it reads:
 - **Project categories** — every category in the workspace, with how many projects carry it, and the only place a category is renamed or deleted
 - **Task tags** — every tag in the workspace, with how many tasks carry it, and the only place a tag is deleted
 - **Signal campaigns** — every campaign in the workspace, with how many posts carry it, and the only place a campaign is renamed or deleted
-- **Agent handoffs** — what IDE agents asked each other to do through the coordination queue: open and claimed items, completed and cancelled from the last seven days, notes on a handoff, and operator cancel with a required reason. Agents post and claim through MCP; this panel does not create handoffs
 - Sidebar branding — the mark, title, subtitle, tagline, colours, and logo shown in the left navigation
 - **Default views** — how Clients, Projects, Calendar, and Signal open when the address omits that choice
 - The current application version
 - Detected local timezone
 - A short note on the Calendar, with a link to it
 
-On a wide screen these sit in two columns: the connection, the labels, and agent handoffs on the
-left, the sidebar's appearance and the rest on the right. Each column is its own stack, so a card
-that grows — Drive as you connect it, a validation message appearing, a long list of campaigns or
-handoffs — moves only the cards under it in the same column and never leaves a blank strip beside
-it. A narrower screen shows one column, and the cards read top to bottom in the order listed above.
+Agent connection setup, connection health, and agent handoffs live under **Agents** in the left
+navigation, not in Settings.
+
+On a wide screen Settings sits in two columns: the connection and the labels on the left, the
+sidebar's appearance and the rest on the right. Each column is its own stack, so a card that grows
+— Drive as you connect it, a validation message appearing, a long list of campaigns — moves only
+the cards under it in the same column and never leaves a blank strip beside it. A narrower screen
+shows one column, and the cards read top to bottom in the order listed above.
 
 Deleting a tag that is still attached asks first and tells you how many tasks are affected; a tag no task carries is removed straight away. Tags are created from tasks, not here.
 
@@ -1218,6 +1220,19 @@ Leave the address empty to use the text mark instead. The text mark also returns
 [Calendar](#calendar), [Signal](#signal), and [Files](#files) are in the sidebar and working.
 Calendar and Files only read: use Signal to change the content schedule, and use the **Open** links
 on Files or **Open Drive** on a project to manage files themselves in Google Drive.
+
+### Agents
+
+**Agents** is where you connect IDE assistants to this Command Center and watch their handoffs:
+
+- **Agent connection setup** — register an agent label, issue or rotate a scoped credential, follow
+  numbered steps for Cursor, Claude, or Codex, and copy a ready-to-paste HTTPS setup into that
+  client's own settings UI. You should not need a terminal or a text editor. The credential is shown
+  once; rotate creates a new one and the old key stops working immediately.
+- **Connection health** — run the read-only diagnostic and see which agents connected last.
+- **Agent handoffs** — open and claimed items, completed and cancelled from the last seven days,
+  notes on a handoff, and operator cancel with a required reason. Agents post and claim through MCP;
+  this panel does not create handoffs.
 
 ## 9. Deadlines and timezones
 
