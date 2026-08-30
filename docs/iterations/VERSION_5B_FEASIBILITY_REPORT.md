@@ -415,7 +415,7 @@ a later option only, not required for this card.
 | Auto-update status to Published after successful check | Decision-gated / M | Planning vs delivery are separate (C65/C66); auto-reconcile of delivery already exists | Do not mutate planning status without an explicit reversal. Safer: surface delivery success in the same panel |
 | Reorder sidebar (Dashboard… Agents… Settings) | High / S | Current order: Dashboard, Clients, Projects, Status, Import, Files, Calendar, Signal, Settings — no Agents | Implement with the MCP credential card; Agents owns setup/health/handoffs |
 | Reorder Settings columns | High / XS-S | Cards exist; left currently leads with Drive and agent cards | Left: categories, tags. Right: defaults, branding, Drive, timezones, calendar, campaigns. Move agent cards to Agents |
-| Guided MCP credential rotation on Agents | High / M | See [Operator priority](#operator-priority-guided-mcp-key-issue-and-rotate) | Wave A; non-technical acceptance criterion |
+| Guided MCP credential rotation on Agents | High / M | See [Operator priority](#operator-priority-guided-mcp-key-issue-and-rotate); card [C136 / #420](https://github.com/GHolmesDesigns/hybrid-command-center/issues/420) | Wave A; non-technical acceptance criterion |
 | Logo click → gholmesdesigns.com | High / XS | `BrandMark` is not a link | External link with visible new-tab affordance; keep contrast rules |
 | Signal import sample file; stack buttons in a quadrant | High / S | Sample workbook exists at `docs/examples/signal-import-format.xlsx`; UI has playbook sample, not Signal sample; buttons wrap in a row | Serve/download the Signal sample; quadrant layout for the two import actions |
 | Link to current version’s user manual | High / XS | Manual is version-gated in repo; README links it; no in-app link | Settings or Help link to the version-matched manual HTML |
@@ -470,7 +470,8 @@ Decision-gated or program-sized (do not quietly fold into adjacent cards):
 
 #### Wave A — Stabilize operator access and obvious defects
 
-1. **Guided MCP key issue/rotate** on an Agents surface (non-technical acceptance).
+1. **Guided MCP key issue/rotate** on an Agents surface (non-technical acceptance) —
+   tracked as [C136 / #420](https://github.com/GHolmesDesigns/hybrid-command-center/issues/420).
 2. Agents nav + Connection health + Handoffs placement beside that flow.
 3. MCP vs web Drive connection diagnosis (`storeId`, which base URL the agent uses).
 4. Empty-column Status drag-and-drop.
