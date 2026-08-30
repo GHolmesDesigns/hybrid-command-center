@@ -90,6 +90,35 @@ describe('buildMcpClientConfig', () => {
     ).toThrow(/origin/i);
   });
 
+  it('refuses stdio for Claude Desktop, which only connects over hosted HTTPS', () => {
+    expect(() =>
+      buildMcpClientConfig({
+        platform: 'claude-desktop',
+        transport: 'stdio',
+        agentLabel: 'claude-cowork',
+        origin: 'https://hcc.example.com',
+      }),
+    ).toThrow(/hosted HTTPS, not local stdio/i);
+  });
+
+  it('emits connector fields rather than a document for Claude Desktop over HTTPS', () => {
+    const config = buildMcpClientConfig({
+      platform: 'claude-desktop',
+      transport: 'http',
+      agentLabel: 'claude-cowork',
+      origin: 'https://hcc.example.com',
+      bearerToken: 'hcc_mcp_test-token',
+      embedSecret: true,
+    });
+    expect(config.format).toBe('fields');
+    expect(config.pasteTarget).toBe('fields');
+    expect(config.content).toContain('Server URL: https://hcc.example.com/api/mcp');
+    expect(config.content).toContain('Authorization: Bearer hcc_mcp_test-token');
+    // The label is carried by the credential; a header that disagrees with it is rejected.
+    expect(config.content).not.toContain('x-agent-label:');
+    expect(config.notes.join(' ')).toMatch(/Add custom connector/i);
+  });
+
   it('rejects unsupported platform values at runtime', () => {
     expect(() =>
       buildMcpClientConfig({
