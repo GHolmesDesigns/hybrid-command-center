@@ -19,6 +19,10 @@ version `5.9.5` — see [Post-implementation findings](#post-implementation-find
 `docs/mcp-review-findings`, containing freshly fetched `origin/main` at `ca046a8`.
 The pull was already up to date; the existing report commit was preserved. See
 [Codex review reconciliation](#codex-review-reconciliation-2026-08-30).
+**Final conversation reconciliation:** 2026-08-30, freshly fetched `main` at `1bb713c`, app
+version `5.9.7`, after Claude's documentation PR #424 merged. This pass records the test-procedure
+audit and OpenAI client compatibility assessment below; it does not claim the isolated testing
+changes are merged or the fetched version is deployed.
 The Version 5b strikethrough audit and Project 6 tables below are historical as of 2026-08-23. The
 [Version 5.5 delta](#version-55-delta) appends a full assessment of the new Word document without
 rewriting that audit.
@@ -424,11 +428,14 @@ that belongs in connector settings. The credential also reached the config witho
 prefix, which the server rejects as HTTP 401 and the client surfaces as "server unreachable." Time
 to a working connection was well beyond the "no text editor, no terminal" bar in recommendation 4.
 
-**Resolved in 5.9.6** ([#422](https://github.com/GHolmesDesigns/hybrid-command-center/issues/422),
+**Changes shipped in 5.9.6** ([#422](https://github.com/GHolmesDesigns/hybrid-command-center/issues/422),
 [PR #423](https://github.com/GHolmesDesigns/hybrid-command-center/pull/423), merged `8ebdda9`):
 
-- **C136-3 fixed.** `httpConfig` now emits a complete `mcpServers` document instead of a bare
-  `{url, headers}` fragment, so the content matches what the filename claims.
+- **C136-3 partially fixed.** `httpConfig` now emits a complete `mcpServers` JSON document instead
+  of a bare `{url, headers}` fragment. The final Codex review still finds JSON emitted for the
+  `codex` platform while its filename says `~/.codex/config.toml (HTTP section)`. Codex requires
+  TOML `[mcp_servers.<name>]` configuration, so the Codex format mismatch remains open. The common
+  wrapper fix must not be reported as verified compatibility with every client.
 - **C136-4 fixed.** A `claude-desktop` platform labelled "Claude Desktop / claude.ai" carries its own
   connector steps — Settings → Connectors → Add custom connector — and its stdio case throws, since
   those surfaces reach MCP only over hosted HTTPS. A new `pasteTarget` of `fields` drops the combined
@@ -437,7 +444,9 @@ to a working connection was well beyond the "no text editor, no terminal" bar in
   surfaces, which narrows C136-5 without closing it for the file-based platforms.
 
 **C136-1, C136-2, and C136-6 remain open.** They are behaviour changes in the card rather than
-onboarding, and were deliberately left out of #422's scope.
+onboarding, and were deliberately left out of #422's scope. C136-3 remains open specifically for
+Codex's generated format, and C136-5 remains open for the file-based platforms. C136-4's separate
+Claude connector guide shipped; this pass did not retest Claude chat or Cowork end to end.
 
 **Codex clarification of C136-1:** the pair is inside a `try/catch`, but that catch only flashes the
 error; it neither restores the revoked key nor explains partial success. Other labels remain
@@ -528,6 +537,83 @@ The earlier live diagnostic reported server **5.9.4**, while the fetched reposit
 C136 pass's 5.9.5 observation above remains attributed to that pass. Do not equate a successful Git
 pull with a deployed release. The diagnostic calls its transport `http` and does not expose TLS
 details separately.
+
+### Final conversation reconciliation: test quality and client parity
+
+#### Test procedure: quality over quantity
+
+The operator explicitly rejected adding tests to reach arbitrary counts. The testing audit on
+isolated baseline `ca046a8` found **2,550 Vitest cases in 209 files**, spanning shared rules, script
+helpers, server/SQLite/HTTP integration, and React/jsdom. They are not all isolated unit tests.
+Playwright separately collected **52 cases in 43 spec files**; those browser flows were not run
+as part of this audit.
+
+The prepared changes prioritize observable behavior and failure detection:
+
+- Revised `AGENTS.md`, README, `docs/testing.md`, and a PR evidence template require named outcomes,
+  relevant refusal/failure checks, persisted-state and unchanged-state assertions, and an
+  explanation of what mocks cannot prove. Reuse or strengthen a useful existing case before adding
+  another. No test-count quota, filler assertions, or automatic coverage-threshold increases.
+- Strengthened two existing MCP matrix cases. Temporarily making checklist completion ignore its
+  requested value left the original seven-case matrix green; the improved matrix failed on the
+  persisted value, then passed when the source was restored. This was a focused fault experiment,
+  not a claim that the fault survived every original test.
+- Removed three protocol cases that returned immediately on the inapplicable transport while
+  being counted as passes. Their real HTTP cases remain. Added `.only` refusal to all four
+  projects and assertion-presence safeguards where compatible. Nine legitimate Supertest-only
+  cases were retained without dummy Vitest assertions; the server conformance suite has its own
+  assertion safeguard.
+- The revised suite passed **2,547 cases in 209 files**, zero failures/skips/todos, with all existing
+  coverage floors unchanged and passing. Typecheck, lint, formatting, build, and diff checks passed.
+  Temporary faults and sentinel tests were removed. Fewer cases now give more accurate evidence.
+
+**Delivery state:** these policy/configuration/test changes remain uncommitted in
+`.worktrees/test-procedure-audit`, based on `ca046a8`. The full audit is
+`docs/audits/test-procedure-audit-2026-08-30.md` inside that worktree. They have **not** been
+integrated into `main`, so other agents do not yet inherit the revised repository guidance.
+Reconcile them with current `main` and run the applicable gates before integration. The results
+above are the isolated audit's evidence, not tests of `1bb713c`, remote CI, or production.
+
+#### Codex, ChatGPT Chat, and Work: same backend, separately verified clients
+
+The connection pain can recur on OpenAI surfaces. They can use MCP read/write tools, but a working
+local Codex connection does not prove that ChatGPT Chat or cloud Work has the same connection,
+authentication, enabled tools, or approvals. Do not solve that by adding separate data stores or
+by exposing unrestricted HTTP routes.
+
+| Surface | Evidence and remaining risk |
+|---|---|
+| This Codex desktop session | Live `system_connection_status` at `2026-08-30T23:33:47.974Z`: authenticated `codex-desktop`, all four coordination/workspace read/write scopes, 60 tools, 4 resources, store `c11bf2bb-8af9-4680-9c02-b347720fb532`, server `5.9.5`, capability `mcp-d3c51687`. Discovery and bounded read passed; no write was executed to test access |
+| Another Codex installation / local Work setup | Codex supports Streamable HTTP with bearer tokens or OAuth. Configure and verify each actual installation; HCC's Codex JSON-versus-TOML generator defect remains C136-3. See [official MCP configuration](https://learn.chatgpt.com/docs/extend/mcp?surface=cli) |
+| ChatGPT Chat with a custom MCP app | Developer mode supports both read and write tools, subject to enabled tools and confirmation settings. Its documented authentication choices are OAuth, no authentication, and mixed OAuth/no-auth; this does not establish a generic paste-in bearer-header field. HCC's manually issued credential must not be confused with an OAuth client ID/secret. See [official developer-mode documentation](https://developers.openai.com/api/docs/guides/developer-mode) |
+| ChatGPT Work in the cloud | Hosted Chat/Work uses installed plugins/connectors, not local Codex configuration files. Permissions and authorized connections govern available actions. A common plugin can expose the same backend tools, but account access and HCC read/write parity must be verified in Work itself. See [MCP web setup](https://learn.chatgpt.com/docs/extend/mcp?surface=cli), [plugins](https://learn.chatgpt.com/docs/plugins), and [Work execution and connection boundaries](https://learn.chatgpt.com/docs/enterprise/chatgpt-work-overview) |
+
+**Authentication gap to assess:** the inspected HCC MCP path resolves HCC scoped bearers or operator
+sessions; no MCP OAuth authorization-server/discovery flow was found in `server/`. Existing Google
+Drive OAuth connects HCC to Drive and does not authenticate ChatGPT to HCC. For the standard ChatGPT
+app route, assess supported OAuth onboarding (directly or through a reviewed adapter) before
+promising compatibility. A separately supported plugin credential mechanism may also work, but it
+must be verified in the user's Chat/Work surfaces. Do not disable HCC authentication, use a public
+no-auth bridge, or paste a bearer into ordinary chat to bypass setup.
+
+**Acceptance criteria for client parity:**
+
+1. The selected integration reaches the intended hosted HCC endpoint and returns the same
+   `storeId`; each agent has its own traceable identity and appropriate scopes.
+2. Compare actual tool names/schemas and enabled actions, not only the number 60. Refresh stale
+   discovery after updates. Where resources/prompts are unavailable in a client, use the existing
+   tool equivalents such as `system_capabilities` rather than treating missing UI support as lost
+   application capability.
+3. Read the same existing record from each client. Validate write behavior first with fixture data;
+   any live write requires an explicitly approved target/action and read-back in the other client.
+   Do not create test handoffs as a connection check. Scope grants alone are not write evidence.
+4. Keep the same revision, confirmation, idempotency, audit, and provider/Drive boundaries for every
+   client. MCP parity does not mean parity with a coding agent's shell or every browser HTTP route.
+
+The live server reported **5.9.5** while the fetched repository is **5.9.7**. Report deployment
+lag separately from authentication/client compatibility. The diagnostic calls the transport `http`;
+it does not independently expose TLS details. No ChatGPT Chat/Work or Claude client was operated
+from this pass, so their actual account-level connection/write status remains unverified.
 
 ### Bugs (5.5)
 
@@ -666,6 +752,14 @@ Decision-gated or program-sized (do not quietly fold into adjacent cards):
 
 ## Verification and limitations
 
+- Final conversation pass: `git pull --ff-only origin main` succeeded (already up to date) at
+  `1bb713c`, after #424. Preserved Claude's guide and shipped changes, narrowed C136-3's resolution
+  to the formats actually fixed, and added test-procedure delivery status and client parity risks.
+  Read official OpenAI MCP, developer-mode, plugin, and Work documentation. The safe config-builder
+  check used a placeholder/example origin and showed `format: json` with the Codex TOML filename;
+  no credential or provider was involved. The production diagnostic made no workspace mutation.
+- The new report text is documentation only. Earlier test-audit results belong to its isolated
+  worktree; they are not a fresh application gate run against this final-report checkout.
 - 2026-08-30 Codex reconciliation: ran `git pull --ff-only origin main` successfully; it reported
   already up to date. Only this report was edited. Rechecked the cited rotation, credential,
   scope-enforcement, listing, operator-health, and shutdown paths. C136-6 is established by static
