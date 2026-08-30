@@ -69,6 +69,7 @@ describe('Settings Agent connection setup card', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Run connection diagnostic' }));
     expect(await screen.findByText('Diagnostic passed')).toBeVisible();
+    expect(screen.getByText('Store: store-fi')).toBeVisible();
     expect(
       requests.some(
         (request) => request.method === 'POST' && request.url.endsWith('/api/mcp/health/test'),

@@ -16,6 +16,20 @@ they do not restate this policy.
 Network MCP requires operator authentication on the host. Local stdio transport runs
 `npm run mcp` from the repository checkout and uses `MCP_AGENT_LABEL` in the server environment.
 
+### Which connection is authoritative (C135, #410)
+
+Stdio and hosted HTTPS can expose the same tools, labels, and capability version while answering
+from **different SQLite files**. A coordination write through local stdio succeeds locally but does
+**not** appear in the operator's production inbox or in a prod MCP read.
+
+**The hosted HTTPS origin is the sole authoritative store for the shared coordination inbox.**
+Use `hybrid-command-center-prod` (or your operator's HTTPS MCP config) for handoffs, claims, and
+completes that must reach Settings or other agents. Local stdio is workstation-local only.
+
+Before any coordination write, call `system_connection_status` on every configured connection and
+compare `storeId`. Different values mean different stores — stop and switch to HTTPS rather than
+assuming a write will propagate.
+
 ## Claim → work → prove
 
 Every handoff follows the same loop:
@@ -68,9 +82,11 @@ Stop and ask rather than guessing when:
 
 ## Diagnostics
 
-- `system_connection_status` — read-only check that auth, tools, and resources respond. Safe to run
-  any time; it creates no handoff and writes nothing.
-- The operator's Settings diagnostic runs the same checks from the server side.
+- `system_connection_status` — read-only check that auth, tools, resources, and **`storeId`**
+  respond. Safe to run any time; it creates no handoff and writes nothing. Compare `storeId` across
+  connections before coordination writes.
+- The operator's Settings diagnostic runs the same checks from the server side and shows the store
+  id beside capability version.
 
 ## Optional: Claude Code background inbox loop
 
