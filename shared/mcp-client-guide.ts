@@ -31,6 +31,8 @@ export type McpClientGuide = {
   agentLabel: string;
   steps: readonly McpGuideStep[];
   copyFields: readonly McpGuideCopyField[];
+  /** What this client must send on every request. Connector surfaces must not send the label. */
+  headerHint: string;
 };
 
 const normalizeOrigin = (origin: string): string => origin.replace(/\/+$/, '');
@@ -70,6 +72,24 @@ const STEPS: Record<McpClientPlatform, readonly McpGuideStep[]> = {
     {
       title: 'Confirm in Hybrid Command Center',
       body: 'Return here and run the connection diagnostic. Last used updates after the agent’s first successful call.',
+    },
+  ],
+  'claude-desktop': [
+    {
+      title: 'Open connector settings in claude.ai',
+      body: 'In Claude Desktop, claude.ai chat, or Cowork, open Settings, then Connectors. These surfaces use account-level connectors — do not use Developer settings or edit a configuration file.',
+    },
+    {
+      title: 'Add a custom connector',
+      body: 'Choose Add custom connector. Name it Hybrid Command Center. This is a form, not a file — you will fill each value into its own field.',
+    },
+    {
+      title: 'Fill the server URL and credential',
+      body: 'Copy the server URL below into the connector URL field, then copy the credential into the Authorization field. Keep the word Bearer and the space in front of it — a bare token is rejected as a 401 and usually shows as “server unreachable”.',
+    },
+    {
+      title: 'Enable it where you need it, then confirm',
+      body: 'Enable the connector for the projects or chats that should reach the Command Center. Return here and run the connection diagnostic; Last used updates after the first successful call.',
     },
   ],
   codex: [
@@ -120,29 +140,60 @@ export function buildMcpClientGuide(input: McpClientGuideInput): McpClientGuide 
     bearerToken: input.bearerToken,
     embedSecret: true,
   });
+  const serverUrlField: McpGuideCopyField = {
+    id: 'serverUrl',
+    label: 'Copy server URL',
+    value: serverUrl,
+  };
+  const credentialField: McpGuideCopyField = {
+    id: 'credential',
+    label: 'Copy credential',
+    value: input.bearerToken,
+    secret: true,
+  };
+  const agentLabelField: McpGuideCopyField = {
+    id: 'agentLabel',
+    label: 'Copy agent label',
+    value: input.agentLabel,
+  };
+
+  /**
+   * A client whose UI asks for each value separately gets the fields in the order its form asks
+   * for them, and no combined blob — offering one there invites pasting a document into a field
+   * that wants a URL (#422).
+   */
+  const copyFields: readonly McpGuideCopyField[] =
+    setup.pasteTarget === 'fields'
+      ? [serverUrlField, credentialField, agentLabelField]
+      : [
+          {
+            id: 'setup',
+            label: `Copy ready-to-paste setup for ${MCP_CLIENT_PLATFORM_LABEL[input.platform]}`,
+            value: setup.content,
+            secret: true,
+          },
+          serverUrlField,
+          agentLabelField,
+          { ...credentialField, label: 'Copy credential only' },
+        ];
+
   return {
     platform: input.platform,
     platformLabel: MCP_CLIENT_PLATFORM_LABEL[input.platform],
     serverUrl,
     agentLabel: input.agentLabel,
     steps: STEPS[input.platform],
-    copyFields: [
-      {
-        id: 'setup',
-        label: `Copy ready-to-paste setup for ${MCP_CLIENT_PLATFORM_LABEL[input.platform]}`,
-        value: setup.content,
-        secret: true,
-      },
-      { id: 'serverUrl', label: 'Copy server URL', value: serverUrl },
-      { id: 'agentLabel', label: 'Copy agent label', value: input.agentLabel },
-      {
-        id: 'credential',
-        label: 'Copy credential only',
-        value: input.bearerToken,
-        secret: true,
-      },
-    ],
+    copyFields,
+    headerHint:
+      setup.pasteTarget === 'fields' ? MCP_GUIDE_CONNECTOR_HEADER_HINT : MCP_GUIDE_HEADER_HINT,
   };
 }
 
 export const MCP_GUIDE_HEADER_HINT = `Every request must send Authorization: Bearer … and ${MCP_AGENT_LABEL_HEADER}.`;
+
+/**
+ * Connector surfaces send Authorization only. The label is carried inside the credential, and a
+ * `x-agent-label` that disagrees with it is rejected outright, so telling an operator to add one
+ * here can only break the connection (#422).
+ */
+export const MCP_GUIDE_CONNECTOR_HEADER_HINT = `Send Authorization: Bearer … only. Keep the word Bearer and the space; do not add ${MCP_AGENT_LABEL_HEADER}.`;
