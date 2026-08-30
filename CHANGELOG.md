@@ -8,6 +8,30 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.9.6] - 2026-08-30
+
+### Added
+
+- Added **Claude Desktop / claude.ai** as a client option in Agents → Agent connection setup, with
+  steps for adding a custom connector in claude.ai settings. Claude Desktop, claude.ai chat, and
+  Cowork use account-level connectors rather than per-project configuration, and previously the only
+  Claude option described Claude Code's setup instead.
+
+### Fixed
+
+- The copied HTTPS setup is now a complete configuration document rather than a fragment, so it is
+  valid where the guide says to paste it.
+- The Claude Desktop / claude.ai steps offer the server URL and credential as separate values,
+  matching a connector form that asks for each field on its own, and no longer suggest pasting a
+  configuration blob into a field expecting a URL.
+- The connection steps for connector-based clients no longer instruct operators to send an
+  `x-agent-label` header. The agent label travels inside the credential, and a header that disagrees
+  with it is rejected.
+
+### Breaking changes
+
+None.
+
 ## [5.9.5] - 2026-08-30
 
 ### Added
