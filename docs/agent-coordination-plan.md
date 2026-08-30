@@ -433,6 +433,26 @@ This does **not** reopen C105: for workspace and Signal tools, `agent_label` rem
 coordination claim/complete/cancel among agents, the label is the authorization principal so a
 directed handoff means something. Agents are still not tenants — one operator workspace.
 
+### 5.1a Store identity (C135, #410)
+
+`agent_label` identifies a principal, not a store. Two MCP connections can report the same label,
+the same tool list, and the same capability version while each is backed by its own SQLite file —
+this happened live on 2026-08-28 between the `hybrid-command-center` stdio connection (a workstation
+checkout) and `hybrid-command-center-prod` (the hosted HTTPS origin at `hcc.gholmesdesigns.com`), and
+`coordination_claim_handoff` + `coordination_complete_handoff` against the stdio side left the
+production inbox showing the handoff as still `OPEN`.
+
+**The hosted HTTPS origin is the sole authoritative store for the shared operator-visible inbox.**
+Local stdio is a workstation-local instance: real for whoever is running it, invisible to every
+other connection, and never assumed to be the same inbox the operator's Settings page shows. An
+agent that needs its coordination writes to reach the operator or another agent must connect over
+the hosted HTTPS origin, not stdio.
+
+`system_connection_status` (C124) now returns `storeId` — a value minted once per SQLite file and
+stable across restarts (`server/db.ts`, `getStoreId`). Two connections that return different
+`storeId`s are provably different stores no matter what else about them matches; compare it before
+trusting that a write made through one connection is visible through another.
+
 ### 5.2 Lifecycle
 
 Completing a claimed handoff requires a result summary and one machine-readable outcome:

@@ -32,6 +32,10 @@ export const mcpConnectionStatusSchema = z.object({
   protocolVersion: z.string(),
   agentLabel: z.string().nullable(),
   grantedScopes: z.array(z.string()),
+  // Identifies the SQLite file answering this connection (#410). Two connections with the same
+  // agent label and tool list can still be talking to two independent stores — stdio against a
+  // workstation checkout, HTTPS against the hosted origin — and this is what tells them apart.
+  storeId: z.string(),
   serverVersion: z.string(),
   capabilityVersion: z.string(),
   serverClock: z.string(),

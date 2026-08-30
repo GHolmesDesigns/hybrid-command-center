@@ -33,6 +33,45 @@ describe('buildConnectionStatus', () => {
     expect(status.checks.resourcesList.ok).toBe(true);
     expect(status.checks.resourceRead.ok).toBe(true);
     expect(status.capabilityVersion).toMatch(/^mcp-/);
+    expect(status.storeId).toEqual(expect.any(String));
+    expect(status.storeId.length).toBeGreaterThan(0);
+  });
+
+  it('reports the same storeId across repeated calls on one database', () => {
+    const first = buildConnectionStatus(db, {
+      transport: 'http',
+      authenticated: true,
+      agentLabel: 'cursor-planning',
+      grantedScopes: MCP_AGENT_SCOPES,
+      now: NOW,
+    });
+    const second = buildConnectionStatus(db, {
+      transport: 'stdio',
+      authenticated: true,
+      agentLabel: 'cursor-planning',
+      grantedScopes: MCP_AGENT_SCOPES,
+      now: NOW,
+    });
+    expect(second.storeId).toBe(first.storeId);
+  });
+
+  it('reports different storeIds for independent databases (#410)', () => {
+    const other = createDb(':memory:');
+    const statusA = buildConnectionStatus(db, {
+      transport: 'stdio',
+      authenticated: true,
+      agentLabel: 'cursor-planning',
+      grantedScopes: MCP_AGENT_SCOPES,
+      now: NOW,
+    });
+    const statusB = buildConnectionStatus(other, {
+      transport: 'http',
+      authenticated: true,
+      agentLabel: 'cursor-planning',
+      grantedScopes: MCP_AGENT_SCOPES,
+      now: NOW,
+    });
+    expect(statusA.storeId).not.toBe(statusB.storeId);
   });
 
   it('reports failure when the caller is not authenticated', () => {

@@ -30,6 +30,29 @@ describe('Settings MCP health panel', () => {
       recentCompletions: [],
       auditEventCount: 0,
     };
+    testState.mcpHealthTestPayload = {
+      ok: true,
+      status: {
+        ok: true,
+        transport: 'operator',
+        authenticated: true,
+        protocolVersion: '2024-11-05',
+        agentLabel: null,
+        grantedScopes: ['coordination:read', 'coordination:write'],
+        storeId: 'store-fixture-health',
+        serverVersion: '5.9.3',
+        capabilityVersion: 'mcp-test',
+        serverClock: '2026-08-28T12:00:00.000Z',
+        checks: {
+          toolsList: { ok: true, toolCount: 17 },
+          resourcesList: { ok: true, resourceCount: 2 },
+          resourceRead: { ok: true, uri: 'hcc://workspace/context', byteLength: 100 },
+        },
+        testedAt: '2026-08-28T12:00:00.000Z',
+      },
+      workspaceChecksumUnchanged: true,
+      lastUsedAt: '2026-08-28T12:00:00.000Z',
+    };
 
     render(
       <MemoryRouter initialEntries={['/settings']}>
@@ -42,6 +65,7 @@ describe('Settings MCP health panel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Test connection' }));
 
     expect(await screen.findByText('Diagnostic passed')).toBeVisible();
+    expect(screen.getByText('Store: store-fi')).toBeVisible();
     expect(screen.getByText(/Last tested:/)).toBeVisible();
     expect(
       requests.some(

@@ -26,6 +26,10 @@ the operator, and which MCP prompts to use. This file adds only Claude Code-spec
    the bearer.
 4. Reload MCP servers after saving.
 
+**Coordination writes must use HTTPS prod**, not local stdio — see
+[docs/mcp-agent-workflow.md](../../docs/mcp-agent-workflow.md) §Connect once. Run
+`system_connection_status` on both connections and compare `storeId` before posting handoffs.
+
 ## MCP prompts
 
 After connecting, fetch workflow prompts with `prompts/list` and `prompts/get`. Start with

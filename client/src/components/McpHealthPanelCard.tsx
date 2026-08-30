@@ -230,6 +230,9 @@ export function McpHealthPanelCard({
           <strong>{testResult.ok ? 'Diagnostic passed' : 'Diagnostic reported failures'}</strong>
           <span>Server clock: {new Date(testResult.status.serverClock).toLocaleString()}</span>
           <span>Capability version: {testResult.status.capabilityVersion}</span>
+          <span title={testResult.status.storeId}>
+            Store: {testResult.status.storeId.slice(0, 8)}
+          </span>
           <span>Tools listed: {testResult.status.checks.toolsList.toolCount ?? 0}</span>
           <span>Last tested: {new Date(testResult.lastUsedAt).toLocaleString()}</span>
           {!testResult.workspaceChecksumUnchanged && (

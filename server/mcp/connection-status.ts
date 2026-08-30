@@ -8,7 +8,7 @@ import type { McpAgentScope } from '../../shared/mcp-agent-registry.ts';
 import type { McpConnectionStatus } from '../../shared/mcp-health.ts';
 import { MCP_PROTOCOL_VERSION } from '../../shared/mcp-transport.ts';
 import { WORKSPACE_CONTEXT_URI } from '../../shared/mcp-workspace-context.ts';
-import type { Db } from '../db.ts';
+import { getStoreId, type Db } from '../db.ts';
 import { MCP_CAPABILITY_VERSION, mcpToolsListPayload } from './registry.ts';
 import { MCP_RESOURCE_DEFINITIONS, readMcpResource } from './resources.ts';
 
@@ -74,6 +74,7 @@ export function buildConnectionStatus(
     protocolVersion: MCP_PROTOCOL_VERSION,
     agentLabel: options.agentLabel,
     grantedScopes: [...options.grantedScopes],
+    storeId: getStoreId(db),
     serverVersion: APP_VERSION,
     capabilityVersion: MCP_CAPABILITY_VERSION,
     serverClock: now.toISOString(),

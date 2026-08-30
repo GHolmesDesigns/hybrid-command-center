@@ -28,6 +28,7 @@ describe('Settings Agent connection setup card', () => {
         protocolVersion: '2024-11-05',
         agentLabel: null,
         grantedScopes: ['coordination:read', 'coordination:write'],
+        storeId: 'store-fixture-1',
         serverVersion: '5.7.1',
         capabilityVersion: '5.7.1',
         serverClock: '2026-08-28T12:00:00.000Z',
@@ -68,6 +69,7 @@ describe('Settings Agent connection setup card', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Run connection diagnostic' }));
     expect(await screen.findByText('Diagnostic passed')).toBeVisible();
+    expect(screen.getByText('Store: store-fi')).toBeVisible();
     expect(
       requests.some(
         (request) => request.method === 'POST' && request.url.endsWith('/api/mcp/health/test'),

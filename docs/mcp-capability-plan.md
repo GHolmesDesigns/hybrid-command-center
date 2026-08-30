@@ -775,6 +775,63 @@ matrix in [`mcp-agent-evaluation.md`](mcp-agent-evaluation.md).
 
 ---
 
+## Wave 31 — Post-launch fix
+
+### C135 — Stdio and prod MCP endpoints resolve to independent, unsynced coordination stores (shipped)
+
+**Type / branch:** `fix/410-mcp-store-divergence`
+**Size:** M · **Estimate:** 1–3 h · **Labels:** `bug` `tier-1-security` `size-m`
+**Issue:** [#410](https://github.com/GHolmesDesigns/hybrid-command-center/issues/410)
+**Depends on:** C124 (#374) — the connection diagnostic this card extends.
+**Discovered:** live agent session, 27–28 August 2026.
+
+#### Problem
+
+`hybrid-command-center` (stdio) and `hybrid-command-center-prod` (HTTPS) both answered
+`coordination_list_handoffs` identically in one session; minutes later, a claim and complete against
+stdio reported `COMPLETED` while the production inbox and a re-query of the prod endpoint still
+showed the same handoff `OPEN`. `createDb()` (`server/db.ts`) opens one `DatabaseSync` file per
+process — the two connections were never the same store, and nothing in `system_connection_status`
+(C124) said so.
+
+#### Settled behaviour
+
+The separation is intentional deployment topology, not a bug to unify: a workstation checkout and
+the hosted origin are different machines with different SQLite files by construction, and forcing
+stdio to write into production would be a bigger change than this defect calls for.
+
+- `createDb()` mints a `store_id` once per file (`settings` key `store_id`, `INSERT OR IGNORE`,
+  `crypto.randomUUID()`) and keeps it across every restart and migration.
+- `system_connection_status` returns it as `storeId` — two connections that report different
+  `storeId`s are provably different stores regardless of matching label, tool list, or capability
+  version.
+- The operator's Settings diagnostic panel shows the store id beside capability version and tools
+  listed, so a human comparing two connections' test results can tell them apart at a glance.
+- [`agent-coordination-plan.md`](agent-coordination-plan.md) §5.1a states plainly that the hosted
+  HTTPS origin is the sole authoritative store for the shared inbox and stdio is workstation-local.
+
+#### Out of scope
+
+- Real-time replication or a distributed store between instances.
+- Making a non-authoritative endpoint refuse coordination writes outright — rejected in favor of the
+  simpler fix (a visible, comparable identifier) given the confirmed cause is topology, not
+  misconfiguration.
+
+#### Acceptance criteria
+
+- [x] `system_connection_status` output lets an agent distinguish this stdio connection from the
+      production HTTPS connection.
+- [x] `agent-coordination-plan.md` states plainly which connection is authoritative for the shared
+      inbox.
+- [x] Re-running the repro (list on both → write on one → list on both) now shows a `storeId`
+      mismatch explaining the divergence before any write is attempted.
+
+**Shipped as:** `server/db.ts` (`getStoreId`), `shared/mcp-health.ts`, `server/mcp/connection-status.ts`,
+`client/src/components/McpConnectionSetupCard.tsx`, and
+[`agent-coordination-plan.md`](agent-coordination-plan.md) §5.1a.
+
+---
+
 ## 5. Sequencing
 
 ```text
