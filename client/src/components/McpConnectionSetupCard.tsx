@@ -253,7 +253,9 @@ export function McpConnectionSetupCard({
             <li aria-disabled={!issued}>
               <strong>2. Connect your client</strong>
               {!issued ? (
-                <p className="field-hint">Issue or rotate a credential to unlock the connection steps.</p>
+                <p className="field-hint">
+                  Issue or rotate a credential to unlock the connection steps.
+                </p>
               ) : guide && 'error' in guide ? (
                 <p role="alert">{guide.error}</p>
               ) : guide ? (
