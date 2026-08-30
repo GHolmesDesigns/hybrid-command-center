@@ -25,7 +25,7 @@ import {
   reclaimWorkSession,
   reclaimableWorkSessions,
 } from '../../agent-coordination/work-sessions.ts';
-import { EVAL_FIXTURE, EVAL_NOW } from './fixture.ts';
+import { EVAL_FIXTURE } from './fixture.ts';
 import {
   EVAL_ALL_SCOPES,
   EVAL_SESSION_SECRET,
@@ -81,7 +81,7 @@ async function withHttpApp(
       .send({
         label,
         scopes,
-        expiresAt: new Date(EVAL_NOW.getTime() + 86_400_000).toISOString(),
+        expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
       });
     if (issued.status !== 201) {
       throw new Error(`Credential issue failed: ${issued.status} ${JSON.stringify(issued.body)}`);
