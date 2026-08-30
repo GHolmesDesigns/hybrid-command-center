@@ -8,6 +8,29 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.9.4] - 2026-08-29
+
+### Fixed
+
+- `system_connection_status` now returns a `storeId` that stays stable across restarts and differs
+  between independent SQLite files, so an agent (or the operator's Settings diagnostic) can tell a
+  local stdio MCP connection apart from the hosted production HTTPS connection even when the agent
+  label, tool list, and capability version all match. Previously the two could look identical while
+  silently backed by two unsynced coordination stores, so a claim/complete made through one endpoint
+  could report success while the other endpoint — and the operator's live inbox — still showed the
+  handoff open.
+- `docs/agent-coordination-plan.md` now states plainly that the hosted HTTPS origin is the sole
+  authoritative store for the shared agent coordination inbox and that local stdio is
+  workstation-local only.
+- `docs/mcp-agent-workflow.md` and the Cursor/Claude skill wrappers now tell agents to compare
+  `storeId` across connections and route coordination writes through HTTPS prod.
+- Settings connection diagnostics (Agent connection setup and Connection health) now show the store
+  id beside capability version so operators can tell two connections apart at a glance.
+
+### Breaking changes
+
+None.
+
 ## [5.9.3] - 2026-08-29
 
 ### Added
