@@ -8,6 +8,23 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.9.7] - 2026-08-30
+
+### Added
+
+- Added a connection and efficiency guide for Claude chat and Claude Cowork, covering connector
+  setup on those surfaces, the store-identity check before coordination writes, and how to read the
+  workspace efficiently.
+
+### Changed
+
+- Updated the Version 5b feasibility report: the guided MCP credential flow is recorded as shipped,
+  with post-implementation findings and a full-repository review of the current code.
+
+### Breaking changes
+
+None.
+
 ## [5.9.6] - 2026-08-30
 
 ### Added

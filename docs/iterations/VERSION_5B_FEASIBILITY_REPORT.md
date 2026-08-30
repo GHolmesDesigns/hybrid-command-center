@@ -13,6 +13,12 @@ Prior report: `VERSION_5_FEASIBILITY_REPORT.md`
 **Version 5.5 modified:** 2026-08-30 09:43:47 -04:00  
 **Version 5.5 SHA-256:** `d5f9cb5a4185fc2a9d7dfb04bbac2d3d83f7b646e0d70f9729f905d6a289923f`  
 **Repository baseline (5.5 delta):** live `origin/main` at `ed8b211`, app version `5.9.4`  
+**C136 post-implementation pass:** 2026-08-30, live `origin/main` at `ca046a8` (merged #421), app
+version `5.9.5` — see [Post-implementation findings](#post-implementation-findings-c136-guided-credential-flow-595)  
+**Codex findings reconciliation:** 2026-08-30, checkout `434a498` on
+`docs/mcp-review-findings`, containing freshly fetched `origin/main` at `ca046a8`.
+The pull was already up to date; the existing report commit was preserved. See
+[Codex review reconciliation](#codex-review-reconciliation-2026-08-30).
 The Version 5b strikethrough audit and Project 6 tables below are historical as of 2026-08-23. The
 [Version 5.5 delta](#version-55-delta) appends a full assessment of the new Word document without
 rewriting that audit.
@@ -391,12 +397,151 @@ a later option only, not required for this card.
 5. Do not widen MCP write boundaries as part of this card. Credential UX is authentication and
    onboarding, not Drive writes or provider publish.
 
+**Status:** shipped as C136 in `5.9.5` (PR #421, merged `ca046a8`). Recommendations 1–2 and part of 3 landed: an
+Agents page owns the three cards, `buildMcpClientGuide` emits numbered client-specific steps with
+copy controls, and one-time reveal plus in-app Rotate exist. Credential-specific verification is
+still missing (C136-6). Recommendation 4 — the acceptance
+criterion — is **not met on every client**; see below.
+
+### Post-implementation findings: C136 guided credential flow (5.9.5)
+
+Defects found by inspecting the shipped code at `ca046a8`, and by an operator connecting Claude
+Desktop through this flow on 2026-08-30. Ordered most severe first. None of these were knowable at
+the `ed8b211` baseline the 5.5 delta was written against.
+
+| # | Finding | Feasibility / size | Current-state evidence | Recommendation |
+|---|---|---:|---|---|
+| C136-1 | **Rotate is non-atomic and has no rollback.** `rotateFor` POSTs revoke, then separately POSTs a new credential. If the second call fails, the label is left with no working credential and the UI offers no recovery — the operator must notice and re-issue by hand | High / S | `McpConnectionSetupCard.tsx:132-137` — `send(.../revoke)` then `send('/auth/mcp-agents', 'POST')`, generic catch around the pair, with no rollback or partial-success recovery | Use a dedicated transactional rotation operation that preserves the old credential on issuance failure; surface partial-success and lost-response recovery explicitly |
+| C136-2 | **Rotate silently changes the credential lifetime.** Expiry is computed from the step-1 form dropdown, not from the credential being rotated. Rotating a 90-day credential while the selector sits at its 30-day default issues a 30-day one, with no indication. Scopes are carried over correctly; expiry is not | High / XS | `:136` `credentialExpiryIso(days, …)` where `days` is component state from `:60` (`useState(30)`); contrast `:135` which correctly reuses `credential.scopes` | Carry the original lifetime, or show the expiry the rotate will apply in the confirm dialog |
+| C136-3 | **The HTTPS "ready-to-paste setup" is not pasteable as a config file.** It emits a bare `{url, headers}` fragment with no `mcpServers` wrapper and no server name, yet is named `<platform>-mcp-http.json`. The stdio builders emit complete documents; the HTTP path does not. Pasting it where the filename implies produces malformed config | High / S | `shared/mcp-client-config.ts:110-116` (payload) vs `:52-66` / `:69-84` (stdio emit full `mcpServers` documents with real filenames) | Emit a complete, named `mcpServers` entry for HTTP too, or rename the copy control so it does not read as a file body |
+| C136-4 | **No Claude Desktop or claude.ai option; Claude Code steps are shown instead.** Platforms are `cursor \| claude \| codex`, and the `claude` steps say "In Claude Code, open MCP / connector settings for this project." An operator in Claude Desktop, claude.ai chat, or Cowork follows instructions that do not match their UI — those surfaces use connector settings, not per-project MCP config. This is what broke recommendation 4's acceptance criterion in practice | High / M | `shared/mcp-client-config.ts:9` platform union; `:170` label `'Claude Code'`; `shared/mcp-client-guide.ts` `STEPS.claude` | Add a Claude Desktop / claude.ai connector platform with its own steps, or relabel and reword so the distinction is explicit |
+| C136-5 | **The emitted config includes `x-agent-label`, which can only be a no-op or a hard error.** The label is authoritative from the credential; the server throws when the header disagrees with it. Including the header adds a failure mode and no capability. The known-good production config omits it | High / XS | `shared/mcp-client-config.ts:114` emits the header; `server/mcp/http.ts:199-204` throws `x-agent-label does not match the credential identity` on mismatch | Drop the header from the emitted HTTP config; keep `MCP_GUIDE_HEADER_HINT` as documentation only |
+| C136-6 | **The post-rotation diagnostic does not validate the new credential or the client's connection.** It can pass while the client still holds the revoked key or has never installed the replacement. The UI submits no issued token or credential ID; the endpoint builds an operator-context status with all scopes | High / S | `McpConnectionSetupCard.tsx`, `testConnection`; `server/app.ts`, `POST /api/mcp/health/test` sets `transport: 'operator'`, `agentLabel: null`, and `grantedScopes: MCP_AGENT_SCOPES` | Label this result as server health only. Require a successful authenticated call from the target client using the replacement credential before marking setup verified; correlate that evidence with the credential ID and store ID, without logging the token |
+
+**Operator-observed impact.** C136-3 and C136-4 together sent a non-technical operator to Claude
+Desktop's Developer → Edit config (`claude_desktop_config.json`, a local-stdio file) with a fragment
+that belongs in connector settings. The credential also reached the config without its `Bearer `
+prefix, which the server rejects as HTTP 401 and the client surfaces as "server unreachable." Time
+to a working connection was well beyond the "no text editor, no terminal" bar in recommendation 4.
+
+**Resolved in 5.9.6** ([#422](https://github.com/GHolmesDesigns/hybrid-command-center/issues/422),
+[PR #423](https://github.com/GHolmesDesigns/hybrid-command-center/pull/423), merged `8ebdda9`):
+
+- **C136-3 fixed.** `httpConfig` now emits a complete `mcpServers` document instead of a bare
+  `{url, headers}` fragment, so the content matches what the filename claims.
+- **C136-4 fixed.** A `claude-desktop` platform labelled "Claude Desktop / claude.ai" carries its own
+  connector steps — Settings → Connectors → Add custom connector — and its stdio case throws, since
+  those surfaces reach MCP only over hosted HTTPS. A new `pasteTarget` of `fields` drops the combined
+  blob from that platform's copy controls, and the header hint tells connector clients to send
+  Authorization only. That last part also removes the `x-agent-label` instruction for connector
+  surfaces, which narrows C136-5 without closing it for the file-based platforms.
+
+**C136-1, C136-2, and C136-6 remain open.** They are behaviour changes in the card rather than
+onboarding, and were deliberately left out of #422's scope.
+
+**Codex clarification of C136-1:** the pair is inside a `try/catch`, but that catch only flashes the
+error; it neither restores the revoked key nor explains partial success. Other labels remain
+unaffected. The service also rejects issuing a second active credential for the same label, so
+simply reversing the two existing calls will fail. A dedicated transactional rotate operation must
+preserve the original credential if replacement issuance fails, with an explicit recovery policy
+for a lost one-time-secret response.
+
+**Codex clarification of C136-3 and C136-5:** the Codex HTTP builder specifically emits JSON while
+its filename points to a TOML section; this mismatch is visible in the repository without assuming
+any particular client's current settings UI. C136-5 concerns scoped credentials; the legacy
+bootstrap branch still uses the label header, as recorded in SW-3. Do not remove the server's
+mismatch rejection as a workaround.
+
+### Full-repository sweep (5.9.5)
+
+A broader pass over the codebase at `ca046a8`, beyond the C136 credential flow: HTTP hardening, auth
+and session handling, the coordination and workspace read paths, the Signal/provider surface, the
+import paths, and process lifecycle. Scale at time of review: ~67k lines of non-test TypeScript
+(server 35.7k, client 16.7k, shared 9.3k, e2e 5.2k) across 343 test files.
+
+This is an inspection pass, not an audit with executed exploits. Findings below were read directly in
+the code; none were reproduced against a running instance except where noted.
+
+#### Findings
+
+| # | Area | Finding | Feasibility / size | Evidence | Recommendation |
+|---|---|---|---|---:|---|
+| SW-1 | Scalability | **`workspace_list_tasks` paginates after doing all the work.** `limit`/`offset` are applied with `Array.slice` *after* the full result set is fetched and hydrated. `hydrateTask` issues four queries per task — tags, checklist, dependencies, blocking dependencies — so `listTasks` costs `1 + 4N` queries regardless of page size. A `limit: 1` request against 500 tasks runs ~2,000 queries and builds 500 objects to return one. The API looks paginated; the database work is not | High / M | `server/mcp/workspace-read.ts:109-110` (`listTasks(...)` then `.slice(offset, offset + limit)`); `server/repositories.ts:105-137` (`hydrateTask`), `:149-157` (`listTasks`), `server/domain/dependencies.ts:20-27` | Push `LIMIT`/`OFFSET` into the SQL, and batch-hydrate the page with one query per relation (`WHERE task_id IN (…)`) instead of four per row. Same slice-after-compute shape at `workspace-read.ts:61-64` (dashboard buckets) and `:163` (queue) |
+| SW-2 | Scalability | **`coordination_list_handoffs` is unbounded.** No SQL `LIMIT` or pagination; the tool accepts only a state filter. Completed history includes full messages and stored completion evidence. Notes are fetched separately by `getHandoff`, not included in this listing | High / S | `server/agent-coordination/service.ts`, `listHandoffs`, `getHandoff` | Add bounded pagination and explicit truncation metadata; preserve access to older history |
+| SW-3 | Security | **Bootstrap bearers can assume any agent label.** Scoped credentials reject a mismatched `x-agent-label`, but an operator bearer resolves to `operatorBootstrapCredential(...)` and that branch accepts the header verbatim. Anyone holding an operator bearer can post, claim, note, and complete as any label. Not privilege escalation — an operator bearer is already privileged — but `fromAgentLabel`, `claimedBy`, and note authorship stop being verifiable, which matters because the board is the evidence half of claim → work → prove | Moderate / M | `server/mcp/http.ts:191-197` (bootstrap branch) vs `:199-204` (scoped mismatch throws); `server/auth/mcp-agent-credentials.ts:50-60` | Bind bootstrap bearers to a fixed label, or flag bootstrap-authored coordination rows so the UI can separate asserted from verified identity |
+| SW-4 | Availability / follow-up | **Original no-shutdown claim withdrawn.** `server/index.ts` already installs `closeOnSignals`, which handles SIGINT/SIGTERM, drains HTTP through `server.close`, and closes SQLite. No custom fatal-error listeners were found, but that alone does not establish a defect or absence of runtime error output. Long-lived SSE shutdown remains a targeted test question | Unconfirmed / S investigation | `server/index.ts`; `server/shutdown.ts`; `server/shutdown.test.ts`; `server/mcp/http-sessions.ts` | Test termination with an active SSE connection before filing a bounded-drain defect. Do not add handlers that swallow fatal errors or continue an unsafe process |
+| SW-5 | Security / ops | **Rotating the session secret invalidates every agent credential at once.** Credential lookup is by `HMAC-SHA256(sessionSecret, token)`; change the secret and no stored hash matches. Every agent 401s simultaneously, and the client-side symptom is "server unreachable" rather than an auth error | Moderate / XS | `server/auth/mcp-bearers.ts:48-50`; `server/auth/mcp-agent-credentials.ts:159-162` | Document as an operational constraint, or derive the credential key from a dedicated secret with its own rotation story |
+| SW-6 | Scalability | **Two writes on every authenticated MCP request.** Each resolve updates `last_used_at` on both the credential and the registration inside a transaction, including for read-only calls like `system_connection_status`. WAL and a 5s busy timeout make this survivable; it is still a write lock per request | Low / S | `server/auth/mcp-agent-credentials.ts:163-171`; mitigations at `server/db.ts:1456` | Debounce the touch (skip when `last_used_at` is within N seconds) or move it off the request path |
+| SW-7 | Usability | **Active workspace scopes are still labelled "reserved".** The UI permits granting them but defaults to coordination only. Workspace scopes are already enforced by the HTTP dispatcher, so the label incorrectly suggests those capabilities are unavailable | High / XS | `McpConnectionSetupCard.tsx`, `SCOPE_LABEL`; `server/mcp/registry.ts`, `requiredScope`; `server/mcp/http.ts`, scope check; `server/mcp/http.test.ts`, workspace scope refusal/allowance cases | Remove the stale reserved wording and explain which permissions workspace tools require. Do not disable working scopes or silently broaden defaults |
+| SW-8 | Usability / observability | **The connection diagnostic omits the credential ID needed to correlate a setup attempt.** The list API already exposes a non-secret credential ID and issue/expiry metadata. Two active credentials for one label are refused, so the original simultaneous-duplicate premise is withdrawn | Low / S | `server/auth/mcp-agent-credentials.ts`, `toSummary`, active-label guard, `listMcpAgentCredentials`; `shared/mcp-health.ts` | Surface the existing credential ID in diagnostic and UI evidence; do not expose token-hash bytes. Pair with C136-6 so server health is not mistaken for a verified replacement key |
+
+#### Verified sound — recorded so later reviews do not re-open them
+
+- **The publish and Drive boundary is enforced and negatively tested.** `signal_publish_now` and
+  `signal_publish_submit` exist only in `server/mcp/registry.test.ts` and
+  `workspace-write-matrix.test.ts` as assertions that they are *not* registered. The MCP registry
+  exposes `signal_publish_preview` (read) and `signal_update_publish_targets` (config) and no publish
+  path. This is the single most important invariant in `docs/mcp-agent-workflow.md`, and it holds.
+- **No injection or dangerous-sink exposure.** No `dangerouslySetInnerHTML`, `innerHTML =`, `eval`,
+  or `new Function` in the client. Every SQL template interpolation is a constant table name or a
+  generated placeholder list — no user input reaches SQL as text.
+- **HTTP hardening is in place.** `helmet` with a production CSP, CORS pinned to `config.appOrigin`
+  with credentials, `HttpOnly` + `SameSite=Lax` + `Path=/` cookies with `Secure` under TLS, a 1 MB
+  default body limit, and rate/concurrency budgets deliberately mounted *ahead* of the body parsers
+  with the rationale documented in place (`server/app.ts:613-663`).
+- **Credential handling is correct.** 32 random bytes, prefix-gated, stored as HMAC-SHA256 keyed by
+  the session secret; revocation and expiry are both enforced on every resolve, and the listing
+  filters revoked and expired rows.
+- **Bounded MCP session growth.** The HTTP session registry prunes by TTL and evicts oldest-touched
+  past `MCP_HTTP_SESSION_MAX` (`server/mcp/http-sessions.ts:127-140`).
+- **Storage fundamentals.** WAL journal mode with a 5s busy timeout; 38 indices across 50 tables;
+  backup, restore, offsite, rehearsal, and cutover scripts all present in `package.json`.
+- **No latent debt markers.** Zero genuine `TODO` / `FIXME` / `HACK` / `XXX` comments in
+  `server/`, `client/src/`, or `shared/` — all ten textual matches are the `TODO` task *status*.
+
+#### Sweep priority
+
+SW-1 and SW-2 increase database or response work with dataset growth; their production latency has
+not been measured. SW-3 is an identity-provenance limitation to resolve before treating bootstrap
+authorship as independently verified. SW-4 is a test question, not a confirmed missing-shutdown bug.
+SW-7 is a small correction needed for accurate onboarding; SW-8 supports credential verification.
+
+### Codex review reconciliation (2026-08-30)
+
+This pass preserves the findings above, adds **C136-6**, and corrects SW-2, SW-4, SW-7, and SW-8
+against the current code. It does not implement any application fixes or create roadmap cards.
+The earlier [Codex MCP capabilities report](../codex-mcp-capabilities-report.md) describes a 5.4.2
+baseline; its findings must not all be copied into the current backlog as unresolved bugs:
+
+| Earlier Codex finding | Current evidence / disposition |
+|---|---|
+| Network write budget resets per request | Addressed by the persistent registry wired in `server/mcp/http.ts`; `server/mcp/http.test.ts` explicitly covers an eleventh write across separate requests and across changed agent labels. Keep regression coverage, not a duplicate open defect |
+| Minimal HTTP lifecycle and missing notifications | Stateful sessions now exist in `server/mcp/http-sessions.ts`; the earlier missing-lifecycle claim is historical. This pass does not certify every client or reconnect scenario |
+| Coordination-only tools and missing discovery prompts | Superseded by the workspace/Signal registry and `server/mcp/prompts.ts`. The live diagnostic earlier in this task advertised 60 tools and 4 resources |
+| Completion without evidence and claims without liveness | The registry now requires completion summary/outcome and exposes leased work sessions, heartbeat, checkpoint, release, and completion. These address the old missing-capability findings; evidence quality still requires review |
+| No independently managed remote identity | Scoped credential issue/revoke and server-bound labels exist. Remaining rotation and onboarding defects are C136-1 through C136-6; legacy bootstrap label provenance remains SW-3 |
+| Missing operational health and connection diagnostics | `server/mcp/health-panel.ts` and the operator diagnostic exist. Their existence does not prove installation of a replacement credential: C136-6 and SW-8 track that gap |
+| Local/production workspace and Drive state diverge | Retain as an endpoint/store diagnosis, not a proven OAuth defect. The operator removed the STDIO connection. Earlier in this task the production diagnostic returned store `c11bf2bb-8af9-4680-9c02-b347720fb532`, authenticated network transport, and 60 tools. No local database was opened or reconciled during this review |
+
+The earlier live diagnostic reported server **5.9.4**, while the fetched repository baseline is
+**5.9.5**. This is time-specific evidence, not proof of the current deployment version; the older
+C136 pass's 5.9.5 observation above remains attributed to that pass. Do not equate a successful Git
+pull with a deployed release. The diagnostic calls its transport `http` and does not expose TLS
+details separately.
+
 ### Bugs (5.5)
 
 | Active item | Feasibility / size | Current-state finding | Recommendation |
 |---|---:|---|---|
 | Status drag-and-drop into empty columns fails; field selector works | High / S | Columns and “Drop tasks here” exist (`KanbanCards.tsx` / `Kanban.tsx`); empty `SortableContext` + `closestCorners` is the classic miss | Fix empty-column droppable hit area; add a regression test that drops into an empty status |
 | Line up fields with radio buttons on merge modal | High / XS | Merge modal shipped (C49/C71); `.merge-choice` uses baseline alignment | CSS/layout polish only; preserve keyboard and field-choice semantics |
+
+This table covers bugs listed in `Version 5.5.docx`. Six further findings in shipped C136 code
+after that document was written are tracked separately in
+[Post-implementation findings](#post-implementation-findings-c136-guided-credential-flow-595); C136-1
+and C136-2 are correctness bugs in rotate, and C136-6 is a verification gap. All three belong in
+the same wave as the rows above. The empty-column collision cause remains a hypothesis until
+reproduced; the source-document symptom alone does not establish that implementation cause.
 
 ### Paper cuts (5.5)
 
@@ -437,9 +582,11 @@ a later option only, not required for this card.
 
 ### Coverage gaps that need cards or scope amendments (5.5)
 
-No current milestone card explicitly covers:
+The original delta identified these coverage gaps. C136 subsequently shipped the Agents surface
+and guided issue/rotate; its remaining defects are listed above. No live board refresh was performed
+in the Codex reconciliation, so the remaining list is candidate scope, not a current card inventory:
 
-- guided MCP key issue/rotate on an Agents surface (operator priority);
+- follow-up fixes for guided MCP issue/rotate and credential-specific verification (C136-1–6);
 - empty-column Status drag-and-drop;
 - merge-modal field/radio alignment;
 - Picker padding;
@@ -470,9 +617,11 @@ Decision-gated or program-sized (do not quietly fold into adjacent cards):
 
 #### Wave A — Stabilize operator access and obvious defects
 
-1. **Guided MCP key issue/rotate** on an Agents surface (non-technical acceptance) —
-   tracked as [C136 / #420](https://github.com/GHolmesDesigns/hybrid-command-center/issues/420).
-2. Agents nav + Connection health + Handoffs placement beside that flow.
+1. **Fix shipped C136 issue/rotate**: atomic failure handling, visible expiry, accurate client setup,
+   and credential-specific verification (C136-1–6). The original surface shipped through
+   [C136 / #420](https://github.com/GHolmesDesigns/hybrid-command-center/issues/420).
+2. Keep the shipped Agents nav, Connection health, and Handoffs placement; correct the stale scope
+   labels (SW-7) and correlate connection evidence with credential identity (SW-8).
 3. MCP vs web Drive connection diagnosis (`storeId`, which base URL the agent uses).
 4. Empty-column Status drag-and-drop.
 5. Merge-modal alignment and Picker padding.
@@ -517,6 +666,16 @@ Decision-gated or program-sized (do not quietly fold into adjacent cards):
 
 ## Verification and limitations
 
+- 2026-08-30 Codex reconciliation: ran `git pull --ff-only origin main` successfully; it reported
+  already up to date. Only this report was edited. Rechecked the cited rotation, credential,
+  scope-enforcement, listing, operator-health, and shutdown paths. C136-6 is established by static
+  call-path inspection; no live credential was revoked or issued to reproduce it.
+- Ran the existing focused tests with
+  `npm.cmd test -- server/shutdown.test.ts server/mcp/http.test.ts server/mcp/app-health.test.ts`:
+  **3 files, 33 tests passed**. These cover signal shutdown, HTTP auth/scopes and persistent write
+  limits, and operator health behavior. They do not reproduce failed rotation or certify client
+  setup. `git diff --check` passed. Full application gates and remote CI were not run for this
+  documentation-only reconciliation.
 - Read Project 6 live through the active `GHolmesDesigns` GitHub identity (2026-08-23 pass).
 - Verified the live main commit and the merged pull request attached to every struck requirement
   (2026-08-23 pass).
@@ -524,8 +683,32 @@ Decision-gated or program-sized (do not quietly fold into adjacent cards):
   verified closed state of #260, #261, #271, #275; inspected `origin/main` at `ed8b211` and app
   version `5.9.4`; inspected MCP setup UI, nav order, Buffer route constants, calendar read-only
   composition, view defaults, and Drive media boundaries.
+- 2026-08-30 C136 post-implementation pass: inspected `origin/main` at `ca046a8`, app version
+  `5.9.5`. Read `McpConnectionSetupCard.tsx`, `shared/mcp-client-config.ts`,
+  `shared/mcp-client-guide.ts`, `client/src/components/AgentsView.tsx`, and the label-resolution path
+  in `server/mcp/http.ts`. Confirmed the live server over HTTPS MCP via `system_connection_status`
+  (server 5.9.5, capability `mcp-d3c51687`, 60 tools, 4 resources).
+- The original five C136 findings are from code inspection plus one operator connection attempt, not from a
+  test suite. C136-1 was reasoned from the call sequence; the revoke-then-failed-issue path was not
+  deliberately triggered against a live credential. C136-2 through C136-5 were each observed or read
+  directly in the emitted values.
+- 2026-08-30 full-repository sweep: static inspection of HTTP hardening, auth and session handling,
+  the coordination and workspace read paths, the MCP registry and boundary tests, storage
+  configuration, and process lifecycle. Read, not executed — no exploit was run, no load test was
+  performed, and the SW-1 query counts are derived from the call graph rather than measured.
+- The sweep did not cover: the Signal/provider surface beyond MCP registration and the publish
+  boundary, Buffer and Post Bridge adapters, Drive sync internals, the import parsers past their body
+  limits, the e2e suite, or client rendering performance. Dependency and supply-chain review
+  (`npm audit`, license posture) was not performed.
+- Earlier in this session the truncation of handoff message bodies was attributed to MCP. No
+  server-side truncation of `message` was found in the coordination path; `handoffMessageExcerpt`
+  (`shared/agent-coordination.ts:321`, 140 chars) is UI-only and has no other caller. The truncation
+  is real and reproducible at roughly 400 characters through two different agents, but its source is
+  unconfirmed and may be client-side rendering rather than HCC. Not filed as a finding for that
+  reason.
 - Made no live Post Bridge, Buffer, Drive, or platform call.
-- Ran no application quality gates because this is a planning artifact and changes no runtime code.
+- The original planning passes ran no application quality gates; the later Codex focused-test
+  results are recorded above. This report changes no runtime code.
 - Neither DOCX could be visually rendered in Word; OOXML extraction preserved paragraph order and
   strike flags. Annotated-image layout was not visually reviewed.
 - The working tree may contain unrelated local changes. This report file is the only deliverable of
