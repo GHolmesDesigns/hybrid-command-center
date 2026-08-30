@@ -1,13 +1,17 @@
 /**
  * MCP client configuration generation (C127).
  *
- * Produces copy-ready snippets for Cursor, Claude Code, and Codex. Tracked repository files
- * never receive a bearer token; callers pass `embedSecret: true` only for ephemeral UI copy.
+ * Produces copy-ready snippets for Cursor, Claude Code, Claude Desktop / claude.ai, and Codex.
+ * Tracked repository files never receive a bearer token; callers pass `embedSecret: true` only for
+ * ephemeral UI copy.
  */
 import { MCP_AGENT_LABEL_HEADER, MCP_HTTP_PATH } from './mcp-network.ts';
 
-export const MCP_CLIENT_PLATFORMS = ['cursor', 'claude', 'codex'] as const;
+export const MCP_CLIENT_PLATFORMS = ['cursor', 'claude', 'claude-desktop', 'codex'] as const;
 export type McpClientPlatform = (typeof MCP_CLIENT_PLATFORMS)[number];
+
+/** Server name used wherever a client stores this connection under a key. */
+export const MCP_CLIENT_SERVER_NAME = 'hybrid-command-center';
 
 export const MCP_CLIENT_TRANSPORTS = ['stdio', 'http'] as const;
 export type McpClientTransport = (typeof MCP_CLIENT_TRANSPORTS)[number];
@@ -30,10 +34,16 @@ export type McpClientConfigInput = {
 };
 
 export type McpClientConfigResult = {
-  format: 'json' | 'toml';
+  format: 'json' | 'toml' | 'fields';
   filename: string;
   content: string;
   secretEmbedded: boolean;
+  /**
+   * Where the content is meant to go. `file` content is a complete document for a config file or a
+   * settings field that accepts one. `fields` content is a labelled list for a client whose UI asks
+   * for each value separately — it must never be presented as something to paste whole.
+   */
+  pasteTarget: 'file' | 'fields';
   notes: readonly string[];
 };
 
@@ -45,6 +55,13 @@ const bearerValue = (input: McpClientConfigInput): string => {
 const normalizeOrigin = (origin: string): string => origin.replace(/\/+$/, '');
 
 const jsonBlock = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`;
+
+const HTTP_PLATFORM_NOTE: Record<McpClientPlatform, string> = {
+  cursor: 'Paste into Cursor MCP settings or a local secrets file — never commit the bearer.',
+  claude: 'Paste into Claude Code MCP settings or a local secrets file — never commit the bearer.',
+  'claude-desktop': 'Fill the connector fields in claude.ai settings — never commit the bearer.',
+  codex: 'Paste into ~/.codex/config.toml under [mcp_servers] — never commit the bearer.',
+};
 
 const stdioCursor = (agentLabel: string): McpClientConfigResult => ({
   format: 'json',
@@ -59,6 +76,7 @@ const stdioCursor = (agentLabel: string): McpClientConfigResult => ({
     },
   }),
   secretEmbedded: false,
+  pasteTarget: 'file',
   notes: [
     'Commit this file in the repository. Cursor expands ${workspaceFolder} to the project root.',
     'Restart or reload MCP servers after saving.',
@@ -79,6 +97,7 @@ const stdioClaude = (agentLabel: string): McpClientConfigResult => ({
     },
   }),
   secretEmbedded: false,
+  pasteTarget: 'file',
   notes: [
     'Commit this file at the repository root. Start Claude Code from the repository root.',
     'Restart or reload MCP servers after saving.',
@@ -97,6 +116,7 @@ startup_timeout_sec = 60
 MCP_AGENT_LABEL = ${JSON.stringify(agentLabel)}
 `,
   secretEmbedded: false,
+  pasteTarget: 'file',
   notes: [
     'This file is machine-local and never committed. Replace the prefix path if you move the checkout.',
     'Restart Codex after saving.',
@@ -107,33 +127,56 @@ const httpConfig = (input: McpClientConfigInput): McpClientConfigResult => {
   const origin = normalizeOrigin(input.origin);
   const token = bearerValue(input);
   const secretEmbedded = input.embedSecret === true && Boolean(input.bearerToken);
-  const payload = {
-    url: `${origin}${MCP_HTTP_PATH}`,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      [MCP_AGENT_LABEL_HEADER]: input.agentLabel,
-    },
+  const serverUrl = `${origin}${MCP_HTTP_PATH}`;
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    [MCP_AGENT_LABEL_HEADER]: input.agentLabel,
   };
-  const platformNote: Record<McpClientPlatform, string> = {
-    cursor: 'Paste into Cursor MCP settings or a local secrets file — never commit the bearer.',
-    claude:
-      'Paste into Claude Code MCP settings or a local secrets file — never commit the bearer.',
-    codex: 'Paste into ~/.codex/config.toml under [mcp_servers] — never commit the bearer.',
-  };
+  const secretNote = secretEmbedded
+    ? 'Copy this now — the credential is shown once and cannot be recovered.'
+    : `Replace ${MCP_BEARER_PLACEHOLDER} with the credential issued on Agents.`;
+
+  /**
+   * Claude Desktop, claude.ai chat, and Cowork add this as an account-level custom connector and
+   * ask for each value in its own field. There is no file and nothing to paste whole, so emit a
+   * labelled list rather than a document that would imply otherwise (#422).
+   */
+  if (input.platform === 'claude-desktop') {
+    return {
+      format: 'fields',
+      filename: 'claude.ai connector settings (no file)',
+      content: [
+        `Name: ${MCP_CLIENT_SERVER_NAME}`,
+        `Server URL: ${serverUrl}`,
+        `Authorization: ${headers.Authorization}`,
+      ].join('\n'),
+      secretEmbedded,
+      pasteTarget: 'fields',
+      notes: [
+        'Add under Settings → Connectors → Add custom connector. Fill each field separately — this is not a config file.',
+        `Do not send ${MCP_AGENT_LABEL_HEADER}: the label travels inside the credential, and a header that disagrees with it is rejected.`,
+        secretNote,
+      ],
+    };
+  }
+
   return {
     format: 'json',
     filename:
       input.platform === 'codex'
         ? '~/.codex/config.toml (HTTP section)'
         : `${input.platform}-mcp-http.json`,
-    content: jsonBlock(payload),
+    // A complete document, not a fragment: the filename above says "file", so the content must be
+    // one. A bare `{url, headers}` object is not valid anywhere it would be pasted (#422).
+    content: jsonBlock({
+      mcpServers: { [MCP_CLIENT_SERVER_NAME]: { type: 'http', url: serverUrl, headers } },
+    }),
     secretEmbedded,
+    pasteTarget: 'file',
     notes: [
-      platformNote[input.platform],
+      HTTP_PLATFORM_NOTE[input.platform],
       `Every request must include the ${MCP_AGENT_LABEL_HEADER} header.`,
-      secretEmbedded
-        ? 'Copy this now — the credential is shown once and cannot be recovered.'
-        : `Replace ${MCP_BEARER_PLACEHOLDER} with the credential issued in Settings.`,
+      secretNote,
     ],
   };
 };
@@ -151,6 +194,10 @@ export function buildMcpClientConfig(input: McpClientConfigInput): McpClientConf
       return stdioCursor(input.agentLabel);
     case 'claude':
       return stdioClaude(input.agentLabel);
+    case 'claude-desktop':
+      // Desktop, chat, and Cowork reach MCP only through hosted HTTPS connectors — there is no
+      // local command for them to run, so there is no stdio configuration to emit.
+      throw new Error('Claude Desktop and claude.ai connect over hosted HTTPS, not local stdio.');
     case 'codex': {
       const repoPath = input.repoPath?.trim();
       if (!repoPath) {
@@ -168,6 +215,7 @@ export function buildMcpClientConfig(input: McpClientConfigInput): McpClientConf
 export const MCP_CLIENT_PLATFORM_LABEL: Record<McpClientPlatform, string> = {
   cursor: 'Cursor',
   claude: 'Claude Code',
+  'claude-desktop': 'Claude Desktop / claude.ai',
   codex: 'Codex',
 };
 

@@ -21,7 +21,7 @@ import {
   MCP_CLIENT_PLATFORM_LABEL,
   type McpClientPlatform,
 } from '../../../shared/mcp-client-config';
-import { buildMcpClientGuide, MCP_GUIDE_HEADER_HINT } from '../../../shared/mcp-client-guide';
+import { buildMcpClientGuide } from '../../../shared/mcp-client-guide';
 import type { McpConnectionStatus } from '../../../shared/mcp-health';
 
 type RegistryResponse = McpAgentCredentialList & { enabled: boolean };
@@ -275,7 +275,7 @@ export function McpConnectionSetupCard({
                   </label>
                   <p className="field-hint" role="status">
                     Credential for <strong>{issued.credential.label}</strong> is shown once. Copy it
-                    now. {MCP_GUIDE_HEADER_HINT}
+                    now. {guide.headerHint}
                   </p>
                   <ol className="mcp-guide-steps">
                     {guide.steps.map((step) => (
@@ -310,9 +310,9 @@ export function McpConnectionSetupCard({
             <li>
               <strong>3. Run diagnostic</strong>
               <p className="field-hint">
-                Safe read-only check — never creates a test handoff. After pasting the setup into
-                your client and reloading MCP, your agent&apos;s first call updates{' '}
-                <strong>Last used</strong> below.
+                Safe read-only check — never creates a test handoff. After configuring your client
+                and reloading MCP, your agent&apos;s first call updates <strong>Last used</strong>{' '}
+                below.
               </p>
               <div className="mcp-health-actions">
                 <button
