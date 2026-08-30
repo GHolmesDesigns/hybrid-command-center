@@ -8,6 +8,7 @@ import {
   useSearchParams,
 } from 'react-router-dom';
 import {
+  Bot,
   BriefcaseBusiness,
   CalendarDays,
   CheckCircle2,
@@ -40,6 +41,7 @@ import { ModalHost } from './Modals';
 import { BrandMark } from './Primitives';
 import { ProjectDetail } from './ProjectDetail';
 import { Projects } from './Projects';
+import { AgentsView } from './AgentsView';
 import { SettingsView } from './SettingsView';
 import { SignalView } from './SignalView';
 import { Nav } from './Shell';
@@ -211,6 +213,7 @@ export function App() {
           <Nav icon={<FileText />} to="/files" label="Files" collapsed={collapsed} />
           <Nav icon={<CalendarDays />} to="/calendar" label="Calendar" collapsed={collapsed} />
           <Nav icon={<Megaphone />} to="/signal" label="Signal" collapsed={collapsed} />
+          <Nav icon={<Bot />} to="/agents" label="Agents" collapsed={collapsed} />
           <Nav icon={<Settings />} to="/settings" label="Settings" collapsed={collapsed} />
         </nav>
         <div className="sidebar-foot">
@@ -369,6 +372,7 @@ export function App() {
             />
             <Route path="/calendar" element={<CalendarView viewDefaults={viewDefaults} />} />
             <Route path="/signal" element={<SignalView viewDefaults={viewDefaults} />} />
+            <Route path="/agents" element={<AgentsView tasks={tasks} flash={flash} />} />
             <Route
               path="/settings"
               element={

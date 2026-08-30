@@ -6,15 +6,15 @@ they do not restate this policy.
 
 ## Connect once
 
-1. Ask the operator to register your agent label in **Settings → Agent connection setup** and issue
+1. Ask the operator to register your agent label in **Agents → Agent connection setup** and issue
    a scoped credential.
-2. Copy the generated client configuration into your IDE's MCP settings. Never commit a bearer
-   token to the repository.
-3. Confirm the connection: the operator runs the read-only diagnostic in Settings, and your label
+2. Copy the ready-to-paste setup into your IDE's MCP settings UI (not a repository file). Never
+   commit a bearer token to the repository.
+3. Confirm the connection: the operator runs the read-only diagnostic on Agents, and your label
    should show a **Last used** timestamp after your first successful call.
 
-Network MCP requires operator authentication on the host. Local stdio transport runs
-`npm run mcp` from the repository checkout and uses `MCP_AGENT_LABEL` in the server environment.
+Network MCP requires operator authentication on the host. The authoritative coordination store is
+the hosted HTTPS origin — see store identity below.
 
 ### Which connection is authoritative (C135, #410)
 

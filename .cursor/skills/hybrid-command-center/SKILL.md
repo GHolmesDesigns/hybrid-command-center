@@ -17,7 +17,7 @@ the operator, and which MCP prompts to use. This file adds only Cursor-specific 
 
 ## Connect in Cursor
 
-1. Ask the operator to run **Settings → Agent connection setup** in HCC, issue a credential for
+1. Ask the operator to run **Agents → Agent connection setup** in HCC, issue a credential for
    your label, and copy the generated configuration.
 2. For local development, commit `.cursor/mcp.json` with your label in `MCP_AGENT_LABEL` — no
    bearer is stored in tracked files for stdio transport.

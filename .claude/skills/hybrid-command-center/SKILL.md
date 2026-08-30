@@ -17,7 +17,7 @@ the operator, and which MCP prompts to use. This file adds only Claude Code-spec
 
 ## Connect in Claude Code
 
-1. Ask the operator to run **Settings → Agent connection setup** in HCC, issue a credential for
+1. Ask the operator to run **Agents → Agent connection setup** in HCC, issue a credential for
    your label, and copy the generated configuration.
 2. For local development, commit `.mcp.json` at the repository root with your label in
    `MCP_AGENT_LABEL`. Start Claude Code from the repository root so `${CLAUDE_PROJECT_DIR:-.}`
