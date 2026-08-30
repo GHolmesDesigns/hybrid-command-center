@@ -103,10 +103,12 @@ second source of truth. Do not enable it unless the operator explicitly wants au
 
 ## Skill packages
 
-| Platform | Wrapper location |
-| --- | --- |
-| Cursor | `.cursor/skills/hybrid-command-center/SKILL.md` |
-| Claude Code | `.claude/skills/hybrid-command-center/SKILL.md` |
-| Codex | `.codex-plugin/` plugin with bundled skill |
+| Platform | Wrapper | Surface guide |
+| --- | --- | --- |
+| Cursor | `.cursor/skills/hybrid-command-center/SKILL.md` | [`docs/mcp-cursor-agent-guide.md`](mcp-cursor-agent-guide.md) |
+| Claude Code | `.claude/skills/hybrid-command-center/SKILL.md` | — |
+| Claude chat / Cowork | — | [`docs/mcp-claude-chat-cowork-guide.md`](mcp-claude-chat-cowork-guide.md) |
+| Codex | `.codex-plugin/` plugin with bundled skill | — |
 
-Each wrapper links to this document and adds only platform-specific packaging instructions.
+Each wrapper links to this document and adds only platform-specific packaging instructions. Surface
+guides add what a particular client needs without restating the policy here.

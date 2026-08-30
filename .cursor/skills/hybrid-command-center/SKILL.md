@@ -12,22 +12,27 @@ Read the canonical workflow policy before taking handoffs:
 
 **[docs/mcp-agent-workflow.md](../../docs/mcp-agent-workflow.md)**
 
-That document covers connection, the claim → work → prove loop, approval boundaries, when to stop for
-the operator, and which MCP prompts to use. This file adds only Cursor-specific packaging.
+Then read the Cursor surface guide — it covers IDE Agent vs Cloud Agent, store identity, shell
+bypass, and efficiency patterns the workflow doc does not restate:
+
+**[docs/mcp-cursor-agent-guide.md](../../docs/mcp-cursor-agent-guide.md)**
+
+That pair covers connection, the claim → work → prove loop, approval boundaries, when to stop for
+the operator, MCP prompts, and which Cursor contexts share (or silently split) the same API.
 
 ## Connect in Cursor
 
 1. Ask the operator to run **Agents → Agent connection setup** in HCC, issue a credential for
    your label, and copy the generated configuration.
-2. For local development, commit `.cursor/mcp.json` with your label in `MCP_AGENT_LABEL` — no
-   bearer is stored in tracked files for stdio transport.
-3. For hosted network MCP, paste the HTTPS configuration into Cursor's MCP settings or local secret
-   storage. Never commit the bearer.
-4. Reload MCP servers in Cursor after saving.
+2. Open **Cursor Settings → MCP** (or **Tools & MCP**). Paste the ready-to-paste setup from
+   Agents. Never commit the bearer.
+3. Reload MCP servers after saving.
+4. Call `system_connection_status` and confirm `agentLabel` and `storeId` before coordination
+   writes.
 
-**Coordination writes must use HTTPS prod**, not local stdio — see
-[docs/mcp-agent-workflow.md](../../docs/mcp-agent-workflow.md) §Connect once. Run
-`system_connection_status` on both connections and compare `storeId` before posting handoffs.
+**Coordination writes must use HTTPS prod**, not local stdio and not shell/localhost API — see
+[docs/mcp-cursor-agent-guide.md](../../docs/mcp-cursor-agent-guide.md) §2–3. Issue separate
+labels for IDE and Cloud Agent (`cursor-ide`, `cursor-cloud`, …) when both act independently.
 
 ## MCP prompts
 
