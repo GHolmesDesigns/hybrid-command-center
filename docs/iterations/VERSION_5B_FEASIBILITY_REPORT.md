@@ -424,6 +424,21 @@ that belongs in connector settings. The credential also reached the config witho
 prefix, which the server rejects as HTTP 401 and the client surfaces as "server unreachable." Time
 to a working connection was well beyond the "no text editor, no terminal" bar in recommendation 4.
 
+**Resolved in 5.9.6** ([#422](https://github.com/GHolmesDesigns/hybrid-command-center/issues/422),
+[PR #423](https://github.com/GHolmesDesigns/hybrid-command-center/pull/423), merged `8ebdda9`):
+
+- **C136-3 fixed.** `httpConfig` now emits a complete `mcpServers` document instead of a bare
+  `{url, headers}` fragment, so the content matches what the filename claims.
+- **C136-4 fixed.** A `claude-desktop` platform labelled "Claude Desktop / claude.ai" carries its own
+  connector steps — Settings → Connectors → Add custom connector — and its stdio case throws, since
+  those surfaces reach MCP only over hosted HTTPS. A new `pasteTarget` of `fields` drops the combined
+  blob from that platform's copy controls, and the header hint tells connector clients to send
+  Authorization only. That last part also removes the `x-agent-label` instruction for connector
+  surfaces, which narrows C136-5 without closing it for the file-based platforms.
+
+**C136-1, C136-2, and C136-6 remain open.** They are behaviour changes in the card rather than
+onboarding, and were deliberately left out of #422's scope.
+
 **Codex clarification of C136-1:** the pair is inside a `try/catch`, but that catch only flashes the
 error; it neither restores the revoked key nor explains partial success. Other labels remain
 unaffected. The service also rejects issuing a second active credential for the same label, so
