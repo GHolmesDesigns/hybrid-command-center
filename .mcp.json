@@ -1,12 +1,3 @@
 {
-  "mcpServers": {
-    "hybrid-command-center": {
-      "type": "stdio",
-      "command": "npm.cmd",
-      "args": ["--prefix", "${CLAUDE_PROJECT_DIR:-.}", "run", "mcp"],
-      "env": {
-        "MCP_AGENT_LABEL": "claude-review"
-      }
-    }
-  }
+  "mcpServers": {}
 }

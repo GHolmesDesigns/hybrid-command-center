@@ -1,11 +1,3 @@
 {
-  "mcpServers": {
-    "hybrid-command-center": {
-      "command": "npm.cmd",
-      "args": ["--prefix", "${workspaceFolder}", "run", "mcp"],
-      "env": {
-        "MCP_AGENT_LABEL": "cursor-planning"
-      }
-    }
-  }
+  "mcpServers": {}
 }
