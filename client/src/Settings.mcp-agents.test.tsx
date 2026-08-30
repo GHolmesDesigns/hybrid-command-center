@@ -28,6 +28,7 @@ describe('Settings Agent connection setup card', () => {
         protocolVersion: '2024-11-05',
         agentLabel: null,
         grantedScopes: ['coordination:read', 'coordination:write'],
+        storeId: 'store-fixture-1',
         serverVersion: '5.7.1',
         capabilityVersion: '5.7.1',
         serverClock: '2026-08-28T12:00:00.000Z',

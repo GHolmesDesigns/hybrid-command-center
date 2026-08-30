@@ -266,6 +266,7 @@ export const testState = {
       protocolVersion: '2024-11-05',
       agentLabel: null,
       grantedScopes: ['coordination:read', 'coordination:write'],
+      storeId: 'store-fixture-app-test-setup',
       serverVersion: APP_VERSION,
       capabilityVersion: 'mcp-test',
       serverClock: '2026-08-28T12:00:00.000Z',

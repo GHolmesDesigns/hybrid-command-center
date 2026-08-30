@@ -5,7 +5,13 @@ import { once } from 'node:events';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { applyAdditiveMigrations, backfillProjectActivity, createDb, type Db } from './db.ts';
+import {
+  applyAdditiveMigrations,
+  backfillProjectActivity,
+  createDb,
+  getStoreId,
+  type Db,
+} from './db.ts';
 
 /**
  * A database shaped like an earlier release: `projects` and `tasks` are missing
@@ -130,6 +136,24 @@ describe('database connection durability', () => {
     ]);
     await once(lockHolder, 'exit');
     children.pop();
+  });
+
+  it('keeps one store_id across a restart on the same file (#410)', () => {
+    const file = scratch('durable.db');
+    const first = track(createDb(file));
+    const mintedId = getStoreId(first);
+    expect(mintedId.length).toBeGreaterThan(0);
+    first.close();
+    open.pop();
+
+    const reopened = track(createDb(file));
+    expect(getStoreId(reopened)).toBe(mintedId);
+  });
+
+  it('mints independent store_ids for independent files (#410)', () => {
+    const a = track(createDb(scratch('store-a.db')));
+    const b = track(createDb(scratch('store-b.db')));
+    expect(getStoreId(a)).not.toBe(getStoreId(b));
   });
 });
 

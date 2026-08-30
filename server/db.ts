@@ -1,4 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.ts';
@@ -1462,6 +1463,16 @@ export function createDb(
        id, display_label, created_at, last_used_at, last_origin
      ) VALUES('operator-session-bootstrap','operator-session','1970-01-01T00:00:00.000Z',NULL,NULL)`,
   ).run();
+  // Minted once per file and never reassigned (#410). Two MCP connections — say, stdio against a
+  // workstation checkout and HTTPS against the hosted origin — open two independent SQLite files
+  // with identical schema, identical agent label, and identical tool list; nothing about the
+  // protocol surface lets an agent tell them apart. This is the fingerprint that does: OR IGNORE
+  // means an existing file keeps its id across every restart and migration, and a fresh file mints
+  // its own the first time createDb() touches it.
+  db.prepare(`INSERT OR IGNORE INTO settings(key, value, updated_at) VALUES('store_id', ?, ?)`).run(
+    crypto.randomUUID(),
+    new Date().toISOString(),
+  );
   const applied = applyAdditiveMigrations(db);
   relaxPublicationScheduledInstant(db);
   backfillProjectActivity(db);
@@ -1484,6 +1495,17 @@ export function createDb(
 let singleton: Db | undefined;
 export function getDb() {
   return (singleton ??= createDb());
+}
+
+/**
+ * The store id `createDb()` bootstraps (#410). A pure read — the row already exists by the time
+ * any caller can reach a `Db` handle, so this never writes.
+ */
+export function getStoreId(db: Db): string {
+  const row = db.prepare(`SELECT value FROM settings WHERE key = 'store_id'`).get() as
+    { value: string } | undefined;
+  if (!row) throw new Error('store_id is missing — createDb() did not bootstrap it.');
+  return row.value;
 }
 
 export function transaction<T>(db: Db, work: () => T): T {

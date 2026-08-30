@@ -414,7 +414,7 @@ const workspaceReadTools: McpToolRegistryEntry[] = [
 const systemConnectionStatusTool: McpToolRegistryEntry = {
   name: 'system_connection_status',
   description:
-    'Read-only connection diagnostic: auth context, tools/list, resources/list, one bounded resource read, server version, capability version, and server clock. Never creates a handoff.',
+    'Read-only connection diagnostic: auth context, tools/list, resources/list, one bounded resource read, server version, capability version, store id, and server clock. Never creates a handoff.',
   inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   class: 'R',
   requiredScope: null,
