@@ -25,16 +25,16 @@ test('drops a task into an empty status column and persists the status', async (
   await expect(targetColumn.locator('.kanban-card')).toHaveCount(0);
 
   const handle = card.getByRole('button', { name: `Drag ${task.title}` });
+  await handle.hover();
   const source = await handle.boundingBox();
   const target = await targetColumn.locator('.column-body').boundingBox();
   if (!source || !target) throw new Error('Expected drag source and empty column body bounds.');
 
-  await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
   await page.mouse.down();
   await page.mouse.move(source.x + source.width / 2 + 20, source.y + source.height / 2, {
     steps: 5,
   });
-  await expect(handle).toHaveAttribute('aria-pressed', 'true');
+  await expect(card).toHaveClass(/dragging/);
   await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 20 });
   await page.mouse.up();
 
