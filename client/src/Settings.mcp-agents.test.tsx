@@ -126,14 +126,14 @@ describe('Agents connection setup card', () => {
       requests.filter(
         (request) =>
           request.method === 'POST' &&
-          request.url.endsWith('/api/auth/mcp-credentials/cred-1/revoke'),
+          request.url.endsWith('/api/auth/mcp-credentials/cred-1/rotate'),
       ),
     ).toHaveLength(1);
     expect(
       requests.some(
         (request) =>
           request.method === 'POST' &&
-          request.url.endsWith('/api/auth/mcp-agents') &&
+          request.url.endsWith('/api/auth/mcp-credentials/cred-1/rotate') &&
           request.body.label === 'cursor-planning',
       ),
     ).toBe(true);

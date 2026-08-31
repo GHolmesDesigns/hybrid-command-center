@@ -205,6 +205,64 @@ export function revokeMcpAgentCredential(db: Db, credentialId: string, now = Dat
   );
 }
 
+/** Atomically replace one active credential. If issuance fails, the old key remains active. */
+export function rotateMcpAgentCredential(
+  db: Db,
+  options: {
+    credentialId: string;
+    scopes: readonly McpAgentScope[];
+    expiresAt: string;
+    sessionSecret: string;
+    now?: number;
+  },
+): { rawToken: string; credential: McpAgentCredentialSummary } {
+  const now = options.now ?? Date.now();
+  if (Date.parse(options.expiresAt) <= now)
+    throw new Error('Credential expiry must be in the future.');
+  const old = db
+    .prepare(`${SELECT_CREDENTIAL} WHERE c.id=? AND c.revoked_at IS NULL AND c.expires_at > ?`)
+    .get(options.credentialId, iso(now)) as CredentialRow | undefined;
+  if (!old)
+    throw new Error(
+      'Active MCP credential not found. Refresh the Agents page and rotate the current credential.',
+    );
+  const scopes = orderedScopes(mcpAgentScopesSchema.parse(options.scopes));
+  const rawToken = `${MCP_BEARER_TOKEN_PREFIX}${crypto.randomBytes(32).toString('base64url')}`;
+  const credentialId = crypto.randomUUID();
+  const issuedAt = iso(now);
+  const tokenHash = hashMcpBearerToken(rawToken, options.sessionSecret);
+  transaction(db, () => {
+    db.prepare(
+      'INSERT INTO agent_credentials(id, agent_id, token_hash, scopes, issued_at, expires_at, last_used_at, revoked_at) VALUES(?,?,?,?,?,?,NULL,NULL)',
+    ).run(
+      credentialId,
+      old.agent_id,
+      tokenHash,
+      JSON.stringify(scopes),
+      issuedAt,
+      options.expiresAt,
+    );
+    db.prepare('UPDATE agent_credentials SET revoked_at=? WHERE id=? AND revoked_at IS NULL').run(
+      issuedAt,
+      options.credentialId,
+    );
+  });
+  return {
+    rawToken,
+    credential: {
+      id: credentialId,
+      agentId: old.agent_id,
+      label: old.display_label,
+      scopes,
+      issuedAt,
+      expiresAt: options.expiresAt,
+      lastUsedAt: null,
+      lastOrigin: null,
+      revokedAt: null,
+    },
+  };
+}
+
 /** Revoke every active credential for a label — used when OAuth reconnects the same connector. */
 export function revokeActiveMcpAgentCredentialsForLabel(
   db: Db,

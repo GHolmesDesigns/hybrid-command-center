@@ -793,6 +793,25 @@ const respondTo = (url: string, init?: RequestInit) => {
   if (url.endsWith('/api/mcp/health/test') && method === 'POST') {
     return testState.mcpHealthTestPayload;
   }
+  const rotateMcpCredential = url.match(/\/api\/auth\/mcp-credentials\/([^/?]+)\/rotate$/);
+  if (rotateMcpCredential && method === 'POST') {
+    const current = testState.mcpAgentRegistryPayload.credentials.find(
+      (credential) => credential.id === rotateMcpCredential[1],
+    );
+    if (!current) return reply(404, { error: 'Active MCP credential not found.' });
+    testState.mcpAgentRegistryPayload.credentials =
+      testState.mcpAgentRegistryPayload.credentials.filter(
+        (credential) => credential.id !== current.id,
+      );
+    const credential = {
+      ...current,
+      id: 'credential-rotated',
+      issuedAt: '2026-08-28T12:00:00.000Z',
+      expiresAt: body.expiresAt,
+    };
+    testState.mcpAgentRegistryPayload.credentials.push(credential);
+    return { ok: true, bearerToken: 'hcc_mcp_rotated-once', credential };
+  }
   if (url.endsWith('/api/auth/mcp-agents') && method === 'POST') {
     const credential = {
       id: 'credential-issued',

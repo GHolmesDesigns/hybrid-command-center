@@ -132,12 +132,15 @@ export function McpConnectionSetupCard({
       }
       setRotatingId(credential.id);
       try {
-        await send(`/auth/mcp-credentials/${credential.id}/revoke`, 'POST');
-        const result = await send<IssuedResponse>('/auth/mcp-agents', 'POST', {
-          label: credential.label,
-          scopes: credential.scopes,
-          expiresAt: credentialExpiryIso(days, Date.now()),
-        });
+        const result = await send<IssuedResponse>(
+          `/auth/mcp-credentials/${credential.id}/rotate`,
+          'POST',
+          {
+            label: credential.label,
+            scopes: credential.scopes,
+            expiresAt: credentialExpiryIso(days, Date.now()),
+          },
+        );
         setIssued(result);
         setTestResult(null);
         await load();
@@ -145,7 +148,10 @@ export function McpConnectionSetupCard({
           `${credential.label} rotated. Copy the new setup below, update your client, then run the diagnostic.`,
         );
       } catch (caught) {
-        flash((caught as Error).message, 'error');
+        flash(
+          `${(caught as Error).message} Your current credential remains active if rotation did not complete; refresh and try Rotate again.`,
+          'error',
+        );
       } finally {
         setRotatingId(null);
       }
