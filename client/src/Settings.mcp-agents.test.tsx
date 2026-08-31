@@ -58,6 +58,11 @@ describe('Agents connection setup card', () => {
       },
       workspaceChecksumUnchanged: true,
       lastUsedAt: '2026-08-28T12:00:00.000Z',
+      credential: {
+        id: 'credential-issued',
+        issuedAt: '2026-08-28T11:00:00.000Z',
+        expiresAt: '2026-11-26T10:00:00.000Z',
+      },
     };
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     const writeText = vi.fn().mockResolvedValue(undefined);
@@ -99,12 +104,20 @@ describe('Agents connection setup card', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Check server health for this setup' }));
     expect(await screen.findByText('Server health passed')).toBeVisible();
+    expect(screen.getByText('Diagnostic credential: credential-issued')).toBeVisible();
+    expect(screen.getByText(/Issued:/)).toBeVisible();
+    expect(screen.getAllByText(/Expires:/)).toHaveLength(2);
     expect(screen.getByText('Store: store-fi')).toBeVisible();
     expect(
       requests.some(
         (request) => request.method === 'POST' && request.url.endsWith('/api/mcp/health/test'),
       ),
     ).toBe(true);
+    expect(
+      requests.find(
+        (request) => request.method === 'POST' && request.url.endsWith('/api/mcp/health/test'),
+      )?.body,
+    ).toEqual({ credentialId: 'credential-issued' });
 
     testState.mcpCredentialVerificationPayload = {
       credentialId: 'credential-issued',

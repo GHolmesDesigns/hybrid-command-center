@@ -52,6 +52,20 @@ export const mcpConnectionStatusSchema = z.object({
 
 export type McpConnectionStatus = z.infer<typeof mcpConnectionStatusSchema>;
 
+export const mcpHealthTestInputSchema = z
+  .object({
+    credentialId: z.string().min(1).optional(),
+  })
+  .strict();
+
+export const mcpHealthDiagnosticCredentialSchema = z.object({
+  id: z.string(),
+  issuedAt: z.string(),
+  expiresAt: z.string(),
+});
+
+export type McpHealthDiagnosticCredential = z.infer<typeof mcpHealthDiagnosticCredentialSchema>;
+
 export const mcpCredentialVerificationSchema = z.object({
   credentialId: z.string(),
   agentLabel: z.string(),

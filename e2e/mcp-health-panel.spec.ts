@@ -32,6 +32,7 @@ test('operator opens MCP health panel, runs test connection, and sees a result',
         ok: true,
         workspaceChecksumUnchanged: true,
         lastUsedAt: testedAt,
+        credential: null,
         status: {
           ok: true,
           transport: 'operator',

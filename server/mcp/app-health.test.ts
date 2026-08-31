@@ -102,6 +102,25 @@ describe('MCP health HTTP routes', () => {
     });
     expect(JSON.stringify(pending.body)).not.toContain(bearerToken);
 
+    const diagnostic = await request(authedApp())
+      .post('/api/mcp/health/test')
+      .set('Cookie', cookie)
+      .set(CSRF_HEADER_NAME, csrfToken)
+      .send({ credentialId });
+    expect(diagnostic.status).toBe(200);
+    expect(diagnostic.body.credential).toEqual({
+      id: credentialId,
+      issuedAt: expect.any(String),
+      expiresAt: expect.any(String),
+    });
+    const stored = db
+      .prepare('SELECT token_hash FROM agent_credentials WHERE id=?')
+      .get(credentialId) as {
+      token_hash: string;
+    };
+    expect(JSON.stringify(diagnostic.body)).not.toContain(bearerToken);
+    expect(JSON.stringify(diagnostic.body)).not.toContain(stored.token_hash);
+
     const clientCall = await request(authedApp())
       .post('/api/mcp')
       .set('Authorization', `Bearer ${bearerToken}`)
