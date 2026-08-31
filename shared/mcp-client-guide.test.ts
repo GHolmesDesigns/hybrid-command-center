@@ -41,8 +41,8 @@ describe('buildMcpClientGuide', () => {
     expect(guide.headerHint).toMatch(/MCP OAuth/i);
   });
 
-  it('emits a complete mcpServers document for file-based clients', () => {
-    for (const platform of ['cursor', 'claude', 'codex'] as const) {
+  it('emits a complete mcpServers document for JSON clients', () => {
+    for (const platform of ['cursor', 'claude'] as const) {
       const guide = buildMcpClientGuide({
         platform,
         agentLabel: 'agent-one',
@@ -60,6 +60,20 @@ describe('buildMcpClientGuide', () => {
       );
       expect(parsed.mcpServers?.['hybrid-command-center']?.type).toBe('http');
     }
+  });
+
+  it('offers Codex a TOML server section with bearer authorization', () => {
+    const guide = buildMcpClientGuide({
+      platform: 'codex',
+      agentLabel: 'codex-test',
+      origin: 'https://hcc.example.com',
+      bearerToken: 'hcc_mcp_test-token',
+    });
+    const setup = guide.copyFields.find((field) => field.id === 'setup');
+    expect(setup?.secret).toBe(true);
+    expect(setup?.value).toContain('[mcp_servers."hybrid-command-center"]');
+    expect(setup?.value).toContain('Authorization = "Bearer hcc_mcp_test-token"');
+    expect(setup?.value).not.toContain('mcpServers');
   });
 
   it('requires origin and credential', () => {

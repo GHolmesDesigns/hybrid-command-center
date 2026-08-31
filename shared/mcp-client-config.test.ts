@@ -1,7 +1,142 @@
 import { describe, expect, it } from 'vitest';
-import { MCP_BEARER_PLACEHOLDER, buildMcpClientConfig } from './mcp-client-config.ts';
+import { parse } from 'smol-toml';
+import {
+  MCP_BEARER_PLACEHOLDER,
+  MCP_CLIENT_SERVER_NAME,
+  buildMcpClientConfig,
+} from './mcp-client-config.ts';
 
 describe('buildMcpClientConfig', () => {
+  it('round-trips escaped values without creating extra TOML tables or keys', () => {
+    const agentLabel = 'agent "quoted"\\path\n[unexpected]\r\t雪';
+    const bearerToken = 'fake-"quoted"\\token';
+    const result = buildMcpClientConfig({
+      platform: 'codex',
+      transport: 'http',
+      agentLabel,
+      bearerToken,
+      embedSecret: true,
+      origin: 'https://hcc.example.com/',
+    });
+    expect(parse(result.content)).toEqual({
+      mcp_servers: {
+        [MCP_CLIENT_SERVER_NAME]: {
+          url: 'https://hcc.example.com/api/mcp',
+          http_headers: { Authorization: `Bearer ${bearerToken}`, 'x-agent-label': agentLabel },
+        },
+      },
+    });
+  });
+
+  it.each([
+    ['cursor', 'stdio', 'json', '.cursor/mcp.json', 'file'],
+    ['claude', 'stdio', 'json', '.mcp.json', 'file'],
+    ['codex', 'stdio', 'toml', '~/.codex/config.toml', 'file'],
+    ['cursor', 'http', 'json', 'cursor-mcp-http.json', 'file'],
+    ['claude', 'http', 'json', 'claude-mcp-http.json', 'file'],
+    ['codex', 'http', 'toml', '~/.codex/config.toml (HTTP section)', 'file'],
+    ['claude-desktop', 'http', 'fields', 'claude.ai connector settings (no file)', 'fields'],
+  ] as const)(
+    'matches the advertised target for %s %s',
+    (platform, transport, format, filename, pasteTarget) => {
+      const result = buildMcpClientConfig({
+        platform,
+        transport,
+        agentLabel: 'test-agent',
+        origin: 'https://hcc.example.com/',
+        repoPath: 'C:\\test\\hcc',
+      });
+      expect(result).toMatchObject({ format, filename, pasteTarget, secretEmbedded: false });
+      if (format === 'json') {
+        const server = JSON.parse(result.content).mcpServers[MCP_CLIENT_SERVER_NAME];
+        if (transport === 'http') {
+          expect(server).toEqual({
+            type: 'http',
+            url: 'https://hcc.example.com/api/mcp',
+            headers: {
+              Authorization: `Bearer ${MCP_BEARER_PLACEHOLDER}`,
+              'x-agent-label': 'test-agent',
+            },
+          });
+        } else {
+          expect(server.command).toBe('npm.cmd');
+          expect(server.env).toEqual({ MCP_AGENT_LABEL: 'test-agent' });
+        }
+      } else if (format === 'fields') {
+        expect(result.content).toBe(
+          'Name: hybrid-command-center\nServer URL: https://hcc.example.com/api/mcp',
+        );
+      } else {
+        const parsed = parse(result.content);
+        expect(parsed).toEqual({
+          mcp_servers: {
+            [MCP_CLIENT_SERVER_NAME]:
+              transport === 'http'
+                ? {
+                    url: 'https://hcc.example.com/api/mcp',
+                    http_headers: {
+                      Authorization: `Bearer ${MCP_BEARER_PLACEHOLDER}`,
+                      'x-agent-label': 'test-agent',
+                    },
+                  }
+                : {
+                    command: 'npm.cmd',
+                    args: ['--prefix', 'C:\\test\\hcc', 'run', 'mcp'],
+                    startup_timeout_sec: 60,
+                    env: { MCP_AGENT_LABEL: 'test-agent' },
+                  },
+          },
+        });
+      }
+    },
+  );
+
+  it.each([
+    {
+      embedSecret: true,
+      bearerToken: 'hcc_mcp_test-token',
+      expected: 'hcc_mcp_test-token',
+      embedded: true,
+    },
+    {
+      embedSecret: false,
+      bearerToken: 'hcc_mcp_test-token',
+      expected: MCP_BEARER_PLACEHOLDER,
+      embedded: false,
+    },
+    {
+      embedSecret: true,
+      bearerToken: undefined,
+      expected: MCP_BEARER_PLACEHOLDER,
+      embedded: false,
+    },
+  ])(
+    'preserves Codex bearer authorization and explicit secret opt-in: $embedSecret / $bearerToken',
+    ({ embedSecret, bearerToken, expected, embedded }) => {
+      const result = buildMcpClientConfig({
+        platform: 'codex',
+        transport: 'http',
+        agentLabel: 'codex-test',
+        origin: 'https://hcc.example.com///',
+        embedSecret,
+        bearerToken,
+      });
+      expect(result.format).toBe('toml');
+      expect(parse(result.content)).toEqual({
+        mcp_servers: {
+          [MCP_CLIENT_SERVER_NAME]: {
+            url: 'https://hcc.example.com/api/mcp',
+            http_headers: { Authorization: `Bearer ${expected}`, 'x-agent-label': 'codex-test' },
+          },
+        },
+      });
+      expect(result.content).toContain('url = "https://hcc.example.com/api/mcp"');
+      expect(result.content).toContain('x-agent-label = "codex-test"');
+      expect(result.secretEmbedded).toBe(embedded);
+      if (!embedded) expect(result.content).not.toContain('hcc_mcp_test-token');
+    },
+  );
+
   it('generates Cursor stdio config without a secret', () => {
     const result = buildMcpClientConfig({
       platform: 'cursor',
