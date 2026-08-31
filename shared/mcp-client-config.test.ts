@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { parse } from 'smol-toml';
 import {
   MCP_BEARER_PLACEHOLDER,
   MCP_CLIENT_SERVER_NAME,
@@ -6,6 +7,27 @@ import {
 } from './mcp-client-config.ts';
 
 describe('buildMcpClientConfig', () => {
+  it('round-trips escaped values without creating extra TOML tables or keys', () => {
+    const agentLabel = 'agent "quoted"\\path\n[unexpected]\r\t雪';
+    const bearerToken = 'fake-"quoted"\\token';
+    const result = buildMcpClientConfig({
+      platform: 'codex',
+      transport: 'http',
+      agentLabel,
+      bearerToken,
+      embedSecret: true,
+      origin: 'https://hcc.example.com/',
+    });
+    expect(parse(result.content)).toEqual({
+      mcp_servers: {
+        [MCP_CLIENT_SERVER_NAME]: {
+          url: 'https://hcc.example.com/api/mcp',
+          http_headers: { Authorization: `Bearer ${bearerToken}`, 'x-agent-label': agentLabel },
+        },
+      },
+    });
+  });
+
   it.each([
     ['cursor', 'stdio', 'json', '.cursor/mcp.json', 'file'],
     ['claude', 'stdio', 'json', '.mcp.json', 'file'],
@@ -45,7 +67,26 @@ describe('buildMcpClientConfig', () => {
           'Name: hybrid-command-center\nServer URL: https://hcc.example.com/api/mcp',
         );
       } else {
-        expect(result.content).toContain('[mcp_servers."hybrid-command-center"]');
+        const parsed = parse(result.content);
+        expect(parsed).toEqual({
+          mcp_servers: {
+            [MCP_CLIENT_SERVER_NAME]:
+              transport === 'http'
+                ? {
+                    url: 'https://hcc.example.com/api/mcp',
+                    http_headers: {
+                      Authorization: `Bearer ${MCP_BEARER_PLACEHOLDER}`,
+                      'x-agent-label': 'test-agent',
+                    },
+                  }
+                : {
+                    command: 'npm.cmd',
+                    args: ['--prefix', 'C:\\test\\hcc', 'run', 'mcp'],
+                    startup_timeout_sec: 60,
+                    env: { MCP_AGENT_LABEL: 'test-agent' },
+                  },
+          },
+        });
       }
     },
   );
@@ -81,7 +122,14 @@ describe('buildMcpClientConfig', () => {
         bearerToken,
       });
       expect(result.format).toBe('toml');
-      expect(result.content).toContain(`Authorization = "Bearer ${expected}"`);
+      expect(parse(result.content)).toEqual({
+        mcp_servers: {
+          [MCP_CLIENT_SERVER_NAME]: {
+            url: 'https://hcc.example.com/api/mcp',
+            http_headers: { Authorization: `Bearer ${expected}`, 'x-agent-label': 'codex-test' },
+          },
+        },
+      });
       expect(result.content).toContain('url = "https://hcc.example.com/api/mcp"');
       expect(result.content).toContain('x-agent-label = "codex-test"');
       expect(result.secretEmbedded).toBe(embedded);
