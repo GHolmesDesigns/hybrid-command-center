@@ -507,7 +507,7 @@ describe('MCP integration tools', () => {
       session(),
       'files_browse_project',
       { projectId },
-      { drive, baseUrl: 'https://hcc.example.com' },
+      { drive, baseUrl: 'https://hcc.example.com', configured: true },
     );
 
     expect(result.outcome).toBe('SUCCESS');

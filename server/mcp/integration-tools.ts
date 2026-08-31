@@ -69,6 +69,8 @@ export type McpIntegrationToolDeps = {
   now?: Date;
   /** Origin of the MCP endpoint; absent for local stdio. */
   baseUrl?: string | null;
+  /** Test-only Drive configuration override; production derives this from environment config. */
+  configured?: boolean;
   inventory?: ProviderInventoryService;
   analyticsWindow?: AnalyticsWindowService;
   bufferAccounts?: BufferAccountsService;
@@ -562,6 +564,7 @@ async function runRead(
           pageToken: args.pageToken,
           pageSize: args.pageSize,
           provider: drive,
+          configured: deps.configured,
         });
         if (!listing) {
           return failed('Project not found.', mcpCoordinationNotFound());
