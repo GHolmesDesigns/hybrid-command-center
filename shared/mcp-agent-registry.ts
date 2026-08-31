@@ -36,3 +36,12 @@ export type McpAgentCredentialSummary = {
 };
 
 export type McpAgentCredentialList = { credentials: McpAgentCredentialSummary[] };
+
+/** Renew the saved lifetime from the rotation preview, independent of the issue form. */
+export const rotatedCredentialExpiryIso = (
+  credential: Pick<McpAgentCredentialSummary, 'issuedAt' | 'expiresAt'>,
+  nowMs: number,
+): string =>
+  new Date(
+    nowMs + Date.parse(credential.expiresAt) - Date.parse(credential.issuedAt),
+  ).toISOString();

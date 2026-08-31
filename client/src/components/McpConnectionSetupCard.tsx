@@ -12,6 +12,7 @@ import {
 import { api, send } from '../api';
 import {
   MCP_AGENT_SCOPES,
+  rotatedCredentialExpiryIso,
   type McpAgentCredentialList,
   type McpAgentCredentialSummary,
   type McpAgentScope,
@@ -123,9 +124,10 @@ export function McpConnectionSetupCard({
   const rotateFor =
     (credential: McpAgentCredentialSummary) => async (event: MouseEvent<HTMLButtonElement>) => {
       event.preventDefault();
+      const expiresAt = rotatedCredentialExpiryIso(credential, Date.now());
       if (
         !confirm(
-          `Rotate the credential for ${credential.label}? The old key stops working immediately. A new key is shown once.`,
+          `Rotate the credential for ${credential.label}? The old key stops working immediately. A new key is shown once. The original lifetime is preserved; the new credential expires at ${expiresAt} (UTC).`,
         )
       ) {
         return;
@@ -138,7 +140,7 @@ export function McpConnectionSetupCard({
           {
             label: credential.label,
             scopes: credential.scopes,
-            expiresAt: credentialExpiryIso(days, Date.now()),
+            expiresAt,
           },
         );
         setIssued(result);
@@ -386,6 +388,10 @@ export function McpConnectionSetupCard({
                 <div>
                   <strong>{credential.label}</strong>
                   <span>{credential.scopes.join(' · ')}</span>
+                  <small>
+                    Expires:{' '}
+                    <time dateTime={credential.expiresAt}>{credential.expiresAt} (UTC)</time>
+                  </small>
                   <small>
                     Last used:{' '}
                     {credential.lastUsedAt
