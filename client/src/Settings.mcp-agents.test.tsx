@@ -17,6 +17,23 @@ import {
 describe('Agents connection setup card', () => {
   afterEach(() => vi.restoreAllMocks());
 
+  it('labels workspace scopes accurately and keeps coordination-only defaults', async () => {
+    testState.mcpAgentRegistryPayload = { enabled: true, credentials: [] };
+
+    render(
+      <MemoryRouter initialEntries={['/agents']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Agent connection setup' })).toBeVisible();
+    expect(screen.getByLabelText('Read workspace and Signal data')).not.toBeChecked();
+    expect(screen.getByLabelText('Write workspace and Signal data')).not.toBeChecked();
+    expect(screen.getByLabelText('Read coordination')).toBeChecked();
+    expect(screen.getByLabelText('Write coordination')).toBeChecked();
+    expect(screen.queryByText(/reserved/i)).not.toBeInTheDocument();
+  });
+
   it('issues a credential, shows client guide steps, runs the diagnostic, and revokes', async () => {
     testState.mcpAgentRegistryPayload = { enabled: true, credentials: [] };
     testState.mcpHealthTestPayload = {
