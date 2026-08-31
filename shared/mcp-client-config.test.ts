@@ -22,7 +22,7 @@ describe('buildMcpClientConfig', () => {
       mcp_servers: {
         [MCP_CLIENT_SERVER_NAME]: {
           url: 'https://hcc.example.com/api/mcp',
-          http_headers: { Authorization: `Bearer ${bearerToken}`, 'x-agent-label': agentLabel },
+          http_headers: { Authorization: `Bearer ${bearerToken}` },
         },
       },
     });
@@ -47,6 +47,7 @@ describe('buildMcpClientConfig', () => {
         repoPath: 'C:\\test\\hcc',
       });
       expect(result).toMatchObject({ format, filename, pasteTarget, secretEmbedded: false });
+      expect(result.content).not.toContain('x-agent-label');
       if (format === 'json') {
         const server = JSON.parse(result.content).mcpServers[MCP_CLIENT_SERVER_NAME];
         if (transport === 'http') {
@@ -55,7 +56,6 @@ describe('buildMcpClientConfig', () => {
             url: 'https://hcc.example.com/api/mcp',
             headers: {
               Authorization: `Bearer ${MCP_BEARER_PLACEHOLDER}`,
-              'x-agent-label': 'test-agent',
             },
           });
         } else {
@@ -76,7 +76,6 @@ describe('buildMcpClientConfig', () => {
                     url: 'https://hcc.example.com/api/mcp',
                     http_headers: {
                       Authorization: `Bearer ${MCP_BEARER_PLACEHOLDER}`,
-                      'x-agent-label': 'test-agent',
                     },
                   }
                 : {
@@ -126,12 +125,12 @@ describe('buildMcpClientConfig', () => {
         mcp_servers: {
           [MCP_CLIENT_SERVER_NAME]: {
             url: 'https://hcc.example.com/api/mcp',
-            http_headers: { Authorization: `Bearer ${expected}`, 'x-agent-label': 'codex-test' },
+            http_headers: { Authorization: `Bearer ${expected}` },
           },
         },
       });
       expect(result.content).toContain('url = "https://hcc.example.com/api/mcp"');
-      expect(result.content).toContain('x-agent-label = "codex-test"');
+      expect(result.content).not.toContain('x-agent-label');
       expect(result.secretEmbedded).toBe(embedded);
       if (!embedded) expect(result.content).not.toContain('hcc_mcp_test-token');
     },
@@ -196,7 +195,7 @@ describe('buildMcpClientConfig', () => {
     });
     expect(result.content).toContain('"url": "https://hcc.example.com/api/mcp"');
     expect(result.content).toContain(`Bearer ${MCP_BEARER_PLACEHOLDER}`);
-    expect(result.content).toContain('"x-agent-label": "cursor-planning"');
+    expect(result.content).not.toContain('x-agent-label');
     expect(result.secretEmbedded).toBe(false);
   });
 
