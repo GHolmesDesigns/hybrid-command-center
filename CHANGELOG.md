@@ -8,6 +8,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.11.3] - 2026-08-31
+
+### Added
+
+- Added credential ID, issue time, and expiry to operator MCP health diagnostics so connection
+  results can be correlated with the credential being configured without exposing secret material.
+
+### Breaking changes
+
+None.
+
 ## [5.11.2] - 2026-08-31
 
 ### Fixed
