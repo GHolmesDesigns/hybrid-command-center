@@ -60,7 +60,8 @@ const HTTP_PLATFORM_NOTE: Record<McpClientPlatform, string> = {
   cursor: 'Paste into Cursor MCP settings or a local secrets file — never commit the bearer.',
   claude: 'Paste into Claude Code MCP settings or a local secrets file — never commit the bearer.',
   'claude-desktop': 'Fill the connector fields in claude.ai settings — never commit the bearer.',
-  codex: 'Paste into ~/.codex/config.toml under [mcp_servers] — never commit the bearer.',
+  codex:
+    'Paste this server section into ~/.codex/config.toml, replacing any existing hybrid-command-center section — never commit the bearer.',
 };
 
 const stdioCursor = (agentLabel: string): McpClientConfigResult => ({
@@ -155,17 +156,23 @@ const httpConfig = (input: McpClientConfigInput): McpClientConfigResult => {
     };
   }
 
+  const codex = input.platform === 'codex';
   return {
-    format: 'json',
-    filename:
-      input.platform === 'codex'
-        ? '~/.codex/config.toml (HTTP section)'
-        : `${input.platform}-mcp-http.json`,
+    format: codex ? 'toml' : 'json',
+    filename: codex ? '~/.codex/config.toml (HTTP section)' : `${input.platform}-mcp-http.json`,
     // A complete document, not a fragment: the filename above says "file", so the content must be
     // one. A bare `{url, headers}` object is not valid anywhere it would be pasted (#422).
-    content: jsonBlock({
-      mcpServers: { [MCP_CLIENT_SERVER_NAME]: { type: 'http', url: serverUrl, headers } },
-    }),
+    content: codex
+      ? `[mcp_servers."${MCP_CLIENT_SERVER_NAME}"]
+url = ${JSON.stringify(serverUrl)}
+
+[mcp_servers."${MCP_CLIENT_SERVER_NAME}".http_headers]
+Authorization = ${JSON.stringify(headers.Authorization)}
+${MCP_AGENT_LABEL_HEADER} = ${JSON.stringify(input.agentLabel)}
+`
+      : jsonBlock({
+          mcpServers: { [MCP_CLIENT_SERVER_NAME]: { type: 'http', url: serverUrl, headers } },
+        }),
     secretEmbedded,
     pasteTarget: 'file',
     notes: [
