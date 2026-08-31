@@ -8,6 +8,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.10.3] - 2026-08-31
+
+### Fixed
+
+- Generated Cursor, Claude Code, and Codex HTTPS MCP configurations now use the credential's agent identity without a redundant label header. Setup guidance explains that the label header must not be added by hand.
+
+### Breaking changes
+
+None.
+
 ## [5.10.2] - 2026-08-31
 
 ### Fixed

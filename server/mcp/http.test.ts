@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
+import { parse } from 'smol-toml';
+import { buildMcpClientConfig, MCP_CLIENT_SERVER_NAME } from '../../shared/mcp-client-config.ts';
 import { createApp } from '../app.ts';
 import { createDb, type Db } from '../db.ts';
 import { hashPassword } from '../auth/password.ts';
@@ -174,6 +176,55 @@ describe('network MCP (C113)', () => {
     const payload = JSON.parse(res.body.result.content[0].text);
     expect(payload.state).toBe('OPEN');
   });
+
+  it.each(['cursor', 'claude', 'codex'] as const)(
+    'authenticates unchanged %s config as its credential label',
+    async (platform) => {
+      const { cookie, csrfToken } = await login();
+      const label = `${platform}-planning`;
+      const issued = await issueScopedBearer(cookie, csrfToken, label, [
+        'coordination:read',
+        'coordination:write',
+      ]);
+      const config = buildMcpClientConfig({
+        platform,
+        transport: 'http',
+        agentLabel: label,
+        origin: 'https://hcc.example.com',
+        bearerToken: issued.bearerToken,
+        embedSecret: true,
+      });
+      const connection =
+        config.format === 'toml'
+          ? (
+              parse(config.content) as {
+                mcp_servers: Record<string, { url: string; http_headers: Record<string, string> }>;
+              }
+            ).mcp_servers[MCP_CLIENT_SERVER_NAME]
+          : (
+              JSON.parse(config.content) as {
+                mcpServers: Record<string, { url: string; headers: Record<string, string> }>;
+              }
+            ).mcpServers[MCP_CLIENT_SERVER_NAME];
+      const headers = 'http_headers' in connection ? connection.http_headers : connection.headers;
+      expect(headers).not.toHaveProperty(MCP_AGENT_LABEL_HEADER);
+      const accepted = await request(app())
+        .post(new URL(connection.url).pathname)
+        .set(headers)
+        .send({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/call',
+          params: {
+            name: 'coordination_post_handoff',
+            arguments: { subjectType: 'freeform', message: 'Generated configuration identity.' },
+          },
+        });
+      expect(accepted.status).toBe(200);
+      expect(accepted.body.result.isError).toBe(false);
+      expect(JSON.parse(accepted.body.result.content[0].text).fromAgentLabel).toBe(label);
+    },
+  );
 
   it('binds a scoped credential to its server-side label and audits header impersonation', async () => {
     const { cookie, csrfToken } = await login();

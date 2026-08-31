@@ -3,6 +3,24 @@ import { MCP_BEARER_PLACEHOLDER } from './mcp-client-config.ts';
 import { buildMcpClientGuide } from './mcp-client-guide.ts';
 
 describe('buildMcpClientGuide', () => {
+  it.each(['cursor', 'claude', 'codex'] as const)(
+    'documents credential-bound identity without emitting a label header for %s',
+    (platform) => {
+      const guide = buildMcpClientGuide({
+        platform,
+        agentLabel: 'agent-one',
+        origin: 'https://hcc.example.com',
+        bearerToken: 'hcc_mcp_test-token',
+      });
+      expect(guide.copyFields.find((field) => field.id === 'setup')?.value).not.toContain(
+        'x-agent-label',
+      );
+      expect(guide.headerHint).toContain('Authorization: Bearer');
+      expect(guide.headerHint).toContain('agent label is bound to the credential');
+      expect(guide.headerHint).toContain('do not add x-agent-label by hand');
+    },
+  );
+
   it('builds Cursor HTTPS steps with a ready-to-paste setup that embeds the credential', () => {
     const guide = buildMcpClientGuide({
       platform: 'cursor',
@@ -17,7 +35,7 @@ describe('buildMcpClientGuide', () => {
     const setup = guide.copyFields.find((field) => field.id === 'setup');
     expect(setup?.secret).toBe(true);
     expect(setup?.value).toContain('Bearer hcc_mcp_test-token');
-    expect(setup?.value).toContain('"x-agent-label": "cursor-planning"');
+    expect(setup?.value).not.toContain('x-agent-label');
     expect(setup?.value).not.toContain(MCP_BEARER_PLACEHOLDER);
   });
 

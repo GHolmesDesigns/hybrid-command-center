@@ -5,7 +5,7 @@
  * Tracked repository files never receive a bearer token; callers pass `embedSecret: true` only for
  * ephemeral UI copy.
  */
-import { MCP_AGENT_LABEL_HEADER, MCP_HTTP_PATH } from './mcp-network.ts';
+import { MCP_HTTP_PATH } from './mcp-network.ts';
 
 export const MCP_CLIENT_PLATFORMS = ['cursor', 'claude', 'claude-desktop', 'codex'] as const;
 export type McpClientPlatform = (typeof MCP_CLIENT_PLATFORMS)[number];
@@ -131,7 +131,6 @@ const httpConfig = (input: McpClientConfigInput): McpClientConfigResult => {
   const serverUrl = `${origin}${MCP_HTTP_PATH}`;
   const headers = {
     Authorization: `Bearer ${token}`,
-    [MCP_AGENT_LABEL_HEADER]: input.agentLabel,
   };
   const secretNote = secretEmbedded
     ? 'Copy this now — the credential is shown once and cannot be recovered.'
@@ -168,7 +167,6 @@ url = ${JSON.stringify(serverUrl)}
 
 [mcp_servers."${MCP_CLIENT_SERVER_NAME}".http_headers]
 Authorization = ${JSON.stringify(headers.Authorization)}
-${MCP_AGENT_LABEL_HEADER} = ${JSON.stringify(input.agentLabel)}
 `
       : jsonBlock({
           mcpServers: { [MCP_CLIENT_SERVER_NAME]: { type: 'http', url: serverUrl, headers } },
@@ -177,7 +175,7 @@ ${MCP_AGENT_LABEL_HEADER} = ${JSON.stringify(input.agentLabel)}
     pasteTarget: 'file',
     notes: [
       HTTP_PLATFORM_NOTE[input.platform],
-      `Every request must include the ${MCP_AGENT_LABEL_HEADER} header.`,
+      'The agent label is bound to the credential; do not add an agent label header.',
       secretNote,
     ],
   };

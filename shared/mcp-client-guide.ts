@@ -31,7 +31,7 @@ export type McpClientGuide = {
   agentLabel: string;
   steps: readonly McpGuideStep[];
   copyFields: readonly McpGuideCopyField[];
-  /** What this client must send on every request. Connector surfaces must not send the label. */
+  /** Authentication guidance only; clients must not add a credential-bound label header. */
   headerHint: string;
 };
 
@@ -193,7 +193,7 @@ export function buildMcpClientGuide(input: McpClientGuideInput): McpClientGuide 
   };
 }
 
-export const MCP_GUIDE_HEADER_HINT = `Every request must send Authorization: Bearer … and ${MCP_AGENT_LABEL_HEADER}.`;
+export const MCP_GUIDE_HEADER_HINT = `Every request must send Authorization: Bearer …. The agent label is bound to the credential; do not add ${MCP_AGENT_LABEL_HEADER} by hand.`;
 
 /**
  * Connector surfaces send Authorization only. The label is carried inside the credential, and a

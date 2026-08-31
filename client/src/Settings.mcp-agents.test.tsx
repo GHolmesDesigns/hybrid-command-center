@@ -78,7 +78,7 @@ describe('Agents connection setup card', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Copy ready-to-paste setup for Cursor' }));
     await waitFor(() => expect(writeText).toHaveBeenCalled());
     expect(String(writeText.mock.calls[0]?.[0])).toContain('Bearer hcc_mcp_shown-once');
-    expect(String(writeText.mock.calls[0]?.[0])).toContain('"x-agent-label": "cursor-planning"');
+    expect(String(writeText.mock.calls[0]?.[0])).not.toContain('x-agent-label');
 
     fireEvent.click(screen.getByRole('button', { name: 'Run connection diagnostic' }));
     expect(await screen.findByText('Diagnostic passed')).toBeVisible();
