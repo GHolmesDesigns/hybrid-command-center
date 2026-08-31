@@ -23,7 +23,8 @@ describe('mcp oauth', () => {
       client_name: 'Claude Cowork',
       token_endpoint_auth_method: 'none',
     });
-    expect(agentLabelForOAuthClient(client)).toBe('claude-cowork');
+    const label = `claude-oauth-claude-cowork-${client.clientId.slice(0, 8)}`;
+    expect(agentLabelForOAuthClient(client)).toBe(label);
 
     const verifier = crypto.randomBytes(32).toString('base64url');
     const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
@@ -71,7 +72,7 @@ describe('mcp oauth', () => {
       origin: ISSUER,
       now: 4_000,
     });
-    expect(resolved?.agentLabel).toBe('claude-cowork');
+    expect(resolved?.agentLabel).toBe(label);
     expect(resolved?.scopes).toEqual(['coordination:read', 'coordination:write']);
   });
 

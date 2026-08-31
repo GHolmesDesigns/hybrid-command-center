@@ -7,10 +7,8 @@
 import { MCP_AGENT_SCOPES, type McpAgentScope } from './mcp-agent-registry.ts';
 import { MCP_HTTP_PATH } from './mcp-network.ts';
 
-export const MCP_OAUTH_PROTECTED_RESOURCE_WELL_KNOWN =
-  '/.well-known/oauth-protected-resource';
-export const MCP_OAUTH_AUTHORIZATION_SERVER_WELL_KNOWN =
-  '/.well-known/oauth-authorization-server';
+export const MCP_OAUTH_PROTECTED_RESOURCE_WELL_KNOWN = '/.well-known/oauth-protected-resource';
+export const MCP_OAUTH_AUTHORIZATION_SERVER_WELL_KNOWN = '/.well-known/oauth-authorization-server';
 export const MCP_OAUTH_AUTHORIZE_PATH = '/authorize';
 export const MCP_OAUTH_TOKEN_PATH = '/token';
 export const MCP_OAUTH_REGISTER_PATH = '/register';
@@ -69,10 +67,38 @@ export function mcpOAuthWwwAuthenticateHeader(issuer: string): string {
   return `Bearer realm="mcp", resource_metadata="${resourceMetadata}"`;
 }
 
-export function parseMcpOAuthScopeParam(raw: string | undefined): McpAgentScope[] {
-  if (!raw?.trim()) return [...MCP_AGENT_SCOPES];
+/**
+ * What a connector gets when it names no scope at all.
+ *
+ * The full set, deliberately: the operator reads this list on the approval screen and is the one who
+ * grants it, so narrowing it here would break writes with no way to widen them from the UI. It is a
+ * named constant rather than an inline `MCP_AGENT_SCOPES` so that narrowing it later is one line
+ * with a test behind it.
+ */
+export const MCP_OAUTH_DEFAULT_SCOPES = MCP_AGENT_SCOPES;
+
+export type McpOAuthScopeParseResult =
+  { ok: true; scopes: McpAgentScope[] } | { ok: false; unsupported: string[] };
+
+/**
+ * Resolve the `scope` parameter of an authorization request.
+ *
+ * An unrecognized scope is rejected rather than dropped. Filtering it out and falling back to the
+ * full set — what this did before — turned a typo, or a client carrying another server's scope
+ * names, into a silent escalation to every capability: the narrowest request produced the widest
+ * grant.
+ */
+export function parseMcpOAuthScopeParam(raw: string | undefined): McpOAuthScopeParseResult {
+  if (!raw?.trim()) return { ok: true, scopes: [...MCP_OAUTH_DEFAULT_SCOPES] };
   const requested = raw.trim().split(/\s+/);
   const allowed = new Set<string>(MCP_AGENT_SCOPES);
-  const scopes = requested.filter((scope): scope is McpAgentScope => allowed.has(scope));
-  return scopes.length ? scopes : [...MCP_AGENT_SCOPES];
+  const unsupported = requested.filter((scope) => !allowed.has(scope));
+  if (unsupported.length) return { ok: false, unsupported };
+  const seen = new Set<string>();
+  const scopes = requested.filter((scope): scope is McpAgentScope => {
+    if (seen.has(scope)) return false;
+    seen.add(scope);
+    return true;
+  });
+  return { ok: true, scopes };
 }

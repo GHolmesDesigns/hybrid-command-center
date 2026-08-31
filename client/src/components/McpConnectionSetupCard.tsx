@@ -21,7 +21,10 @@ import {
   MCP_CLIENT_PLATFORM_LABEL,
   type McpClientPlatform,
 } from '../../../shared/mcp-client-config';
-import { buildMcpClientGuide, MCP_GUIDE_CLAUDE_CONNECTOR_BLOCKER } from '../../../shared/mcp-client-guide';
+import {
+  buildMcpClientGuide,
+  MCP_GUIDE_CLAUDE_CONNECTOR_BLOCKER,
+} from '../../../shared/mcp-client-guide';
 import type { McpConnectionStatus } from '../../../shared/mcp-health';
 
 type RegistryResponse = McpAgentCredentialList & { enabled: boolean };

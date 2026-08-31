@@ -8,6 +8,7 @@ import crypto from 'node:crypto';
 import { z } from 'zod';
 import type { Db } from '../db.ts';
 import { mcpAgentScopesSchema, type McpAgentScope } from '../../shared/mcp-agent-registry.ts';
+import { agentLabelSchema } from '../../shared/agent-coordination.ts';
 import {
   MCP_OAUTH_ALLOWED_REDIRECT_URIS,
   MCP_OAUTH_CODE_TTL_MS,
@@ -43,25 +44,20 @@ export const MCP_OAUTH_CODES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS mcp_oauth_c
   consumed_at TEXT
 )`;
 
-export class McpOAuthError extends Error {
-  readonly errorCode:
-    | 'invalid_request'
-    | 'invalid_client'
-    | 'invalid_grant'
-    | 'unauthorized_client'
-    | 'unsupported_grant_type'
-    | 'access_denied';
+/** The `error` values this authorization server returns, per RFC 6749 §4.1.2.1 and §5.2. */
+export type McpOAuthErrorCode =
+  | 'invalid_request'
+  | 'invalid_client'
+  | 'invalid_grant'
+  | 'invalid_scope'
+  | 'unauthorized_client'
+  | 'unsupported_grant_type'
+  | 'access_denied';
 
-  constructor(
-    message: string,
-    errorCode:
-      | 'invalid_request'
-      | 'invalid_client'
-      | 'invalid_grant'
-      | 'unauthorized_client'
-      | 'unsupported_grant_type'
-      | 'access_denied' = 'invalid_request',
-  ) {
+export class McpOAuthError extends Error {
+  readonly errorCode: McpOAuthErrorCode;
+
+  constructor(message: string, errorCode: McpOAuthErrorCode = 'invalid_request') {
     super(message);
     this.name = 'McpOAuthError';
     this.errorCode = errorCode;
@@ -98,7 +94,10 @@ const redirectUriSchema = z
   .string()
   .url()
   .refine(
-    (uri) => MCP_OAUTH_ALLOWED_REDIRECT_URIS.includes(uri as (typeof MCP_OAUTH_ALLOWED_REDIRECT_URIS)[number]),
+    (uri) =>
+      MCP_OAUTH_ALLOWED_REDIRECT_URIS.includes(
+        uri as (typeof MCP_OAUTH_ALLOWED_REDIRECT_URIS)[number],
+      ),
     'redirect_uri is not an allowed MCP connector callback.',
   );
 
@@ -167,16 +166,35 @@ function verifyRedirectUri(client: RegisteredMcpOAuthClient, redirectUri: string
 }
 
 /** Map a connector client name to a valid agent label, with a stable fallback. */
+/** Every agent label this OAuth server issues starts here, so one is recognizable in the agent list. */
+export const MCP_OAUTH_AGENT_LABEL_PREFIX = 'claude-oauth-';
+
+/**
+ * Map a connector to the agent label its credentials are issued under.
+ *
+ * The label always carries both the prefix and the client id. Token exchange revokes every live
+ * credential for the label it lands on, so when the label was the client-supplied `client_name`
+ * alone, a connector could register itself under an existing agent's name and revoke that agent's
+ * credentials the moment an operator approved the connection — and inherit its name in the agent
+ * list. Keying on the client id makes the label unique per registration, so a connector can only
+ * revoke a token it was itself issued earlier, which is exactly what reconnecting the same connector
+ * should do. The name survives only as a slug, to give the operator something readable on the
+ * approval screen.
+ */
 export function agentLabelForOAuthClient(client: RegisteredMcpOAuthClient): string {
-  const fallback = `claude-oauth-${client.clientId.slice(0, 8)}`;
-  const raw = client.clientName?.trim();
-  if (!raw) return fallback;
-  const normalized = raw
+  const suffix = client.clientId.slice(0, 8);
+  const slug = (client.clientName ?? '')
+    .trim()
     .toLowerCase()
     .replace(/[^a-z0-9._-]+/g, '-')
     .replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, '')
-    .slice(0, 64);
-  return normalized.length ? normalized : fallback;
+    .slice(0, 32);
+  const label = slug
+    ? `${MCP_OAUTH_AGENT_LABEL_PREFIX}${slug}-${suffix}`
+    : `${MCP_OAUTH_AGENT_LABEL_PREFIX}${suffix}`;
+  // Operator-chosen labels are validated at the HTTP boundary; this one never was. Parse it so a
+  // later edit here cannot write a row the agent form and the PATCH endpoint would both refuse.
+  return agentLabelSchema.parse(label);
 }
 
 export type PendingMcpOAuthAuthorization = {
@@ -199,12 +217,18 @@ const authorizeQuerySchema = z.object({
   scope: z.string().optional(),
 });
 
-export function parseAuthorizeRequest(query: Record<string, unknown>): PendingMcpOAuthAuthorization {
+export function parseAuthorizeRequest(
+  query: Record<string, unknown>,
+): PendingMcpOAuthAuthorization {
   const parsed = authorizeQuerySchema.parse(query);
+  const scope = parseMcpOAuthScopeParam(parsed.scope);
+  if (!scope.ok) {
+    throw new McpOAuthError(`Unsupported scope: ${scope.unsupported.join(' ')}.`, 'invalid_scope');
+  }
   return {
     clientId: parsed.client_id,
     redirectUri: parsed.redirect_uri,
-    scopes: mcpAgentScopesSchema.parse(parseMcpOAuthScopeParam(parsed.scope)),
+    scopes: mcpAgentScopesSchema.parse(scope.scopes),
     codeChallenge: parsed.code_challenge,
     codeChallengeMethod: parsed.code_challenge_method,
     oauthState: parsed.state,

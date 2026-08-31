@@ -38,14 +38,19 @@ The connector dialog needs only a **name** and **server URL** — Claude discove
 the server's `401` response and well-known metadata, registers itself, and walks you through sign-in
 and approval in the browser.
 
-1. Ask the operator to open **Agents → Agent connection setup** in HCC and register the agent label
-   you expect (for example `claude-cowork`). OAuth creates or reuses a registration from the
-   connector name at approval time.
-2. In claude.ai, **Settings → Connectors → Add custom connector**. Name it Hybrid Command Center
+1. In claude.ai, **Settings → Connectors → Add custom connector**. Name it Hybrid Command Center
    and paste `https://<origin>/api/mcp`.
-3. Click **Connect** in Claude. Sign in to Hybrid Command Center if prompted, review the agent label
+2. Click **Connect** in Claude. Sign in to Hybrid Command Center if prompted, review the agent label
    and scopes, then **Approve connector**.
-4. Enable the connector for the chats or projects that need it.
+3. Enable the connector for the chats or projects that need it.
+
+There is nothing to pre-register. OAuth mints its own agent registration at approval time under a
+label it derives itself — `claude-oauth-<connector-name>-<client-id>`, shown on the approval screen —
+and reconnecting the same connector reuses that label and replaces its previous credential. It will
+never land on an agent registered through **Agents → Agent connection setup**: a connector names
+itself, and a name a connector chooses must not be able to decide which existing agent's credentials
+get revoked. Agents you register there stay yours, and a connector's label is recognizable in the
+agent list by its prefix.
 
 After approval, ask Claude to call **`system_connection_status`** and read **`agentLabel`** and
 **`storeId`** before any coordination writes.

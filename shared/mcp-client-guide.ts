@@ -149,9 +149,7 @@ export function buildMcpClientGuide(input: McpClientGuideInput): McpClientGuide 
   const credentialField: McpGuideCopyField = {
     id: 'credential',
     label:
-      input.platform === 'claude-desktop'
-        ? 'Copy Authorization header value'
-        : 'Copy credential',
+      input.platform === 'claude-desktop' ? 'Copy Authorization header value' : 'Copy credential',
     value: input.platform === 'claude-desktop' ? authorizationHeaderValue : input.bearerToken,
     secret: true,
   };
