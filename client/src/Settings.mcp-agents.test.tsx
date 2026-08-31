@@ -94,7 +94,10 @@ describe('Agents connection setup card', () => {
     expect(screen.getByText('No active agent credentials.')).toBeVisible();
   });
 
-  it('rotates an existing credential and shows the new one-time setup', async () => {
+  it('preserves a 90-day lifetime and scopes, confirms the exact expiry, and displays it after rotation', async () => {
+    const now = Date.parse('2026-09-01T12:00:00.000Z');
+    const expectedExpiry = '2026-11-30T12:00:00.000Z';
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
     testState.mcpAgentRegistryPayload = {
       enabled: true,
       credentials: [
@@ -102,16 +105,22 @@ describe('Agents connection setup card', () => {
           id: 'cred-1',
           agentId: 'agent-1',
           label: 'cursor-planning',
-          scopes: ['coordination:read', 'coordination:write'],
+          scopes: ['workspace:read'],
           issuedAt: '2026-08-28T10:00:00.000Z',
-          expiresAt: '2026-09-28T10:00:00.000Z',
+          expiresAt: '2026-11-26T10:00:00.000Z',
           revokedAt: null,
           lastUsedAt: null,
           lastOrigin: null,
         },
       ],
     };
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const confirmation = vi.spyOn(window, 'confirm').mockImplementation((message) => {
+      expect(message).toContain(`${expectedExpiry} (UTC)`);
+      expect(requests.filter((request) => request.method === 'POST')).toHaveLength(0);
+      // Time spent considering the dialog must not change the confirmed expiry.
+      clock.mockReturnValue(now + 60_000);
+      return true;
+    });
 
     render(
       <MemoryRouter initialEntries={['/agents']}>
@@ -119,9 +128,17 @@ describe('Agents connection setup card', () => {
       </MemoryRouter>,
     );
     expect(await screen.findByRole('button', { name: 'Rotate cursor-planning' })).toBeVisible();
+    expect(screen.getByLabelText('Expires after')).toHaveValue('30');
+    confirmation.mockReturnValueOnce(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Rotate cursor-planning' }));
+    expect(requests.filter((request) => request.method === 'POST')).toHaveLength(0);
+    expect(screen.getByText('2026-11-26T10:00:00.000Z (UTC)')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Rotate cursor-planning' }));
 
     expect(await screen.findByText(/Open Cursor Settings/)).toBeVisible();
+    expect(confirmation).toHaveBeenCalledTimes(2);
+    expect(await screen.findByText(`${expectedExpiry} (UTC)`)).toBeVisible();
+    expect(screen.queryByText('2026-11-26T10:00:00.000Z (UTC)')).not.toBeInTheDocument();
     expect(
       requests.filter(
         (request) =>
@@ -130,12 +147,12 @@ describe('Agents connection setup card', () => {
       ),
     ).toHaveLength(1);
     expect(
-      requests.some(
-        (request) =>
-          request.method === 'POST' &&
-          request.url.endsWith('/api/auth/mcp-credentials/cred-1/rotate') &&
-          request.body.label === 'cursor-planning',
-      ),
-    ).toBe(true);
+      requests.find((request) => request.url.endsWith('/api/auth/mcp-credentials/cred-1/rotate'))
+        ?.body,
+    ).toEqual({
+      label: 'cursor-planning',
+      scopes: ['workspace:read'],
+      expiresAt: expectedExpiry,
+    });
   });
 });
