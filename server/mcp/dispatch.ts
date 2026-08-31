@@ -35,6 +35,7 @@ export type McpToolDispatchOptions = {
   integrationDeps?: McpIntegrationToolDeps;
   transport?: 'stdio' | 'http';
   authenticated?: boolean;
+  baseUrl?: string | null;
 };
 
 const refused = (
@@ -115,6 +116,7 @@ export async function callMcpTool(
         authenticated: options.authenticated ?? true,
         agentLabel: session.agentLabel,
         grantedScopes: options.grantedScopes,
+        baseUrl: options.baseUrl,
         now,
       });
       return { outcome: 'SUCCESS', data: redactToolResult(payload) };

@@ -57,6 +57,8 @@ export type McpJsonRpcOptions = {
   now?: Date;
   transport?: 'stdio' | 'http';
   authenticated?: boolean;
+  /** Configured HTTP origin when this request has one; local stdio has no base URL. */
+  baseUrl?: string | null;
   workspaceReadDeps?: McpWorkspaceReadDeps;
   workspaceWriteDeps?: McpWorkspaceWriteDeps;
   integrationDeps?: McpIntegrationToolDeps;

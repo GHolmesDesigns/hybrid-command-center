@@ -24,6 +24,7 @@ describe('buildConnectionStatus', () => {
       authenticated: true,
       agentLabel: 'cursor-planning',
       grantedScopes: MCP_AGENT_SCOPES,
+      baseUrl: 'https://hcc.example.com',
       now: NOW,
     });
     const after = workspaceDataChecksum(db);
@@ -35,6 +36,7 @@ describe('buildConnectionStatus', () => {
     expect(status.capabilityVersion).toMatch(/^mcp-/);
     expect(status.storeId).toEqual(expect.any(String));
     expect(status.storeId.length).toBeGreaterThan(0);
+    expect(status.baseUrl).toBe('https://hcc.example.com');
   });
 
   it('reports the same storeId across repeated calls on one database', () => {
@@ -43,6 +45,7 @@ describe('buildConnectionStatus', () => {
       authenticated: true,
       agentLabel: 'cursor-planning',
       grantedScopes: MCP_AGENT_SCOPES,
+      baseUrl: 'https://hcc.example.com',
       now: NOW,
     });
     const second = buildConnectionStatus(db, {
@@ -50,6 +53,7 @@ describe('buildConnectionStatus', () => {
       authenticated: true,
       agentLabel: 'cursor-planning',
       grantedScopes: MCP_AGENT_SCOPES,
+      baseUrl: 'https://hcc.example.com',
       now: NOW,
     });
     expect(second.storeId).toBe(first.storeId);
@@ -62,6 +66,7 @@ describe('buildConnectionStatus', () => {
       authenticated: true,
       agentLabel: 'cursor-planning',
       grantedScopes: MCP_AGENT_SCOPES,
+      baseUrl: 'https://hcc.example.com',
       now: NOW,
     });
     const statusB = buildConnectionStatus(other, {
@@ -80,6 +85,7 @@ describe('buildConnectionStatus', () => {
       authenticated: false,
       agentLabel: null,
       grantedScopes: [],
+      baseUrl: null,
       now: NOW,
     });
     expect(status.ok).toBe(false);
@@ -95,6 +101,7 @@ describe('buildConnectionStatus', () => {
       authenticated: true,
       agentLabel: 'cursor',
       grantedScopes: MCP_AGENT_SCOPES,
+      baseUrl: 'https://hcc.example.com',
       now: NOW,
     });
     expect(status.ok).toBe(false);
@@ -112,6 +119,7 @@ describe('buildConnectionStatus', () => {
       authenticated: true,
       agentLabel: 'cursor',
       grantedScopes: MCP_AGENT_SCOPES,
+      baseUrl: null,
       now: NOW,
     });
     expect(status.checks.resourceRead.detail).toBe('Resource read failed.');
@@ -144,6 +152,7 @@ describe('system_connection_status tool', () => {
         now: NOW,
         transport: 'stdio',
         authenticated: true,
+        baseUrl: null,
       },
     );
     const after = workspaceDataChecksum(db);

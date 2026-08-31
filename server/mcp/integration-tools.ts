@@ -5,7 +5,7 @@
  * writes use the separate integration budget. Provider publish stays unreachable.
  */
 import { z } from 'zod';
-import type { Db } from '../db.ts';
+import { getStoreId, type Db } from '../db.ts';
 import { agentHandoffClientRequestIdSchema } from '../../shared/agent-coordination.ts';
 import { type ClientMergeSelections } from '../../shared/client-merge.ts';
 import { DRIVE_PAGE_SIZE_MAX } from '../../shared/drive.ts';
@@ -67,6 +67,10 @@ import { findWriteMutation, recordWriteMutation } from './write-mutations.ts';
 
 export type McpIntegrationToolDeps = {
   now?: Date;
+  /** Origin of the MCP endpoint; absent for local stdio. */
+  baseUrl?: string | null;
+  /** Test-only Drive configuration override; production derives this from environment config. */
+  configured?: boolean;
   inventory?: ProviderInventoryService;
   analyticsWindow?: AnalyticsWindowService;
   bufferAccounts?: BufferAccountsService;
@@ -560,11 +564,19 @@ async function runRead(
           pageToken: args.pageToken,
           pageSize: args.pageSize,
           provider: drive,
+          configured: deps.configured,
         });
         if (!listing) {
           return failed('Project not found.', mcpCoordinationNotFound());
         }
-        return success(listing);
+        return success(
+          listing.state === 'NOT_CONNECTED'
+            ? {
+                ...listing,
+                connection: { storeId: getStoreId(db), baseUrl: deps.baseUrl ?? null },
+              }
+            : listing,
+        );
       }
       case 'integration_list_activity': {
         const args = integrationListArgs.parse(rawArgs ?? {});

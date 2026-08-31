@@ -27,8 +27,12 @@ Use `hybrid-command-center-prod` (or your operator's HTTPS MCP config) for hando
 completes that must reach Settings or other agents. Local stdio is workstation-local only.
 
 Before any coordination write, call `system_connection_status` on every configured connection and
-compare `storeId`. Different values mean different stores — stop and switch to HTTPS rather than
-assuming a write will propagate.
+compare both `storeId` and `baseUrl`. Different `storeId` values mean different stores — stop and
+switch to HTTPS rather than assuming a write will propagate. If an MCP Files read reports Drive
+`NOT_CONNECTED`, its `connection.storeId` and `connection.baseUrl` identify the store and endpoint
+that were consulted. The same store means the agent and browser are reading the same Drive token
+state; a differing `storeId`, not a missing Drive grant, is the finding behind the split-state
+symptom.
 
 ## Claim → work → prove
 
@@ -82,9 +86,10 @@ Stop and ask rather than guessing when:
 
 ## Diagnostics
 
-- `system_connection_status` — read-only check that auth, tools, resources, and **`storeId`**
-  respond. Safe to run any time; it creates no handoff and writes nothing. Compare `storeId` across
-  connections before coordination writes.
+- `system_connection_status` — a read-only check that auth, protocol negotiation, resolved endpoint
+  (`baseUrl`), store (`storeId`), tools, resources, one bounded resource read, server version,
+  capability version, and server clock respond. Safe to run any time; it creates no handoff and
+  writes nothing. Compare `storeId` and `baseUrl` across connections before coordination writes.
 - The operator's Settings diagnostic runs the same checks from the server side and shows the store
   id beside capability version.
 

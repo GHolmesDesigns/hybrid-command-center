@@ -324,9 +324,13 @@ async function runJsonRpc(
     now: new Date(nowMs),
     transport: 'http',
     authenticated: true,
+    baseUrl: options.appOrigin ?? options.integrationDeps?.baseUrl ?? null,
     workspaceReadDeps: options.workspaceReadDeps,
     workspaceWriteDeps: options.workspaceWriteDeps,
-    integrationDeps: options.integrationDeps,
+    integrationDeps: {
+      ...options.integrationDeps,
+      baseUrl: options.appOrigin ?? options.integrationDeps?.baseUrl ?? null,
+    },
     notify,
     beforeToolsCall: options.beforeToolsCall,
   });

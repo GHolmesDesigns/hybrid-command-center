@@ -497,6 +497,29 @@ describe('MCP integration tools', () => {
     expect(listing.files.map((f) => f.id)).toEqual(['file-1']);
   });
 
+  it('names the consulted store and endpoint when Drive is not connected', async () => {
+    const { projectId } = seedProject();
+    const drive = new MockDriveProvider();
+    drive.connected = false;
+
+    const result = await callIntegrationTool(
+      db,
+      session(),
+      'files_browse_project',
+      { projectId },
+      { drive, baseUrl: 'https://hcc.example.com', configured: true },
+    );
+
+    expect(result.outcome).toBe('SUCCESS');
+    expect(result.data).toMatchObject({
+      state: 'NOT_CONNECTED',
+      connection: {
+        storeId: expect.any(String),
+        baseUrl: 'https://hcc.example.com',
+      },
+    });
+  });
+
   it('refreshes Buffer accounts through the unavailable default', async () => {
     const result = await callIntegrationTool(db, session(), 'signal_refresh_buffer_accounts', {
       clientRequestId: 'buf-default',
