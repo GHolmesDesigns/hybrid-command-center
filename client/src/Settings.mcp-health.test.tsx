@@ -52,6 +52,7 @@ describe('Agents MCP health panel', () => {
       },
       workspaceChecksumUnchanged: true,
       lastUsedAt: '2026-08-28T12:00:00.000Z',
+      credential: null,
     };
 
     render(

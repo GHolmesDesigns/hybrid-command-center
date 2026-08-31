@@ -26,7 +26,11 @@ import {
   buildMcpClientGuide,
   MCP_GUIDE_CLAUDE_CONNECTOR_BLOCKER,
 } from '../../../shared/mcp-client-guide';
-import type { McpConnectionStatus, McpCredentialVerification } from '../../../shared/mcp-health';
+import type {
+  McpConnectionStatus,
+  McpCredentialVerification,
+  McpHealthDiagnosticCredential,
+} from '../../../shared/mcp-health';
 
 type RegistryResponse = McpAgentCredentialList & { enabled: boolean };
 type IssuedResponse = {
@@ -39,6 +43,7 @@ type HealthTestResponse = {
   status: McpConnectionStatus;
   workspaceChecksumUnchanged: boolean;
   lastUsedAt: string;
+  credential: McpHealthDiagnosticCredential | null;
 };
 
 const SCOPE_LABEL: Record<McpAgentScope, string> = {
@@ -196,7 +201,9 @@ export function McpConnectionSetupCard({
   const testConnection = async () => {
     setTesting(true);
     try {
-      const result = await send<HealthTestResponse>('/mcp/health/test', 'POST');
+      const result = await send<HealthTestResponse>('/mcp/health/test', 'POST', {
+        credentialId: issued?.credential.id,
+      });
       setTestResult(result);
       if (result.ok) {
         flash('Server health check passed.');
@@ -392,6 +399,17 @@ export function McpConnectionSetupCard({
                   <span>
                     Server clock: {new Date(testResult.status.serverClock).toLocaleString()}
                   </span>
+                  {testResult.credential && (
+                    <>
+                      <span>Diagnostic credential: {testResult.credential.id}</span>
+                      <span>
+                        Issued: {new Date(testResult.credential.issuedAt).toLocaleString()}
+                      </span>
+                      <span>
+                        Expires: {new Date(testResult.credential.expiresAt).toLocaleString()}
+                      </span>
+                    </>
+                  )}
                   <span>Capability version: {testResult.status.capabilityVersion}</span>
                   <span title={testResult.status.storeId}>
                     Store: {testResult.status.storeId.slice(0, 8)}

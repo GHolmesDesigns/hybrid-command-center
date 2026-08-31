@@ -41,7 +41,11 @@ import { buildMcpHealthPanel } from './mcp/health-panel.ts';
 import { buildConnectionStatus } from './mcp/connection-status.ts';
 import { workspaceDataChecksum } from './mcp/workspace-checksum.ts';
 import { MCP_AGENT_SCOPES } from '../shared/mcp-agent-registry.ts';
-import type { McpCredentialVerification } from '../shared/mcp-health.ts';
+import {
+  mcpHealthDiagnosticCredentialSchema,
+  mcpHealthTestInputSchema,
+  type McpCredentialVerification,
+} from '../shared/mcp-health.ts';
 import { McpWriteLimiterRegistry } from './mcp/write-limiter-registry.ts';
 import { INTEGRATION_WRITE_LIMIT_PER_MINUTE } from '../shared/mcp-agent-events.ts';
 import { DRIVE_OAUTH_SCOPE } from '../shared/drive-oauth.ts';
@@ -1005,6 +1009,8 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       res.status(400).json({ error: 'Authentication is not required on this host.' });
       return;
     }
+    const { credentialId } = mcpHealthTestInputSchema.parse(req.body ?? {});
+    const credential = credentialId ? getMcpAgentCredential(db, credentialId) : null;
     const checksumBefore = workspaceDataChecksum(db);
     const now = new Date(authNowMs());
     const status = buildConnectionStatus(db, {
@@ -1020,6 +1026,13 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       status,
       workspaceChecksumUnchanged: checksumBefore === checksumAfter,
       lastUsedAt: now.toISOString(),
+      credential: credential
+        ? mcpHealthDiagnosticCredentialSchema.parse({
+            id: credential.id,
+            issuedAt: credential.issuedAt,
+            expiresAt: credential.expiresAt,
+          })
+        : null,
     });
   });
 

@@ -2,13 +2,18 @@ import { useCallback, useEffect, useState } from 'react';
 import { Activity, AlertTriangle, CheckCircle2, PlugZap, RefreshCw } from 'lucide-react';
 import { api, send } from '../api';
 import { type McpCoordinationErrorCode } from '../../../shared/mcp-coordination-errors';
-import type { McpConnectionStatus, McpHealthPanel } from '../../../shared/mcp-health';
+import type {
+  McpConnectionStatus,
+  McpHealthDiagnosticCredential,
+  McpHealthPanel,
+} from '../../../shared/mcp-health';
 
 type HealthTestResponse = {
   ok: boolean;
   status: McpConnectionStatus;
   workspaceChecksumUnchanged: boolean;
   lastUsedAt: string;
+  credential: McpHealthDiagnosticCredential | null;
 };
 
 const PANEL_STATE_LABEL: Record<McpHealthPanel['state'], string> = {
@@ -232,6 +237,13 @@ export function McpHealthPanelCard({
             {testResult.ok ? 'Server health passed' : 'Server health reported failures'}
           </strong>
           <span>Server clock: {new Date(testResult.status.serverClock).toLocaleString()}</span>
+          {testResult.credential && (
+            <>
+              <span>Diagnostic credential: {testResult.credential.id}</span>
+              <span>Issued: {new Date(testResult.credential.issuedAt).toLocaleString()}</span>
+              <span>Expires: {new Date(testResult.credential.expiresAt).toLocaleString()}</span>
+            </>
+          )}
           <span>Capability version: {testResult.status.capabilityVersion}</span>
           <span title={testResult.status.storeId}>
             Store: {testResult.status.storeId.slice(0, 8)}
