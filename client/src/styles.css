@@ -3777,7 +3777,7 @@ button.tag-chip.toggle.active {
 }
 .merge-choice {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   gap: 8px;
   font-size: 12px;
   padding: 3px 0;
