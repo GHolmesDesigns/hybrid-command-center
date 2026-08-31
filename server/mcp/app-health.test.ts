@@ -39,6 +39,7 @@ describe('MCP health HTTP routes', () => {
         trustedProxyHops: 0,
         secureCookies: false,
       },
+      appOrigin: 'https://hcc.example.com',
     });
 
   async function login() {
@@ -73,6 +74,8 @@ describe('MCP health HTTP routes', () => {
     expect(response.body.ok).toBe(true);
     expect(response.body.workspaceChecksumUnchanged).toBe(true);
     expect(response.body.status.transport).toBe('operator');
+    expect(response.body.status.storeId).toEqual(expect.any(String));
+    expect(response.body.status.baseUrl).toBe('https://hcc.example.com');
   });
 
   it('proves only a successful call from the selected credential', async () => {
@@ -97,6 +100,7 @@ describe('MCP health HTTP routes', () => {
     expect(pending.body).toMatchObject({
       credentialId,
       agentLabel: 'verification-client',
+      storeId: expect.any(String),
       status: 'pending',
       verifiedAt: null,
     });
@@ -133,6 +137,7 @@ describe('MCP health HTTP routes', () => {
     expect(verified.body).toMatchObject({
       credentialId,
       agentLabel: 'verification-client',
+      storeId: expect.any(String),
       status: 'verified',
       verifiedAt: expect.any(String),
     });
@@ -152,6 +157,7 @@ describe('MCP health HTTP routes', () => {
       .set('Cookie', cookie);
     expect(revoked.body).toMatchObject({
       credentialId,
+      storeId: expect.any(String),
       status: 'revoked',
       verifiedAt: expect.any(String),
     });
@@ -165,6 +171,7 @@ describe('MCP health HTTP routes', () => {
     expect(response.status).toBe(404);
     expect(response.body).toMatchObject({
       credentialId: 'never-issued',
+      storeId: expect.any(String),
       status: 'not_found',
       verifiedAt: null,
     });

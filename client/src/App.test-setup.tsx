@@ -267,6 +267,7 @@ export const testState = {
       agentLabel: null,
       grantedScopes: ['coordination:read', 'coordination:write'],
       storeId: 'store-fixture-app-test-setup',
+      baseUrl: 'https://hcc.example.com',
       serverVersion: APP_VERSION,
       capabilityVersion: 'mcp-test',
       serverClock: '2026-08-28T12:00:00.000Z',

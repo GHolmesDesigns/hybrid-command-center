@@ -46,6 +46,7 @@ describe('Agents connection setup card', () => {
         agentLabel: null,
         grantedScopes: ['coordination:read', 'coordination:write'],
         storeId: 'store-fixture-1',
+        baseUrl: 'https://hcc.example.com',
         serverVersion: '5.7.1',
         capabilityVersion: '5.7.1',
         serverClock: '2026-08-28T12:00:00.000Z',
@@ -107,7 +108,8 @@ describe('Agents connection setup card', () => {
     expect(screen.getByText('Diagnostic credential: credential-issued')).toBeVisible();
     expect(screen.getByText(/Issued:/)).toBeVisible();
     expect(screen.getAllByText(/Expires:/)).toHaveLength(2);
-    expect(screen.getByText('Store: store-fi')).toBeVisible();
+    expect(screen.getByText('Store ID: store-fixture-1')).toBeVisible();
+    expect(screen.getByText('Base URL: https://hcc.example.com')).toBeVisible();
     expect(
       requests.some(
         (request) => request.method === 'POST' && request.url.endsWith('/api/mcp/health/test'),

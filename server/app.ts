@@ -1018,6 +1018,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       authenticated: true,
       agentLabel: null,
       grantedScopes: MCP_AGENT_SCOPES,
+      baseUrl: appOrigin,
       now,
     });
     const checksumAfter = workspaceDataChecksum(db);

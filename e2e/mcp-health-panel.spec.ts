@@ -41,6 +41,7 @@ test('operator opens MCP health panel, runs test connection, and sees a result',
           agentLabel: null,
           grantedScopes: ['coordination:read', 'coordination:write'],
           storeId: 'store-fixture-e2e',
+          baseUrl: 'https://hcc.example.com',
           serverVersion: '5.6.10',
           capabilityVersion: 'mcp-test',
           serverClock: testedAt,
@@ -93,6 +94,12 @@ test('operator opens MCP health panel, runs test connection, and sees a result',
 
     await expect(page.locator('.mcp-health-test-result')).toBeVisible();
     await expect(page.locator('.mcp-health-test-result')).toContainText('Server health passed');
+    await expect(page.locator('.mcp-health-test-result')).toContainText(
+      'Store ID: store-fixture-e2e',
+    );
+    await expect(page.locator('.mcp-health-test-result')).toContainText(
+      'Base URL: https://hcc.example.com',
+    );
     await expect(page.locator('.mcp-health-test-result')).toContainText('Last tested:');
   } finally {
     await page.unroute('**/api/auth/mcp-agents');

@@ -42,6 +42,12 @@ export interface DriveScope {
   url: string | null;
 }
 
+/** Endpoint/store evidence attached to an MCP-only disconnected result. */
+export interface DriveConnectionDiagnostic {
+  storeId: string;
+  baseUrl: string | null;
+}
+
 export interface DriveListing {
   state: DriveListingState;
   projectId: string;
@@ -59,6 +65,8 @@ export interface DriveListing {
   nextPageToken: string | null;
   /** Drive's own words. Only ever set when the state is `FAILED`. */
   error: string | null;
+  /** Present only when MCP diagnosed a disconnected Drive connection. */
+  connection?: DriveConnectionDiagnostic;
 }
 
 /** How many items one page asks Drive for, and the cap the API accepts. */

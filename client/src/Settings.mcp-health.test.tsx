@@ -40,6 +40,7 @@ describe('Agents MCP health panel', () => {
         agentLabel: null,
         grantedScopes: ['coordination:read', 'coordination:write'],
         storeId: 'store-fixture-health',
+        baseUrl: 'https://hcc.example.com',
         serverVersion: '5.9.3',
         capabilityVersion: 'mcp-test',
         serverClock: '2026-08-28T12:00:00.000Z',
@@ -66,7 +67,8 @@ describe('Agents MCP health panel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Check server health' }));
 
     expect(await screen.findByText('Server health passed')).toBeVisible();
-    expect(screen.getByText('Store: store-fi')).toBeVisible();
+    expect(screen.getByText('Store ID: store-fixture-health')).toBeVisible();
+    expect(screen.getByText('Base URL: https://hcc.example.com')).toBeVisible();
     expect(screen.getByText(/Last tested:/)).toBeVisible();
     expect(
       requests.some(

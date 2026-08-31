@@ -245,9 +245,8 @@ export function McpHealthPanelCard({
             </>
           )}
           <span>Capability version: {testResult.status.capabilityVersion}</span>
-          <span title={testResult.status.storeId}>
-            Store: {testResult.status.storeId.slice(0, 8)}
-          </span>
+          <span>Store ID: {testResult.status.storeId}</span>
+          <span>Base URL: {testResult.status.baseUrl ?? 'Local stdio (no HTTP endpoint)'}</span>
           <span>Tools listed: {testResult.status.checks.toolsList.toolCount ?? 0}</span>
           <span>Last tested: {new Date(testResult.lastUsedAt).toLocaleString()}</span>
           {!testResult.workspaceChecksumUnchanged && (

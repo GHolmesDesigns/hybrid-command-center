@@ -17,6 +17,7 @@ export type ConnectionStatusOptions = {
   authenticated: boolean;
   agentLabel: string | null;
   grantedScopes: readonly McpAgentScope[];
+  baseUrl?: string | null;
   now?: Date;
 };
 
@@ -75,6 +76,7 @@ export function buildConnectionStatus(
     agentLabel: options.agentLabel,
     grantedScopes: [...options.grantedScopes],
     storeId: getStoreId(db),
+    baseUrl: options.baseUrl ?? null,
     serverVersion: APP_VERSION,
     capabilityVersion: MCP_CAPABILITY_VERSION,
     serverClock: now.toISOString(),

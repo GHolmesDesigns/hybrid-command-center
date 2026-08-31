@@ -36,6 +36,8 @@ export const mcpConnectionStatusSchema = z.object({
   // agent label and tool list can still be talking to two independent stores — stdio against a
   // workstation checkout, HTTPS against the hosted origin — and this is what tells them apart.
   storeId: z.string(),
+  /** The configured origin that serves this MCP connection; null for local stdio. */
+  baseUrl: z.string().nullable(),
   serverVersion: z.string(),
   capabilityVersion: z.string(),
   serverClock: z.string(),
