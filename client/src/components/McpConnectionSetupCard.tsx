@@ -44,8 +44,8 @@ type HealthTestResponse = {
 const SCOPE_LABEL: Record<McpAgentScope, string> = {
   'coordination:read': 'Read coordination',
   'coordination:write': 'Write coordination',
-  'workspace:read': 'Read workspace (reserved)',
-  'workspace:write': 'Write workspace (reserved)',
+  'workspace:read': 'Read workspace and Signal data',
+  'workspace:write': 'Write workspace and Signal data',
 };
 
 const DEFAULT_SCOPES: McpAgentScope[] = ['coordination:read', 'coordination:write'];
