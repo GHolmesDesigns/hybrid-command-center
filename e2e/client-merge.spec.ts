@@ -18,7 +18,13 @@ test('a client merges into another, and the archived source points at it', async
 
   const source = await (
     await page.request.post('/api/clients', {
-      data: { name: sourceName, contactName: 'E2E Old Contact', phone: '020 7946 0000' },
+      data: {
+        name: sourceName,
+        contactName: 'E2E Old Contact',
+        phone: '020 7946 0000',
+        notes:
+          'A deliberately long source note that wraps in the merge modal at a narrow viewport.',
+      },
     })
   ).json();
   const destination = await (
@@ -58,6 +64,14 @@ test('a client merges into another, and the archived source points at it', async
   const phone = plan.getByRole('group', { name: 'Phone' });
   await expect(phone.getByRole('radio', { name: /Keep destination/ })).toBeChecked();
   await expect(phone.getByText('(none)')).toBeVisible();
+  await page.setViewportSize({ width: 420, height: 900 });
+  const notes = plan.getByRole('group', { name: 'Notes' });
+  await expect(notes.getByText(/deliberately long source note/)).toBeVisible();
+  const notesChoiceAlignment = await notes
+    .locator('.merge-choice')
+    .filter({ hasText: 'Use source' })
+    .evaluate((row) => getComputedStyle(row).alignItems);
+  expect(notesChoiceAlignment).toBe('flex-start');
   await phone.getByRole('radio', { name: /Use source/ }).click();
   const contact = plan.getByRole('group', { name: 'Contact name' });
   await expect(contact.getByRole('radio', { name: /Keep destination/ })).toBeChecked();
