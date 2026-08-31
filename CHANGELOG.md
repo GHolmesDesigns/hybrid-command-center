@@ -8,6 +8,23 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.11.0] - 2026-08-31
+
+### Added
+
+- Credential-specific MCP verification stays pending until the replacement credential makes a
+  successful target-client call, and shows the credential ID and store ID without exposing token
+  material.
+
+### Changed
+
+- The operator-only MCP diagnostic is labelled as server health so it cannot be mistaken for client
+  connection proof.
+
+### Breaking changes
+
+None.
+
 ## [5.10.3] - 2026-08-31
 
 ### Fixed

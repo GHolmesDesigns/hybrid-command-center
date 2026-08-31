@@ -75,6 +75,82 @@ describe('MCP health HTTP routes', () => {
     expect(response.body.status.transport).toBe('operator');
   });
 
+  it('proves only a successful call from the selected credential', async () => {
+    const { cookie, csrfToken } = await login();
+    const issued = await request(authedApp())
+      .post('/api/auth/mcp-agents')
+      .set('Cookie', cookie)
+      .set(CSRF_HEADER_NAME, csrfToken)
+      .send({
+        label: 'verification-client',
+        scopes: ['coordination:read'],
+        expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+      });
+    expect(issued.status).toBe(201);
+    const credentialId = issued.body.credential.id as string;
+    const bearerToken = issued.body.bearerToken as string;
+
+    const pending = await request(authedApp())
+      .get(`/api/mcp/health/verification/${credentialId}`)
+      .set('Cookie', cookie);
+    expect(pending.status).toBe(200);
+    expect(pending.body).toMatchObject({
+      credentialId,
+      agentLabel: 'verification-client',
+      status: 'pending',
+      verifiedAt: null,
+    });
+    expect(JSON.stringify(pending.body)).not.toContain(bearerToken);
+
+    const clientCall = await request(authedApp())
+      .post('/api/mcp')
+      .set('Authorization', `Bearer ${bearerToken}`)
+      .send({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
+    expect(clientCall.status).toBe(200);
+
+    const verified = await request(authedApp())
+      .get(`/api/mcp/health/verification/${credentialId}`)
+      .set('Cookie', cookie);
+    expect(verified.body).toMatchObject({
+      credentialId,
+      agentLabel: 'verification-client',
+      status: 'verified',
+      verifiedAt: expect.any(String),
+    });
+    expect(JSON.stringify(verified.body)).not.toContain(bearerToken);
+
+    await request(authedApp())
+      .post(`/api/auth/mcp-credentials/${credentialId}/revoke`)
+      .set('Cookie', cookie)
+      .set(CSRF_HEADER_NAME, csrfToken);
+    const oldClientCall = await request(authedApp())
+      .post('/api/mcp')
+      .set('Authorization', `Bearer ${bearerToken}`)
+      .send({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
+    expect(oldClientCall.status).toBe(401);
+    const revoked = await request(authedApp())
+      .get(`/api/mcp/health/verification/${credentialId}`)
+      .set('Cookie', cookie);
+    expect(revoked.body).toMatchObject({
+      credentialId,
+      status: 'revoked',
+      verifiedAt: expect.any(String),
+    });
+  });
+
+  it('reports an unknown credential as unverified', async () => {
+    const { cookie } = await login();
+    const response = await request(authedApp())
+      .get('/api/mcp/health/verification/never-issued')
+      .set('Cookie', cookie);
+    expect(response.status).toBe(404);
+    expect(response.body).toMatchObject({
+      credentialId: 'never-issued',
+      status: 'not_found',
+      verifiedAt: null,
+    });
+  });
+
   it('refuses the diagnostic test when auth is disabled on the host', async () => {
     const response = await request(createApp(db)).post('/api/mcp/health/test');
     expect(response.status).toBe(400);

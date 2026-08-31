@@ -84,14 +84,14 @@ test('operator opens MCP health panel, runs test connection, and sees a result',
     const testResponsePromise = page.waitForResponse((response) =>
       response.url().includes('/api/mcp/health/test'),
     );
-    await healthCard.getByRole('button', { name: 'Test connection' }).click();
+    await healthCard.getByRole('button', { name: 'Check server health' }).click();
     const testResponse = await testResponsePromise;
     expect(testResponse.ok()).toBe(true);
     const payload = (await testResponse.json()) as { ok: boolean };
     expect(payload.ok).toBe(true);
 
     await expect(page.locator('.mcp-health-test-result')).toBeVisible();
-    await expect(page.locator('.mcp-health-test-result')).toContainText('Diagnostic passed');
+    await expect(page.locator('.mcp-health-test-result')).toContainText('Server health passed');
     await expect(page.locator('.mcp-health-test-result')).toContainText('Last tested:');
   } finally {
     await page.unroute('**/api/auth/mcp-agents');
