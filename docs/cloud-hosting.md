@@ -390,6 +390,12 @@ Non-secret production env that is **not** in Parameter Store (set on the unit / 
 | `PRODUCTION_TLS_TERMINATED` | `true` |
 | `TRUSTED_PROXY_HOPS` | `1` |
 | `LOG_LEVEL` | `info` (or `warn`) |
+| `PUBLISH_TIMEZONE` | `America/New_York` (explicit IANA zone; required when publishing is configured) |
+
+These values and the SSM-loaded secrets are assembled in the host's root-owned
+`/etc/hybrid-command-center/runtime.env`, which `hybrid-command-center.service` names as its
+`EnvironmentFile`. The deployed process does not read a `.env` from a developer checkout. Restart
+the service after changing this file because application configuration is read at process startup.
 
 SSM parameters staged by §12 hold the sentinel **`UNSET`** (SSM rejects a blank string). That
 sentinel is not a secret. C53 boot must refuse required secrets still set to `UNSET`.

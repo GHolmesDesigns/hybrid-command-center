@@ -1361,6 +1361,9 @@ Publishing is optional. Add both `POST_BRIDGE_API_KEY` and an explicit IANA `PUB
 (for example, `America/New_York`) to `.env`, then restart. The API key stays on the server and is
 never returned to the browser or written to the database or activity log.
 
+On the supported AWS deployment, use `/etc/hybrid-command-center/runtime.env` instead of a
+checkout-local `.env`, then restart `hybrid-command-center.service` and verify `/api/health`.
+
 To publish, save the scheduled Signal post and any per-platform content first, then choose
 **Show preview**. Nothing is fetched from the internet, and no provider is contacted, until you press
 it.

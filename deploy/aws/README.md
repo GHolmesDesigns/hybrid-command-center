@@ -12,11 +12,16 @@ process, and one encrypted gp3 EBS volume mounted at `/var/lib/hybrid-command-ce
 3. Copy `dist/production` to a versioned directory under `/opt/hybrid-command-center/`, run
    `npm ci --omit=dev`, then atomically update the `current` symlink.
 4. Build `/etc/hybrid-command-center/runtime.env` from `runtime.env.example`: load secrets from
-   SSM `/hcc/production/*`, replace every `UNSET`, and set the exact public origin. The environment
-   file must be root-owned mode `0600`; do not print it.
+   SSM `/hcc/production/*`, replace every `UNSET`, set the exact public origin, and set
+   `PUBLISH_TIMEZONE` to the deployment's explicit IANA zone (production currently uses
+   `America/New_York`). This host file is the systemd service's configuration source; a `.env` in a
+   developer checkout is not read by the deployed service. The environment file must be root-owned
+   mode `0600`; do not print it.
 5. Replace `command-center.example.com` in `Caddyfile` with the exact public hostname, install the
    service and Caddy files, and validate with `caddy validate --config /etc/caddy/Caddyfile`. Run
-   `systemctl daemon-reload`, then enable and start Caddy and the app service.
+   `systemctl daemon-reload`, then enable and start Caddy and the app service. After changing
+   `runtime.env`, restart `hybrid-command-center.service` and verify `/api/health`; configuration is
+   read when the process starts.
 6. Install the CloudWatch agent with `cloudwatch-agent.json` and create alarms for volume
    `disk_used_percent` above 80% (warning) and 90% (critical), both targeting
    `hcc-production-alerts`. The CloudFormation template also installs the EC2 status alarm.
