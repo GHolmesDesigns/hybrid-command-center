@@ -22,7 +22,7 @@ export function KanbanColumn({
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   return (
-    <section ref={setNodeRef} className={`kanban-column ${isOver ? 'drop-active' : ''}`}>
+    <section className={`kanban-column ${isOver ? 'drop-active' : ''}`}>
       <header>
         <div>
           <span className={`status-dot ${status.toLowerCase()}`} />
@@ -32,7 +32,7 @@ export function KanbanColumn({
         <p>{STATUS_HELP[status]}</p>
       </header>
       <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-        <div className="column-body">
+        <div ref={setNodeRef} className="column-body">
           {tasks.map((t) => (
             <KanbanCard key={t.id} task={t} open={open} move={move} />
           ))}
