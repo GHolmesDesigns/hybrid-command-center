@@ -188,6 +188,28 @@ export function lookupSessionByHash(
   });
 }
 
+/**
+ * Whether a session is still live, without touching it.
+ *
+ * `lookupSessionByHash` refreshes idle expiry as a side effect, which is right when the operator is
+ * the one making the request. The MCP OAuth token endpoint is not — claude.ai calls it, with nobody
+ * at a browser — so reading liveness there must not let a machine call stand in for the operator
+ * presence that the idle window is supposed to measure.
+ */
+export function sessionLiveByHash(db: Db, options: { tokenHash: string; now?: number }): boolean {
+  if (!options.tokenHash) return false;
+  const row = db
+    .prepare(
+      `SELECT revoked_at, idle_expires_at, absolute_expires_at
+       FROM operator_sessions WHERE token_hash = ?`,
+    )
+    .get(options.tokenHash) as
+    Pick<SessionRow, 'revoked_at' | 'idle_expires_at' | 'absolute_expires_at'> | undefined;
+  if (!row || row.revoked_at) return false;
+  const nowIso = iso(options.now ?? Date.now());
+  return row.idle_expires_at > nowIso && row.absolute_expires_at > nowIso;
+}
+
 export function revokeSession(db: Db, tokenHash: string, now: number = Date.now()): void {
   db.prepare(
     `UPDATE operator_sessions SET revoked_at = COALESCE(revoked_at, ?) WHERE token_hash = ?`,

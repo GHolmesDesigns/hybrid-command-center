@@ -2,7 +2,7 @@
  * Express routes for MCP OAuth discovery and the authorization_code + PKCE flow.
  */
 import crypto from 'node:crypto';
-import type { Request, Response, Router } from 'express';
+import type { Request, RequestHandler, Response, Router } from 'express';
 import express from 'express';
 import { ZodError } from 'zod';
 import type { Db } from '../db.ts';
@@ -42,6 +42,8 @@ export type McpOAuthRouteOptions = {
   operatorPasswordHash?: string;
   trustedProxyHops?: number;
   now?: () => number;
+  /** Applied to every route here, so a new endpoint is rate-limited by existing. */
+  rateLimiter?: RequestHandler;
 };
 
 function escapeHtml(value: string): string {
@@ -216,16 +218,19 @@ function authorizeQueryString(params: Record<string, string>): string {
 export function createMcpOAuthRouter(options: McpOAuthRouteOptions): Router {
   const router = express.Router();
   const issuer = options.appOrigin.replace(/\/+$/, '');
+  // Per route, not `router.use`: this router is mounted at the app root, so router-level middleware
+  // would rate-limit every request the app serves rather than the OAuth endpoints.
+  const limited: RequestHandler[] = options.rateLimiter ? [options.rateLimiter] : [];
 
-  router.get(MCP_OAUTH_PROTECTED_RESOURCE_WELL_KNOWN, (_req, res) => {
+  router.get(MCP_OAUTH_PROTECTED_RESOURCE_WELL_KNOWN, ...limited, (_req, res) => {
     res.json(buildMcpProtectedResourceMetadata({ issuer }));
   });
 
-  router.get(MCP_OAUTH_AUTHORIZATION_SERVER_WELL_KNOWN, (_req, res) => {
+  router.get(MCP_OAUTH_AUTHORIZATION_SERVER_WELL_KNOWN, ...limited, (_req, res) => {
     res.json(buildMcpAuthorizationServerMetadata({ issuer }));
   });
 
-  router.post(MCP_OAUTH_REGISTER_PATH, express.json(), (req, res) => {
+  router.post(MCP_OAUTH_REGISTER_PATH, ...limited, express.json(), (req, res) => {
     try {
       const client = registerMcpOAuthClient(options.db, req.body, options.now?.());
       res.status(201).json(registrationResponse(client));
@@ -242,6 +247,7 @@ export function createMcpOAuthRouter(options: McpOAuthRouteOptions): Router {
 
   router.post(
     MCP_OAUTH_TOKEN_PATH,
+    ...limited,
     express.urlencoded({ extended: false }),
     express.json(),
     (req, res) => {
@@ -272,7 +278,7 @@ export function createMcpOAuthRouter(options: McpOAuthRouteOptions): Router {
     },
   );
 
-  router.get(MCP_OAUTH_AUTHORIZE_PATH, (req, res) => {
+  router.get(MCP_OAUTH_AUTHORIZE_PATH, ...limited, (req, res) => {
     let pending;
     try {
       pending = parseAuthorizeRequest(req.query as Record<string, unknown>);
@@ -327,6 +333,7 @@ export function createMcpOAuthRouter(options: McpOAuthRouteOptions): Router {
 
   router.post(
     '/authorize/login',
+    ...limited,
     express.urlencoded({ extended: false }),
     async (req, res, next) => {
       try {
@@ -363,78 +370,83 @@ export function createMcpOAuthRouter(options: McpOAuthRouteOptions): Router {
 
   // POST, not GET: minting an authorization code is the state change this whole flow exists to
   // make, and a GET made it reachable by anything that could get an operator to follow a link.
-  router.post(MCP_OAUTH_APPROVE_PATH, express.urlencoded({ extended: false }), (req, res) => {
-    const body: Record<string, unknown> =
-      req.body && typeof req.body === 'object' && !Array.isArray(req.body)
-        ? (req.body as Record<string, unknown>)
-        : {};
-    const params = authorizeParams(body);
+  router.post(
+    MCP_OAUTH_APPROVE_PATH,
+    ...limited,
+    express.urlencoded({ extended: false }),
+    (req, res) => {
+      const body: Record<string, unknown> =
+        req.body && typeof req.body === 'object' && !Array.isArray(req.body)
+          ? (req.body as Record<string, unknown>)
+          : {};
+      const params = authorizeParams(body);
 
-    const session = operatorSession(req, options);
-    if (!session) {
-      // The form outlived the session. Send them back through sign-in with the request intact
-      // rather than dropping it, which is what the consent page's own login form does.
-      res
-        .status(401)
-        .send(renderLoginPage(`${MCP_OAUTH_AUTHORIZE_PATH}?${authorizeQueryString(params)}`));
-      return;
-    }
+      const session = operatorSession(req, options);
+      if (!session) {
+        // The form outlived the session. Send them back through sign-in with the request intact
+        // rather than dropping it, which is what the consent page's own login form does.
+        res
+          .status(401)
+          .send(renderLoginPage(`${MCP_OAUTH_AUTHORIZE_PATH}?${authorizeQueryString(params)}`));
+        return;
+      }
 
-    // Before anything else reads the request: an approval that cannot prove it came from this
-    // origin's own consent page is not an approval.
-    const submitted = body[APPROVAL_FORM_TOKEN_FIELD];
-    const expected = approvalFormToken(session, options.sessionSecret);
-    if (typeof submitted !== 'string' || !sameSecret(submitted, expected)) {
-      res.status(403).send(
-        renderAuthorizePage({
-          title: 'Connector authorization failed',
-          body: `<p class="error">This approval could not be verified. Start the connection again
+      // Before anything else reads the request: an approval that cannot prove it came from this
+      // origin's own consent page is not an approval.
+      const submitted = body[APPROVAL_FORM_TOKEN_FIELD];
+      const expected = approvalFormToken(session, options.sessionSecret);
+      if (typeof submitted !== 'string' || !sameSecret(submitted, expected)) {
+        res.status(403).send(
+          renderAuthorizePage({
+            title: 'Connector authorization failed',
+            body: `<p class="error">This approval could not be verified. Start the connection again
             from Claude.</p>`,
-        }),
-      );
-      return;
-    }
-
-    let pending;
-    try {
-      pending = parseAuthorizeRequest(body);
-    } catch {
-      res.status(400).send('Invalid authorization request.');
-      return;
-    }
-    try {
-      const { code } = beginMcpOAuthAuthorization(options.db, {
-        ...pending,
-        operatorSessionHash: session.tokenHash,
-        now: options.now?.(),
-      });
-      res.redirect(
-        302,
-        redirectWithAuthorizationCode({
-          redirectUri: pending.redirectUri,
-          code,
-          state: pending.oauthState,
-        }),
-      );
-    } catch (error) {
-      if (error instanceof McpOAuthError) {
-        res.redirect(
-          302,
-          redirectWithOAuthError({
-            redirectUri: pending.redirectUri,
-            error: 'access_denied',
-            state: pending.oauthState,
-            description: error.message,
           }),
         );
         return;
       }
-      throw error;
-    }
-  });
+
+      let pending;
+      try {
+        pending = parseAuthorizeRequest(body);
+      } catch {
+        res.status(400).send('Invalid authorization request.');
+        return;
+      }
+      try {
+        const { code } = beginMcpOAuthAuthorization(options.db, {
+          ...pending,
+          operatorSessionHash: session.tokenHash,
+          now: options.now?.(),
+        });
+        res.redirect(
+          302,
+          redirectWithAuthorizationCode({
+            redirectUri: pending.redirectUri,
+            code,
+            state: pending.oauthState,
+          }),
+        );
+      } catch (error) {
+        if (error instanceof McpOAuthError) {
+          res.redirect(
+            302,
+            redirectWithOAuthError({
+              redirectUri: pending.redirectUri,
+              error: 'access_denied',
+              state: pending.oauthState,
+              description: error.message,
+            }),
+          );
+          return;
+        }
+        throw error;
+      }
+    },
+  );
 
   // Still a GET: denying writes nothing, and a forced deny costs the operator a retry at worst.
-  router.get(MCP_OAUTH_DENY_PATH, (req, res) => {
+  router.get(MCP_OAUTH_DENY_PATH, ...limited, (req, res) => {
     let pending;
     try {
       pending = parseAuthorizeRequest(req.query as Record<string, unknown>);

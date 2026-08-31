@@ -9,6 +9,7 @@ import { z } from 'zod';
 import type { Db } from '../db.ts';
 import { mcpAgentScopesSchema, type McpAgentScope } from '../../shared/mcp-agent-registry.ts';
 import { agentLabelSchema } from '../../shared/agent-coordination.ts';
+import { sessionLiveByHash } from './sessions.ts';
 import {
   MCP_OAUTH_ALLOWED_REDIRECT_URIS,
   MCP_OAUTH_CODE_TTL_MS,
@@ -324,6 +325,17 @@ export function exchangeMcpOAuthCode(
     throw new McpOAuthError('Authorization code has expired.', 'invalid_grant');
   }
   verifyPkce(row.code_challenge, parsed.code_verifier);
+
+  // The operator who approved this must still be signed in. The row has carried their session hash
+  // since approval but nothing read it, so a code stayed redeemable for its full ten minutes after
+  // they signed out — which is the window someone who realized they had been walked into an
+  // approval would be trying to close.
+  if (!sessionLiveByHash(db, { tokenHash: row.operator_session_hash, now })) {
+    throw new McpOAuthError(
+      'The operator session that approved this connector is no longer valid.',
+      'invalid_grant',
+    );
+  }
 
   const scopes = mcpAgentScopesSchema.parse(JSON.parse(row.scopes) as unknown);
   const expiresAt = iso(now + MCP_OAUTH_CREDENTIAL_DAYS * 86_400_000);

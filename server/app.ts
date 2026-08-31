@@ -766,11 +766,9 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   // Network MCP (C113): own auth (session cookie or bearer) before the global `/api` middleware,
   // because bearer clients do not carry the HttpOnly session cookie.
   if (authRequired) {
-    app.use('/.well-known/oauth-protected-resource', mcpOAuthLimiter);
-    app.use('/.well-known/oauth-authorization-server', mcpOAuthLimiter);
-    app.use('/authorize', mcpOAuthLimiter);
-    app.use('/token', mcpOAuthLimiter);
-    app.use('/register', mcpOAuthLimiter);
+    // The limiter goes to the router rather than to a list of path prefixes here: the router owns
+    // which paths it serves, and two lists that have to agree is one route away from an unprotected
+    // endpoint that nothing points at.
     app.use(
       createMcpOAuthRouter({
         db,
@@ -780,6 +778,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         operatorPasswordHash,
         trustedProxyHops,
         now: authNowMs,
+        rateLimiter: mcpOAuthLimiter,
       }),
     );
     // One registry per app instance — process lifetime in production (one process runs one app),

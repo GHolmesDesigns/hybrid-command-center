@@ -9,6 +9,7 @@ import {
   purgeExpiredSessions,
   revokeAllSessions,
   revokeSession,
+  sessionLiveByHash,
 } from './sessions.ts';
 
 const SECRET = 'session-secret-at-least-thirty-two-chars!!';
@@ -161,5 +162,42 @@ describe('operator sessions', () => {
     expect(lookupSessionByHash(db, { tokenHash: 'missing' })).toBeNull();
     revokeSession(db, created.record.tokenHash, 2_000);
     expect(lookupSessionByHash(db, { tokenHash: created.record.tokenHash, now: 2_001 })).toBeNull();
+  });
+  it('sessionLiveByHash reports liveness without touching the row', () => {
+    db = createDb(':memory:');
+    const created = createSession(db, { sessionSecret: SECRET, clientAddress: null, now: 1_000 });
+    const hash = created.record.tokenHash;
+    const stamps = () =>
+      db
+        .prepare('SELECT last_seen_at, idle_expires_at FROM operator_sessions WHERE token_hash = ?')
+        .get(hash);
+
+    expect(sessionLiveByHash(db, { tokenHash: '' })).toBe(false);
+    expect(sessionLiveByHash(db, { tokenHash: 'missing' })).toBe(false);
+    expect(sessionLiveByHash(db, { tokenHash: hash, now: 2_000 })).toBe(true);
+
+    // The whole reason this exists next to lookupSessionByHash: reading liveness must not refresh
+    // the idle window, or the OAuth token endpoint would let a machine call stand in for presence.
+    const before = stamps();
+    expect(sessionLiveByHash(db, { tokenHash: hash, now: 500_000 })).toBe(true);
+    expect(stamps()).toEqual(before);
+
+    expect(sessionLiveByHash(db, { tokenHash: hash, now: 1_000 + SESSION_IDLE_TIMEOUT_MS })).toBe(
+      false,
+    );
+
+    // Absolute expiry refuses even while the idle window is still open.
+    db.prepare('UPDATE operator_sessions SET absolute_expires_at = ? WHERE token_hash = ?').run(
+      new Date(1_500).toISOString(),
+      hash,
+    );
+    expect(sessionLiveByHash(db, { tokenHash: hash, now: 2_000 })).toBe(false);
+
+    db.prepare('UPDATE operator_sessions SET absolute_expires_at = ? WHERE token_hash = ?').run(
+      new Date(1_000 + SESSION_ABSOLUTE_TIMEOUT_MS).toISOString(),
+      hash,
+    );
+    revokeSession(db, hash, 3_000);
+    expect(sessionLiveByHash(db, { tokenHash: hash, now: 4_000 })).toBe(false);
   });
 });
