@@ -33,6 +33,7 @@ import {
   updateMcpAgentRegistrationSchema,
 } from '../shared/mcp-agent-registry.ts';
 import { createMcpHttpHandler, McpHttpSessionRegistry } from './mcp/http.ts';
+import { createMcpOAuthRouter } from './mcp/oauth-routes.ts';
 import { setMcpResourceUpdateBridge } from './mcp/resource-notifier.ts';
 import { buildMcpHealthPanel } from './mcp/health-panel.ts';
 import { buildConnectionStatus } from './mcp/connection-status.ts';
@@ -214,6 +215,7 @@ import {
   DRIVE_OAUTH_BUDGET,
   DRIVE_SYNC_BUDGET,
   MCP_HEALTH_BUDGET,
+  MCP_OAUTH_BUDGET,
   IMPORT_BUDGET,
   IMPORT_BUSY_MESSAGE,
   IMPORT_CONCURRENCY,
@@ -751,10 +753,34 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       validate: { xForwardedForHeader: false },
     }),
   );
+  const mcpOAuthLimiter = rateLimit({
+    windowMs: MCP_OAUTH_BUDGET.windowMs,
+    limit: MCP_OAUTH_BUDGET.limit,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: { error: MCP_OAUTH_BUDGET.message },
+    keyGenerator: (req) => authKey(req),
+    validate: { xForwardedForHeader: false },
+  });
 
   // Network MCP (C113): own auth (session cookie or bearer) before the global `/api` middleware,
   // because bearer clients do not carry the HttpOnly session cookie.
   if (authRequired) {
+    // The limiter goes to the router rather than to a list of path prefixes here: the router owns
+    // which paths it serves, and two lists that have to agree is one route away from an unprotected
+    // endpoint that nothing points at.
+    app.use(
+      createMcpOAuthRouter({
+        db,
+        sessionSecret,
+        appOrigin,
+        secureCookies,
+        operatorPasswordHash,
+        trustedProxyHops,
+        now: authNowMs,
+        rateLimiter: mcpOAuthLimiter,
+      }),
+    );
     // One registry per app instance — process lifetime in production (one process runs one app),
     // and naturally test-isolated since each test builds its own app (C116 / #366).
     const mcpWriteLimiters = new McpWriteLimiterRegistry();
@@ -770,6 +796,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       createMcpHttpHandler({
         db,
         sessionSecret,
+        appOrigin,
         now: authNowMs,
         writeLimiters: mcpWriteLimiters,
         integrationWriteLimiters: mcpIntegrationWriteLimiters,

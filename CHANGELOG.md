@@ -8,6 +8,38 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.10.0] - 2026-08-31
+
+### Added
+
+- MCP OAuth for Claude chat and Cowork: protected-resource and authorization-server discovery,
+  dynamic client registration, browser sign-in and approval, and token exchange that issues the
+  same scoped `hcc_mcp_` credentials as Agents → Agent connection setup. Unauthenticated MCP
+  requests now return `WWW-Authenticate` with a resource metadata URL so name-and-URL-only
+  connectors can authenticate without editing JSON or pasting a bearer into claude.ai settings.
+
+### Changed
+
+- Agents connection setup and the Claude chat/Cowork guide now describe the OAuth connector flow
+  (server URL only, approve once in the browser) instead of a non-existent Authorization field.
+- Approving a connector is now a form submission from the approval screen rather than a link. An
+  approval that cannot prove it came from that screen is refused, so following a link can no longer
+  connect a connector on your behalf without the screen ever being shown.
+- A connector no longer gets to pick which agent it connects as. Its label is derived from the
+  connector name *and* its registration — `claude-oauth-<name>-<client-id>` — so approving one can
+  only ever replace that same connector's earlier credential. Previously a connector that named
+  itself after one of your agents took that agent's name and revoked its credentials on approval.
+  Nothing needs pre-registering any more, and agents you registered yourself are left alone.
+- A connector that asks for a capability this server does not offer is now turned away, naming the
+  capability. It used to be granted every capability instead.
+- Signing out now takes effect immediately on a connection you approved but Claude has not finished
+  setting up. The approval stayed redeemable for its full ten minutes after sign-out, which is the
+  window you would be trying to close if you had just realised an approval was not yours.
+
+### Breaking changes
+
+None.
+
 ## [5.9.7] - 2026-08-30
 
 ### Added

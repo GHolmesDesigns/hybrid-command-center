@@ -54,6 +54,7 @@ import { recordMcpAgentEvent } from './events.ts';
 import { mcpToolRegistryEntry } from './registry.ts';
 import type { McpAgentScope } from '../../shared/mcp-agent-registry.ts';
 import { McpHttpSessionRegistry, type McpHttpSessionRecord } from './http-sessions.ts';
+import { sendMcpUnauthorized } from './oauth-routes.ts';
 
 export type McpHttpAuthContext = {
   session: OperatorSessionRecord | null;
@@ -85,6 +86,8 @@ export type McpHttpHandlerOptions = {
   integrationDeps?: McpIntegrationToolDeps;
   /** Test-only: await before tools/call work so a concurrent cancel can land. */
   beforeToolsCall?: (signal: AbortSignal) => Promise<void>;
+  /** Deployment origin for MCP OAuth discovery on 401 responses. */
+  appOrigin?: string;
 };
 
 function headerValue(raw: string | string[] | undefined): string | null {
@@ -329,6 +332,14 @@ async function runJsonRpc(
   });
 }
 
+function rejectMcpUnauthenticated(res: Response, options: McpHttpHandlerOptions): void {
+  if (options.appOrigin) {
+    sendMcpUnauthorized(res, options.appOrigin);
+    return;
+  }
+  res.status(401).json({ error: 'Authentication required.' });
+}
+
 export async function handleMcpHttpPost(
   req: Request,
   res: Response,
@@ -336,7 +347,7 @@ export async function handleMcpHttpPost(
 ): Promise<void> {
   const auth = resolveMcpHttpAuth(req, options);
   if (!auth) {
-    res.status(401).json({ error: 'Authentication required.' });
+    rejectMcpUnauthenticated(res, options);
     return;
   }
   if (!mcpHttpCsrfOk(auth, req)) {
@@ -512,7 +523,7 @@ export async function handleMcpHttpGet(
 ): Promise<void> {
   const auth = resolveMcpHttpAuth(req, options);
   if (!auth) {
-    res.status(401).json({ error: 'Authentication required.' });
+    rejectMcpUnauthenticated(res, options);
     return;
   }
   if (!wantsEventStream(req)) {
@@ -574,7 +585,7 @@ export async function handleMcpHttpDelete(
 ): Promise<void> {
   const auth = resolveMcpHttpAuth(req, options);
   if (!auth) {
-    res.status(401).json({ error: 'Authentication required.' });
+    rejectMcpUnauthenticated(res, options);
     return;
   }
   if (!mcpHttpCsrfOk(auth, req)) {

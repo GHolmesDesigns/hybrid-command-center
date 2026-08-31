@@ -80,16 +80,16 @@ const STEPS: Record<McpClientPlatform, readonly McpGuideStep[]> = {
       body: 'In Claude Desktop, claude.ai chat, or Cowork, open Settings, then Connectors. These surfaces use account-level connectors — do not use Developer settings or edit a configuration file.',
     },
     {
-      title: 'Add a custom connector',
-      body: 'Choose Add custom connector. Name it Hybrid Command Center. This is a form, not a file — you will fill each value into its own field.',
+      title: 'Add the server URL only',
+      body: 'Choose Add custom connector, name it Hybrid Command Center, and paste the server URL below. Claude discovers OAuth automatically — you do not paste a bearer token into this dialog when the server supports MCP OAuth.',
     },
     {
-      title: 'Fill the server URL and credential',
-      body: 'Copy the server URL below into the connector URL field, then copy the credential into the Authorization field. Keep the word Bearer and the space in front of it — a bare token is rejected as a 401 and usually shows as “server unreachable”.',
+      title: 'Connect and approve once in the browser',
+      body: 'Click Connect in Claude. Sign in to Hybrid Command Center if prompted, review the agent label and scopes, then Approve connector. Claude receives an access token through the OAuth flow.',
     },
     {
-      title: 'Enable it where you need it, then confirm',
-      body: 'Enable the connector for the projects or chats that should reach the Command Center. Return here and run the connection diagnostic; Last used updates after the first successful call.',
+      title: 'Confirm from the client, not with a test handoff',
+      body: 'In Claude, ask the agent to call system_connection_status and read agentLabel and storeId. Return here and run the connection diagnostic; Last used updates after the first successful call. Never post a handoff just to test the connection.',
     },
   ],
   codex: [
@@ -145,10 +145,12 @@ export function buildMcpClientGuide(input: McpClientGuideInput): McpClientGuide 
     label: 'Copy server URL',
     value: serverUrl,
   };
+  const authorizationHeaderValue = `Bearer ${input.bearerToken}`;
   const credentialField: McpGuideCopyField = {
     id: 'credential',
-    label: 'Copy credential',
-    value: input.bearerToken,
+    label:
+      input.platform === 'claude-desktop' ? 'Copy Authorization header value' : 'Copy credential',
+    value: input.platform === 'claude-desktop' ? authorizationHeaderValue : input.bearerToken,
     secret: true,
   };
   const agentLabelField: McpGuideCopyField = {
@@ -164,7 +166,9 @@ export function buildMcpClientGuide(input: McpClientGuideInput): McpClientGuide 
    */
   const copyFields: readonly McpGuideCopyField[] =
     setup.pasteTarget === 'fields'
-      ? [serverUrlField, credentialField, agentLabelField]
+      ? input.platform === 'claude-desktop'
+        ? [serverUrlField, agentLabelField]
+        : [serverUrlField, credentialField, agentLabelField]
       : [
           {
             id: 'setup',
@@ -196,4 +200,7 @@ export const MCP_GUIDE_HEADER_HINT = `Every request must send Authorization: Bea
  * `x-agent-label` that disagrees with it is rejected outright, so telling an operator to add one
  * here can only break the connection (#422).
  */
-export const MCP_GUIDE_CONNECTOR_HEADER_HINT = `Send Authorization: Bearer … only. Keep the word Bearer and the space; do not add ${MCP_AGENT_LABEL_HEADER}.`;
+export const MCP_GUIDE_CONNECTOR_HEADER_HINT = `Claude connectors authenticate through MCP OAuth — no manual Authorization header is required. If your account also shows Request headers, leave it empty; OAuth owns the Authorization header on those connections.`;
+
+/** Shown in the Agents UI when Claude Desktop / claude.ai is selected. */
+export const MCP_GUIDE_CLAUDE_CONNECTOR_BLOCKER = `Claude chat and Cowork connect through MCP OAuth. Add only the server URL in claude.ai, click Connect, then sign in and approve once in the browser. Cursor and Codex still use the manual credential controls below.`;

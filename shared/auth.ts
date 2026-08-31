@@ -48,6 +48,12 @@ export const AUTH_PUBLIC_API_PREFIXES = [
   '/api/auth/status',
   // Google's redirect must reach the handler; session binding is enforced inside consumeAuthorization.
   '/api/drive/oauth/callback',
+  // MCP OAuth discovery and token exchange for Claude chat / Cowork connectors.
+  '/.well-known/oauth-protected-resource',
+  '/.well-known/oauth-authorization-server',
+  '/authorize',
+  '/token',
+  '/register',
 ] as const;
 
 export type AuthPublicApiPrefix = (typeof AUTH_PUBLIC_API_PREFIXES)[number];
