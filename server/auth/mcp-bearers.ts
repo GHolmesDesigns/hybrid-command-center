@@ -1,8 +1,8 @@
 /**
  * MCP bearer tokens bound to operator sessions (C113 / #340).
  *
- * The raw bearer is returned once at issuance; SQLite stores only an HMAC-SHA256 hash peppered
- * with the session secret. Bearers inherit the parent session's revocation — logout, password
+ * The raw bearer is returned once at issuance; SQLite stores only a keyed lookup derivation
+ * peppered with the session secret. Bearers inherit the parent session's revocation — logout, password
  * change, restore, and idle/absolute expiry all invalidate them.
  */
 import crypto from 'node:crypto';
@@ -44,9 +44,16 @@ const toRecord = (row: BearerRow): OperatorMcpBearerRecord => ({
 
 const iso = (ms: number) => new Date(ms).toISOString();
 
-/** HMAC-SHA256 of the raw bearer token, peppered with the session secret. */
+/**
+ * Derive a deterministic lookup key from the raw bearer token and session secret.
+ *
+ * Bearers are random, one-time-displayed credentials rather than passwords. HKDF makes that
+ * distinction explicit while keeping the stored value keyed and non-reversible.
+ */
 export function hashMcpBearerToken(rawToken: string, sessionSecret: string): string {
-  return crypto.createHmac('sha256', sessionSecret).update(rawToken, 'utf8').digest('hex');
+  return Buffer.from(
+    crypto.hkdfSync('sha256', sessionSecret, rawToken, 'hcc-mcp-bearer-lookup', 32),
+  ).toString('hex');
 }
 
 function randomBearerToken(): string {
