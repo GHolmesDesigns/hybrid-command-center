@@ -8,6 +8,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.10.1] - 2026-08-31
+
+### Fixed
+
+- Rotating an MCP agent credential preserves its original lifetime independently of the issue form. Confirmation shows the exact new expiry, and the credential list displays expiry in UTC.
+
+### Breaking changes
+
+None.
+
 ## [5.10.0] - 2026-08-31
 
 ### Added
