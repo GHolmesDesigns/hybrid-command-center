@@ -190,6 +190,16 @@ export function listMcpAgentCredentials(db: Db, now = Date.now()): McpAgentCrede
   ).map(toSummary);
 }
 
+/** Read one credential's non-secret verification evidence, including revoked credentials. */
+export function getMcpAgentCredential(
+  db: Db,
+  credentialId: string,
+): McpAgentCredentialSummary | null {
+  const row = db.prepare(`${SELECT_CREDENTIAL} WHERE c.id=?`).get(credentialId) as
+    CredentialRow | undefined;
+  return row ? toSummary(row) : null;
+}
+
 export function renameMcpAgentRegistration(db: Db, agentId: string, label: string): boolean {
   return (
     db.prepare('UPDATE agent_registrations SET display_label=? WHERE id=?').run(label, agentId)

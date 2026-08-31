@@ -115,8 +115,9 @@ export function McpHealthPanelCard({
         </button>
       </div>
       <p>
-        See which agents have connected, how recent calls succeeded or were refused, and run a safe
-        diagnostic that never creates a handoff.
+        See which agents have connected, how recent calls succeeded or were refused, and check
+        server health. Server health is not proof that a target client installed a replacement
+        credential.
       </p>
       {error && <p role="alert">{error}</p>}
       {panel && !panel.enabled ? (
@@ -139,7 +140,7 @@ export function McpHealthPanelCard({
               disabled={testing || busy || !panel?.enabled}
               onClick={() => void testConnection()}
             >
-              {testing ? <RefreshCw className="spin" /> : <PlugZap />} Test connection
+              {testing ? <RefreshCw className="spin" /> : <PlugZap />} Check server health
             </button>
           </div>
           {panel?.agents.length ? (
@@ -227,7 +228,9 @@ export function McpHealthPanelCard({
       )}
       {testResult && (
         <div className="mcp-health-test-result" role="status">
-          <strong>{testResult.ok ? 'Diagnostic passed' : 'Diagnostic reported failures'}</strong>
+          <strong>
+            {testResult.ok ? 'Server health passed' : 'Server health reported failures'}
+          </strong>
           <span>Server clock: {new Date(testResult.status.serverClock).toLocaleString()}</span>
           <span>Capability version: {testResult.status.capabilityVersion}</span>
           <span title={testResult.status.storeId}>

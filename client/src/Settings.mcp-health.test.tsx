@@ -62,9 +62,9 @@ describe('Agents MCP health panel', () => {
     expect(await screen.findByRole('heading', { name: 'Connection health' })).toBeVisible();
     expect(await screen.findByText(/No agent has connected yet/)).toBeVisible();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Test connection' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Check server health' }));
 
-    expect(await screen.findByText('Diagnostic passed')).toBeVisible();
+    expect(await screen.findByText('Server health passed')).toBeVisible();
     expect(screen.getByText('Store: store-fi')).toBeVisible();
     expect(screen.getByText(/Last tested:/)).toBeVisible();
     expect(

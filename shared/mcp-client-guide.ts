@@ -53,7 +53,7 @@ const STEPS: Record<McpClientPlatform, readonly McpGuideStep[]> = {
     },
     {
       title: 'Confirm in Hybrid Command Center',
-      body: 'Return here and run the connection diagnostic. After your agent’s first successful call, Last used updates for this label.',
+      body: 'Return here and check target-client verification. It becomes verified only after this replacement credential makes a successful call.',
     },
   ],
   claude: [
@@ -71,7 +71,7 @@ const STEPS: Record<McpClientPlatform, readonly McpGuideStep[]> = {
     },
     {
       title: 'Confirm in Hybrid Command Center',
-      body: 'Return here and run the connection diagnostic. Last used updates after the agent’s first successful call.',
+      body: 'Return here and check target-client verification. It becomes verified only after this replacement credential makes a successful call.',
     },
   ],
   'claude-desktop': [
@@ -89,7 +89,7 @@ const STEPS: Record<McpClientPlatform, readonly McpGuideStep[]> = {
     },
     {
       title: 'Confirm from the client, not with a test handoff',
-      body: 'In Claude, ask the agent to call system_connection_status and read agentLabel and storeId. Return here and run the connection diagnostic; Last used updates after the first successful call. Never post a handoff just to test the connection.',
+      body: 'In Claude, ask the agent to call system_connection_status and read agentLabel and storeId. Return here and check target-client verification; it becomes verified only after that successful call. Never post a handoff just to test the connection.',
     },
   ],
   codex: [
@@ -107,7 +107,7 @@ const STEPS: Record<McpClientPlatform, readonly McpGuideStep[]> = {
     },
     {
       title: 'Confirm in Hybrid Command Center',
-      body: 'Return here and run the connection diagnostic. Last used updates after the agent’s first successful call.',
+      body: 'Return here and check target-client verification. It becomes verified only after this replacement credential makes a successful call.',
     },
   ],
 };

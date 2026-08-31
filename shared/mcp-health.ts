@@ -1,5 +1,5 @@
 /**
- * MCP connection diagnostics and operator health panel vocabulary (C124).
+ * MCP server health, credential verification, and operator health panel vocabulary (C124/C141).
  */
 import { z } from 'zod';
 import type { AgentHandoff } from './agent-coordination.ts';
@@ -51,6 +51,16 @@ export const mcpConnectionStatusSchema = z.object({
 });
 
 export type McpConnectionStatus = z.infer<typeof mcpConnectionStatusSchema>;
+
+export const mcpCredentialVerificationSchema = z.object({
+  credentialId: z.string(),
+  agentLabel: z.string(),
+  storeId: z.string(),
+  status: z.enum(['pending', 'verified', 'revoked', 'not_found']),
+  verifiedAt: z.string().nullable(),
+});
+
+export type McpCredentialVerification = z.infer<typeof mcpCredentialVerificationSchema>;
 
 export const mcpHealthAgentStatsSchema = z.object({
   label: z.string(),

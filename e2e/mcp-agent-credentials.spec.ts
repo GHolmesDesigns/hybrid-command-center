@@ -56,11 +56,20 @@ test('operator issues, observes, and independently revokes an MCP agent credenti
     // This response is the one-time copy surface. Subsequent list responses are asserted secret-free.
     expect(body.bearerToken).toMatch(/^hcc_mcp_/);
 
+    const pending = await request.get(`/api/mcp/health/verification/${body.credential.id}`);
+    expect(pending.ok()).toBe(true);
+    expect((await pending.json()) as { status: string }).toMatchObject({ status: 'pending' });
+
     const call = await request.post('/api/mcp', {
       headers: { Authorization: `Bearer ${body.bearerToken}` },
       data: { jsonrpc: '2.0', id: 1, method: 'tools/list' },
     });
     expect(call.ok()).toBe(true);
+
+    const verified = await request.get(`/api/mcp/health/verification/${body.credential.id}`);
+    const verifiedBody = (await verified.json()) as { status: string };
+    expect(verifiedBody).toMatchObject({ status: 'verified' });
+    expect(JSON.stringify(verifiedBody)).not.toContain(body.bearerToken);
 
     const listed = await request.get('/api/auth/mcp-agents');
     const registry = (await listed.json()) as {
@@ -84,6 +93,13 @@ test('operator issues, observes, and independently revokes an MCP agent credenti
       data: { jsonrpc: '2.0', id: 2, method: 'ping' },
     });
     expect(after.status()).toBe(401);
+
+    const revokedVerification = await request.get(
+      `/api/mcp/health/verification/${body.credential.id}`,
+    );
+    expect((await revokedVerification.json()) as { status: string }).toMatchObject({
+      status: 'revoked',
+    });
 
     // Same label after revoke must succeed — Settings re-issue used to 500 on the unique label.
     const reissued = await request.post('/api/auth/mcp-agents', {

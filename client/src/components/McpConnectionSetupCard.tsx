@@ -26,7 +26,7 @@ import {
   buildMcpClientGuide,
   MCP_GUIDE_CLAUDE_CONNECTOR_BLOCKER,
 } from '../../../shared/mcp-client-guide';
-import type { McpConnectionStatus } from '../../../shared/mcp-health';
+import type { McpConnectionStatus, McpCredentialVerification } from '../../../shared/mcp-health';
 
 type RegistryResponse = McpAgentCredentialList & { enabled: boolean };
 type IssuedResponse = {
@@ -65,6 +65,7 @@ export function McpConnectionSetupCard({
   const [issued, setIssued] = useState<IssuedResponse | null>(null);
   const [platform, setPlatform] = useState<McpClientPlatform>('cursor');
   const [testResult, setTestResult] = useState<HealthTestResponse | null>(null);
+  const [verification, setVerification] = useState<McpCredentialVerification | null>(null);
   const [busy, setBusy] = useState(false);
   const [testing, setTesting] = useState(false);
   const [rotatingId, setRotatingId] = useState<string | null>(null);
@@ -97,6 +98,13 @@ export function McpConnectionSetupCard({
         expiresAt: credentialExpiryIso(days, Date.now()),
       });
       setIssued(result);
+      setVerification({
+        credentialId: result.credential.id,
+        agentLabel: result.credential.label,
+        storeId: '',
+        status: 'pending',
+        verifiedAt: null,
+      });
       setLabel('');
       setTestResult(null);
       await load();
@@ -144,6 +152,13 @@ export function McpConnectionSetupCard({
           },
         );
         setIssued(result);
+        setVerification({
+          credentialId: result.credential.id,
+          agentLabel: result.credential.label,
+          storeId: '',
+          status: 'pending',
+          verifiedAt: null,
+        });
         setTestResult(null);
         await load();
         flash(
@@ -184,10 +199,31 @@ export function McpConnectionSetupCard({
       const result = await send<HealthTestResponse>('/mcp/health/test', 'POST');
       setTestResult(result);
       if (result.ok) {
-        flash('Connection diagnostic passed.');
+        flash('Server health check passed.');
       } else {
         flash('Diagnostic completed with failures.', 'error');
       }
+    } catch (caught) {
+      flash((caught as Error).message, 'error');
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const checkVerification = async () => {
+    if (!issued) return;
+    setTesting(true);
+    try {
+      const result = await api<McpCredentialVerification>(
+        `/mcp/health/verification/${encodeURIComponent(issued.credential.id)}`,
+      );
+      setVerification(result);
+      flash(
+        result.status === 'verified'
+          ? 'Replacement credential verified from the target client.'
+          : 'Replacement credential is not verified yet.',
+        result.status === 'verified' ? 'success' : 'error',
+      );
     } catch (caught) {
       flash((caught as Error).message, 'error');
     } finally {
@@ -324,11 +360,10 @@ export function McpConnectionSetupCard({
               ) : null}
             </li>
             <li>
-              <strong>3. Run diagnostic</strong>
+              <strong>3. Check server health</strong>
               <p className="field-hint">
-                Safe read-only check — never creates a test handoff. After configuring your client
-                and reloading MCP, your agent&apos;s first call updates <strong>Last used</strong>{' '}
-                below.
+                This operator-only, read-only check confirms server health. It does not prove that
+                your client installed or used the replacement credential.
               </p>
               <div className="mcp-health-actions">
                 <button
@@ -337,7 +372,8 @@ export function McpConnectionSetupCard({
                   disabled={testing || busy || !registry?.enabled}
                   onClick={() => void testConnection()}
                 >
-                  {testing ? <RefreshCw className="spin" /> : <PlugZap />} Run connection diagnostic
+                  {testing ? <RefreshCw className="spin" /> : <PlugZap />} Check server health for
+                  this setup
                 </button>
               </div>
               {testResult && (
@@ -345,11 +381,11 @@ export function McpConnectionSetupCard({
                   <strong>
                     {testResult.ok ? (
                       <>
-                        <CheckCircle2 aria-hidden="true" /> Diagnostic passed
+                        <CheckCircle2 aria-hidden="true" /> Server health passed
                       </>
                     ) : (
                       <>
-                        <Activity aria-hidden="true" /> Diagnostic reported failures
+                        <Activity aria-hidden="true" /> Server health reported failures
                       </>
                     )}
                   </strong>
@@ -364,6 +400,35 @@ export function McpConnectionSetupCard({
                   <span>Last tested: {new Date(testResult.lastUsedAt).toLocaleString()}</span>
                   {!testResult.workspaceChecksumUnchanged && (
                     <span role="alert">Workspace checksum changed during the test.</span>
+                  )}
+                </div>
+              )}
+              <div className="mcp-health-actions">
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={testing || busy || !issued}
+                  onClick={() => void checkVerification()}
+                >
+                  {testing ? <RefreshCw className="spin" /> : <ShieldCheck />} Check target-client
+                  verification
+                </button>
+              </div>
+              {verification && (
+                <div className="mcp-health-test-result" role="status">
+                  <strong>
+                    {verification.status === 'verified'
+                      ? 'Replacement credential verified'
+                      : verification.status === 'revoked'
+                        ? 'Replacement credential revoked — unverified'
+                        : verification.status === 'not_found'
+                          ? 'Credential not found — unverified'
+                          : 'Waiting for target-client verification'}
+                  </strong>
+                  <span>Credential ID: {verification.credentialId}</span>
+                  {verification.storeId && <span>Store ID: {verification.storeId}</span>}
+                  {verification.verifiedAt && (
+                    <span>Verified at: {new Date(verification.verifiedAt).toLocaleString()}</span>
                   )}
                 </div>
               )}

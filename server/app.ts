@@ -6,7 +6,7 @@ import pinoHttp, { stdSerializers } from 'pino-http';
 import type { DestinationStream } from 'pino';
 import { z } from 'zod';
 import type { Db } from './db.ts';
-import { getDb, transaction } from './db.ts';
+import { getDb, getStoreId, transaction } from './db.ts';
 import { config, publishConfigured, bufferConfigured, authenticationConfigured } from './config.ts';
 import { createAuthMiddleware, type AuthedRequest } from './auth/middleware.ts';
 import {
@@ -21,6 +21,7 @@ import { purgeExpiredSessions } from './auth/sessions.ts';
 import { createMcpBearer } from './auth/mcp-bearers.ts';
 import {
   createMcpAgentCredential,
+  getMcpAgentCredential,
   listMcpAgentCredentials,
   McpAgentLabelTakenError,
   renameMcpAgentRegistration,
@@ -40,6 +41,7 @@ import { buildMcpHealthPanel } from './mcp/health-panel.ts';
 import { buildConnectionStatus } from './mcp/connection-status.ts';
 import { workspaceDataChecksum } from './mcp/workspace-checksum.ts';
 import { MCP_AGENT_SCOPES } from '../shared/mcp-agent-registry.ts';
+import type { McpCredentialVerification } from '../shared/mcp-health.ts';
 import { McpWriteLimiterRegistry } from './mcp/write-limiter-registry.ts';
 import { INTEGRATION_WRITE_LIMIT_PER_MINUTE } from '../shared/mcp-agent-events.ts';
 import { DRIVE_OAUTH_SCOPE } from '../shared/drive-oauth.ts';
@@ -1019,6 +1021,34 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       workspaceChecksumUnchanged: checksumBefore === checksumAfter,
       lastUsedAt: now.toISOString(),
     });
+  });
+
+  app.get('/api/mcp/health/verification/:credentialId', (req, res) => {
+    if (!authRequired) {
+      res.status(400).json({ error: 'Authentication is not required on this host.' });
+      return;
+    }
+    const credential = getMcpAgentCredential(db, req.params.credentialId);
+    const storeId = getStoreId(db);
+    if (!credential) {
+      const verification: McpCredentialVerification = {
+        credentialId: req.params.credentialId,
+        agentLabel: '',
+        storeId,
+        status: 'not_found',
+        verifiedAt: null,
+      };
+      res.status(404).json(verification);
+      return;
+    }
+    const verification: McpCredentialVerification = {
+      credentialId: credential.id,
+      agentLabel: credential.label,
+      storeId,
+      status: credential.revokedAt ? 'revoked' : credential.lastUsedAt ? 'verified' : 'pending',
+      verifiedAt: credential.lastUsedAt,
+    };
+    res.json(verification);
   });
 
   app.post('/api/auth/password', async (req, res, next) => {

@@ -280,6 +280,13 @@ export const testState = {
     workspaceChecksumUnchanged: true,
     lastUsedAt: '2026-08-28T12:00:00.000Z',
   },
+  mcpCredentialVerificationPayload: {
+    credentialId: 'credential-issued',
+    agentLabel: 'cursor-planning',
+    storeId: 'store-fixture-verification',
+    status: 'pending',
+    verifiedAt: null,
+  } as import('../../shared/mcp-health').McpCredentialVerification,
   /**
    * What `GET /api/projects/:id/files` answers, per request, so a suite can vary the page
    * by folder and by cursor the way real Drive does. Unset means a Drive nobody connected.
@@ -792,6 +799,9 @@ const respondTo = (url: string, init?: RequestInit) => {
     return reply(503, { error: testState.driveSettingsError });
   if (url.endsWith('/api/mcp/health/test') && method === 'POST') {
     return testState.mcpHealthTestPayload;
+  }
+  if (url.includes('/api/mcp/health/verification/') && method === 'GET') {
+    return testState.mcpCredentialVerificationPayload;
   }
   const rotateMcpCredential = url.match(/\/api\/auth\/mcp-credentials\/([^/?]+)\/rotate$/);
   if (rotateMcpCredential && method === 'POST') {
@@ -1733,6 +1743,13 @@ beforeEach(() => {
   testState.agentHandoffDetailPayload = null;
   testState.agentHandoffDetailError = null;
   testState.mcpAgentRegistryPayload = { enabled: false, credentials: [] };
+  testState.mcpCredentialVerificationPayload = {
+    credentialId: 'credential-issued',
+    agentLabel: 'cursor-planning',
+    storeId: 'store-fixture-verification',
+    status: 'pending',
+    verifiedAt: null,
+  };
   testState.mcpHealthPanelPayload = {
     enabled: true,
     state: 'never_connected',

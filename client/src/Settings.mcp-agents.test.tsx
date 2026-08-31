@@ -80,14 +80,26 @@ describe('Agents connection setup card', () => {
     expect(String(writeText.mock.calls[0]?.[0])).toContain('Bearer hcc_mcp_shown-once');
     expect(String(writeText.mock.calls[0]?.[0])).not.toContain('x-agent-label');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Run connection diagnostic' }));
-    expect(await screen.findByText('Diagnostic passed')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Check server health for this setup' }));
+    expect(await screen.findByText('Server health passed')).toBeVisible();
     expect(screen.getByText('Store: store-fi')).toBeVisible();
     expect(
       requests.some(
         (request) => request.method === 'POST' && request.url.endsWith('/api/mcp/health/test'),
       ),
     ).toBe(true);
+
+    testState.mcpCredentialVerificationPayload = {
+      credentialId: 'credential-issued',
+      agentLabel: 'cursor-planning',
+      storeId: 'store-fixture-verification',
+      status: 'verified',
+      verifiedAt: '2026-08-28T12:01:00.000Z',
+    };
+    fireEvent.click(screen.getByRole('button', { name: 'Check target-client verification' }));
+    expect(await screen.findByText('Replacement credential verified')).toBeVisible();
+    expect(screen.getByText('Credential ID: credential-issued')).toBeVisible();
+    expect(screen.getByText('Store ID: store-fixture-verification')).toBeVisible();
 
     fireEvent.click(screen.getByRole('button', { name: 'Revoke cursor-planning' }));
     await waitFor(() => expect(screen.queryByText('cursor-planning')).not.toBeInTheDocument());
