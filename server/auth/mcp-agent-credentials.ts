@@ -205,6 +205,27 @@ export function revokeMcpAgentCredential(db: Db, credentialId: string, now = Dat
   );
 }
 
+/** Revoke every active credential for a label — used when OAuth reconnects the same connector. */
+export function revokeActiveMcpAgentCredentialsForLabel(
+  db: Db,
+  label: string,
+  now = Date.now(),
+): number {
+  const revokedAt = iso(now);
+  const result = db
+    .prepare(
+      `UPDATE agent_credentials
+       SET revoked_at = ?
+       WHERE revoked_at IS NULL
+         AND expires_at > ?
+         AND agent_id IN (
+           SELECT id FROM agent_registrations WHERE display_label = ? COLLATE NOCASE
+         )`,
+    )
+    .run(revokedAt, revokedAt, label);
+  return Number(result.changes ?? 0);
+}
+
 export function hasMcpAgentScope(
   scopes: readonly McpAgentScope[],
   required: McpAgentScope,

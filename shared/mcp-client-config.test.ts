@@ -113,10 +113,8 @@ describe('buildMcpClientConfig', () => {
     expect(config.format).toBe('fields');
     expect(config.pasteTarget).toBe('fields');
     expect(config.content).toContain('Server URL: https://hcc.example.com/api/mcp');
-    expect(config.content).toContain('Authorization: Bearer hcc_mcp_test-token');
-    // The label is carried by the credential; a header that disagrees with it is rejected.
-    expect(config.content).not.toContain('x-agent-label:');
-    expect(config.notes.join(' ')).toMatch(/Add custom connector/i);
+    expect(config.content).not.toContain('Authorization:');
+    expect(config.secretEmbedded).toBe(false);
   });
 
   it('rejects unsupported platform values at runtime', () => {

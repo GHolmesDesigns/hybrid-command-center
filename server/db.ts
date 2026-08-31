@@ -133,6 +133,30 @@ CREATE TABLE IF NOT EXISTS oauth_pending_states (
   issued_at TEXT NOT NULL,
   expires_at TEXT NOT NULL
 );
+-- MCP OAuth for Claude chat / Cowork connectors: dynamic client registration and auth codes.
+-- Keep in sync with MCP_OAUTH_*_TABLE_SQL in server/auth/mcp-oauth.ts.
+CREATE TABLE IF NOT EXISTS mcp_oauth_clients (
+  client_id TEXT PRIMARY KEY,
+  redirect_uris TEXT NOT NULL,
+  client_name TEXT,
+  token_endpoint_auth_method TEXT NOT NULL DEFAULT 'none',
+  created_at TEXT NOT NULL,
+  revoked_at TEXT
+);
+CREATE TABLE IF NOT EXISTS mcp_oauth_codes (
+  code TEXT PRIMARY KEY,
+  client_id TEXT NOT NULL,
+  redirect_uri TEXT NOT NULL,
+  code_challenge TEXT NOT NULL,
+  code_challenge_method TEXT NOT NULL,
+  scopes TEXT NOT NULL,
+  operator_session_hash TEXT NOT NULL,
+  agent_label TEXT NOT NULL,
+  oauth_state TEXT NOT NULL,
+  issued_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  consumed_at TEXT
+);
 CREATE TABLE IF NOT EXISTS import_receipts (
   id TEXT PRIMARY KEY, source TEXT NOT NULL, input_kind TEXT NOT NULL, filename TEXT,
   fingerprint TEXT NOT NULL, outcome TEXT NOT NULL, created_count INTEGER NOT NULL DEFAULT 0,
@@ -711,6 +735,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_registrations_label
   ON agent_registrations(display_label COLLATE NOCASE);
 -- Expired OAuth pending rows are deleted by expires_at on begin/consume and on a periodic purge.
 CREATE INDEX IF NOT EXISTS idx_oauth_pending_expires ON oauth_pending_states(expires_at);
+CREATE INDEX IF NOT EXISTS idx_mcp_oauth_codes_expires ON mcp_oauth_codes(expires_at);
 CREATE INDEX IF NOT EXISTS idx_integration_events_created ON integration_events(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_integration_events_correlation ON integration_events(correlation_id);
 -- The calendar reads a date range; the planner reads the queue. Both are this one index:

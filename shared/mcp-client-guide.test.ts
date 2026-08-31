@@ -32,13 +32,13 @@ describe('buildMcpClientGuide', () => {
     // The defect this covers: connector surfaces were shown Claude Code's per-project steps.
     expect(guide.steps[0]?.body).toMatch(/Connectors/i);
     expect(guide.steps.map((step) => step.body).join(' ')).not.toMatch(/this project/i);
-    // No combined blob — every value goes into its own field.
-    expect(guide.copyFields.map((field) => field.id)).toEqual([
-      'serverUrl',
-      'credential',
-      'agentLabel',
-    ]);
-    expect(guide.headerHint).toMatch(/do not add x-agent-label/i);
+    expect(
+      guide.steps.some(
+        (step) => /Connect and approve/i.test(step.title) || /Connect and approve/i.test(step.body),
+      ),
+    ).toBe(true);
+    expect(guide.copyFields.map((field) => field.id)).toEqual(['serverUrl', 'agentLabel']);
+    expect(guide.headerHint).toMatch(/MCP OAuth/i);
   });
 
   it('emits a complete mcpServers document for file-based clients', () => {

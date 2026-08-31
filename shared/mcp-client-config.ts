@@ -145,17 +145,12 @@ const httpConfig = (input: McpClientConfigInput): McpClientConfigResult => {
     return {
       format: 'fields',
       filename: 'claude.ai connector settings (no file)',
-      content: [
-        `Name: ${MCP_CLIENT_SERVER_NAME}`,
-        `Server URL: ${serverUrl}`,
-        `Authorization: ${headers.Authorization}`,
-      ].join('\n'),
-      secretEmbedded,
+      content: [`Name: ${MCP_CLIENT_SERVER_NAME}`, `Server URL: ${serverUrl}`].join('\n'),
+      secretEmbedded: false,
       pasteTarget: 'fields',
       notes: [
-        'Add under Settings → Connectors → Add custom connector. Fill each field separately — this is not a config file.',
-        `Do not send ${MCP_AGENT_LABEL_HEADER}: the label travels inside the credential, and a header that disagrees with it is rejected.`,
-        secretNote,
+        'Add under Settings → Connectors → Add custom connector. Paste the server URL, then click Connect and approve OAuth in the browser.',
+        'Do not paste a bearer token into OAuth client ID or client secret — Claude registers automatically and receives a token after you approve.',
       ],
     };
   }

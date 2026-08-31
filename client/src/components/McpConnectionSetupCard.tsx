@@ -21,7 +21,7 @@ import {
   MCP_CLIENT_PLATFORM_LABEL,
   type McpClientPlatform,
 } from '../../../shared/mcp-client-config';
-import { buildMcpClientGuide } from '../../../shared/mcp-client-guide';
+import { buildMcpClientGuide, MCP_GUIDE_CLAUDE_CONNECTOR_BLOCKER } from '../../../shared/mcp-client-guide';
 import type { McpConnectionStatus } from '../../../shared/mcp-health';
 
 type RegistryResponse = McpAgentCredentialList & { enabled: boolean };
@@ -277,6 +277,11 @@ export function McpConnectionSetupCard({
                     Credential for <strong>{issued.credential.label}</strong> is shown once. Copy it
                     now. {guide.headerHint}
                   </p>
+                  {platform === 'claude-desktop' ? (
+                    <p className="field-hint mcp-guide-blocker" role="note">
+                      {MCP_GUIDE_CLAUDE_CONNECTOR_BLOCKER}
+                    </p>
+                  ) : null}
                   <ol className="mcp-guide-steps">
                     {guide.steps.map((step) => (
                       <li key={step.title}>

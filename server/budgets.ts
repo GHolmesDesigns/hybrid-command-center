@@ -127,6 +127,13 @@ export const MCP_HEALTH_BUDGET: Budget = {
   message: 'Too many MCP health requests. Wait a moment and try again.',
 };
 
+/** MCP OAuth register/authorize/token — same abuse window as Drive OAuth connect. */
+export const MCP_OAUTH_BUDGET: Budget = {
+  limit: 20,
+  windowMs: 15 * 60_000,
+  message: 'Too many MCP OAuth requests. Wait a few minutes and try again.',
+};
+
 /**
  * How many import requests may be in flight at once. One, because the point of the cap is that a
  * caller cannot hold several multi-megabyte bodies in memory simultaneously — and it only holds

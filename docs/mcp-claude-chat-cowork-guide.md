@@ -28,27 +28,46 @@ an agent that may not be.
 
 ---
 
-## 2. Connecting on these surfaces
+### Connecting on these surfaces
 
 Chat and Cowork use **claude.ai connector settings** — not `claude_desktop_config.json`, and not any
 repository file.
 
-1. Ask the operator to open **Agents → Agent connection setup** in HCC, register your label, and
-   issue a scoped credential. The credential is shown **once**.
-2. Configure a custom connector pointing at `https://<origin>/api/mcp`.
-3. Supply the credential as the `Authorization` value.
+Hybrid Command Center speaks **MCP OAuth** on hosted deployments with operator authentication enabled.
+The connector dialog needs only a **name** and **server URL** — Claude discovers authorization from
+the server's `401` response and well-known metadata, registers itself, and walks you through sign-in
+and approval in the browser.
+
+1. Ask the operator to open **Agents → Agent connection setup** in HCC and register the agent label
+   you expect (for example `claude-cowork`). OAuth creates or reuses a registration from the
+   connector name at approval time.
+2. In claude.ai, **Settings → Connectors → Add custom connector**. Name it Hybrid Command Center
+   and paste `https://<origin>/api/mcp`.
+3. Click **Connect** in Claude. Sign in to Hybrid Command Center if prompted, review the agent label
+   and scopes, then **Approve connector**.
+4. Enable the connector for the chats or projects that need it.
+
+After approval, ask Claude to call **`system_connection_status`** and read **`agentLabel`** and
+**`storeId`** before any coordination writes.
+
+### Request headers (optional beta)
+
+Some organization accounts also expose a **Request headers** section for static bearer tokens.
+Hybrid Command Center does not require it when OAuth is available — OAuth owns the `Authorization`
+header on those connections. If you use Request headers anyway, enter `Bearer ` followed by the
+token; a bare token returns HTTP 401.
 
 Three failure modes, all observed in practice:
 
-- **Missing `Bearer ` prefix.** The header value must be `Bearer <token>` — the word, one space, then
-  the token. A bare token returns HTTP 401.
-- **`x-agent-label` is unnecessary and risky.** Your label is carried inside the credential. Sending
-  a label that *disagrees* with the credential is a hard error; omit the header entirely.
+- **Approval skipped or denied.** Claude shows no MCP tools until the browser flow completes.
+- **Wrong deployment origin.** The URL must be the hosted HTTPS origin ending in `/api/mcp`, not a
+  local stdio checkout.
 - **A 401 often surfaces as "server unreachable."** Treat a connection failure as an auth problem
   first, before assuming the host is down.
 
-Never paste a credential into a chat message, a repository file, or a document. If one is exposed,
-rotate it on the Agents page.
+Never paste a credential into a chat message, a repository file, or a document. OAuth-issued tokens
+can be rotated by removing and re-adding the connector, or by revoking the agent credential on the
+Agents page.
 
 ---
 
