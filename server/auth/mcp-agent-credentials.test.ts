@@ -7,6 +7,7 @@ import {
   renameMcpAgentRegistration,
   resolveMcpAgentCredential,
   revokeMcpAgentCredential,
+  rotateMcpAgentCredential,
 } from './mcp-agent-credentials.ts';
 import { hashMcpBearerToken } from './mcp-bearers.ts';
 
@@ -141,5 +142,62 @@ describe('scoped MCP agent credentials', () => {
   it('refuses a second active credential for the same label', () => {
     issue('codex-desktop', 1_000);
     expect(() => issue('CODEX-DESKTOP', 2_000)).toThrow(McpAgentLabelTakenError);
+  });
+
+  it('atomically rotates and retires only the selected credential', () => {
+    const first = issue('cursor', 1_000);
+    const other = issue('claude', 1_000);
+    const rotated = rotateMcpAgentCredential(db, {
+      credentialId: first.credential.id,
+      scopes: first.credential.scopes,
+      expiresAt: new Date(70_000).toISOString(),
+      sessionSecret: SECRET,
+      now: 2_000,
+    });
+    expect(
+      resolveMcpAgentCredential(db, {
+        rawToken: first.rawToken,
+        sessionSecret: SECRET,
+        origin: null,
+        now: 2_001,
+      }),
+    ).toBeNull();
+    expect(
+      resolveMcpAgentCredential(db, {
+        rawToken: rotated.rawToken,
+        sessionSecret: SECRET,
+        origin: null,
+        now: 2_001,
+      }),
+    ).toMatchObject({ agentLabel: 'cursor' });
+    expect(
+      resolveMcpAgentCredential(db, {
+        rawToken: other.rawToken,
+        sessionSecret: SECRET,
+        origin: null,
+        now: 2_001,
+      }),
+    ).not.toBeNull();
+  });
+
+  it('keeps the old credential when replacement issuance fails', () => {
+    const first = issue('cursor', 1_000);
+    expect(() =>
+      rotateMcpAgentCredential(db, {
+        credentialId: first.credential.id,
+        scopes: first.credential.scopes,
+        expiresAt: new Date(1_000).toISOString(),
+        sessionSecret: SECRET,
+        now: 2_000,
+      }),
+    ).toThrow('future');
+    expect(
+      resolveMcpAgentCredential(db, {
+        rawToken: first.rawToken,
+        sessionSecret: SECRET,
+        origin: null,
+        now: 2_001,
+      }),
+    ).not.toBeNull();
   });
 });

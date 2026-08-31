@@ -25,6 +25,7 @@ import {
   McpAgentLabelTakenError,
   renameMcpAgentRegistration,
   revokeMcpAgentCredential,
+  rotateMcpAgentCredential,
 } from './auth/mcp-agent-credentials.ts';
 import { CSRF_HEADER_NAME } from '../shared/auth.ts';
 import { MCP_BEARER_ISSUE_PATH, MCP_HTTP_PATH } from '../shared/mcp-network.ts';
@@ -955,6 +956,27 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       return;
     }
     res.json({ ok: true });
+  });
+
+  app.post('/api/auth/mcp-credentials/:credentialId/rotate', (req, res, next) => {
+    try {
+      if (!authRequired) {
+        res.status(400).json({ error: 'Authentication is not required on this host.' });
+        return;
+      }
+      const input = createMcpAgentCredentialSchema.parse(req.body);
+      const issued = rotateMcpAgentCredential(db, {
+        credentialId: req.params.credentialId,
+        ...input,
+        sessionSecret,
+        now: authNowMs(),
+      });
+      res
+        .status(201)
+        .json({ ok: true, bearerToken: issued.rawToken, credential: issued.credential });
+    } catch (error) {
+      next(error);
+    }
   });
 
   app.get('/api/mcp/health', (_req, res) => {
