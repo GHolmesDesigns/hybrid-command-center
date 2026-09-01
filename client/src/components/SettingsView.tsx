@@ -253,7 +253,12 @@ export function SettingsView({
             {state?.connected ? (
               <>
                 {state.pickerConfigured ? (
-                  <button type="button" onClick={chooseRoot} disabled={pickerBusy}>
+                  <button
+                    className="drive-picker-button"
+                    type="button"
+                    onClick={chooseRoot}
+                    disabled={pickerBusy}
+                  >
                     {pickerBusy
                       ? 'Opening Google Picker…'
                       : state.rootFolderId

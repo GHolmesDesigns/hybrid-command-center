@@ -2034,6 +2034,11 @@ button.tag-chip.toggle.active {
   font-size: 13px;
   line-height: 1.6;
 }
+.drive-picker-button {
+  display: flex;
+  width: fit-content;
+  margin-bottom: 18px;
+}
 
 .agent-credential-form fieldset {
   border: 1px solid var(--line);
