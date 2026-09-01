@@ -8,6 +8,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.11.6] - 2026-09-01
+
+### Changed
+
+- Added a behavior-based testing procedure and PR evidence template covering persistence,
+  refusal and failure checks, fault experiments, coverage review, and verification limits.
+- Strengthened MCP write persistence checks and removed transport cases that could pass without
+  exercising the behavior under test.
+- Added Vitest safeguards against focused tests and assertion-free cases where the project can
+  reliably enforce them.
+
+### Breaking changes
+
+None.
+
 ## [5.11.5] - 2026-08-31
 
 ### Fixed
