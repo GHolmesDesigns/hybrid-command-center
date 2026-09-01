@@ -8,6 +8,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.12.0] - 2026-09-01
+
+### Changed
+
+- The Import page now keeps its guidance full width and presents import receipts in two equal, independently scrolling columns that collapse cleanly on narrow screens.
+
+### Breaking changes
+
+None.
+
 ## [5.11.9] - 2026-09-01
 
 ### Added
