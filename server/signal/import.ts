@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import type { Db } from '../db.ts';
 import { transaction } from '../db.ts';
@@ -66,6 +67,10 @@ import {
   type SignalImportResolvedMedia,
   type SignalImportSkip,
 } from '../../shared/signal-import.ts';
+
+export const SAMPLE_SIGNAL_DIRECTORY = fileURLToPath(
+  new URL('../../docs/examples/', import.meta.url),
+);
 import {
   connectedPublishTargetsFromDb,
   evaluateImportCapabilities,

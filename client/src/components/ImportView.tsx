@@ -7,6 +7,7 @@ import {
   SAMPLE_PLAYBOOK_FILENAME,
   type ImportReceipt,
 } from '../../../shared/playbook';
+import { SAMPLE_SIGNAL_DOWNLOAD_PATH, SAMPLE_SIGNAL_FILENAME } from '../../../shared/signal-import';
 import {
   INTEGRATION_ENTITY_LABEL,
   INTEGRATION_OPERATION_LABEL,
@@ -88,24 +89,34 @@ export function ImportView({
         body="Create a client, its projects, their tasks, checklists, and dependencies from one campaign playbook workbook."
         action={
           <div className="head-actions">
-            {/*
-              A plain link, not a fetch: the API answers with `Content-Disposition: attachment`,
-              so the browser saves the workbook itself. Nothing here reads the bytes, which is
-              why `download` names the file rather than any code assembling a blob for it.
-            */}
-            <a
-              className="secondary buttonlike"
-              href={SAMPLE_PLAYBOOK_DOWNLOAD_PATH}
-              download={SAMPLE_PLAYBOOK_FILENAME}
-            >
-              <Download /> Download sample playbook
-            </a>
-            <button onClick={open}>
-              <Upload /> Import a playbook
-            </button>
-            <button className="secondary" onClick={openSignal}>
-              <Upload /> Import Signal queue
-            </button>
+            <div className="sample-downloads" aria-label="Sample workbooks">
+              {/*
+                Plain links, not fetches: the API answers with `Content-Disposition: attachment`,
+                so the browser saves each canonical workbook itself.
+              */}
+              <a
+                className="secondary buttonlike"
+                href={SAMPLE_PLAYBOOK_DOWNLOAD_PATH}
+                download={SAMPLE_PLAYBOOK_FILENAME}
+              >
+                <Download /> Download sample playbook
+              </a>
+              <a
+                className="secondary buttonlike"
+                href={SAMPLE_SIGNAL_DOWNLOAD_PATH}
+                download={SAMPLE_SIGNAL_FILENAME}
+              >
+                <Download /> Download sample Signal import
+              </a>
+            </div>
+            <div className="import-actions" aria-label="Import actions">
+              <button onClick={open}>
+                <Upload /> Import a playbook
+              </button>
+              <button className="secondary" onClick={openSignal}>
+                <Upload /> Import Signal queue
+              </button>
+            </div>
           </div>
         }
       />

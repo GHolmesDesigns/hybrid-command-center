@@ -22,6 +22,10 @@ export const SIGNAL_IMPORT_RECEIPT_LIMIT = 50;
 export const SIGNAL_IMPORT_SHEETS = ['SignalPosts', 'SignalMedia', 'SignalVariants'] as const;
 export type SignalImportSheet = (typeof SIGNAL_IMPORT_SHEETS)[number];
 
+/** The versioned sample workbook served by the Import page. */
+export const SAMPLE_SIGNAL_DOWNLOAD_PATH = '/api/import/signal/sample';
+export const SAMPLE_SIGNAL_FILENAME = 'signal-import-format.xlsx';
+
 export interface SignalImportIssue {
   sheet: string;
   row?: number;

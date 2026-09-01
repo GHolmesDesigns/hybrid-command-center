@@ -213,6 +213,7 @@ import {
 import {
   SIGNAL_IMPORT_CONTENT_BASE64_MAX,
   SIGNAL_IMPORT_TEXT_MAX,
+  SAMPLE_SIGNAL_DIRECTORY,
   commitSignalImport,
   listSignalImportReceipts,
   previewSignalImport,
@@ -230,12 +231,14 @@ import {
   IMPORT_BUSY_MESSAGE,
   IMPORT_CONCURRENCY,
   SAMPLE_PLAYBOOK_BUDGET,
+  SAMPLE_SIGNAL_BUDGET,
   concurrencyGate,
   postsOnly,
   requestBudget,
 } from './budgets.ts';
 import { rateLimit } from 'express-rate-limit';
 import { SAMPLE_PLAYBOOK_DOWNLOAD_PATH, SAMPLE_PLAYBOOK_FILENAME } from '../shared/playbook.ts';
+import { SAMPLE_SIGNAL_DOWNLOAD_PATH, SAMPLE_SIGNAL_FILENAME } from '../shared/signal-import.ts';
 import { MANUAL_FILENAME, MANUAL_ROUTE, manualUrlForVersion } from '../shared/manual.ts';
 import { listIntegrationEvents } from './integration-log.ts';
 import {
@@ -648,6 +651,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
    * because a spent import budget must not withhold the example that fixes the failing workbook.
    */
   app.use(SAMPLE_PLAYBOOK_DOWNLOAD_PATH, requestBudget(SAMPLE_PLAYBOOK_BUDGET, { now: clock }));
+  app.use(SAMPLE_SIGNAL_DOWNLOAD_PATH, requestBudget(SAMPLE_SIGNAL_BUDGET, { now: clock }));
   app.use('/api/drive/sync', requestBudget(DRIVE_SYNC_BUDGET, { now: clock }));
   app.use('/api/drive', driveBudget);
   app.use('/api/settings/drive', driveBudget);
@@ -1736,6 +1740,18 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
        */
       if (res.headersSent) {
         req.log.error({ err: error }, 'Sample playbook download failed');
+        return;
+      }
+      next(error);
+    });
+  });
+  app.get(SAMPLE_SIGNAL_DOWNLOAD_PATH, (req, res, next) => {
+    res.setHeader('Content-Type', SAMPLE_PLAYBOOK_CONTENT_TYPE);
+    res.setHeader('Content-Disposition', `attachment; filename="${SAMPLE_SIGNAL_FILENAME}"`);
+    res.sendFile(SAMPLE_SIGNAL_FILENAME, { root: SAMPLE_SIGNAL_DIRECTORY }, (error?: Error) => {
+      if (!error) return;
+      if (res.headersSent) {
+        req.log.error({ err: error }, 'Sample Signal download failed');
         return;
       }
       next(error);

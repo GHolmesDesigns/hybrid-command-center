@@ -21,10 +21,12 @@ import {
   IMPORT_BUDGET,
   IMPORT_BUSY_MESSAGE,
   SAMPLE_PLAYBOOK_BUDGET,
+  SAMPLE_SIGNAL_BUDGET,
 } from './budgets.ts';
 import { IMPORT_BODY_LIMIT_BYTES } from './import.ts';
 import { findSheet, readXlsxWorkbook } from './domain/workbook.ts';
 import { PLAYBOOK_SHEETS } from '../shared/playbook.ts';
+import { SIGNAL_IMPORT_SHEETS } from '../shared/signal-import.ts';
 import { TASK_CHECKLIST_TEMPLATES } from '../shared/types.ts';
 import { APP_VERSION, DEFAULT_BRANDING } from '../shared/branding.ts';
 import { manualUrlForVersion } from '../shared/manual.ts';
@@ -1900,6 +1902,52 @@ describe('the sample playbook download', () => {
     expect(refused.status).toBe(429);
     expect(refused.body).toEqual({ error: SAMPLE_PLAYBOOK_BUDGET.message });
     expect(refused.headers['retry-after']).toBeTruthy();
+  });
+});
+
+describe('the sample Signal download', () => {
+  const SAMPLE = path.join(import.meta.dirname, '../docs/examples/signal-import-format.xlsx');
+  const download = (app: ReturnType<typeof createApp>) =>
+    request(app).get('/api/import/signal/sample').responseType('blob');
+  const digest = (bytes: Buffer) => crypto.createHash('sha256').update(bytes).digest('hex');
+
+  it('serves the canonical Signal workbook byte for byte', async () => {
+    const response = await download(createApp(db));
+    const expected = readFileSync(SAMPLE);
+
+    expect(response.status).toBe(200);
+    expect({ bytes: response.body.length, sha256: digest(response.body) }).toEqual({
+      bytes: expected.length,
+      sha256: digest(expected),
+    });
+  });
+
+  it('serves a workbook with every tab Signal import reads', async () => {
+    const response = await download(createApp(db));
+    const workbook = readXlsxWorkbook(response.body);
+
+    expect(SIGNAL_IMPORT_SHEETS.every((sheet) => findSheet(workbook, sheet))).toBe(true);
+  });
+
+  it('tells the browser the Signal workbook type and filename', async () => {
+    const response = await download(createApp(db));
+
+    expect(response.headers['content-type']).toBe(
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    expect(response.headers['content-disposition']).toBe(
+      'attachment; filename="signal-import-format.xlsx"',
+    );
+  });
+
+  it('has its own download budget', async () => {
+    const app = createApp(db);
+    for (let i = 0; i < SAMPLE_SIGNAL_BUDGET.limit; i += 1)
+      expect((await download(app)).status).toBe(200);
+
+    const refused = await download(app);
+    expect(refused.status).toBe(429);
+    expect(JSON.parse(refused.body.toString())).toEqual({ error: SAMPLE_SIGNAL_BUDGET.message });
   });
 });
 
