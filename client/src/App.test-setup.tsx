@@ -207,6 +207,7 @@ export const testState = {
   dashboardPayload: emptyDashboard as DashboardData,
   brandingPayload: null as Branding | null,
   viewDefaultsPayload: null as ViewDefaults | null,
+  manualPayload: null as { version: string; available: boolean; url: string | null } | null,
   taskPatchError: null as string | null,
   taskReorderError: null as string | null,
   dashboardFailures: 0,
@@ -742,6 +743,14 @@ const payloadFor = (url: string) => {
     return { branding: testState.brandingPayload ?? branding };
   if (url.endsWith('/api/settings/view-defaults'))
     return { viewDefaults: testState.viewDefaultsPayload ?? CANONICAL_VIEW_DEFAULTS };
+  if (url.endsWith('/api/settings/manual'))
+    return (
+      testState.manualPayload ?? {
+        version: APP_VERSION,
+        available: true,
+        url: `/api/manual/${encodeURIComponent(APP_VERSION)}`,
+      }
+    );
   if (url.endsWith('/api/settings/drive'))
     return (
       testState.driveSettingsPayload ?? {
@@ -1728,6 +1737,7 @@ beforeEach(() => {
   testState.dashboardPayload = emptyDashboard;
   testState.brandingPayload = null;
   testState.viewDefaultsPayload = null;
+  testState.manualPayload = null;
   testState.taskPatchError = null;
   testState.taskReorderError = null;
   testState.dashboardFailures = 0;

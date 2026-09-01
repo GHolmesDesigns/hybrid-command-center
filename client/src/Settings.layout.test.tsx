@@ -49,7 +49,7 @@ describe('the Settings layout', () => {
     // A card left as a direct child of the grid is a card back in a shared row track, taking
     // its starting edge from whatever sits beside it. There is no such card.
     expect(document.querySelectorAll('.settings-layout > .settings-card')).toHaveLength(0);
-    expect(document.querySelectorAll('.settings-layout .settings-card')).toHaveLength(8);
+    expect(document.querySelectorAll('.settings-layout .settings-card')).toHaveLength(9);
   });
 
   it('keeps labels in the left stack and settings modules in the right stack', async () => {
@@ -59,6 +59,7 @@ describe('the Settings layout', () => {
     expect(headingsIn(connections)).toEqual(['Project categories', 'Task tags']);
     expect(headingsIn(appearance)).toEqual([
       'Default views',
+      'User manual',
       'Branding',
       'Google Drive',
       'Local timezone',
@@ -74,6 +75,7 @@ describe('the Settings layout', () => {
       'Project categories',
       'Task tags',
       'Default views',
+      'User manual',
       'Branding',
       'Google Drive',
       'Local timezone',

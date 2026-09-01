@@ -1,4 +1,6 @@
 ﻿import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -233,6 +235,7 @@ import {
 } from './budgets.ts';
 import { rateLimit } from 'express-rate-limit';
 import { SAMPLE_PLAYBOOK_DOWNLOAD_PATH, SAMPLE_PLAYBOOK_FILENAME } from '../shared/playbook.ts';
+import { MANUAL_FILENAME, MANUAL_ROUTE, manualUrlForVersion } from '../shared/manual.ts';
 import { listIntegrationEvents } from './integration-log.ts';
 import {
   APP_VERSION,
@@ -1656,6 +1659,34 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   app.get('/api/settings/branding', (_req, res) =>
     res.json({ version: APP_VERSION, branding: readBranding(db) }),
   );
+  app.get('/api/settings/manual', (_req, res) => {
+    const manualPath = path.resolve('docs/manual', MANUAL_FILENAME);
+    const available = fs.existsSync(manualPath);
+    res.json({
+      version: APP_VERSION,
+      available,
+      url: available ? manualUrlForVersion(APP_VERSION) : null,
+    });
+  });
+  app.get(`${MANUAL_ROUTE}/:version`, (req, res, next) => {
+    const manualPath = path.resolve('docs/manual', MANUAL_FILENAME);
+    if (req.params.version !== APP_VERSION || !fs.existsSync(manualPath)) {
+      res.status(404).json({ error: 'The user manual for this version is unavailable.' });
+      return;
+    }
+    res.sendFile(
+      manualPath,
+      { headers: { 'Content-Type': 'text/html; charset=utf-8' } },
+      (error?: Error) => {
+        if (!error) return;
+        if (res.headersSent) {
+          req.log.error({ err: error }, 'User manual delivery failed');
+          return;
+        }
+        next(error);
+      },
+    );
+  });
   app.put('/api/settings/branding', (req, res, next) => {
     try {
       res.json(updateBranding(db, brandingInput.parse(req.body)));
