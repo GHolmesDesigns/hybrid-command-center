@@ -81,9 +81,10 @@
   transcript never committed.
 - `npm test`: unit/integration tests with mock Drive
 - `npm run test:coverage`: the same suite with coverage and its thresholds. CI runs this rather
-  than `npm test`, so a drop below any project's threshold fails the build. The thresholds are
-  the measured figures, not targets — raise one when the suite genuinely covers more, and do not
-  lower one to make a branch pass.
+  than `npm test`, so a drop below any source group's threshold fails the build. The thresholds
+  are execution regression alarms, not correctness scores or test-count targets. Do not lower
+  one to make a branch pass or raise it automatically; review the protected behavior and stable
+  measurements first. Follow `docs/testing.md` when adding, removing, or reviewing tests.
 - `npm run test:e2e`: Playwright workflows. Playwright starts and stops the API and Vite
   itself, on ports 8788 and 5174, against `data/e2e.db`, which is deleted at the start of
   every run. The command exits on its own, passing or failing; if it ever does not, something
@@ -238,6 +239,23 @@
 - Automated tests must use a mock provider and must never call real Drive.
 
 ## Definition of done
+
+### Test quality, not quantity
+
+- Follow `docs/testing.md` and the PR evidence template. No quota for tests, assertions, or new
+  unit-test files per card. Reuse or strengthen an existing case when it protects the behavior.
+- Name the expected user/domain outcome and the plausible regression each test detects. For
+  mutations, verify stored state and relevant unchanged state; success/error codes alone are
+  insufficient. Keep expected results independent of the implementation and mock external seams,
+  not the rule under test.
+- For a reproducible bug, show the focused assertion fails on the bug and passes on the fix.
+  For changed high-risk logic or suspicious tests, use a bounded fault injection in an isolated
+  fixture checkout, or explain the alternative evidence. Restore mutations before committing.
+- No filler assertions, hidden `.only`, silent skips, or broad retries to obtain a green result.
+  Document quarantined tests with a reason, owner, and re-enable condition. Counts and coverage
+  cannot certify behavior, real client compatibility, vendor capabilities, or production health.
+- Preserve all required gates. Distinguish local validation, completed remote CI, and authorized
+  owner verification. A mocked success or a skipped security scan is not production evidence.
 
 A change is done when its user flow is complete, validation and error states are present, relevant unit/integration tests pass, TypeScript and lint pass, the production build succeeds, responsive behavior is preserved, and no secret or real-Drive side effect is introduced.
 

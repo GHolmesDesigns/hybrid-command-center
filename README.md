@@ -654,7 +654,13 @@ npm run test:e2e
 
 Every one of these runs as a blocking gate in `.github/workflows/quality-gates.yml`. `npm run test:e2e` starts and stops its own API and Vite servers, on ports 8788 and 5174, against `data/e2e.db`, which is deleted at the start of every run; it exits on its own whether the suite passes or fails.
 
-CI runs the unit and integration suite as `npm run test:coverage` — the same tests with `--coverage` — and fails when any of the three projects drops below the thresholds in `vitest.config.ts`. Run it locally before opening a pull request that removes or rewrites tests. The thresholds are what the suite measured when they were set, and the excluded paths are listed there with the reason each one is excluded; `coverage/` is generated and not committed.
+CI runs the unit and integration suite as `npm run test:coverage` — the same tests with `--coverage` — and fails when any of the four source groups drops below the thresholds in `vitest.config.ts`. Run it locally before opening a pull request that removes or rewrites tests. The thresholds are what the suite measured when they were set, and the excluded paths are listed there with the reason each one is excluded; `coverage/` is generated and not committed.
+
+Follow the [testing procedure](docs/testing.md) for behavior-based test selection, failure and
+security assertions, focused regression proof, coverage review, and per-iteration evidence. Test
+counts are inventory, not a target. A passing test must check an expected outcome; neither a high
+coverage percentage nor a mocked success establishes production correctness. The PR template
+records protected behavior and verification limits rather than requiring more tests each iteration.
 
 The tests use an in-memory SQLite database and a mock Drive provider. They never contact or modify a real Google Drive account. Coverage includes client/project/task creation, status movement and ordering, local-time deadline rules, checklist progress, dependency blocking and cycle prevention, hierarchy naming, idempotency, partial failure recovery, and dashboard counts. Playwright exercises the visible create-client → create-project → create-task → checklist workflow, and the dashboard deadline tiles round trip: clicking one opens the board filtered to exactly the tasks that tile counted. API integration coverage exercises dependency blocking and dashboard updates deterministically.
 
