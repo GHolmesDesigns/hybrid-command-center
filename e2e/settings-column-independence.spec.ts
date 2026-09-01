@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { layoutSettled } from './ready';
 
 /**
- * The Wave 6 spec for C56. Settings used to be eight cards in a two-column grid, and two cards
+ * The Wave 6 spec for C56. Settings used to be nine cards in a two-column grid, and two cards
  * sharing a row share a starting edge: whichever of the pair was taller decided where the next
  * card on the *other* side began, so connecting Drive, a validation message appearing, or a
  * category list wrapping left a blank strip above the card beside it. C32 stopped the cards
@@ -16,7 +16,7 @@ import { layoutSettled } from './ready';
  *     pushed down by the other column reads as a larger distance, which is the bug, in pixels.
  *   - Growing and shrinking one column moves that column's later cards by exactly as much, and
  *     moves the neighbouring column by nothing.
- *   - At one column the two stacks meet at the same gap they use internally, so the eight cards
+ *   - At one column the two stacks meet at the same gap they use internally, so the nine cards
  *     read as one stack, in document order.
  *
  * Both Drive states are faked at the HTTP boundary with `page.route`, as they are in
@@ -75,7 +75,7 @@ const cardBoxes = (page: Page): Promise<CardBox[]> =>
 const openSettings = async (page: Page) => {
   await page.goto('/settings');
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
-  await expect(page.locator('.settings-layout .settings-card')).toHaveCount(8);
+  await expect(page.locator('.settings-layout .settings-card')).toHaveCount(9);
   // Every measurement below is taken across two separate renders and compared to the pixel, so the
   // two have to be laid out in the same font. `client/src/styles.css` fetches DM Sans and Manrope
   // with `display=swap`, which means one render can be measured in the fallback face and its

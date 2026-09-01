@@ -224,6 +224,7 @@ import {
   DRIVE_OAUTH_BUDGET,
   DRIVE_SYNC_BUDGET,
   MCP_HEALTH_BUDGET,
+  MANUAL_BUDGET,
   MCP_OAUTH_BUDGET,
   IMPORT_BUDGET,
   IMPORT_BUSY_MESSAGE,
@@ -1659,6 +1660,17 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   app.get('/api/settings/branding', (_req, res) =>
     res.json({ version: APP_VERSION, branding: readBranding(db) }),
   );
+  const manualLimiter = rateLimit({
+    windowMs: MANUAL_BUDGET.windowMs,
+    limit: MANUAL_BUDGET.limit,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: { error: MANUAL_BUDGET.message },
+    keyGenerator: (req) => authKey(req),
+    validate: { xForwardedForHeader: false },
+  });
+  app.use('/api/settings/manual', manualLimiter);
+  app.use(MANUAL_ROUTE, manualLimiter);
   app.get('/api/settings/manual', (_req, res) => {
     const manualPath = path.resolve('docs/manual', MANUAL_FILENAME);
     const available = fs.existsSync(manualPath);
