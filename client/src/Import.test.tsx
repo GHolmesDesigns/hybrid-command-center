@@ -97,6 +97,36 @@ describe('Import module', () => {
     expect(screen.getByText('No imports yet')).toBeVisible();
   });
 
+  it('keeps the helper full width and balances receipts into independently addressed columns', async () => {
+    testState.importReceiptsPayload = [
+      receipt({ id: 'receipt-1', filename: 'one.xlsx' }),
+      receipt({ id: 'receipt-2', filename: 'two.xlsx' }),
+      receipt({ id: 'receipt-3', filename: 'three.xlsx' }),
+    ];
+    render(
+      <MemoryRouter initialEntries={['/import']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    const helper = await screen.findByRole('heading', { name: 'How an import behaves' });
+    await screen.findByText('one.xlsx');
+    const receiptsPanel = screen
+      .getByRole('heading', { name: 'Import receipts' })
+      .closest('section')!;
+    expect(helper.closest('section')).toHaveClass('import-about');
+    expect(helper.closest('section')).toHaveClass('panel');
+    expect(receiptsPanel).toHaveClass('import-receipts');
+    expect(receiptsPanel.parentElement).toHaveClass('import-layout');
+
+    const columns = Array.from(receiptsPanel.querySelectorAll<HTMLElement>('.receipt-list'));
+    expect(columns).toHaveLength(2);
+    expect(within(columns[0]).getByText('one.xlsx')).toBeVisible();
+    expect(within(columns[0]).getByText('three.xlsx')).toBeVisible();
+    expect(within(columns[1]).getByText('two.xlsx')).toBeVisible();
+    expect(within(receiptsPanel).queryByText('receipt-4')).toBeNull();
+  });
+
   /**
    * C37 (#139). The sample workbook is committed under `docs/examples/`, and before this it was
    * reachable only by opening the repository. The page head offers it beside the import itself.

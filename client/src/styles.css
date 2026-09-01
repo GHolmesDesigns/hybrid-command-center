@@ -2867,7 +2867,7 @@ button.tag-chip.toggle.active {
 /* Import: the playbook modal and the receipts the Import page keeps. */
 .import-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   align-items: start;
 }
@@ -2876,10 +2876,6 @@ button.tag-chip.toggle.active {
 .import-activity h2 {
   font: 700 17px Manrope;
   margin: 0 0 10px;
-}
-/* The activity log is a wide list of one-line records, so it spans both columns. */
-.import-activity {
-  grid-column: 1 / -1;
 }
 .import-about ul {
   margin: 0 0 12px;
@@ -3015,6 +3011,12 @@ button.tag-chip.toggle.active {
 .import-actions .submit {
   margin: 0;
 }
+.receipt-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  min-width: 0;
+}
 .receipt-list {
   list-style: none;
   margin: 0;
@@ -3022,6 +3024,10 @@ button.tag-chip.toggle.active {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
+  max-height: 460px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .receipt {
   border: 1px solid var(--line);
@@ -3270,7 +3276,7 @@ button.tag-chip.toggle.active {
   }
 }
 @media (max-width: 900px) {
-  .import-layout {
+  .receipt-columns {
     grid-template-columns: 1fr;
   }
 }

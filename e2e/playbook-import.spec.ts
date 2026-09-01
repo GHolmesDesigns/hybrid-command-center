@@ -105,6 +105,13 @@ test('a campaign playbook previews, imports once, and refuses to duplicate itsel
   await page.reload();
   const receipt = page.getByText('7 created · 0 skipped · 0 failed').first();
   await expect(receipt).toBeVisible();
+  await expect(page.locator('.receipt-columns')).toBeVisible();
+  await expect(page.locator('.receipt-list')).toHaveCount(2);
+  await page.setViewportSize({ width: 600, height: 900 });
+  const narrowColumns = await page
+    .locator('.receipt-columns')
+    .evaluate((element) => getComputedStyle(element).gridTemplateColumns.trim().split(/\s+/));
+  expect(narrowColumns).toHaveLength(1);
 
   // C17: the import also left an audit record, on the page and naming what it created by id.
   const receiptId = await newestReceiptId();
