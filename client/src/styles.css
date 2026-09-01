@@ -141,6 +141,19 @@ button svg,
   align-items: center;
   padding: 0 8px 28px;
 }
+.brand-mark-link {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  color: var(--sidebar-fg);
+  text-decoration: none;
+  border-radius: 10px;
+}
+.brand-mark-link:hover {
+  color: var(--sidebar-fg);
+}
 .brand-mark {
   display: grid;
   place-items: center;
@@ -153,6 +166,12 @@ button svg,
   font-weight: 800;
   font-size: 13px;
   letter-spacing: -0.5px;
+  flex: none;
+}
+.brand-new-tab {
+  width: 13px;
+  height: 13px;
+  color: var(--sidebar-fg);
   flex: none;
 }
 .brand-logo {
