@@ -107,6 +107,58 @@ describe('callWorkspaceReadTool', () => {
     expect(data.truncated).toBe(true);
   });
 
+  it('narrows Signal posts by project, campaign, both, or neither', async () => {
+    addProject('p2', 'c1', 'Second project');
+    seedSignalPost(db, {
+      id: 'project-campaign',
+      projectId: 'p1',
+      campaigns: [{ id: 'campaign-1', name: 'Launch Week' }],
+    });
+    seedSignalPost(db, {
+      id: 'other-project',
+      projectId: 'p2',
+      campaigns: [{ id: 'campaign-2', name: 'Other Campaign' }],
+    });
+    seedSignalPost(db, { id: 'unassigned', projectId: null, campaigns: [] });
+    seedSignalPost(db, { id: 'outside-window', projectId: 'p1', date: '2027-09-01' });
+
+    const byProject = await callWorkspaceReadTool(db, 'signal_list_posts', {
+      from: '2027-08-01',
+      to: '2027-08-31',
+      projectId: 'p1',
+    });
+    expect(
+      (byProject.data as { posts: Array<{ id: string }> }).posts.map((post) => post.id),
+    ).toEqual(['project-campaign']);
+
+    const byCampaign = await callWorkspaceReadTool(db, 'signal_list_posts', {
+      from: '2027-08-01',
+      to: '2027-08-31',
+      campaign: ' launch   WEEK ',
+    });
+    expect(
+      (byCampaign.data as { posts: Array<{ id: string }> }).posts.map((post) => post.id),
+    ).toEqual(['project-campaign']);
+
+    const byBoth = await callWorkspaceReadTool(db, 'signal_list_posts', {
+      from: '2027-08-01',
+      to: '2027-08-31',
+      projectId: 'p1',
+      campaign: 'LAUNCH WEEK',
+    });
+    expect((byBoth.data as { posts: Array<{ id: string }> }).posts.map((post) => post.id)).toEqual([
+      'project-campaign',
+    ]);
+
+    const unfiltered = await callWorkspaceReadTool(db, 'signal_list_posts', {
+      from: '2027-08-01',
+      to: '2027-08-31',
+    });
+    expect(
+      (unfiltered.data as { posts: Array<{ id: string }> }).posts.map((post) => post.id),
+    ).toEqual(['other-project', 'project-campaign', 'unassigned']);
+  });
+
   it('returns queue snapshot with capped unscheduled and upcoming posts', async () => {
     for (let index = 0; index < MCP_QUEUE_UNSCHEDULED_LIMIT + 3; index += 1) {
       seedSignalPost(db, { id: `queue-${index}`, date: null, position: index });

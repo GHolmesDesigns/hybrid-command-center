@@ -195,7 +195,7 @@ CREATE TABLE IF NOT EXISTS drive_steps (
 -- content went out outside this app and is never a substitute for a publication row. Neutral
 -- defaults preserve every historical row as an active in-Signal plan.
 CREATE TABLE IF NOT EXISTS signal_posts (
-  id TEXT PRIMARY KEY, text TEXT NOT NULL, date TEXT, time TEXT NOT NULL DEFAULT '09:00',
+  id TEXT PRIMARY KEY, project_id TEXT REFERENCES projects(id), text TEXT NOT NULL, date TEXT, time TEXT NOT NULL DEFAULT '09:00',
   format TEXT NOT NULL DEFAULT 'TEXT', status TEXT NOT NULL DEFAULT 'DRAFT', campaign TEXT,
   cta TEXT NOT NULL DEFAULT 'NONE', position INTEGER NOT NULL DEFAULT 0,
   lifecycle TEXT NOT NULL DEFAULT 'ACTIVE',
@@ -741,6 +741,7 @@ CREATE INDEX IF NOT EXISTS idx_integration_events_correlation ON integration_eve
 -- The calendar reads a date range; the planner reads the queue. Both are this one index:
 -- dated rows order by day, and the NULL dates group together at the front.
 CREATE INDEX IF NOT EXISTS idx_signal_posts_date ON signal_posts(date, time);
+CREATE INDEX IF NOT EXISTS idx_signal_posts_project ON signal_posts(project_id);
 -- Lifecycle filter for planner / calendar / queue lists that default to active plans only.
 CREATE INDEX IF NOT EXISTS idx_signal_posts_lifecycle ON signal_posts(lifecycle);
 -- Imports resolve an alias by its unique pair. This reverse index serves post deletion and any

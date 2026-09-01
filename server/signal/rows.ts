@@ -29,6 +29,7 @@ import {
 
 export interface SignalPostRow {
   id: string;
+  project_id: string | null;
   text: string;
   date: string | null;
   time: string;
@@ -168,6 +169,7 @@ export function toSignalPost(
 ): SignalPost {
   return {
     id: row.id,
+    projectId: row.project_id,
     text: row.text,
     // Empty rather than absent, so every consumer can read `post.channels.length`.
     channels,

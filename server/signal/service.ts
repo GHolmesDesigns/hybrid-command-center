@@ -180,6 +180,8 @@ const date = z
   .refine(isSignalDate, 'That date does not exist.');
 
 const postFields = {
+  /** Optional workspace project association used by bounded Signal reads. */
+  projectId: z.string().trim().min(1).max(200).nullable().default(null),
   text: z.string().trim().min(1, 'A post needs content.').max(20_000),
   /** Deduplicated, because the join's primary key would reject a repeat as an error. */
   channels: z
@@ -457,10 +459,11 @@ function insertPost(db: Db, input: SignalPostInput, media: SignalPostMedia[]): S
     // lifecycle / delivery_provenance take their table defaults (ACTIVE / IN_SIGNAL) so every new
     // plan preserves the historical meaning of an ordinary in-Signal post.
     db.prepare(
-      `INSERT INTO signal_posts(id,text,date,time,format,status,cta,position,delivery_provenance,created_at,updated_at)
-       VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO signal_posts(id,project_id,text,date,time,format,status,cta,position,delivery_provenance,created_at,updated_at)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
     ).run(
       postId,
+      input.projectId,
       input.text,
       input.date,
       input.time,
@@ -518,6 +521,7 @@ function writePost(
   if (!existing) throw new SignalPostNotFoundError(`No Signal post ${postId}.`);
 
   const next = {
+    projectId: patch.projectId === undefined ? existing.project_id : patch.projectId,
     text: patch.text ?? existing.text,
     date: patch.date === undefined ? existing.date : patch.date,
     time: patch.time ?? existing.time,
@@ -537,9 +541,10 @@ function writePost(
       requireRevision(db, 'signal_post', postId, expectedRevision);
     const timestamp = now();
     db.prepare(
-      `UPDATE signal_posts SET text=?,date=?,time=?,format=?,status=?,cta=?,position=?,delivery_provenance=?,updated_at=?
+      `UPDATE signal_posts SET project_id=?,text=?,date=?,time=?,format=?,status=?,cta=?,position=?,delivery_provenance=?,updated_at=?
        WHERE id=?`,
     ).run(
+      next.projectId,
       next.text,
       next.date,
       next.time,
@@ -1136,6 +1141,7 @@ export function duplicatePost(db: Db, postId: string): SignalPost {
   return insertPost(
     db,
     {
+      projectId: source.projectId ?? null,
       text: source.text,
       channels: source.channels,
       mediaUrls: [],

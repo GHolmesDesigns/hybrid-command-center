@@ -147,7 +147,12 @@ export async function callWorkspaceReadTool(
         if (args.from > args.to) {
           return failed('The range ends before it starts.', mcpCoordinationInvalidArguments());
         }
-        return success(listPostsInRange(db, args.from, args.to, args.lifecycle ?? 'active'));
+        return success(
+          listPostsInRange(db, args.from, args.to, args.lifecycle ?? 'active', {
+            projectId: args.projectId,
+            campaign: args.campaign,
+          }),
+        );
       }
       case 'signal_queue_health':
         return success(readQueueHealth(db, now));

@@ -8,6 +8,7 @@ let sequence = 0;
 export function seedSignalPost(db: Db, overrides: Partial<SignalPost> = {}): SignalPost {
   const base: SignalPost = {
     id: `signal-fixture-${++sequence}`,
+    projectId: null,
     text: 'A clear campaign post',
     channels: ['x'],
     media: [],
@@ -35,11 +36,12 @@ export function seedSignalPost(db: Db, overrides: Partial<SignalPost> = {}): Sig
   const post: SignalPost = { ...base, media, mediaUrls: media.map((item) => item.url) };
   db.prepare(
     `INSERT INTO signal_posts(
-       id,text,date,time,format,status,cta,position,lifecycle,retired_at,delivery_provenance,
+       id,project_id,text,date,time,format,status,cta,position,lifecycle,retired_at,delivery_provenance,
        created_at,updated_at
-     ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+     ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
   ).run(
     post.id,
+    post.projectId ?? null,
     post.text,
     post.date,
     post.time,
