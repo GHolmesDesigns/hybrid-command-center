@@ -40,11 +40,10 @@ same interface and the old implementation is deleted in the same branch.
 The working artifact reaches Post Bridge through a claude.ai MCP connector. That transport is a
 constraint of an artifact running inside claude.ai, not a reusable application boundary. This
 local Node server can and will use `POST_BRIDGE_API_KEY` against `api.post-bridge.com/v1` directly,
-so the original transport decision stands. Buffer is now the explicit route for this studio's
-TikTok and YouTube channels because Post Bridge's account cap cannot hold those two beside the five
-accounts used by the active campaign. That is an account-cap constraint, not a platform-capability
-gap: Post Bridge supports both services. Section 2 records the non-overlapping route before any
-second adapter is built.
+so the original transport decision stands. As of the owner-confirmed 1 September 2026 configuration,
+Post Bridge is the explicit route for this studio's TikTok and YouTube channels. Buffer remains
+available for historical rows only; its credential does not select a current route. The dated
+ownership decision is recorded in [`tiktok-youtube-provider-ownership-decision.md`](tiktok-youtube-provider-ownership-decision.md).
 
 Four things follow, and the rest of this document is those four things in detail:
 
@@ -114,12 +113,12 @@ unrecoverable ones (in the GraphQL `errors` array), which is a better error cont
 `400 | 500`. If publishing ever needs to be dependable at volume rather than deliberate at low
 volume, that gap matters.
 
-The provider account read on **22 August 2026** changed the answer for this app. Post Bridge listed
+The provider account read on **22 August 2026** changed the answer for this app at that time. Post Bridge listed
 seven accounts before TikTok and YouTube were connected — Facebook ×3, Instagram, LinkedIn,
 Threads, and Bluesky — and only four afterwards, with five active-campaign accounts displaced. It
-cannot hold TikTok and YouTube beside the five accounts this studio publishes on. Buffer is
-therefore the only available route for those two channels while the cap holds. The cost of avoiding
-a second provider would be evicting five active routes to gain two, which is not an available trade.
+could not hold TikTok and YouTube beside the five accounts this studio publishes on. The owner
+confirmed on 1 September 2026 that the current configuration changed; that current evidence
+supersedes the historical account-cap observation for routing.
 
 The count is **two, not three**: TikTok and YouTube. Buffer's own `Service` enum, read 23 August
 2026, includes `tiktok`, `youtube`, `bluesky`, and `threads`; Post Bridge also supports all four.
@@ -152,10 +151,11 @@ owner-run probe below records a live result; absence or ambiguity stays fail-clo
 | Limits | Every response carries three structured `RateLimit` / `RateLimit-Policy` windows; 429 carries `Retry-After` and `RATE_LIMIT_EXCEEDED` | Record headers already received; never provoke a limit. Respect the named window and retry delay in the later adapter |
 
 **The routing rule is explicit and durable.** Signal remains the only authoritative schedule. Each
-delivery target names exactly one provider and provider account/channel id. TikTok and YouTube use
-Buffer while the account-cap decision above holds; existing Facebook, Instagram, LinkedIn,
-Threads, and Bluesky targets use Post Bridge. There is no automatic failover, retry-through to the
-other provider, dual submission, first-matching account, or credential-presence routing. A Post
+delivery target names exactly one provider and provider account/channel id. TikTok, YouTube,
+Facebook, Instagram, LinkedIn, Threads, and Bluesky use explicitly connected Post Bridge targets.
+Buffer targets remain provider-qualified historical records. There is no automatic failover,
+retry-through to the other provider, dual submission, first-matching account, or credential-presence
+routing. A Post
 Bridge publication remains Post Bridge for create, read, update, reconcile, and delete; a Buffer
 publication does the same on Buffer. Changing a route requires a new confirmed delivery, never an
 in-place provider swap.

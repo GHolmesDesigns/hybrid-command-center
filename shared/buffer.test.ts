@@ -1,14 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BUFFER_SIGNAL_CHANNELS,
   BUFFER_UNAVAILABLE_LABEL,
   bufferPlatformForService,
   bufferUnavailableReason,
 } from './buffer.ts';
 
 describe('buffer service mapping', () => {
-  it('maps only the Buffer-route platforms from Signal channels', () => {
-    expect(bufferPlatformForService('tiktok')).toBe('tiktok');
-    expect(bufferPlatformForService('youtube')).toBe('youtube');
+  it('does not map current Signal platforms to Buffer after the ownership decision', () => {
+    expect(BUFFER_SIGNAL_CHANNELS).toEqual([]);
+    expect(bufferPlatformForService('tiktok')).toBeUndefined();
+    expect(bufferPlatformForService('youtube')).toBeUndefined();
     expect(bufferPlatformForService('twitter')).toBeUndefined();
   });
 
@@ -34,5 +36,12 @@ describe('buffer service mapping', () => {
         isQueuePaused: true,
       }),
     ).toBe(BUFFER_UNAVAILABLE_LABEL.queuePaused);
+    expect(
+      bufferUnavailableReason({
+        isDisconnected: false,
+        isLocked: false,
+        isQueuePaused: false,
+      }),
+    ).toBeUndefined();
   });
 });

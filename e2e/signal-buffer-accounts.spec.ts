@@ -1,12 +1,12 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * Wave 15: Buffer account metadata reaches publishing preview only when a person asks for it.
+ * C156: Buffer account metadata remains readable, but is not a current TikTok/YouTube route.
  *
  * Opening the planner spends no Buffer request. A publish preview reads the mocked Buffer
  * channels, stores them, and records one integration event — the flow this card owns.
  */
-test('publish preview refreshes Buffer accounts and an ordinary page load does not', async ({
+test('publish preview refreshes historical Buffer accounts and an ordinary page load does not', async ({
   page,
 }) => {
   const countRefreshes = async () => {
@@ -42,9 +42,16 @@ test('publish preview refreshes Buffer accounts and an ordinary page load does n
   const body = await preview.json();
   expect(body.connectedAccounts).toEqual(
     expect.arrayContaining([
-      expect.objectContaining({ provider: 'buffer', platform: 'tiktok', handle: '@e2e-tiktok' }),
-      expect.objectContaining({ provider: 'buffer', platform: 'youtube', handle: '@e2e-youtube' }),
+      expect.objectContaining({ provider: 'post-bridge', platform: 'tiktok', handle: '@gholmes' }),
+      expect.objectContaining({
+        provider: 'post-bridge',
+        platform: 'youtube',
+        handle: '@gholmesdesigns',
+      }),
     ]),
+  );
+  expect(body.connectedAccounts).not.toEqual(
+    expect.arrayContaining([expect.objectContaining({ provider: 'buffer' })]),
   );
 
   const stored = await page.request.get('/api/signal/buffer-accounts');

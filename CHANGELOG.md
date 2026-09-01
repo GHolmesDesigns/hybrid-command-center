@@ -8,6 +8,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.12.5] - 2026-09-01
+
+### Changed
+
+- Rewired new TikTok and YouTube publishing previews to their current Post Bridge-owned accounts.
+- Kept historical Buffer publications provider-qualified and refused Buffer account fallback.
+
+### Breaking changes
+
+None.
+
 ## [5.12.4] - 2026-09-01
 
 ### Changed

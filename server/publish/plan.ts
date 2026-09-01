@@ -92,6 +92,7 @@ import type {
  * asks for its formatter before it scans rather than trusting the caller.
  */
 const zoneFormatters = new Map<string, Intl.DateTimeFormat>();
+const CURRENT_PROVIDER = 'post-bridge';
 const zoneFormatter = (zone: string) => {
   const cached = zoneFormatters.get(zone);
   if (cached) return cached;
@@ -383,12 +384,10 @@ function resolveTarget(
             target.handle.toLowerCase().replace(/[^a-z0-9]/g, '') === 'gholmesdesigns',
         )
       : candidates;
-  // When both providers list the same platform, keep Post Bridge for auto-resolve so Buffer's
-  // read-only account refresh cannot steal a Post Bridge submission. Explicit target selection is
-  // how a person chooses Buffer instead; this filter only applies to the §3.1 single-account path.
-  const postBridgeOnly = resolved.filter(
-    (target) => (target.provider ?? 'post-bridge') === 'post-bridge',
-  );
+  // When both providers are present, keep current Post Bridge ownership ahead of Buffer's
+  // historical accounts. The target service excludes Buffer from new account listings entirely;
+  // this filter also protects callers that provide a combined read directly.
+  const postBridgeOnly = resolved.filter((target) => targetProvider(target) === CURRENT_PROVIDER);
   if (postBridgeOnly.length) resolved = postBridgeOnly;
   if (resolved.length === 1) {
     const target = resolved[0] as PublishTarget;

@@ -30,7 +30,7 @@ describe('buffer wire parsers', () => {
       isLocked: false,
       isQueuePaused: false,
     });
-    expect(mapBufferChannel(channel)).toMatchObject({ platform: 'tiktok' });
+    expect(mapBufferChannel(channel)).toBeUndefined();
     expect(
       mapBufferChannel({
         ...channel,
@@ -42,7 +42,7 @@ describe('buffer wire parsers', () => {
         ...channel,
         isQueuePaused: true,
       })?.unavailable,
-    ).toBe('Queue paused in Buffer');
+    ).toBeUndefined();
 
     expect(
       parseBufferPostsPage({
