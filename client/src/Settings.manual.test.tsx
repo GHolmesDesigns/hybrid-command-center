@@ -10,7 +10,6 @@ import {
   screen,
   testState,
   vi,
-  waitFor,
 } from './App.test-setup';
 
 const renderSettings = async () => {
@@ -20,7 +19,7 @@ const renderSettings = async () => {
     </MemoryRouter>,
   );
   expect(await screen.findByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
-  await waitFor(() => expect(screen.getByRole('heading', { name: 'User manual' })).toBeVisible());
+  expect(screen.getByRole('heading', { name: 'User manual' })).toBeVisible();
 };
 
 afterEach(() => vi.restoreAllMocks());
@@ -29,7 +28,7 @@ describe('the version-matched user manual', () => {
   it('builds a keyboard-reachable new-tab link from the reported version', async () => {
     await renderSettings();
 
-    const link = screen.getByRole('link', { name: /Open user manual/ });
+    const link = await screen.findByRole('link', { name: /Open user manual/ });
     expect(link).toHaveAttribute('href', `/api/manual/${encodeURIComponent(APP_VERSION)}`);
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', 'noreferrer');
@@ -41,7 +40,7 @@ describe('the version-matched user manual', () => {
 
     expect(screen.queryByRole('link', { name: /Open user manual/ })).not.toBeInTheDocument();
     expect(
-      screen.getByText('The user manual for this version is not available yet.'),
+      await screen.findByText('The user manual for this version is not available yet.'),
     ).toBeVisible();
   });
 });

@@ -633,9 +633,18 @@ button svg,
   font-size: 15px;
 }
 .head-actions {
+  display: grid;
+  grid-template-columns: minmax(210px, auto) minmax(210px, auto);
+  gap: 9px 12px;
+}
+.sample-downloads,
+.import-actions {
   display: flex;
+  flex-direction: column;
   gap: 9px;
-  flex-wrap: wrap;
+}
+.head-actions > div > * {
+  white-space: nowrap;
 }
 .refresh-status {
   display: flex;
@@ -3443,6 +3452,9 @@ button.tag-chip.toggle.active {
   }
 }
 @media (max-width: 460px) {
+  .head-actions {
+    grid-template-columns: 1fr;
+  }
   .crumb li {
     max-width: 6.5rem;
   }

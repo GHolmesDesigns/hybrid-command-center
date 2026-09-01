@@ -57,6 +57,12 @@ export const SAMPLE_PLAYBOOK_BUDGET: Budget = {
   message: 'Too many sample playbook downloads. Wait a moment and try again.',
 };
 
+export const SAMPLE_SIGNAL_BUDGET: Budget = {
+  limit: 30,
+  windowMs: 60_000,
+  message: 'Too many sample Signal downloads. Wait a moment and try again.',
+};
+
 /**
  * Drive routes spend someone else's quota and wait on a network round trip. Two a second
  * sustained covers clicking through folders as fast as a person can — the Files page reads one

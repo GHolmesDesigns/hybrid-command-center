@@ -150,6 +150,22 @@ describe('Import module', () => {
     expect(screen.getByRole('button', { name: /Import a playbook/ })).toBeVisible();
   });
 
+  it('offers the Signal sample and keeps samples separate from the stacked import actions', async () => {
+    render(
+      <MemoryRouter initialEntries={['/import']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    const signalLink = await screen.findByRole('link', { name: /Download sample Signal import/ });
+    expect(signalLink).toHaveAttribute('href', '/api/import/signal/sample');
+    expect(signalLink).toHaveAttribute('download', 'signal-import-format.xlsx');
+    expect(signalLink.closest('.sample-downloads')).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: /Import a playbook/ }).closest('.import-actions'),
+    ).toBe(screen.getByRole('button', { name: /Import Signal queue/ }).closest('.import-actions'));
+  });
+
   it('previews before it writes, and only enables the confirm button for a clean preview', async () => {
     testState.importPreviewPayload = preview({
       ok: false,

@@ -213,6 +213,7 @@ import {
 import {
   SIGNAL_IMPORT_CONTENT_BASE64_MAX,
   SIGNAL_IMPORT_TEXT_MAX,
+  SAMPLE_SIGNAL_DIRECTORY,
   commitSignalImport,
   listSignalImportReceipts,
   previewSignalImport,
@@ -230,12 +231,14 @@ import {
   IMPORT_BUSY_MESSAGE,
   IMPORT_CONCURRENCY,
   SAMPLE_PLAYBOOK_BUDGET,
+  SAMPLE_SIGNAL_BUDGET,
   concurrencyGate,
   postsOnly,
   requestBudget,
 } from './budgets.ts';
 import { rateLimit } from 'express-rate-limit';
 import { SAMPLE_PLAYBOOK_DOWNLOAD_PATH, SAMPLE_PLAYBOOK_FILENAME } from '../shared/playbook.ts';
+import { SAMPLE_SIGNAL_DOWNLOAD_PATH, SAMPLE_SIGNAL_FILENAME } from '../shared/signal-import.ts';
 import { MANUAL_FILENAME, MANUAL_ROUTE, manualUrlForVersion } from '../shared/manual.ts';
 import { listIntegrationEvents } from './integration-log.ts';
 import {
@@ -559,6 +562,32 @@ const categoryPatch = categoryInput.partial().refine((value) => Object.keys(valu
   message: 'Provide a category field to update.',
 });
 
+function sendSampleWorkbook(
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction,
+  filename: string,
+  directory: string,
+  contentType: string,
+  label: string,
+) {
+  res.setHeader('Content-Type', contentType);
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.sendFile(filename, { root: directory }, (error?: Error) => {
+    if (!error) return;
+    /**
+     * Before any bytes are on the wire this is a 500 through the shared handler, which is what
+     * keeps the absolute path out of the response. After them there is no status left to send,
+     * so a download the browser abandoned is logged and dropped rather than answered twice.
+     */
+    if (res.headersSent) {
+      req.log.error({ err: error }, `${label} download failed`);
+      return;
+    }
+    next(error);
+  });
+}
+
 export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   const app = express();
   const production = options.production ?? isProductionRuntime();
@@ -648,6 +677,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
    * because a spent import budget must not withhold the example that fixes the failing workbook.
    */
   app.use(SAMPLE_PLAYBOOK_DOWNLOAD_PATH, requestBudget(SAMPLE_PLAYBOOK_BUDGET, { now: clock }));
+  app.use(SAMPLE_SIGNAL_DOWNLOAD_PATH, requestBudget(SAMPLE_SIGNAL_BUDGET, { now: clock }));
   app.use('/api/drive/sync', requestBudget(DRIVE_SYNC_BUDGET, { now: clock }));
   app.use('/api/drive', driveBudget);
   app.use('/api/settings/drive', driveBudget);
@@ -1725,21 +1755,26 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
    * told the `.xlsx` type and the filename by this code and a test can hold it to both.
    */
   app.get(SAMPLE_PLAYBOOK_DOWNLOAD_PATH, (req, res, next) => {
-    res.setHeader('Content-Type', SAMPLE_PLAYBOOK_CONTENT_TYPE);
-    res.setHeader('Content-Disposition', `attachment; filename="${SAMPLE_PLAYBOOK_FILENAME}"`);
-    res.sendFile(SAMPLE_PLAYBOOK_FILENAME, { root: SAMPLE_PLAYBOOK_DIRECTORY }, (error?: Error) => {
-      if (!error) return;
-      /**
-       * Before any bytes are on the wire this is a 500 through the shared handler, which is what
-       * keeps the absolute path out of the response. After them there is no status left to send,
-       * so a download the browser abandoned is logged and dropped rather than answered twice.
-       */
-      if (res.headersSent) {
-        req.log.error({ err: error }, 'Sample playbook download failed');
-        return;
-      }
-      next(error);
-    });
+    sendSampleWorkbook(
+      req,
+      res,
+      next,
+      SAMPLE_PLAYBOOK_FILENAME,
+      SAMPLE_PLAYBOOK_DIRECTORY,
+      SAMPLE_PLAYBOOK_CONTENT_TYPE,
+      'Sample playbook',
+    );
+  });
+  app.get(SAMPLE_SIGNAL_DOWNLOAD_PATH, (req, res, next) => {
+    sendSampleWorkbook(
+      req,
+      res,
+      next,
+      SAMPLE_SIGNAL_FILENAME,
+      SAMPLE_SIGNAL_DIRECTORY,
+      SAMPLE_PLAYBOOK_CONTENT_TYPE,
+      'Sample Signal',
+    );
   });
   // Campaign playbook import. The preview is the error report: a workbook that cannot be
   // imported answers 200 with every reason, because an author needs the whole list, not the
