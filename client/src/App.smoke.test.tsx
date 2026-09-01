@@ -31,6 +31,20 @@ describe('App', () => {
     expect(screen.getByRole('link', { name: 'Status' })).toHaveAttribute('href', '/status');
   });
 
+  it('keeps Agents immediately before Settings in primary navigation', async () => {
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>,
+    );
+
+    const links = await screen.findAllByRole('link');
+    const labels = links.map((link) => link.textContent?.trim());
+    const agentsIndex = labels.indexOf('Agents');
+    expect(agentsIndex).toBeGreaterThanOrEqual(0);
+    expect(labels[agentsIndex + 1]).toBe('Settings');
+  });
+
   it('labels the board route Status without exposing the word Kanban', async () => {
     render(
       <MemoryRouter initialEntries={['/status']}>
