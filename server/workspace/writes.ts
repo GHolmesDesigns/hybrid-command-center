@@ -120,7 +120,27 @@ export function readViewDefaults(db: Db): ViewDefaults {
   if (!raw) return { ...CANONICAL_VIEW_DEFAULTS };
   try {
     const stored = JSON.parse(raw) as unknown;
-    return isViewDefaults(stored) ? stored : { ...CANONICAL_VIEW_DEFAULTS };
+    // C153 added Projects presentation after operators could already have saved every other
+    // default. Upgrade exactly that legacy shape in memory so the new field does not erase their
+    // existing choices; every other incomplete or unknown shape still fails closed.
+    const upgraded =
+      stored !== null &&
+      typeof stored === 'object' &&
+      !Array.isArray(stored) &&
+      'projects' in stored &&
+      stored.projects !== null &&
+      typeof stored.projects === 'object' &&
+      !Array.isArray(stored.projects) &&
+      !('presentation' in stored.projects)
+        ? {
+            ...stored,
+            projects: {
+              ...stored.projects,
+              presentation: CANONICAL_VIEW_DEFAULTS.projects.presentation,
+            },
+          }
+        : stored;
+    return isViewDefaults(upgraded) ? upgraded : { ...CANONICAL_VIEW_DEFAULTS };
   } catch {
     return { ...CANONICAL_VIEW_DEFAULTS };
   }

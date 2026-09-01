@@ -9,6 +9,7 @@ import {
   viewDefaultsIssues,
   type ViewDefaults,
 } from './view-defaults.ts';
+import { PROJECT_PRESENTATIONS } from './project-view.ts';
 
 const defaults = (overrides: Partial<ViewDefaults> = {}): ViewDefaults => ({
   clients: { ...CANONICAL_VIEW_DEFAULTS.clients, ...overrides.clients },
@@ -49,7 +50,12 @@ describe('viewDefaultsIssues', () => {
     expect(
       viewDefaultsIssues({
         ...CANONICAL_VIEW_DEFAULTS,
-        projects: { visibility: 'live', sort: 'recently-updated', layout: 'grid' },
+        projects: {
+          visibility: 'live',
+          sort: 'recently-updated',
+          presentation: 'grid',
+          layout: 'grid',
+        },
       }),
     ).toContainEqual({
       path: 'projects.layout',
@@ -60,7 +66,9 @@ describe('viewDefaultsIssues', () => {
   it('rejects a value outside the settled vocabulary', () => {
     expect(
       viewDefaultsIssues(
-        defaults({ projects: { visibility: 'live', sort: 'popularity' as never } }),
+        defaults({
+          projects: { visibility: 'live', sort: 'popularity' as never, presentation: 'grid' },
+        }),
       ),
     ).toContainEqual({
       path: 'projects.sort',
@@ -68,7 +76,13 @@ describe('viewDefaultsIssues', () => {
     });
     expect(
       viewDefaultsIssues(
-        defaults({ projects: { visibility: 'active' as never, sort: 'recently-updated' } }),
+        defaults({
+          projects: {
+            visibility: 'active' as never,
+            sort: 'recently-updated',
+            presentation: 'grid',
+          },
+        }),
       ),
     ).toContainEqual({
       path: 'projects.visibility',
@@ -83,6 +97,20 @@ describe('viewDefaultsIssues', () => {
     expect(viewDefaultsIssues(defaults({ calendar: { view: 'year' as never } }))).toContainEqual({
       path: 'calendar.view',
       message: 'Expected one of today, week, month.',
+    });
+    expect(
+      viewDefaultsIssues(
+        defaults({
+          projects: {
+            visibility: 'live',
+            sort: 'recently-updated',
+            presentation: 'cards' as never,
+          },
+        }),
+      ),
+    ).toContainEqual({
+      path: 'projects.presentation',
+      message: `Expected one of ${PROJECT_PRESENTATIONS.join(', ')}.`,
     });
   });
 

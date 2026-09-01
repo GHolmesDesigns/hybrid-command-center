@@ -13,8 +13,8 @@ For every durable view or sort parameter:
 3. **Canonical default** — when Settings has nothing stored, or the stored object fails validation,
    the shipped default in `shared/view-defaults.ts` applies.
 
-Only Clients (visibility), Projects (visibility and sort), Calendar (view), and Signal (view) are
-configurable. Other pages keep hard-coded defaults. A configured value is omitted from the address
+Only Clients (visibility), Projects (visibility, presentation, and sort), Calendar (view), and
+Signal (view) are configurable. Other pages keep hard-coded defaults. A configured value is omitted from the address
 when it matches the *configured* default, so the ordinary view keeps a short URL after someone
 changes Settings.
 
@@ -53,7 +53,7 @@ resolving even when they contain an unknown or retired value.
 | View | Page type | Default | Durable URL state |
 | --- | --- | --- | --- |
 | Clients | Collection | Active clients | `visibility` for archived or all |
-| Projects | Collection | Live projects by recent activity in grid presentation | `visibility`, `view`, `client`, `sort`, `statuses`, and `categories` |
+| Projects | Collection | Live projects by recent activity in configured Grid/List presentation | `visibility`, `view`, `client`, `sort`, `statuses`, and `categories` |
 | Status | Workflow board | Canonical task-status order | Project, client, priority, type, focus, and tag filters |
 | Calendar | Time view | Current month | View and selected date/month when away from the default |
 | Signal | Time view | Current month | View and selected date/month when away from the default, `post` for an open post, `new` for the shared Add Post form, `lifecycle` for active / retired / all plans (lifecycle dimension, not planning status), and `campaigns`, `channels`, `accounts`, `from`, and `to` for the campaign-figures filters |
@@ -64,9 +64,10 @@ Projects uses `live`, `archived`, and `all`; Clients uses its domain term `activ
 explicit (unless Settings has made one of those the configured default, in which case the other
 choices are what appear in the URL).
 
-Projects `view` is `grid` or `list` over the same filtered result set. Grid is the canonical
-default and is omitted from the address. List keeps every filter and link; Custom order remains
-a sort in list mode, but rearranging by hand is grid-only.
+The Projects page is the only consumer of the Projects presentation default. Its `view` is `grid`
+or `list` over the same filtered result set. Grid is the canonical default, but whichever value is
+configured is omitted from the address; an explicit `view` always overrides it. List keeps every
+filter and link; Custom order remains a sort in list mode, but rearranging by hand is grid-only.
 
 Projects `statuses` is a multi-value filter over live planning statuses — `PLANNING`, `ACTIVE`,
 `ON_HOLD`, and `COMPLETE` — combined with OR within the dimension and AND with client, category,

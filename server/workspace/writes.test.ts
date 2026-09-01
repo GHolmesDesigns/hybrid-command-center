@@ -244,4 +244,24 @@ describe('workspace writes', () => {
       CANONICAL_VIEW_DEFAULTS,
     );
   });
+
+  it('preserves legacy view choices while adding the canonical Projects presentation', () => {
+    setSetting(
+      db,
+      VIEW_DEFAULTS_SETTING_KEY,
+      JSON.stringify({
+        clients: { visibility: 'archived' },
+        projects: { visibility: 'all', sort: 'priority' },
+        calendar: { view: 'week' },
+        signal: { view: 'today' },
+      }),
+    );
+
+    expect(readViewDefaults(db)).toEqual({
+      clients: { visibility: 'archived' },
+      projects: { visibility: 'all', sort: 'priority', presentation: 'grid' },
+      calendar: { view: 'week' },
+      signal: { view: 'today' },
+    });
+  });
 });

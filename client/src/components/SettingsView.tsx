@@ -35,12 +35,14 @@ import {
   CLIENT_VISIBILITY_LABEL,
   PROJECT_SORTS,
   PROJECT_SORT_LABEL,
+  PROJECT_PRESENTATION_LABEL,
   PROJECT_VISIBILITIES,
   PROJECT_VISIBILITY_LABEL,
   TIME_VIEW_LABEL,
   viewDefaultsIssues,
   type ViewDefaults,
 } from '../../../shared/view-defaults';
+import { PROJECT_PRESENTATIONS } from '../../../shared/project-view';
 import { BrandMark, DriveBadge } from './Primitives';
 import { PageHead } from './Shell';
 import { brandStyle } from './ui-shared';
@@ -201,7 +203,7 @@ export function SettingsView({
   };
   const effectiveViews = [
     `${CLIENT_VISIBILITY_LABEL[viewsForm.clients.visibility]} clients`,
-    `${PROJECT_VISIBILITY_LABEL[viewsForm.projects.visibility]} projects by ${PROJECT_SORT_LABEL[viewsForm.projects.sort]}`,
+    `${PROJECT_VISIBILITY_LABEL[viewsForm.projects.visibility]} projects in ${PROJECT_PRESENTATION_LABEL[viewsForm.projects.presentation]} view by ${PROJECT_SORT_LABEL[viewsForm.projects.sort]}`,
     `Calendar ${TIME_VIEW_LABEL[viewsForm.calendar.view]}`,
     `Signal ${TIME_VIEW_LABEL[viewsForm.signal.view]}`,
   ].join(' · ');
@@ -317,6 +319,28 @@ export function SettingsView({
                   </select>
                 </label>
               </div>
+              <label>
+                Projects presentation
+                <select
+                  aria-label="Projects presentation default"
+                  value={viewsForm.projects.presentation}
+                  onChange={(e) =>
+                    setViewsForm({
+                      ...viewsForm,
+                      projects: {
+                        ...viewsForm.projects,
+                        presentation: e.target.value as (typeof PROJECT_PRESENTATIONS)[number],
+                      },
+                    })
+                  }
+                >
+                  {PROJECT_PRESENTATIONS.map((value) => (
+                    <option key={value} value={value}>
+                      {PROJECT_PRESENTATION_LABEL[value]}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <div className="form-row">
                 <label>
                   Calendar view
