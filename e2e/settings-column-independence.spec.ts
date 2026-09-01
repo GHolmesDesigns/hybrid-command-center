@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { layoutSettled } from './ready';
 
 /**
- * The Wave 6 spec for C56. Settings used to be six cards in a two-column grid, and two cards
+ * The Wave 6 spec for C56. Settings used to be eight cards in a two-column grid, and two cards
  * sharing a row share a starting edge: whichever of the pair was taller decided where the next
  * card on the *other* side began, so connecting Drive, a validation message appearing, or a
  * category list wrapping left a blank strip above the card beside it. C32 stopped the cards
@@ -16,7 +16,7 @@ import { layoutSettled } from './ready';
  *     pushed down by the other column reads as a larger distance, which is the bug, in pixels.
  *   - Growing and shrinking one column moves that column's later cards by exactly as much, and
  *     moves the neighbouring column by nothing.
- *   - At one column the two stacks meet at the same gap they use internally, so the six cards
+ *   - At one column the two stacks meet at the same gap they use internally, so the eight cards
  *     read as one stack, in document order.
  *
  * Both Drive states are faked at the HTTP boundary with `page.route`, as they are in
@@ -30,14 +30,14 @@ const GAP = 18;
 
 /** The cards in document order, which is the order they are meant to be read in. */
 const READING_ORDER = [
-  'Google Drive',
   'Project categories',
   'Task tags',
-  'Signal campaigns',
-  'Branding',
   'Default views',
+  'Branding',
+  'Google Drive',
   'Local timezone',
   'Calendar',
+  'Signal campaigns',
 ];
 
 type CardBox = {
@@ -127,9 +127,9 @@ test('each Settings column stacks on its own at desktop width', async ({ page })
 
   const cards = await cardBoxes(page);
   expect(cards.map((card) => card.heading)).toEqual(READING_ORDER);
-  // Four cards in the left stack and four in the right, and every card in one — a card left as
+  // Two cards in the left stack and six in the right, and every card in one — a card left as
   // the grid's own child would report column -1 and be back in a shared row track.
-  expect(cards.map((card) => card.column)).toEqual([0, 0, 0, 0, 1, 1, 1, 1]);
+  expect(cards.map((card) => card.column)).toEqual([0, 0, 1, 1, 1, 1, 1, 1]);
 
   const [left, right] = [0, 1].map((column) => cards.filter((card) => card.column === column));
 
@@ -176,15 +176,15 @@ test('a Settings card follows its own column, and no card follows the other one'
   // Every later card in the Drive card's own column moved up by exactly what it lost. Not
   // "moved up somewhat": the whole point is that the distance is the content's and nothing
   // else's, so any other number means something is still setting these starting edges.
-  for (const heading of ['Project categories', 'Task tags', 'Signal campaigns']) {
+  for (const heading of ['Local timezone', 'Calendar', 'Signal campaigns']) {
     expect(Math.round(find(connected, heading).top - find(disconnected, heading).top)).toBe(
       Math.round(shrankBy),
     );
   }
 
-  // And the neighbouring column did not move at all. This is what leaves no gap: Branding's
-  // start has nothing to do with how tall Drive is, in either state.
-  for (const heading of ['Branding', 'Default views', 'Local timezone', 'Calendar']) {
+  // And the neighbouring column did not move at all. This is what leaves no gap: the label
+  // stack's start has nothing to do with how tall Drive is, in either state.
+  for (const heading of ['Project categories', 'Task tags']) {
     expect(Math.round(find(disconnected, heading).top - find(connected, heading).top)).toBe(0);
   }
 });

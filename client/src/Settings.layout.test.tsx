@@ -13,7 +13,7 @@ import {
 } from './App.test-setup';
 
 /**
- * Settings is two independent card stacks, not nine cards in a shared two-column grid. jsdom
+ * Settings is two independent card stacks, not eight cards in a shared two-column grid. jsdom
  * cannot see the gap that motivated the change — there is no layout engine here, so the
  * measuring is `e2e/settings-column-independence.spec.ts`'s job. What this file guards is the
  * structure that gap-free layout rests on, and the part of it a browser cannot check for free:
@@ -52,21 +52,18 @@ describe('the Settings layout', () => {
     expect(document.querySelectorAll('.settings-layout .settings-card')).toHaveLength(8);
   });
 
-  it('reads in one order: what the workspace connects to and organises by, then how it looks', async () => {
+  it('keeps labels in the left stack and settings modules in the right stack', async () => {
     await renderSettings();
 
     const [connections, appearance] = columns();
-    expect(headingsIn(connections)).toEqual([
-      'Google Drive',
-      'Project categories',
-      'Task tags',
-      'Signal campaigns',
-    ]);
+    expect(headingsIn(connections)).toEqual(['Project categories', 'Task tags']);
     expect(headingsIn(appearance)).toEqual([
-      'Branding',
       'Default views',
+      'Branding',
+      'Google Drive',
       'Local timezone',
       'Calendar',
+      'Signal campaigns',
     ]);
 
     // One reading order, and it is the document's. Nothing reorders these in CSS, so this is
@@ -74,14 +71,19 @@ describe('the Settings layout', () => {
     // below 1100px the two stacks sit one under the other and the eight cards read straight
     // through. `e2e/settings-column-independence.spec.ts` measures that they really do.
     expect(headingsIn(document.querySelector('.settings-layout')!)).toEqual([
-      'Google Drive',
       'Project categories',
       'Task tags',
-      'Signal campaigns',
-      'Branding',
       'Default views',
+      'Branding',
+      'Google Drive',
       'Local timezone',
       'Calendar',
+      'Signal campaigns',
     ]);
+    expect(
+      headingsIn(document.querySelector('.settings-layout')!).filter((heading) =>
+        /^(Agent connection setup|Connection health|Agent handoffs)$/.test(heading ?? ''),
+      ),
+    ).toEqual([]);
   });
 });

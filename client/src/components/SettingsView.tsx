@@ -207,116 +207,11 @@ export function SettingsView({
 
         The stacks are the reading order too. Below 1100px they sit one under the other, and
         because nothing is reordered in CSS, what the keyboard and a screen reader follow is
-        what is on screen at both widths: what the workspace connects to and organises by,
-        then how it looks and what it shows.
+        what is on screen at both widths: labels the workspace organises by, then defaults,
+        appearance, integrations, and the remaining modules.
       */}
       <div className="settings-layout">
         <div className="settings-column">
-          <section className="panel settings-card">
-            <div className="settings-icon">
-              <ExternalLink />
-            </div>
-            <div className="section-title">
-              <div>
-                <span className="eyebrow">Integration</span>
-                <h2>Google Drive</h2>
-              </div>
-              <DriveBadge status={state?.connected ? 'CONNECTED' : 'DISCONNECTED'} />
-            </div>
-            <p>
-              Drive stores project files. Clients and projects are owned by Command Center — folder
-              names never create projects. OAuth uses the limited <code>drive.file</code> scope;
-              existing folders are granted only through Google Picker. Tokens stay encrypted on the
-              server and never reach the browser.
-            </p>
-            {driveError && (
-              <div className="inline-warning" role="alert">
-                <AlertCircle />
-                <div>
-                  <strong>Drive status unavailable</strong>
-                  <span>{driveError}</span>
-                </div>
-              </div>
-            )}
-            {!driveError && !state?.configured && (
-              <div className="inline-warning">
-                <AlertCircle />
-                <div>
-                  <strong>Credentials required</strong>
-                  <span>
-                    Add the Google OAuth values and encryption key from <code>.env.example</code>,
-                    then restart the app.
-                  </span>
-                </div>
-              </div>
-            )}
-            {state?.connected ? (
-              <>
-                {state.pickerConfigured ? (
-                  <button
-                    className="drive-picker-button"
-                    type="button"
-                    onClick={chooseRoot}
-                    disabled={pickerBusy}
-                  >
-                    {pickerBusy
-                      ? 'Opening Google Picker…'
-                      : state.rootFolderId
-                        ? 'Change root folder with Google Picker'
-                        : 'Choose root folder with Google Picker'}
-                  </button>
-                ) : (
-                  <div className="inline-warning">
-                    <AlertCircle />
-                    <div>
-                      <strong>Picker not configured</strong>
-                      <span>
-                        Add <code>GOOGLE_API_KEY</code> and <code>GOOGLE_APP_ID</code> (Cloud
-                        project number) to <code>.env</code>, enable the Google Picker API, then
-                        restart.
-                      </span>
-                    </div>
-                  </div>
-                )}
-                {state.rootFolderUrl && (
-                  <a
-                    className="drive-root"
-                    target="_blank"
-                    rel="noreferrer"
-                    href={state.rootFolderUrl}
-                  >
-                    <div>
-                      <FolderKanban />
-                      <span>
-                        <strong>Current root folder</strong>
-                        <small>{state.rootFolderId}</small>
-                      </span>
-                    </div>
-                    <ExternalLink />
-                  </a>
-                )}
-                <button className="text-btn danger-text" onClick={disconnect}>
-                  Disconnect Google Drive
-                </button>
-                <p className="muted">
-                  Disconnect removes credentials stored here only. After a cutover from the old
-                  full-Drive grant, also revoke the app in{' '}
-                  <a
-                    href="https://myaccount.google.com/permissions"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Google Account permissions
-                  </a>
-                  , then reconnect with <code>drive.file</code>.
-                </p>
-              </>
-            ) : (
-              <button onClick={connect} disabled={!state?.configured}>
-                Connect Google Drive
-              </button>
-            )}
-          </section>
           <CategoriesCard
             categories={categories}
             projects={projects}
@@ -324,11 +219,158 @@ export function SettingsView({
             flash={flash}
           />
           <TagsCard tags={tags} tasks={tasks} refresh={refresh} flash={flash} />
-          {/* Beside the other two label lists, because it is the same kind of thing one module over:
-              campaigns label Signal posts, categories label projects, tags label tasks. */}
-          <SignalCampaignsCard flash={flash} />
         </div>
         <div className="settings-column">
+          <section className="panel settings-card">
+            <div className="settings-icon neutral">
+              <LayoutDashboard />
+            </div>
+            <div className="section-title">
+              <div>
+                <span className="eyebrow">Layout</span>
+                <h2>Default views</h2>
+              </div>
+            </div>
+            <p>
+              Choose how Clients, Projects, Calendar, and Signal open when the address omits that
+              choice. A shared or bookmarked URL still wins; Reset restores the shipped defaults.
+            </p>
+            <form className="form brand-form" onSubmit={saveViewDefaults}>
+              <label>
+                Clients visibility
+                <select
+                  aria-label="Clients visibility default"
+                  value={viewsForm.clients.visibility}
+                  onChange={(e) =>
+                    setViewsForm({
+                      ...viewsForm,
+                      clients: {
+                        visibility: e.target.value as (typeof CLIENT_VISIBILITIES)[number],
+                      },
+                    })
+                  }
+                >
+                  {CLIENT_VISIBILITIES.map((value) => (
+                    <option key={value} value={value}>
+                      {CLIENT_VISIBILITY_LABEL[value]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="form-row">
+                <label>
+                  Projects visibility
+                  <select
+                    aria-label="Projects visibility default"
+                    value={viewsForm.projects.visibility}
+                    onChange={(e) =>
+                      setViewsForm({
+                        ...viewsForm,
+                        projects: {
+                          ...viewsForm.projects,
+                          visibility: e.target.value as (typeof PROJECT_VISIBILITIES)[number],
+                        },
+                      })
+                    }
+                  >
+                    {PROJECT_VISIBILITIES.map((value) => (
+                      <option key={value} value={value}>
+                        {PROJECT_VISIBILITY_LABEL[value]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Projects sort
+                  <select
+                    aria-label="Projects sort default"
+                    value={viewsForm.projects.sort}
+                    onChange={(e) =>
+                      setViewsForm({
+                        ...viewsForm,
+                        projects: {
+                          ...viewsForm.projects,
+                          sort: e.target.value as (typeof PROJECT_SORTS)[number],
+                        },
+                      })
+                    }
+                  >
+                    {PROJECT_SORTS.map((value) => (
+                      <option key={value} value={value}>
+                        {PROJECT_SORT_LABEL[value]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="form-row">
+                <label>
+                  Calendar view
+                  <select
+                    aria-label="Calendar view default"
+                    value={viewsForm.calendar.view}
+                    onChange={(e) =>
+                      setViewsForm({
+                        ...viewsForm,
+                        calendar: {
+                          view: e.target.value as (typeof CALENDAR_VIEWS)[number],
+                        },
+                      })
+                    }
+                  >
+                    {CALENDAR_VIEWS.map((value) => (
+                      <option key={value} value={value}>
+                        {TIME_VIEW_LABEL[value]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Signal view
+                  <select
+                    aria-label="Signal view default"
+                    value={viewsForm.signal.view}
+                    onChange={(e) =>
+                      setViewsForm({
+                        ...viewsForm,
+                        signal: {
+                          view: e.target.value as (typeof CALENDAR_VIEWS)[number],
+                        },
+                      })
+                    }
+                  >
+                    {CALENDAR_VIEWS.map((value) => (
+                      <option key={value} value={value}>
+                        {TIME_VIEW_LABEL[value]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <p className="field-hint" role="status">
+                Effective: {effectiveViews}
+              </p>
+              <div className="brand-actions">
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setViewsForm({ ...CANONICAL_VIEW_DEFAULTS })}
+                  disabled={viewsBusy}
+                >
+                  <RotateCcw /> Reset to defaults
+                </button>
+                <button className="submit" disabled={viewsBusy || viewsProblems.length > 0}>
+                  {viewsBusy ? (
+                    <>
+                      <RefreshCw className="spin" /> Saving…
+                    </>
+                  ) : (
+                    'Save defaults'
+                  )}
+                </button>
+              </div>
+            </form>
+          </section>
           <section className="panel settings-card">
             <div className="settings-icon neutral">
               <Pencil />
@@ -487,154 +529,109 @@ export function SettingsView({
             </form>
           </section>
           <section className="panel settings-card">
-            <div className="settings-icon neutral">
-              <LayoutDashboard />
+            <div className="settings-icon">
+              <ExternalLink />
             </div>
             <div className="section-title">
               <div>
-                <span className="eyebrow">Layout</span>
-                <h2>Default views</h2>
+                <span className="eyebrow">Integration</span>
+                <h2>Google Drive</h2>
               </div>
+              <DriveBadge status={state?.connected ? 'CONNECTED' : 'DISCONNECTED'} />
             </div>
             <p>
-              Choose how Clients, Projects, Calendar, and Signal open when the address omits that
-              choice. A shared or bookmarked URL still wins; Reset restores the shipped defaults.
+              Drive stores project files. Clients and projects are owned by Command Center — folder
+              names never create projects. OAuth uses the limited <code>drive.file</code> scope;
+              existing folders are granted only through Google Picker. Tokens stay encrypted on the
+              server and never reach the browser.
             </p>
-            <form className="form brand-form" onSubmit={saveViewDefaults}>
-              <label>
-                Clients visibility
-                <select
-                  aria-label="Clients visibility default"
-                  value={viewsForm.clients.visibility}
-                  onChange={(e) =>
-                    setViewsForm({
-                      ...viewsForm,
-                      clients: {
-                        visibility: e.target.value as (typeof CLIENT_VISIBILITIES)[number],
-                      },
-                    })
-                  }
-                >
-                  {CLIENT_VISIBILITIES.map((value) => (
-                    <option key={value} value={value}>
-                      {CLIENT_VISIBILITY_LABEL[value]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="form-row">
-                <label>
-                  Projects visibility
-                  <select
-                    aria-label="Projects visibility default"
-                    value={viewsForm.projects.visibility}
-                    onChange={(e) =>
-                      setViewsForm({
-                        ...viewsForm,
-                        projects: {
-                          ...viewsForm.projects,
-                          visibility: e.target.value as (typeof PROJECT_VISIBILITIES)[number],
-                        },
-                      })
-                    }
-                  >
-                    {PROJECT_VISIBILITIES.map((value) => (
-                      <option key={value} value={value}>
-                        {PROJECT_VISIBILITY_LABEL[value]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Projects sort
-                  <select
-                    aria-label="Projects sort default"
-                    value={viewsForm.projects.sort}
-                    onChange={(e) =>
-                      setViewsForm({
-                        ...viewsForm,
-                        projects: {
-                          ...viewsForm.projects,
-                          sort: e.target.value as (typeof PROJECT_SORTS)[number],
-                        },
-                      })
-                    }
-                  >
-                    {PROJECT_SORTS.map((value) => (
-                      <option key={value} value={value}>
-                        {PROJECT_SORT_LABEL[value]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+            {driveError && (
+              <div className="inline-warning" role="alert">
+                <AlertCircle />
+                <div>
+                  <strong>Drive status unavailable</strong>
+                  <span>{driveError}</span>
+                </div>
               </div>
-              <div className="form-row">
-                <label>
-                  Calendar view
-                  <select
-                    aria-label="Calendar view default"
-                    value={viewsForm.calendar.view}
-                    onChange={(e) =>
-                      setViewsForm({
-                        ...viewsForm,
-                        calendar: {
-                          view: e.target.value as (typeof CALENDAR_VIEWS)[number],
-                        },
-                      })
-                    }
-                  >
-                    {CALENDAR_VIEWS.map((value) => (
-                      <option key={value} value={value}>
-                        {TIME_VIEW_LABEL[value]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Signal view
-                  <select
-                    aria-label="Signal view default"
-                    value={viewsForm.signal.view}
-                    onChange={(e) =>
-                      setViewsForm({
-                        ...viewsForm,
-                        signal: {
-                          view: e.target.value as (typeof CALENDAR_VIEWS)[number],
-                        },
-                      })
-                    }
-                  >
-                    {CALENDAR_VIEWS.map((value) => (
-                      <option key={value} value={value}>
-                        {TIME_VIEW_LABEL[value]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+            )}
+            {!driveError && !state?.configured && (
+              <div className="inline-warning">
+                <AlertCircle />
+                <div>
+                  <strong>Credentials required</strong>
+                  <span>
+                    Add the Google OAuth values and encryption key from <code>.env.example</code>,
+                    then restart the app.
+                  </span>
+                </div>
               </div>
-              <p className="field-hint" role="status">
-                Effective: {effectiveViews}
-              </p>
-              <div className="brand-actions">
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => setViewsForm({ ...CANONICAL_VIEW_DEFAULTS })}
-                  disabled={viewsBusy}
-                >
-                  <RotateCcw /> Reset to defaults
+            )}
+            {state?.connected ? (
+              <>
+                {state.pickerConfigured ? (
+                  <button
+                    className="drive-picker-button"
+                    type="button"
+                    onClick={chooseRoot}
+                    disabled={pickerBusy}
+                  >
+                    {pickerBusy
+                      ? 'Opening Google Picker…'
+                      : state.rootFolderId
+                        ? 'Change root folder with Google Picker'
+                        : 'Choose root folder with Google Picker'}
+                  </button>
+                ) : (
+                  <div className="inline-warning">
+                    <AlertCircle />
+                    <div>
+                      <strong>Picker not configured</strong>
+                      <span>
+                        Add <code>GOOGLE_API_KEY</code> and <code>GOOGLE_APP_ID</code> (Cloud
+                        project number) to <code>.env</code>, enable the Google Picker API, then
+                        restart.
+                      </span>
+                    </div>
+                  </div>
+                )}
+                {state.rootFolderUrl && (
+                  <a
+                    className="drive-root"
+                    target="_blank"
+                    rel="noreferrer"
+                    href={state.rootFolderUrl}
+                  >
+                    <div>
+                      <FolderKanban />
+                      <span>
+                        <strong>Current root folder</strong>
+                        <small>{state.rootFolderId}</small>
+                      </span>
+                    </div>
+                    <ExternalLink />
+                  </a>
+                )}
+                <button className="text-btn danger-text" onClick={disconnect}>
+                  Disconnect Google Drive
                 </button>
-                <button className="submit" disabled={viewsBusy || viewsProblems.length > 0}>
-                  {viewsBusy ? (
-                    <>
-                      <RefreshCw className="spin" /> Saving…
-                    </>
-                  ) : (
-                    'Save defaults'
-                  )}
-                </button>
-              </div>
-            </form>
+                <p className="muted">
+                  Disconnect removes credentials stored here only. After a cutover from the old
+                  full-Drive grant, also revoke the app in{' '}
+                  <a
+                    href="https://myaccount.google.com/permissions"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Google Account permissions
+                  </a>
+                  , then reconnect with <code>drive.file</code>.
+                </p>
+              </>
+            ) : (
+              <button onClick={connect} disabled={!state?.configured}>
+                Connect Google Drive
+              </button>
+            )}
           </section>
           <section className="panel settings-card">
             <div className="settings-icon neutral">
@@ -682,6 +679,9 @@ export function SettingsView({
               moves, or deletes one.
             </p>
           </section>
+          {/* Beside the other settings modules, because campaigns label Signal posts just as
+              categories label projects and tags label tasks. */}
+          <SignalCampaignsCard flash={flash} />
         </div>
       </div>
     </>

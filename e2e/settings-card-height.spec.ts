@@ -62,7 +62,9 @@ test('the Settings cards size to their content at desktop width, in both Drive s
 
   const layout = page.locator('.settings-layout');
   const cards = layout.locator('.settings-card');
-  const drive = cards.first();
+  const drive = cards.filter({
+    has: page.getByRole('heading', { level: 2, name: 'Google Drive' }),
+  });
   const branding = cards.filter({
     has: page.getByRole('heading', { level: 2, name: 'Branding' }),
   });
