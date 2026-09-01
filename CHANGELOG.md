@@ -8,6 +8,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.12.3] - 2026-09-01
+
+### Added
+
+- The read-only `signal_list_posts` MCP tool now accepts optional project and campaign filters
+  while preserving its inclusive date-window behavior.
+
+### Breaking changes
+
+None.
+
 ## [5.12.2] - 2026-09-01
 
 ### Added
