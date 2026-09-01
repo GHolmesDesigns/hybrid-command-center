@@ -8,6 +8,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.11.8] - 2026-09-01
+
+### Added
+
+- The sidebar brand mark now links to gholmesdesigns.com and clearly indicates that it opens in a new tab.
+
+### Breaking changes
+
+None.
+
 ## [5.11.7] - 2026-09-01
 
 ### Changed
