@@ -5,7 +5,7 @@ import { createApp } from '../app.ts';
 import { seedSignalPost } from '../signal/test-fixture.ts';
 import { MockPublishProvider } from './mock-provider.ts';
 import { BufferAccountsService } from './buffer-accounts.ts';
-import { PublishProviderError } from './provider.ts';
+import { PublishProviderError, UnavailablePublishProvider } from './provider.ts';
 import { resolvePublishingTargets } from './targets.ts';
 
 describe('resolvePublishingTargets', () => {
@@ -63,6 +63,33 @@ describe('resolvePublishingTargets', () => {
     const targets = await resolvePublishingTargets(db, publish, buffer, clock);
     expect(targets).toHaveLength(1);
     expect(targets[0]?.platform).toBe('twitter');
+  });
+
+  it('refreshes historical Buffer accounts without offering them when Post Bridge is unavailable', async () => {
+    const db = createDb(':memory:');
+    let channelCalls = 0;
+    const buffer = new BufferAccountsService(
+      db,
+      {
+        ...bufferProvider,
+        async channels() {
+          channelCalls += 1;
+          return bufferProvider.channels();
+        },
+      },
+      clock,
+    );
+
+    const targets = await resolvePublishingTargets(
+      db,
+      new UnavailablePublishProvider(),
+      buffer,
+      clock,
+    );
+
+    expect(channelCalls).toBe(1);
+    expect(targets).toEqual([]);
+    expect(buffer.selectableTargets()).toEqual([]);
   });
 
   it('does not use Buffer as a fallback when Post Bridge listing fails', async () => {
