@@ -538,6 +538,8 @@ export const compareSignalCampaigns = (a: SignalCampaign, b: SignalCampaign) =>
 /** One planned piece of content. */
 export interface SignalPost {
   id: string;
+  /** The workspace project this post belongs to, or null when it is unassigned. */
+  projectId?: string | null;
   /** What is being posted. The copy itself, not a title. */
   text: string;
   channels: SignalChannel[];

@@ -321,6 +321,8 @@ const workspaceReadTools: McpToolRegistryEntry[] = [
         from: { type: 'string', description: 'YYYY-MM-DD' },
         to: { type: 'string', description: 'YYYY-MM-DD' },
         lifecycle: { type: 'string', enum: [...SIGNAL_LIFECYCLE_FILTERS] },
+        projectId: { type: 'string', description: 'Only posts assigned to this project' },
+        campaign: { type: 'string', description: 'Case-insensitive campaign name' },
       },
       required: ['from', 'to'],
       additionalProperties: false,

@@ -58,6 +58,8 @@ export const mcpSignalListPostsArgsSchema = z
     from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     lifecycle: z.enum(SIGNAL_LIFECYCLE_FILTERS).optional(),
+    projectId: z.string().trim().min(1).max(200).optional(),
+    campaign: z.string().trim().min(1).max(60).optional(),
   })
   .strict();
 

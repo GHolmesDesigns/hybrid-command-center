@@ -1,5 +1,9 @@
 import type { Db } from '../db.ts';
-import { SIGNAL_RANGE_LIMIT, type SignalLifecycleFilter } from '../../shared/signal.ts';
+import {
+  normalizeSignalCampaignName,
+  SIGNAL_RANGE_LIMIT,
+  type SignalLifecycleFilter,
+} from '../../shared/signal.ts';
 import type { SignalProvider, SignalPostRange } from './provider.ts';
 import type { PublishVariantRecord } from '../../shared/publish-variants.ts';
 import type { PublishTargetSelection } from '../../shared/publish.ts';
@@ -39,17 +43,35 @@ export function listPostsInRange(
   from: string,
   to: string,
   lifecycle: SignalLifecycleFilter = 'active',
+  filters: { projectId?: string; campaign?: string } = {},
 ): SignalPostRange {
   const lifecycleClause = signalLifecycleSql(lifecycle);
+  const clauses = ['date IS NOT NULL', 'date >= ?', 'date <= ?'];
+  if (lifecycleClause.sql) clauses.push(lifecycleClause.sql.replace(/^ AND /, ''));
+  const params: (string | number)[] = [from, to];
+  if (filters.projectId) {
+    clauses.push('project_id = ?');
+    params.push(filters.projectId);
+  }
+  if (filters.campaign) {
+    clauses.push(
+      `EXISTS (
+         SELECT 1 FROM signal_post_campaigns pc
+         JOIN signal_campaigns c ON c.id = pc.campaign_id
+         WHERE pc.post_id = signal_posts.id AND c.name = ? COLLATE NOCASE
+       )`,
+    );
+    params.push(normalizeSignalCampaignName(filters.campaign));
+  }
   const rows = db
     .prepare(
       `SELECT * FROM signal_posts
-       WHERE date IS NOT NULL AND date >= ? AND date <= ?${lifecycleClause.sql}
+       WHERE ${clauses.join(' AND ')}
        ORDER BY date, time, created_at, id
        LIMIT ?`,
     )
     // One more than the limit, so a full page is distinguishable from an overflowing one.
-    .all(from, to, SIGNAL_RANGE_LIMIT + 1) as unknown as SignalPostRow[];
+    .all(...params, SIGNAL_RANGE_LIMIT + 1) as unknown as SignalPostRow[];
   const truncated = rows.length > SIGNAL_RANGE_LIMIT;
   return { from, to, posts: toSignalPosts(db, rows.slice(0, SIGNAL_RANGE_LIMIT)), truncated };
 }
