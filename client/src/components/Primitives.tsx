@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { CalendarDays, FolderKanban, Search, X } from 'lucide-react';
+import { CalendarDays, ExternalLink, FolderKanban, Search, X } from 'lucide-react';
 import type { DriveStatus, Priority, Task, TaskStatus, TaskType } from '../../../shared/types';
 import type { Branding } from '../../../shared/branding';
 import { formatDate } from './formatting';
@@ -18,19 +18,28 @@ import { STATUS_LABEL, TASK_TYPE_LABEL } from './ui-shared';
 export function BrandMark({ branding }: { branding: Branding }) {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [branding.logoUrl]);
-  if (branding.logoUrl && !failed)
-    return (
-      <img
-        className="brand-logo"
-        src={branding.logoUrl}
-        alt={branding.logoAlt}
-        onError={() => setFailed(true)}
-      />
-    );
   return (
-    <div className="brand-mark" title={branding.title}>
-      {branding.mark}
-    </div>
+    <a
+      className="brand-mark-link"
+      href="https://gholmesdesigns.com"
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={`Open ${branding.title} website in a new tab`}
+    >
+      {branding.logoUrl && !failed ? (
+        <img
+          className="brand-logo"
+          src={branding.logoUrl}
+          alt={branding.logoAlt}
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <div className="brand-mark" title={branding.title}>
+          {branding.mark}
+        </div>
+      )}
+      <ExternalLink className="brand-new-tab" aria-hidden="true" />
+    </a>
   );
 }
 

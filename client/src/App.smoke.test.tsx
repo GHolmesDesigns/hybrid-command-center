@@ -2,6 +2,7 @@ import { useLocation } from 'react-router-dom';
 import {
   render,
   screen,
+  within,
   MemoryRouter,
   describe,
   expect,
@@ -38,7 +39,8 @@ describe('App', () => {
       </MemoryRouter>,
     );
 
-    const links = await screen.findAllByRole('link');
+    const navigation = await screen.findByRole('navigation', { name: 'Primary navigation' });
+    const links = within(navigation).getAllByRole('link');
     const labels = links.map((link) => link.textContent?.trim());
     const agentsIndex = labels.indexOf('Agents');
     expect(agentsIndex).toBeGreaterThanOrEqual(0);
