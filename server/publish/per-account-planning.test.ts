@@ -211,6 +211,75 @@ describe('Buffer accounts beside Post Bridge', () => {
     expect(preview.targets[0]?.provider).toBe('post-bridge');
     expect(preview.connectedAccounts).toHaveLength(2);
   });
+
+  it('names an unavailable Post Bridge account instead of falling back to Buffer', () => {
+    const post = getPost(
+      db,
+      seedSignalPost(db, {
+        channels: ['tt'],
+        mediaUrls: ['https://example.com/frame.jpg'],
+      }).id,
+    ) as SignalPost;
+    const preview = plan(
+      post,
+      [],
+      [],
+      [
+        {
+          id: 906,
+          provider: 'post-bridge',
+          accountRef: '906',
+          platform: 'tiktok',
+          handle: '@pb-paused',
+          name: '',
+          unavailable: 'Connection paused',
+        },
+        {
+          id: 907,
+          provider: 'buffer',
+          accountRef: 'buf-tt',
+          platform: 'tiktok',
+          handle: '@buf',
+          name: 'Buffer',
+        },
+      ],
+    );
+
+    expect(preview.channels[0]?.refusals).toContain(
+      'TikTok is connected to @pb-paused, which is connection paused.',
+    );
+    expect(preview.targets).toEqual([]);
+  });
+
+  it('keeps a provider-qualified connection instruction for historical Buffer accounts', () => {
+    const post = getPost(
+      db,
+      seedSignalPost(db, {
+        channels: ['fb'],
+        mediaUrls: ['https://example.com/frame.jpg'],
+      }).id,
+    ) as SignalPost;
+    const preview = plan(
+      post,
+      [],
+      [],
+      [
+        {
+          id: 908,
+          provider: 'buffer',
+          accountRef: 'buf-fb',
+          platform: 'facebook',
+          handle: '@other-page',
+          name: 'Other Page',
+        },
+      ],
+    );
+
+    expect(preview.channels[0]?.refusals).toContain(
+      'Facebook has no connected account for G.Holmes Designs. Connect one in Buffer.',
+    );
+    expect(preview.targets).toEqual([]);
+  });
 });
 
 describe('the plan hash', () => {
