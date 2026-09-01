@@ -52,6 +52,8 @@ describe.each([['stdio'], ['http']] as const)('MCP protocol conformance (%s)', (
   let httpSessionId: string | null = null;
 
   beforeEach(async () => {
+    // This suite uses Vitest assertions throughout; an early return must not pass silently.
+    expect.hasAssertions();
     resetMcpResourceNotifierForTests();
     db = createDb(':memory:');
     passwordHash = await hashPassword(PASSWORD);
@@ -150,36 +152,35 @@ describe.each([['stdio'], ['http']] as const)('MCP protocol conformance (%s)', (
     }
   });
 
-  it('refuses malformed JSON-RPC batches', async () => {
-    if (kind === 'stdio') {
-      // Stdio parser never feeds an array into handleMcpJsonRpc; HTTP enforces the rule.
-      return;
-    }
-    const app = createApp(db, {
-      enforceAuth: true,
-      auth: {
-        sessionSecret: SECRET,
-        operatorPasswordHash: passwordHash,
-        trustedProxyHops: 0,
-        secureCookies: false,
-      },
+  // This harness feeds batches only through HTTP. Do not collect a no-op stdio "pass".
+  if (kind === 'http') {
+    it('refuses malformed JSON-RPC batches', async () => {
+      const app = createApp(db, {
+        enforceAuth: true,
+        auth: {
+          sessionSecret: SECRET,
+          operatorPasswordHash: passwordHash,
+          trustedProxyHops: 0,
+          secureCookies: false,
+        },
+      });
+      const login = await request(app).post('/api/auth/login').send({ password: PASSWORD });
+      const bearer = await request(app)
+        .post(MCP_BEARER_ISSUE_PATH)
+        .set('Cookie', login.headers['set-cookie']?.[0] as string)
+        .set(CSRF_HEADER_NAME, login.body.csrfToken);
+      const res = await request(app)
+        .post(MCP_HTTP_PATH)
+        .set('Authorization', `Bearer ${bearer.body.bearerToken}`)
+        .set(MCP_AGENT_LABEL_HEADER, 'conformance')
+        .send([
+          { jsonrpc: '2.0', id: 1, method: 'ping' },
+          { jsonrpc: '2.0', id: 2, method: 'ping' },
+        ]);
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe(-32600);
     });
-    const login = await request(app).post('/api/auth/login').send({ password: PASSWORD });
-    const bearer = await request(app)
-      .post(MCP_BEARER_ISSUE_PATH)
-      .set('Cookie', login.headers['set-cookie']?.[0] as string)
-      .set(CSRF_HEADER_NAME, login.body.csrfToken);
-    const res = await request(app)
-      .post(MCP_HTTP_PATH)
-      .set('Authorization', `Bearer ${bearer.body.bearerToken}`)
-      .set(MCP_AGENT_LABEL_HEADER, 'conformance')
-      .send([
-        { jsonrpc: '2.0', id: 1, method: 'ping' },
-        { jsonrpc: '2.0', id: 2, method: 'ping' },
-      ]);
-    expect(res.status).toBe(400);
-    expect(res.body.error.code).toBe(-32600);
-  });
+  }
 
   it('emits progress notifications when a progressToken is present', async () => {
     await client.call({
@@ -422,83 +423,84 @@ describe.each([['stdio'], ['http']] as const)('MCP protocol conformance (%s)', (
     }
   });
 
-  it('replays buffered SSE events after Last-Event-ID on HTTP reconnect', async () => {
-    if (kind !== 'http') return;
-    const { createMcpHttpHandler, McpHttpSessionRegistry } = await import('./http.ts');
-    const { McpWriteLimiterRegistry } = await import('./write-limiter-registry.ts');
-    const sessions = new McpHttpSessionRegistry();
-    const handler = createMcpHttpHandler({
-      db,
-      sessionSecret: SECRET,
-      writeLimiters: new McpWriteLimiterRegistry(),
-      httpSessions: sessions,
-    });
-    const app = createApp(db, {
-      enforceAuth: true,
-      auth: {
+  // These features belong to HTTP; register only the transport that actually exercises them.
+  if (kind === 'http') {
+    it('replays buffered SSE events after Last-Event-ID on HTTP reconnect', async () => {
+      const { createMcpHttpHandler, McpHttpSessionRegistry } = await import('./http.ts');
+      const { McpWriteLimiterRegistry } = await import('./write-limiter-registry.ts');
+      const sessions = new McpHttpSessionRegistry();
+      const handler = createMcpHttpHandler({
+        db,
         sessionSecret: SECRET,
-        operatorPasswordHash: passwordHash,
-        trustedProxyHops: 0,
-        secureCookies: false,
-      },
-    });
-    const login = await request(app).post('/api/auth/login').send({ password: PASSWORD });
-    const bearerRes = await request(app)
-      .post(MCP_BEARER_ISSUE_PATH)
-      .set('Cookie', login.headers['set-cookie']?.[0] as string)
-      .set(CSRF_HEADER_NAME, login.body.csrfToken);
-    const bearer = bearerRes.body.bearerToken as string;
-    const init = await invokeHandler(handler, {
-      method: 'POST',
-      body: {
+        writeLimiters: new McpWriteLimiterRegistry(),
+        httpSessions: sessions,
+      });
+      const app = createApp(db, {
+        enforceAuth: true,
+        auth: {
+          sessionSecret: SECRET,
+          operatorPasswordHash: passwordHash,
+          trustedProxyHops: 0,
+          secureCookies: false,
+        },
+      });
+      const login = await request(app).post('/api/auth/login').send({ password: PASSWORD });
+      const bearerRes = await request(app)
+        .post(MCP_BEARER_ISSUE_PATH)
+        .set('Cookie', login.headers['set-cookie']?.[0] as string)
+        .set(CSRF_HEADER_NAME, login.body.csrfToken);
+      const bearer = bearerRes.body.bearerToken as string;
+      const init = await invokeHandler(handler, {
+        method: 'POST',
+        body: {
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: { clientInfo: { name: 'conformance', version: '0' } },
+        },
+        bearer,
+        sessionId: null,
+        accept: 'application/json',
+      });
+      const sessionId = init.headers[MCP_SESSION_ID_HEADER]!;
+      const record = sessions.get(sessionId, Date.now())!;
+      sessions.publish(record, {
         jsonrpc: '2.0',
-        id: 1,
-        method: 'initialize',
-        params: { clientInfo: { name: 'conformance', version: '0' } },
-      },
-      bearer,
-      sessionId: null,
-      accept: 'application/json',
+        method: 'notifications/resources/updated',
+        params: { uri: COORDINATION_INBOX_URI },
+      });
+      const replayed = sessions.eventsAfter(record, '0');
+      expect(replayed).toHaveLength(1);
+      expect(replayed[0]?.message).toMatchObject({
+        method: 'notifications/resources/updated',
+      });
     });
-    const sessionId = init.headers[MCP_SESSION_ID_HEADER]!;
-    const record = sessions.get(sessionId, Date.now())!;
-    sessions.publish(record, {
-      jsonrpc: '2.0',
-      method: 'notifications/resources/updated',
-      params: { uri: COORDINATION_INBOX_URI },
-    });
-    const replayed = sessions.eventsAfter(record, '0');
-    expect(replayed).toHaveLength(1);
-    expect(replayed[0]?.message).toMatchObject({
-      method: 'notifications/resources/updated',
-    });
-  });
 
-  it('continues one-shot JSON-RPC without a session header on HTTP', async () => {
-    if (kind !== 'http') return;
-    const app = createApp(db, {
-      enforceAuth: true,
-      auth: {
-        sessionSecret: SECRET,
-        operatorPasswordHash: passwordHash,
-        trustedProxyHops: 0,
-        secureCookies: false,
-      },
+    it('continues one-shot JSON-RPC without a session header on HTTP', async () => {
+      const app = createApp(db, {
+        enforceAuth: true,
+        auth: {
+          sessionSecret: SECRET,
+          operatorPasswordHash: passwordHash,
+          trustedProxyHops: 0,
+          secureCookies: false,
+        },
+      });
+      const login = await request(app).post('/api/auth/login').send({ password: PASSWORD });
+      const bearer = await request(app)
+        .post(MCP_BEARER_ISSUE_PATH)
+        .set('Cookie', login.headers['set-cookie']?.[0] as string)
+        .set(CSRF_HEADER_NAME, login.body.csrfToken);
+      const res = await request(app)
+        .post(MCP_HTTP_PATH)
+        .set('Authorization', `Bearer ${bearer.body.bearerToken}`)
+        .set(MCP_AGENT_LABEL_HEADER, 'oneshot')
+        .send({ jsonrpc: '2.0', id: 1, method: 'ping' });
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ result: {} });
+      expect(res.headers[MCP_SESSION_ID_HEADER]).toBeUndefined();
     });
-    const login = await request(app).post('/api/auth/login').send({ password: PASSWORD });
-    const bearer = await request(app)
-      .post(MCP_BEARER_ISSUE_PATH)
-      .set('Cookie', login.headers['set-cookie']?.[0] as string)
-      .set(CSRF_HEADER_NAME, login.body.csrfToken);
-    const res = await request(app)
-      .post(MCP_HTTP_PATH)
-      .set('Authorization', `Bearer ${bearer.body.bearerToken}`)
-      .set(MCP_AGENT_LABEL_HEADER, 'oneshot')
-      .send({ jsonrpc: '2.0', id: 1, method: 'ping' });
-    expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ result: {} });
-    expect(res.headers[MCP_SESSION_ID_HEADER]).toBeUndefined();
-  });
+  }
 });
 
 async function createClient(

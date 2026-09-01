@@ -1,6 +1,15 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
+// A green run must not mean "only my focused test ran" or "nothing was asserted".
+// Inline projects do not inherit root test options, so apply this to each explicitly.
+// Server tests also use Supertest assertions, which Vitest cannot count; see below.
+// These catch accidental false passes, not weak assertions; see docs/testing.md.
+const testIntegrity = {
+  allowOnly: false,
+  expect: { requireAssertions: true },
+};
+
 export default defineConfig({
   test: {
     coverage: {
@@ -67,12 +76,14 @@ export default defineConfig({
         // not by omission. `mock-provider.ts` is what the suite exercises instead.
         'server/drive/google.ts',
       ],
-      // Per project rather than one global number, because the three environments fail
+      // Per source group rather than one global number, because the environments fail
       // differently and a global figure lets a client regression hide behind server tests.
       // The globs are the three `projects` below — `e2e/` sits with `server/` because that is
       // the project whose `include` runs it. Each figure is the suite's own measurement on
       // this branch, floored to a whole percent; a round number would be a target rather than
-      // a baseline, and this way a drop reads as a drop.
+      // a baseline, and this way a drop reads as a drop. These are execution regression alarms,
+      // not correctness scores or targets for adding tests. Review the missing behavior first;
+      // do not add filler assertions or automatically ratchet thresholds. See docs/testing.md.
       thresholds: {
         // 97.06 statements / 89.10 branches / 99.21 functions / 98.24 lines. The Post Bridge probe,
         // measured over everything except its two live halves, which are excluded above. High
@@ -96,6 +107,7 @@ export default defineConfig({
     projects: [
       {
         test: {
+          ...testIntegrity,
           name: 'shared',
           environment: 'node',
           include: ['shared/**/*.test.ts'],
@@ -104,6 +116,7 @@ export default defineConfig({
       },
       {
         test: {
+          ...testIntegrity,
           // The Post Bridge probe. Its own project rather than a glob added to `server`, because
           // nothing under `scripts/` is application code and a probe test failing should read as a
           // probe failure.
@@ -114,6 +127,10 @@ export default defineConfig({
       },
       {
         test: {
+          // Supertest's .expect(status/body) is a real assertion but is not counted by
+          // Vitest's requireAssertions. Do not force filler expect() calls into these tests.
+          // Vitest-only suites can use expect.hasAssertions() in beforeEach (e.g. conformance).
+          allowOnly: false,
           name: 'server',
           environment: 'node',
           // `e2e/` is included for the helpers under it, not for the specs. The two runners
@@ -127,6 +144,7 @@ export default defineConfig({
       {
         plugins: [react()],
         test: {
+          ...testIntegrity,
           name: 'client',
           environment: 'jsdom',
           include: ['client/**/*.test.tsx'],

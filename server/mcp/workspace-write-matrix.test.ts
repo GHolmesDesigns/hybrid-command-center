@@ -5,6 +5,7 @@ import { callWorkspaceWriteTool, isWorkspaceWriteTool } from './workspace-write.
 import { createProject, createTask, readBranding, readViewDefaults } from '../workspace/writes.ts';
 import { seedSignalPost } from '../signal/test-fixture.ts';
 import { setSetting } from '../drive/service.ts';
+import { getTask } from '../repositories.ts';
 import { VIEW_DEFAULTS_SETTING_KEY } from '../../shared/view-defaults.ts';
 
 let db: Db;
@@ -51,8 +52,9 @@ const dayLabel = (offset: number) => {
 };
 
 describe('workspace MCP write tool matrix', () => {
-  it('covers checklist and dependency tools', async () => {
+  it('persists checklist edits and dependencies without changing another task', async () => {
     const { task, other } = seed();
+    const untouched = getTask(db, other.id);
     const add = await callWorkspaceWriteTool(db, session(), 'workspace_add_checklist_item', {
       clientRequestId: 'cl-1',
       taskId: task.id,
@@ -63,6 +65,9 @@ describe('workspace MCP write tool matrix', () => {
     const afterAdd = (add.data as { after: { revision: number; checklist: Array<{ id: string }> } })
       .after;
     const itemId = afterAdd.checklist[0]!.id;
+    expect(getTask(db, task.id)?.checklist).toEqual([
+      { id: itemId, taskId: task.id, text: 'One', completed: false, position: 0 },
+    ]);
     const upd = await callWorkspaceWriteTool(db, session(), 'workspace_update_checklist_item', {
       clientRequestId: 'cl-2',
       itemId,
@@ -70,6 +75,12 @@ describe('workspace MCP write tool matrix', () => {
       completed: true,
     });
     expect(upd.outcome).toBe('SUCCESS');
+    // A success envelope can hide a no-op. Re-read the stored task before removing the item.
+    expect(getTask(db, task.id)).toMatchObject({
+      checklist: [{ id: itemId, text: 'One', completed: true }],
+      checklistCompleted: 1,
+      checklistTotal: 1,
+    });
     const afterUpd = (upd.data as { after: { revision: number } }).after;
     const rem = await callWorkspaceWriteTool(db, session(), 'workspace_remove_checklist_item', {
       clientRequestId: 'cl-3',
@@ -79,6 +90,11 @@ describe('workspace MCP write tool matrix', () => {
       revision: afterUpd.revision,
     });
     expect(rem.outcome).toBe('SUCCESS');
+    expect(getTask(db, task.id)).toMatchObject({
+      checklist: [],
+      checklistCompleted: 0,
+      checklistTotal: 0,
+    });
 
     const dep = await callWorkspaceWriteTool(db, session(), 'workspace_add_dependency', {
       clientRequestId: 'dep-1',
@@ -87,6 +103,11 @@ describe('workspace MCP write tool matrix', () => {
       revision: (rem.data as { after: { revision: number } }).after.revision,
     });
     expect(dep.outcome).toBe('SUCCESS');
+    expect(getTask(db, task.id)).toMatchObject({
+      dependencyIds: [other.id],
+      blockingDependencies: [{ id: other.id, title: 'Other' }],
+      blocked: true,
+    });
     const afterDep = (dep.data as { after: { revision: number } }).after;
     const undep = await callWorkspaceWriteTool(db, session(), 'workspace_remove_dependency', {
       clientRequestId: 'dep-2',
@@ -97,6 +118,12 @@ describe('workspace MCP write tool matrix', () => {
       revision: afterDep.revision,
     });
     expect(undep.outcome).toBe('SUCCESS');
+    expect(getTask(db, task.id)).toMatchObject({
+      dependencyIds: [],
+      blockingDependencies: [],
+      blocked: false,
+    });
+    expect(getTask(db, other.id)).toEqual(untouched);
   });
 
   it('covers publish targets dry-run and commit against injected accounts', async () => {
@@ -229,6 +256,7 @@ describe('workspace MCP write tool matrix', () => {
 
   it('refuses mismatched confirm ids and unknown tools', async () => {
     const { task } = seed();
+    const beforeRefusal = getTask(db, task.id);
     const refused = await callWorkspaceWriteTool(db, session(), 'workspace_delete_task', {
       clientRequestId: 'bad-confirm',
       taskId: task.id,
@@ -237,6 +265,7 @@ describe('workspace MCP write tool matrix', () => {
     });
     expect(refused.outcome).toBe('REFUSED');
     expect(refused.errorDetail?.code).toBe('WORKSPACE_CONFIRMATION_REQUIRED');
+    expect(getTask(db, task.id)).toEqual(beforeRefusal);
 
     const unknown = await callWorkspaceWriteTool(db, session(), 'not_a_write_tool', {
       clientRequestId: 'x',
