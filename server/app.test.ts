@@ -791,7 +791,7 @@ describe('command center API', () => {
   describe('default views and sorts', () => {
     const configured: ViewDefaults = {
       clients: { visibility: 'archived' },
-      projects: { visibility: 'all', sort: 'name-ascending' },
+      projects: { visibility: 'all', sort: 'name-ascending', presentation: 'list' },
       calendar: { view: 'week' },
       signal: { view: 'today' },
     };
@@ -814,7 +814,12 @@ describe('command center API', () => {
     it('rejects an unknown page or an invalid sort without writing', async () => {
       expect((await put({ ...configured, status: { view: 'board' } })).status).toBe(400);
       expect(
-        (await put({ ...configured, projects: { visibility: 'all', sort: 'popularity' } })).status,
+        (
+          await put({
+            ...configured,
+            projects: { visibility: 'all', sort: 'popularity', presentation: 'list' },
+          })
+        ).status,
       ).toBe(400);
       expect(await stored()).toEqual(CANONICAL_VIEW_DEFAULTS);
     });

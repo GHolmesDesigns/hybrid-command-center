@@ -51,28 +51,33 @@ describe('default views settings form', () => {
     fireEvent.change(screen.getByLabelText('Projects sort default'), {
       target: { value: 'name-ascending' },
     });
+    fireEvent.change(screen.getByLabelText('Projects presentation default'), {
+      target: { value: 'list' },
+    });
     fireEvent.change(screen.getByLabelText('Calendar view default'), {
       target: { value: 'week' },
     });
     expect(screen.getByText(/Effective:.*Name A–Z/)).toBeVisible();
+    expect(screen.getByText(/Effective:.*List view/)).toBeVisible();
     expect(screen.getByText(/Effective:.*Calendar Week/)).toBeVisible();
 
     fireEvent.click(screen.getByRole('button', { name: 'Save defaults' }));
     await waitFor(() => expect(viewDefaultsPuts()).toHaveLength(1));
     expect(viewDefaultsPuts()[0].body).toMatchObject({
-      projects: { sort: 'name-ascending' },
+      projects: { sort: 'name-ascending', presentation: 'list' },
       calendar: { view: 'week' },
     });
   });
 
   it('resets the form to the canonical defaults before Save', async () => {
     setViewDefaults({
-      projects: { visibility: 'all', sort: 'priority' },
+      projects: { visibility: 'all', sort: 'priority', presentation: 'list' },
       calendar: { view: 'week' },
     });
     await renderSettings();
 
     expect(screen.getByLabelText('Projects sort default')).toHaveValue('priority');
+    expect(screen.getByLabelText('Projects presentation default')).toHaveValue('list');
     fireEvent.click(
       Array.from(viewsCard().querySelectorAll('button.secondary')).find((button) =>
         /reset to defaults/i.test(button.textContent ?? ''),
@@ -80,6 +85,9 @@ describe('default views settings form', () => {
     );
     expect(screen.getByLabelText('Projects sort default')).toHaveValue(
       CANONICAL_VIEW_DEFAULTS.projects.sort,
+    );
+    expect(screen.getByLabelText('Projects presentation default')).toHaveValue(
+      CANONICAL_VIEW_DEFAULTS.projects.presentation,
     );
     expect(screen.getByLabelText('Calendar view default')).toHaveValue(
       CANONICAL_VIEW_DEFAULTS.calendar.view,
@@ -93,7 +101,9 @@ describe('default views settings form', () => {
 
 describe('configured default views on collection pages', () => {
   it('applies a Projects sort default on a clean URL and lets an explicit sort win', async () => {
-    setViewDefaults({ projects: { visibility: 'live', sort: 'name-ascending' } });
+    setViewDefaults({
+      projects: { visibility: 'live', sort: 'name-ascending', presentation: 'grid' },
+    });
     testState.projectsPayload = [
       project('zulu', 'Zulu', 'ACTIVE', { clientId: 'c1', clientName: 'Acme' }),
       project('alpha', 'Alpha', 'ACTIVE', { clientId: 'c1', clientName: 'Acme' }),
@@ -130,6 +140,35 @@ describe('configured default views on collection pages', () => {
     expect(screen.getByLabelText('Current location')).toHaveTextContent(
       '/projects?sort=name-descending',
     );
+  });
+
+  it('uses the configured Projects presentation only when the URL has no explicit view', async () => {
+    setViewDefaults({
+      projects: { visibility: 'live', sort: 'recently-updated', presentation: 'list' },
+    });
+    testState.projectsPayload = [
+      project('alpha', 'Alpha', 'ACTIVE', { clientId: 'c1', clientName: 'Acme' }),
+    ];
+    testState.clientsPayload = [client('c1', 'Acme')];
+
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/projects']}>
+        <App />
+        <LocationProbe />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('button', { name: 'List', pressed: true })).toBeVisible();
+    expect(screen.getByLabelText('Current location')).toHaveTextContent('/projects');
+    unmount();
+
+    render(
+      <MemoryRouter initialEntries={['/projects?view=grid']}>
+        <App />
+        <LocationProbe />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('button', { name: 'Grid', pressed: true })).toBeVisible();
+    expect(screen.getByLabelText('Current location')).toHaveTextContent('/projects?view=grid');
   });
 
   it('applies a Clients visibility default on a clean URL and lets an explicit URL win', async () => {

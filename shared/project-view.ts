@@ -6,9 +6,8 @@
  * selection means no further narrowing within the current visibility.
  *
  * URL values are read defensively the same way other durable view parameters are — unknown tokens
- * are dropped, and a missing parameter falls back to the canonical default (grid, no status filter).
- * Settings does not yet store these; when it does, `resolveViewChoice` will supply the configured
- * default the same way C100 does for visibility and sort.
+ * are dropped, and a missing presentation falls back to the configured default. Grid remains the
+ * canonical presentation, while an empty status filter keeps its separate canonical meaning.
  */
 export const PROJECT_PRESENTATIONS = ['grid', 'list'] as const;
 export type ProjectPresentation = (typeof PROJECT_PRESENTATIONS)[number];

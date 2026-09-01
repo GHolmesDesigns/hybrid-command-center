@@ -41,7 +41,6 @@ import {
   type ViewDefaults,
 } from '../../../shared/view-defaults';
 import {
-  CANONICAL_PROJECT_PRESENTATION,
   LIVE_PROJECT_STATUSES,
   LIVE_PROJECT_STATUS_LABEL,
   PROJECT_PRESENTATIONS,
@@ -120,7 +119,7 @@ export function Projects({
   const presentation = resolveViewChoice(
     params.get('view'),
     PROJECT_PRESENTATIONS,
-    CANONICAL_PROJECT_PRESENTATION,
+    viewDefaults.projects.presentation,
   );
   const clientFilter = params.get('client') || '';
   const visibility = resolveViewChoice(
@@ -146,7 +145,7 @@ export function Projects({
   const setStatuses = (statuses: LiveProjectStatus[]) =>
     setParam('statuses', serializeLiveProjectStatuses(statuses));
   const setPresentation = (value: ProjectPresentation) =>
-    setParam('view', value, CANONICAL_PROJECT_PRESENTATION);
+    setParam('view', value, viewDefaults.projects.presentation);
   // Client choices track the visibility toggle so Live never offers a client whose projects
   // are all hidden, matching the same filter the project list itself applies. This keys off
   // project status rather than the client's own status: an active client with only archived

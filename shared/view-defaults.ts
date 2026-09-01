@@ -10,6 +10,11 @@
  * default — one list of allowed values, not three copies.
  */
 import { CALENDAR_VIEWS, type CalendarViewMode } from './calendar.ts';
+import {
+  CANONICAL_PROJECT_PRESENTATION,
+  PROJECT_PRESENTATIONS,
+  type ProjectPresentation,
+} from './project-view.ts';
 
 export const VIEW_DEFAULT_PAGES = ['clients', 'projects', 'calendar', 'signal'] as const;
 export type ViewDefaultPage = (typeof VIEW_DEFAULT_PAGES)[number];
@@ -33,7 +38,11 @@ export type ProjectSort = (typeof PROJECT_SORTS)[number];
 
 export interface ViewDefaults {
   clients: { visibility: ClientVisibility };
-  projects: { visibility: ProjectVisibility; sort: ProjectSort };
+  projects: {
+    visibility: ProjectVisibility;
+    sort: ProjectSort;
+    presentation: ProjectPresentation;
+  };
   calendar: { view: CalendarViewMode };
   signal: { view: CalendarViewMode };
 }
@@ -41,7 +50,11 @@ export interface ViewDefaults {
 /** Shipped defaults: live/active collections by recency, month agenda on Calendar and Signal. */
 export const CANONICAL_VIEW_DEFAULTS: ViewDefaults = {
   clients: { visibility: 'active' },
-  projects: { visibility: 'live', sort: 'recently-updated' },
+  projects: {
+    visibility: 'live',
+    sort: 'recently-updated',
+    presentation: CANONICAL_PROJECT_PRESENTATION,
+  },
   calendar: { view: 'month' },
   signal: { view: 'month' },
 };
@@ -68,6 +81,11 @@ export const PROJECT_SORT_LABEL: Record<ProjectSort, string> = {
   deadline: 'Deadline',
   priority: 'Priority',
   custom: 'Custom order',
+};
+
+export const PROJECT_PRESENTATION_LABEL: Record<ProjectPresentation, string> = {
+  grid: 'Grid',
+  list: 'List',
 };
 
 export const TIME_VIEW_LABEL: Record<CalendarViewMode, string> = {
@@ -121,7 +139,7 @@ export function viewDefaultsIssues(value: unknown): ViewDefaultsIssue[] {
     else {
       const page = projects as Record<string, unknown>;
       for (const key of Object.keys(page))
-        if (key !== 'visibility' && key !== 'sort')
+        if (key !== 'visibility' && key !== 'sort' && key !== 'presentation')
           issues.push({ path: `projects.${key}`, message: `Unknown projects field "${key}".` });
       if (!isOneOf(page.visibility, PROJECT_VISIBILITIES))
         issues.push({
@@ -132,6 +150,11 @@ export function viewDefaultsIssues(value: unknown): ViewDefaultsIssue[] {
         issues.push({
           path: 'projects.sort',
           message: `Expected one of ${PROJECT_SORTS.join(', ')}.`,
+        });
+      if (!isOneOf(page.presentation, PROJECT_PRESENTATIONS))
+        issues.push({
+          path: 'projects.presentation',
+          message: `Expected one of ${PROJECT_PRESENTATIONS.join(', ')}.`,
         });
     }
   }
