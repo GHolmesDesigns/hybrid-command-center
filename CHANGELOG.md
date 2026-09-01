@@ -8,6 +8,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.12.4] - 2026-09-01
+
+### Changed
+
+- Recorded that TikTok and YouTube are currently Post Bridge-owned, including fail-closed routing,
+  mixed-provider, and migration rules for future implementation work.
+
+### Breaking changes
+
+None.
+
 ## [5.12.3] - 2026-09-01
 
 ### Added
