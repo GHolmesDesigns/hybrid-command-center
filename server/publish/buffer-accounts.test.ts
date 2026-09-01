@@ -73,7 +73,7 @@ describe('BufferAccountsService', () => {
     const refreshed = await service.refresh();
     expect(refreshed.channels).toHaveLength(3);
     expect(refreshed.lastRefreshAt).toBe(NOW.toISOString());
-    expect(service.selectableTargets()).toHaveLength(2);
+    expect(service.selectableTargets()).toHaveLength(0);
 
     const event = listIntegrationEvents(db, { limit: 1 })[0];
     expect(event?.operation).toBe('signal.buffer-accounts-refresh');
@@ -204,7 +204,7 @@ describe('BufferAccountsService', () => {
     const service = new BufferAccountsService(db, provider, clock);
     await service.refresh();
     expect(service.read().channels).toHaveLength(4);
-    expect(service.selectableTargets()).toHaveLength(2);
+    expect(service.selectableTargets()).toHaveLength(0);
     expect(
       service.read().channels.find((channel) => channel.channelId === 'ch-unknown')?.unavailable,
     ).toBe('Unknown Buffer service');
@@ -234,12 +234,8 @@ describe('BufferAccountsService', () => {
     const service = new BufferAccountsService(db, provider, clock);
     await service.refresh();
     const targets = bufferTargetsFromDb(db);
-    expect(targets.map((target) => target.platform).sort()).toEqual([
-      'tiktok',
-      'youtube',
-      'youtube',
-    ]);
-    expect(service.selectableTargets()).toHaveLength(2);
+    expect(targets).toEqual([]);
+    expect(service.selectableTargets()).toHaveLength(0);
     expect(service.read().organizationId).toBe('org-1');
   });
 

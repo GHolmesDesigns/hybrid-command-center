@@ -33,14 +33,14 @@ describe('resolvePublishingTargets', () => {
     },
   };
 
-  it('merges Post Bridge listings with stored Buffer channels when both are available', async () => {
+  it('keeps current TikTok and YouTube routing on Post Bridge', async () => {
     const db = createDb(':memory:');
     const publish = new MockPublishProvider([
       { id: 1, platform: 'twitter', handle: '@x', name: 'X' },
     ]);
     const buffer = new BufferAccountsService(db, bufferProvider, clock);
     const targets = await resolvePublishingTargets(db, publish, buffer, clock);
-    expect(targets.map((target) => target.platform).sort()).toEqual(['tiktok', 'twitter']);
+    expect(targets.map((target) => target.platform).sort()).toEqual(['twitter']);
   });
 
   it('skips Buffer when the read provider is unavailable', async () => {
@@ -65,7 +65,7 @@ describe('resolvePublishingTargets', () => {
     expect(targets[0]?.platform).toBe('twitter');
   });
 
-  it('keeps Buffer accounts when a cold Post Bridge listing fails on the same press', async () => {
+  it('does not use Buffer as a fallback when Post Bridge listing fails', async () => {
     const db = createDb(':memory:');
     const publish = new MockPublishProvider([
       { id: 1, platform: 'twitter', handle: '@x', name: 'X' },
@@ -74,10 +74,9 @@ describe('resolvePublishingTargets', () => {
       throw new PublishProviderError('Post Bridge refused the request (503).', true);
     };
     const buffer = new BufferAccountsService(db, bufferProvider, clock);
-    const targets = await resolvePublishingTargets(db, publish, buffer, clock);
-    expect(targets).toEqual([
-      expect.objectContaining({ platform: 'tiktok', provider: 'buffer', handle: '@tt' }),
-    ]);
+    await expect(resolvePublishingTargets(db, publish, buffer, clock)).rejects.toThrow(
+      /Post Bridge refused/,
+    );
   });
 
   it('surfaces a Post Bridge listing failure when Buffer contributes nothing', async () => {
@@ -148,15 +147,15 @@ describe('resolvePublishingTargets', () => {
     release();
     const [a, b] = await Promise.all([first, second]);
     expect(channelCalls).toBe(1);
-    expect(a.map((target) => target.platform).sort()).toEqual(['tiktok', 'twitter']);
-    expect(b.map((target) => target.platform).sort()).toEqual(['tiktok', 'twitter']);
+    expect(a.map((target) => target.platform).sort()).toEqual(['twitter']);
+    expect(b.map((target) => target.platform).sort()).toEqual(['twitter']);
   });
 });
 
 describe('cold publish preview over HTTP', () => {
   const clock = () => new Date('2030-01-01T00:00:00.000Z');
 
-  it('returns the same Buffer preview on the first and second press when Post Bridge listing fails', async () => {
+  it('refuses a cold TikTok preview when Post Bridge listing fails', async () => {
     const db = createDb(':memory:');
     const post = seedSignalPost(db, {
       text: 'Cold preview post',
@@ -200,16 +199,11 @@ describe('cold publish preview over HTTP', () => {
       },
     });
 
-    const first = await request(app).post(`/api/signal/posts/${post.id}/publish/preview`).send({});
-    expect(first.status).toBe(200);
-    expect(first.body.connectedAccounts).toEqual([
-      expect.objectContaining({ provider: 'buffer', platform: 'tiktok', handle: '@tt' }),
-    ]);
-    expect(first.body.channels[0]?.provider).toBe('buffer');
-
-    const second = await request(app).post(`/api/signal/posts/${post.id}/publish/preview`).send({});
-    expect(second.status).toBe(200);
-    expect(second.body).toEqual(first.body);
-    expect(listCalls).toBe(2);
+    const response = await request(app)
+      .post(`/api/signal/posts/${post.id}/publish/preview`)
+      .send({});
+    expect(response.status).toBe(500);
+    expect(response.body.error).toBe('Something went wrong on the server.');
+    expect(listCalls).toBe(1);
   });
 });

@@ -4,15 +4,14 @@ import type { PublishProvider, PublishTarget } from './provider.ts';
 import { BufferAccountsService } from './buffer-accounts.ts';
 
 /**
- * Every provider account a person may choose when previewing or saving publish targets.
+ * Every current provider account a person may choose when previewing or saving publish targets.
  *
  * Post Bridge and Buffer are read here and only here on those paths — never on an ordinary Signal
  * page load — and the result is resolved to local surrogates in one pass.
  *
- * The two providers load in parallel and fail independently. A cold Post Bridge listing must not
- * block or abort a Buffer refresh on the same press, and a Buffer refresh that leaves the prior
- * generation in place must not erase Post Bridge accounts already listed. Neither side falls
- * through to the other: each contributes only its own accounts.
+ * The two providers still load in parallel so the Buffer account snapshot can be refreshed for
+ * historical lifecycle reads, but only Post Bridge accounts enter a new Signal target list.
+ * Buffer never falls through as a current route.
  */
 export async function resolvePublishingTargets(
   db: Db,
@@ -40,17 +39,12 @@ export async function resolvePublishingTargets(
     return bufferAccounts.selectableTargets();
   };
 
-  const [postBridge, bufferTargets] = await Promise.all([loadPostBridge(), loadBuffer()]);
+  const [postBridge] = await Promise.all([loadPostBridge(), loadBuffer()]);
   if (!postBridge.ok) {
-    // Buffer accounts on this press mean Post Bridge's failure is not Buffer's problem — leave Post
-    // Bridge empty so its channels refuse in the plan, and keep the Buffer rows. With nothing from
-    // either side, the Post Bridge error is the only honest answer and must stay visible.
-    if (bufferTargets.length === 0) throw postBridge.error;
+    // Buffer accounts on this press never become a fallback: C155/#447 assigns every current
+    // Signal route to Post Bridge. Its failure must remain visible and current targets refuse.
+    throw postBridge.error;
   }
 
-  return resolveProviderAccounts(
-    db,
-    [...(postBridge.ok ? postBridge.targets : []), ...bufferTargets],
-    clock,
-  );
+  return resolveProviderAccounts(db, postBridge.targets, clock);
 }
