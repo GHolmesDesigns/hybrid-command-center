@@ -562,6 +562,32 @@ const categoryPatch = categoryInput.partial().refine((value) => Object.keys(valu
   message: 'Provide a category field to update.',
 });
 
+function sendSampleWorkbook(
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction,
+  filename: string,
+  directory: string,
+  contentType: string,
+  label: string,
+) {
+  res.setHeader('Content-Type', contentType);
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.sendFile(filename, { root: directory }, (error?: Error) => {
+    if (!error) return;
+    /**
+     * Before any bytes are on the wire this is a 500 through the shared handler, which is what
+     * keeps the absolute path out of the response. After them there is no status left to send,
+     * so a download the browser abandoned is logged and dropped rather than answered twice.
+     */
+    if (res.headersSent) {
+      req.log.error({ err: error }, `${label} download failed`);
+      return;
+    }
+    next(error);
+  });
+}
+
 export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   const app = express();
   const production = options.production ?? isProductionRuntime();
@@ -1729,33 +1755,26 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
    * told the `.xlsx` type and the filename by this code and a test can hold it to both.
    */
   app.get(SAMPLE_PLAYBOOK_DOWNLOAD_PATH, (req, res, next) => {
-    res.setHeader('Content-Type', SAMPLE_PLAYBOOK_CONTENT_TYPE);
-    res.setHeader('Content-Disposition', `attachment; filename="${SAMPLE_PLAYBOOK_FILENAME}"`);
-    res.sendFile(SAMPLE_PLAYBOOK_FILENAME, { root: SAMPLE_PLAYBOOK_DIRECTORY }, (error?: Error) => {
-      if (!error) return;
-      /**
-       * Before any bytes are on the wire this is a 500 through the shared handler, which is what
-       * keeps the absolute path out of the response. After them there is no status left to send,
-       * so a download the browser abandoned is logged and dropped rather than answered twice.
-       */
-      if (res.headersSent) {
-        req.log.error({ err: error }, 'Sample playbook download failed');
-        return;
-      }
-      next(error);
-    });
+    sendSampleWorkbook(
+      req,
+      res,
+      next,
+      SAMPLE_PLAYBOOK_FILENAME,
+      SAMPLE_PLAYBOOK_DIRECTORY,
+      SAMPLE_PLAYBOOK_CONTENT_TYPE,
+      'Sample playbook',
+    );
   });
   app.get(SAMPLE_SIGNAL_DOWNLOAD_PATH, (req, res, next) => {
-    res.setHeader('Content-Type', SAMPLE_PLAYBOOK_CONTENT_TYPE);
-    res.setHeader('Content-Disposition', `attachment; filename="${SAMPLE_SIGNAL_FILENAME}"`);
-    res.sendFile(SAMPLE_SIGNAL_FILENAME, { root: SAMPLE_SIGNAL_DIRECTORY }, (error?: Error) => {
-      if (!error) return;
-      if (res.headersSent) {
-        req.log.error({ err: error }, 'Sample Signal download failed');
-        return;
-      }
-      next(error);
-    });
+    sendSampleWorkbook(
+      req,
+      res,
+      next,
+      SAMPLE_SIGNAL_FILENAME,
+      SAMPLE_SIGNAL_DIRECTORY,
+      SAMPLE_PLAYBOOK_CONTENT_TYPE,
+      'Sample Signal',
+    );
   });
   // Campaign playbook import. The preview is the error report: a workbook that cannot be
   // imported answers 200 with every reason, because an author needs the whole list, not the
