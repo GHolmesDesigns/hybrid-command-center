@@ -128,6 +128,14 @@ export const MCP_HEALTH_BUDGET: Budget = {
 };
 
 /** MCP OAuth register/authorize/token — same abuse window as Drive OAuth connect. */
+/** Public manual metadata and delivery. The handlers touch the filesystem, so app.ts mounts
+ * express-rate-limit explicitly for CodeQL and to bound repeated reads. */
+export const MANUAL_BUDGET: Budget = {
+  limit: 120,
+  windowMs: 60_000,
+  message: 'Too many manual requests. Wait a moment and try again.',
+};
+
 export const MCP_OAUTH_BUDGET: Budget = {
   limit: 20,
   windowMs: 15 * 60_000,

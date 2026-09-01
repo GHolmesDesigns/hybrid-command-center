@@ -47,6 +47,7 @@ import { brandStyle } from './ui-shared';
 import { CategoriesCard } from './CategoriesCard';
 import { SignalCampaignsCard } from './SignalCampaignsCard';
 import { TagsCard } from './TagsCard';
+import { manualUrlForVersion } from '../../../shared/manual';
 
 const COLOR_LABEL: Record<BrandingColorField, string> = {
   background: 'Sidebar background',
@@ -61,6 +62,12 @@ type DriveSettingsState = {
   rootFolderId?: string;
   rootFolderUrl?: string;
   picker: DrivePickerConfig | null;
+};
+
+type ManualState = {
+  version: string;
+  available: boolean;
+  url: string | null;
 };
 
 export function SettingsView({
@@ -83,6 +90,8 @@ export function SettingsView({
   flash: (s: string, t?: 'success' | 'error') => void;
 }) {
   const [state, setState] = useState<DriveSettingsState | null>(null),
+    [manual, setManual] = useState<ManualState | null>(null),
+    [manualError, setManualError] = useState(''),
     [brandForm, setBrandForm, brandSaved] = useServerSeeded<Branding>(branding),
     [viewsForm, setViewsForm, viewsSaved] = useServerSeeded<ViewDefaults>(viewDefaults),
     [brandBusy, setBrandBusy] = useState(false),
@@ -97,6 +106,11 @@ export function SettingsView({
   useEffect(() => {
     void load().catch((error: unknown) => setDriveError((error as Error).message));
   }, [load]);
+  useEffect(() => {
+    void api<ManualState>('/settings/manual')
+      .then((next) => setManual(next))
+      .catch((error: unknown) => setManualError((error as Error).message));
+  }, []);
   const connect = async () => {
     try {
       const { url } = await api<{ url: string }>('/drive/oauth/start');
@@ -370,6 +384,37 @@ export function SettingsView({
                 </button>
               </div>
             </form>
+          </section>
+          <section className="panel settings-card">
+            <div className="settings-icon neutral">
+              <FileText />
+            </div>
+            <div className="section-title">
+              <div>
+                <span className="eyebrow">Help</span>
+                <h2>User manual</h2>
+              </div>
+              {manual?.version && <span className="version-pill">v{manual.version}</span>}
+            </div>
+            <p>Open the operating manual for the version running on this device.</p>
+            {manualError || (manual && !manual.available) ? (
+              <p className="field-hint" role="status">
+                The user manual for this version is not available yet.
+              </p>
+            ) : manual ? (
+              <a
+                className="buttonlike secondary settings-link"
+                href={manual.url ?? manualUrlForVersion(manual.version)}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <FileText /> Open user manual <ExternalLink aria-hidden="true" />
+              </a>
+            ) : (
+              <p className="field-hint" role="status">
+                Checking for the matching manual…
+              </p>
+            )}
           </section>
           <section className="panel settings-card">
             <div className="settings-icon neutral">

@@ -26,7 +26,8 @@ import { IMPORT_BODY_LIMIT_BYTES } from './import.ts';
 import { findSheet, readXlsxWorkbook } from './domain/workbook.ts';
 import { PLAYBOOK_SHEETS } from '../shared/playbook.ts';
 import { TASK_CHECKLIST_TEMPLATES } from '../shared/types.ts';
-import { DEFAULT_BRANDING } from '../shared/branding.ts';
+import { APP_VERSION, DEFAULT_BRANDING } from '../shared/branding.ts';
+import { manualUrlForVersion } from '../shared/manual.ts';
 import { CANONICAL_VIEW_DEFAULTS, type ViewDefaults } from '../shared/view-defaults.ts';
 
 let db: Db;
@@ -676,6 +677,21 @@ describe('command center API', () => {
     // leaves the default palette behind rather than a half-written one.
     expect(saved.body.branding.background).toBe(DEFAULT_BRANDING.background);
     expect(saved.body.branding.logoUrl).toBe('');
+  });
+  it('reports and serves only the manual matching the running version', async () => {
+    const app = createApp(db);
+    const settings = await request(app).get('/api/settings/manual').expect(200);
+
+    expect(settings.body).toEqual({
+      version: APP_VERSION,
+      available: true,
+      url: manualUrlForVersion(APP_VERSION),
+    });
+    await request(app)
+      .get(manualUrlForVersion(APP_VERSION))
+      .expect('Content-Type', /html/)
+      .expect(200);
+    await request(app).get(manualUrlForVersion('0.0.0')).expect(404);
   });
 
   describe('sidebar colours and logo', () => {
