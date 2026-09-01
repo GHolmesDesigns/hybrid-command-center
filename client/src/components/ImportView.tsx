@@ -72,6 +72,13 @@ export function ImportView({
       ),
     [events],
   );
+  const receiptColumns = useMemo(
+    () => [
+      receipts.filter((_, index) => index % 2 === 0),
+      receipts.filter((_, index) => index % 2 === 1),
+    ],
+    [receipts],
+  );
 
   return (
     <>
@@ -153,13 +160,23 @@ export function ImportView({
               body="Once you import a playbook, its counts and every skipped or failed row stay here."
             />
           )}
-          <ul className="receipt-list">
-            {receipts.map((receipt) => (
-              <li key={receipt.id}>
-                <Receipt receipt={receipt} event={eventByReceipt.get(receipt.id)} />
-              </li>
-            ))}
-          </ul>
+          {receipts.length > 0 && (
+            <div className="receipt-columns">
+              {receiptColumns.map((column, index) => (
+                <ul
+                  className="receipt-list"
+                  aria-label={`Import receipts column ${index + 1}`}
+                  key={index}
+                >
+                  {column.map((receipt) => (
+                    <li key={receipt.id}>
+                      <Receipt receipt={receipt} event={eventByReceipt.get(receipt.id)} />
+                    </li>
+                  ))}
+                </ul>
+              ))}
+            </div>
+          )}
         </section>
         <section className="panel import-activity">
           <div className="section-title">
