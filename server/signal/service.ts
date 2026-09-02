@@ -27,6 +27,7 @@ import {
   channelsByPost,
   mediaByPost,
   signalLifecycleSql,
+  signalPostSelect,
   variantLayerKey,
   variantMediaByPost,
   type SignalPostRow,
@@ -407,8 +408,7 @@ function mediaItemsOf(input: {
 }
 
 function readRow(db: Db, postId: string): SignalPostRow | undefined {
-  return db.prepare('SELECT * FROM signal_posts WHERE id=?').get(postId) as
-    SignalPostRow | undefined;
+  return db.prepare(`${signalPostSelect} WHERE p.id=?`).get(postId) as SignalPostRow | undefined;
 }
 
 /** One post with its channels, or undefined when there is no such post. */
@@ -434,7 +434,7 @@ export function listQueue(db: Db, lifecycle: SignalLifecycleFilter = 'active'): 
   const lifecycleClause = signalLifecycleSql(lifecycle);
   const rows = db
     .prepare(
-      `SELECT * FROM signal_posts WHERE date IS NULL${lifecycleClause.sql} ORDER BY position, created_at, id`,
+      `${signalPostSelect} WHERE p.date IS NULL${lifecycleClause.sql.replaceAll('lifecycle', 'p.lifecycle')} ORDER BY p.position, p.created_at, p.id`,
     )
     .all() as unknown as SignalPostRow[];
   return toSignalPosts(db, rows);

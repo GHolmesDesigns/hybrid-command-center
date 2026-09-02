@@ -142,6 +142,31 @@ describe('Signal planner', () => {
     expect(screen.queryByText('Not in this month')).not.toBeInTheDocument();
   });
 
+  it('names a bound client cue and leaves an unbound post without one', async () => {
+    testState.signalPostsPayload = [
+      signalPost('bound', 'Client launch', '2026-09-14', {
+        client: {
+          id: 'client-1',
+          name: 'Acme Studio',
+          branding: { logoUrl: '', colorOne: '#18201d', colorTwo: '#ffffff' },
+        },
+      }),
+      signalPost('unbound', 'Unassigned idea', null),
+    ];
+    await openSignal();
+
+    const day = screen.getByRole('region', { name: '2026-09-14' });
+    expect(within(day).getByText('Acme Studio')).toBeInTheDocument();
+    expect(within(day).getByText('AS')).toBeInTheDocument();
+    const cue = day.querySelector<HTMLElement>('.signal-client-cue');
+    expect(cue).not.toBeNull();
+    expect(cue?.style.getPropertyValue('--client-cue-bg')).toBe('#18201d');
+    expect(cue?.style.getPropertyValue('--client-cue-fg')).toBe('#ffffff');
+    const queue = screen.getByRole('complementary', { name: 'Unscheduled queue' });
+    expect(within(queue).queryByText('Acme Studio')).not.toBeInTheDocument();
+    expect(within(queue).getByText('Unassigned idea')).toBeInTheDocument();
+  });
+
   it('warns on every planner surface when X-bound copy carries a link without rewriting it', async () => {
     const warning =
       'X removes links from the post body. Move this link to a reply before publishing.';

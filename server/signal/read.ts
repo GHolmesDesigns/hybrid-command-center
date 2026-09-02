@@ -12,6 +12,7 @@ import {
   listPostVariants,
   signalLifecycleSql,
   toSignalPosts,
+  signalPostSelect,
   type SignalPostRow,
 } from './rows.ts';
 
@@ -65,9 +66,9 @@ export function listPostsInRange(
   }
   const rows = db
     .prepare(
-      `SELECT * FROM signal_posts
-       WHERE ${clauses.join(' AND ')}
-       ORDER BY date, time, created_at, id
+      `${signalPostSelect}
+       WHERE ${clauses.map((clause) => clause.replaceAll('signal_posts.', 'p.')).join(' AND ')}
+       ORDER BY p.date, p.time, p.created_at, p.id
        LIMIT ?`,
     )
     // One more than the limit, so a full page is distinguishable from an overflowing one.

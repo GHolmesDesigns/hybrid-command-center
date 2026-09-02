@@ -1,6 +1,7 @@
 import { mixHex } from './contrast.ts';
 import { normalizeTagName, sameTagName } from './types.ts';
 import { signalMediaKindForMime, type SignalPostMedia } from './signal-media.ts';
+import type { ClientBranding } from './branding.ts';
 
 /**
  * Signal Campaign: the scheduled-content vocabulary the API, the planner, and the calendar
@@ -528,6 +529,13 @@ export interface SignalCampaignSummary extends SignalCampaign {
   postCount: number;
 }
 
+/** The one client relationship a Signal post may carry, resolved through its project. */
+export interface SignalPostClient {
+  id: string;
+  name: string;
+  branding?: ClientBranding;
+}
+
 /**
  * Campaign order, wherever one is listed: case- and accent-insensitive by name, tie-broken by id
  * so two spellings that compare equal cannot swap places between renders.
@@ -540,6 +548,8 @@ export interface SignalPost {
   id: string;
   /** The workspace project this post belongs to, or null when it is unassigned. */
   projectId?: string | null;
+  /** The client reached through `projectId`; absent for an unbound post. */
+  client?: SignalPostClient;
   /** What is being posted. The copy itself, not a title. */
   text: string;
   channels: SignalChannel[];
