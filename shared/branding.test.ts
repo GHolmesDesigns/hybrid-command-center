@@ -3,6 +3,8 @@ import {
   DEFAULT_BRANDING,
   brandingContrastReadings,
   brandingIssues,
+  clientBrandingIssues,
+  resolveClientBranding,
   sidebarPalette,
   type Branding,
 } from './branding.ts';
@@ -58,6 +60,67 @@ describe('branding validation', () => {
 
   it('asks for no alt text when there is no logo to describe', () => {
     expect(brandingIssues(brand({ logoUrl: '', logoAlt: '' }))).toEqual([]);
+  });
+});
+
+describe('client branding validation', () => {
+  it('accepts a readable two-colour HTTPS client palette', () => {
+    expect(
+      clientBrandingIssues({
+        logoUrl: 'https://cdn.example/logo.svg',
+        colorOne: '#18201d',
+        colorTwo: '#ffffff',
+      }),
+    ).toEqual([]);
+  });
+
+  it('refuses non-HTTPS logos and unreadable palettes', () => {
+    expect(
+      clientBrandingIssues({
+        logoUrl: 'http://cdn.example/logo.svg',
+        colorOne: '#ffffff',
+        colorTwo: '#eeeeee',
+      }),
+    ).toEqual([
+      { field: 'colorTwo', message: expect.stringContaining('WCAG AA') },
+      { field: 'logoUrl', message: 'A logo address must start with https://' },
+    ]);
+  });
+
+  it('refuses an incomplete client palette', () => {
+    expect(clientBrandingIssues({ logoUrl: '', colorOne: '#18201d', colorTwo: '' })).toEqual([
+      {
+        field: 'colorTwo',
+        message: 'Expected a hex colour such as #ffffff, received ""',
+      },
+    ]);
+    expect(clientBrandingIssues({ logoUrl: '', colorOne: '', colorTwo: '#ffffff' })).toEqual([
+      {
+        field: 'colorOne',
+        message: 'Expected a hex colour such as #18201d, received ""',
+      },
+    ]);
+  });
+
+  it('uses global branding when a client has no palette', () => {
+    expect(resolveClientBranding()).toEqual(DEFAULT_BRANDING);
+    expect(resolveClientBranding({ logoUrl: '', colorOne: '', colorTwo: '' })).toEqual(
+      DEFAULT_BRANDING,
+    );
+  });
+
+  it('maps a valid client palette onto the shared branding shape', () => {
+    expect(
+      resolveClientBranding({
+        logoUrl: 'https://cdn.example/logo.svg',
+        colorOne: '#FFFFFF',
+        colorTwo: '#18201D',
+      }),
+    ).toMatchObject({
+      background: '#ffffff',
+      foreground: '#18201d',
+      logoUrl: 'https://cdn.example/logo.svg',
+    });
   });
 });
 

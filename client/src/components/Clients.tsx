@@ -10,6 +10,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { send } from '../api';
+import { DEFAULT_BRANDING } from '../../../shared/branding';
 import type { Client, Project } from '../../../shared/types';
 import {
   CLIENT_VISIBILITIES,
@@ -101,7 +102,19 @@ export function Clients({
         {visible.map((c) => (
           <article className={`entity-card ${c.status === 'ARCHIVED' ? 'muted' : ''}`} key={c.id}>
             <div className="entity-top">
-              <div className="monogram large">{initials(c.name)}</div>
+              <div
+                className="monogram large"
+                style={{
+                  background: c.branding?.colorOne || DEFAULT_BRANDING.background,
+                  color: c.branding?.colorTwo || DEFAULT_BRANDING.foreground,
+                }}
+              >
+                {c.branding?.logoUrl ? (
+                  <img src={c.branding.logoUrl} alt={c.name} />
+                ) : (
+                  initials(c.name)
+                )}
+              </div>
               <div className="entity-badges">
                 {c.status === 'ARCHIVED' && <span className="archived-badge">Archived</span>}
                 {c.mergedInto && (
@@ -313,6 +326,19 @@ export function ClientDetail({
               {client.driveError && <small>{client.driveError}</small>}
             </dd>
           </dl>
+          <div
+            className="client-branding-preview"
+            style={{
+              background: client.branding?.colorOne || DEFAULT_BRANDING.background,
+              color: client.branding?.colorTwo || DEFAULT_BRANDING.foreground,
+            }}
+          >
+            {client.branding?.logoUrl ? (
+              <img src={client.branding.logoUrl} alt={client.name} />
+            ) : (
+              <span>{client.branding ? 'Client palette' : 'Global branding'}</span>
+            )}
+          </div>
           <button className="secondary" onClick={() => open({ type: 'client', value: client })}>
             Edit details
           </button>

@@ -77,6 +77,8 @@ export const TASK_CHECKLIST_TEMPLATES: Partial<Record<TaskType, readonly string[
 export type Priority = (typeof TASK_PRIORITIES)[number];
 export type DriveStatus = 'DISCONNECTED' | 'PENDING' | 'CONNECTED' | 'FAILED';
 
+import type { ClientBranding } from './branding.ts';
+
 export interface Client {
   id: string;
   name: string;
@@ -91,6 +93,8 @@ export interface Client {
   driveFolderUrl?: string;
   driveStatus: DriveStatus;
   driveError?: string;
+  /** Per-client palette; absent or empty means the global branding is used. */
+  branding?: ClientBranding;
   /**
    * Present only on a client that was merged into another one. Its projects now belong to that
    * client, it is archived for good, and a playbook naming it resolves to the survivor.

@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS clients (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, slug TEXT NOT NULL UNIQUE, contact_name TEXT, email TEXT,
   phone TEXT, website TEXT, notes TEXT, status TEXT NOT NULL DEFAULT 'ACTIVE', drive_folder_id TEXT,
   drive_folder_url TEXT, drive_status TEXT NOT NULL DEFAULT 'DISCONNECTED', drive_error TEXT,
+  branding_logo_url TEXT, branding_color_one TEXT, branding_color_two TEXT,
   created_at TEXT NOT NULL, updated_at TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1
 );
 -- One row per client that was merged into another. Clients are archive-only, so a merge never

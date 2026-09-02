@@ -285,6 +285,8 @@ import {
 } from './agent-coordination/service.ts';
 import { reclaimableWorkSessions, reclaimWorkSession } from './agent-coordination/work-sessions.ts';
 import { INTEGRATION_EVENT_PAGE_MAX, INTEGRATION_SOURCES } from '../shared/integration-log.ts';
+import { clientBrandingIssues } from '../shared/branding.ts';
+import { normalizeHex } from '../shared/contrast.ts';
 import { normalizeCategoryName, normalizeTagName } from '../shared/types.ts';
 
 const id = () => crypto.randomUUID();
@@ -497,6 +499,10 @@ const nullableEmail = emailText
   .optional()
   .transform((v) => (v === undefined ? undefined : v || null));
 const nullableUrl = urlText.optional().transform((v) => (v === undefined ? undefined : v || null));
+const nullableBranding = z
+  .union([z.string().trim().max(500), z.null()])
+  .optional()
+  .transform((v) => (v === undefined || v === null ? v : v || null));
 /** Resolve one PATCH field: an omitted key keeps the stored value, `null` clears it. */
 const patch = <T>(next: T | undefined, current: T): T => (next === undefined ? current : next);
 
@@ -507,8 +513,34 @@ const clientFields = {
   phone: nullable,
   website: nullableUrl,
   notes: nullable,
+  brandingLogoUrl: nullableBranding,
+  brandingColorOne: nullableBranding,
+  brandingColorTwo: nullableBranding,
 };
-const clientInput = z.object(clientFields);
+const validateClientBranding = (
+  data: {
+    brandingLogoUrl?: string | null;
+    brandingColorOne?: string | null;
+    brandingColorTwo?: string | null;
+  },
+  ctx: z.RefinementCtx,
+) => {
+  for (const issue of clientBrandingIssues({
+    logoUrl: data.brandingLogoUrl ?? '',
+    colorOne: data.brandingColorOne ?? '',
+    colorTwo: data.brandingColorTwo ?? '',
+  }))
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: [issue.field], message: issue.message });
+};
+const clientInputBase = z.object(clientFields);
+const clientInput = clientInputBase.superRefine(validateClientBranding);
+const clientBrandingInput = z
+  .object({
+    brandingLogoUrl: nullableBranding,
+    brandingColorOne: nullableBranding,
+    brandingColorTwo: nullableBranding,
+  })
+  .superRefine(validateClientBranding);
 const clientPatch = z.object(clientFields).partial();
 
 const normalizedTagName = z.string().transform(normalizeTagName).pipe(z.string().min(1).max(60));
@@ -1144,7 +1176,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       const clientId = id();
       const stamp = now();
       db.prepare(
-        `INSERT INTO clients(id,name,slug,contact_name,email,phone,website,notes,drive_status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO clients(id,name,slug,contact_name,email,phone,website,notes,branding_logo_url,branding_color_one,branding_color_two,drive_status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       ).run(
         clientId,
         data.name,
@@ -1154,6 +1186,9 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         data.phone ?? null,
         data.website ?? null,
         data.notes ?? null,
+        data.brandingLogoUrl ?? null,
+        normalizeHex(data.brandingColorOne ?? '') ?? data.brandingColorOne ?? null,
+        normalizeHex(data.brandingColorTwo ?? '') ?? data.brandingColorTwo ?? null,
         'PENDING',
         stamp,
         stamp,
@@ -1174,11 +1209,19 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       const revision = revisionPrecondition.parse(req.body?.revision);
       const current = db.prepare('SELECT * FROM clients WHERE id=?').get(req.params.id) as any;
       if (!current) return res.status(404).json({ error: 'Client not found.' });
+      const branding = {
+        brandingLogoUrl: patch(data.brandingLogoUrl, current.branding_logo_url),
+        brandingColorOne: patch(data.brandingColorOne, current.branding_color_one),
+        brandingColorTwo: patch(data.brandingColorTwo, current.branding_color_two),
+      };
+      const brandingResult = clientBrandingInput.safeParse(branding);
+      if (!brandingResult.success)
+        throw new WorkspaceValidationError(brandingResult.error.issues[0].message);
       const stamp = now();
       transaction(db, () => {
         requireRevision(db, 'client', current.id, revision);
         db.prepare(
-          `UPDATE clients SET name=?,slug=?,contact_name=?,email=?,phone=?,website=?,notes=?,updated_at=? WHERE id=?`,
+          `UPDATE clients SET name=?,slug=?,contact_name=?,email=?,phone=?,website=?,notes=?,branding_logo_url=?,branding_color_one=?,branding_color_two=?,updated_at=? WHERE id=?`,
         ).run(
           patch(data.name, current.name),
           data.name === undefined ? current.slug : buildClientSlug(data.name, current.id),
@@ -1187,6 +1230,9 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
           patch(data.phone, current.phone),
           patch(data.website, current.website),
           patch(data.notes, current.notes),
+          branding.brandingLogoUrl,
+          normalizeHex(branding.brandingColorOne ?? '') ?? branding.brandingColorOne,
+          normalizeHex(branding.brandingColorTwo ?? '') ?? branding.brandingColorTwo,
           stamp,
           req.params.id,
         );

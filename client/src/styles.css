@@ -952,6 +952,23 @@ button svg,
   height: 48px;
   font-size: 14px;
 }
+
+.monogram.large img,
+.client-branding-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.client-branding-preview {
+  align-items: center;
+  border-radius: 0.5rem;
+  display: flex;
+  justify-content: center;
+  min-height: 3rem;
+  padding: 0.75rem;
+  margin: 1rem 0;
+}
 .quick-actions {
   margin-top: 18px;
   background: #ebeae4;
