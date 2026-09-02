@@ -8,6 +8,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.13.3] - 2026-09-02
+
+### Added
+
+- Added project-scoped, human-confirmed Google Drive folder creation and file uploads from Files.
+- Drive write previews name the exact action and target, reject stale confirmations, and record
+  successful or failed attempts in Integration activity. Agent Drive write remains a separate grant
+  that is disabled by default.
+
+### Breaking changes
+
+None.
+
 ## [5.13.2] - 2026-09-02
 
 ### Added
