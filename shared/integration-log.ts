@@ -26,6 +26,8 @@ export const INTEGRATION_OPERATIONS = [
   'signal.import',
   'calendar.sync',
   'drive.sync',
+  'drive.create-folder',
+  'drive.upload-file',
   'signal.publish',
   'signal.publish-now',
   'signal.reconcile',
@@ -70,7 +72,14 @@ export const INTEGRATION_OUTCOMES = ['SUCCESS', 'PARTIAL', 'FAILURE'] as const;
 export type IntegrationOutcome = (typeof INTEGRATION_OUTCOMES)[number];
 
 /** Record kinds an integration can affect. Each maps to one local table. */
-export const INTEGRATION_ENTITY_TYPES = ['client', 'project', 'task', 'signalPost'] as const;
+export const INTEGRATION_ENTITY_TYPES = [
+  'client',
+  'project',
+  'task',
+  'signalPost',
+  'driveFolder',
+  'driveFile',
+] as const;
 export type IntegrationEntityType = (typeof INTEGRATION_ENTITY_TYPES)[number];
 
 /** One record an operation created or changed, addressed the way the rest of the app does. */
@@ -129,6 +138,8 @@ export const INTEGRATION_OPERATION_LABEL: Record<IntegrationOperation, string> =
   'signal.import': 'Signal import',
   'calendar.sync': 'Calendar sync',
   'drive.sync': 'Drive sync',
+  'drive.create-folder': 'Drive create folder',
+  'drive.upload-file': 'Drive upload file',
   'signal.publish': 'Signal publish',
   'signal.publish-now': 'Signal publish now',
   'signal.reconcile': 'Signal reconcile',
@@ -151,4 +162,6 @@ export const INTEGRATION_ENTITY_LABEL: Record<IntegrationEntityType, string> = {
   project: 'Project',
   task: 'Task',
   signalPost: 'Signal post',
+  driveFolder: 'Drive folder',
+  driveFile: 'Drive file',
 };

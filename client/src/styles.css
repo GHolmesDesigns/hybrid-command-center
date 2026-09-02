@@ -3174,7 +3174,30 @@ button.tag-chip.toggle.active {
   background: #fdecea;
   color: var(--red);
 }
-/* Files: the read-only Drive listing. */
+/* Files: scoped browsing and separately confirmed Drive writes. */
+.files-write {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 14px 0;
+}
+.files-write label:not(.buttonlike) {
+  display: grid;
+  gap: 5px;
+  min-width: 220px;
+}
+.files-write label span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.files-write input[type='text'],
+.files-write input:not([type]) {
+  min-height: 38px;
+}
+.files-write label.buttonlike input {
+  display: none;
+}
 .files-note {
   display: flex;
   align-items: center;

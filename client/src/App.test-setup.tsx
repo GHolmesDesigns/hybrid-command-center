@@ -295,6 +295,8 @@ export const testState = {
    * by folder and by cursor the way real Drive does. Unset means a Drive nobody connected.
    */
   driveListingPayload: null as ((projectId: string, query: URLSearchParams) => unknown) | null,
+  driveWritePreviewPayload: null as unknown,
+  driveWriteCommitPayload: null as unknown,
   /**
    * What `GET /api/calendar` answers, per range, so a suite can vary a month. Unset means an
    * empty month with a healthy schedule behind it.
@@ -1358,6 +1360,20 @@ const respondTo = (url: string, init?: RequestInit) => {
     return reply(answer.status, answer.body);
   }
   const files = url.match(/\/api\/projects\/([^/?]+)\/files(?:\?(.*))?$/);
+  const driveWritePreview = url.match(
+    /\/api\/projects\/([^/?]+)\/drive-write\/(folder|upload)\/preview$/,
+  );
+  if (driveWritePreview && method === 'POST')
+    return (
+      testState.driveWritePreviewPayload ??
+      reply(400, { error: 'No Drive write preview was set up.' })
+    );
+  const driveWriteCommit = url.match(/\/api\/projects\/([^/?]+)\/drive-write\/(folder|upload)$/);
+  if (driveWriteCommit && method === 'POST')
+    return (
+      testState.driveWriteCommitPayload ??
+      reply(400, { error: 'No Drive write commit was set up.' })
+    );
   if (files && method === 'GET') {
     const query = new URLSearchParams(files[2] ?? '');
     return (
@@ -1774,6 +1790,8 @@ beforeEach(() => {
     auditEventCount: 0,
   };
   testState.driveListingPayload = null;
+  testState.driveWritePreviewPayload = null;
+  testState.driveWriteCommitPayload = null;
   testState.calendarPayload = null;
   testState.signalPostsPayload = [];
   testState.signalPostsTruncated = false;

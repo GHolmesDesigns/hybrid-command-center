@@ -1,6 +1,15 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ExternalLink, File, Folder, Lock, RefreshCw } from 'lucide-react';
+import {
+  AlertCircle,
+  ExternalLink,
+  File,
+  Folder,
+  Lock,
+  Plus,
+  RefreshCw,
+  Upload,
+} from 'lucide-react';
 import { api } from '../api';
 import type { Project } from '../../../shared/types';
 import {
@@ -62,6 +71,8 @@ export function FilesView({
   const [loading, setLoading] = useState(false);
   const [paging, setPaging] = useState(false);
   const [error, setError] = useState('');
+  const [folderName, setFolderName] = useState('');
+  const [writeBusy, setWriteBusy] = useState(false);
   /** Bumped by "Try again", which is the only way to ask for the same listing twice. */
   const [attempt, setAttempt] = useState(0);
   const retry = () => setAttempt((count) => count + 1);
@@ -131,6 +142,63 @@ export function FilesView({
     // A folder belongs to the project it was opened from, so changing project drops it.
     if (key === 'project') next.delete('folder');
     setParams(next);
+  };
+
+  const createFolder = async () => {
+    if (!listing?.folder || !folderName.trim()) return;
+    setWriteBusy(true);
+    setError('');
+    try {
+      const preview = await api<{ plan: unknown; planHash: string; confirmation: string }>(
+        `/projects/${selected}/drive-write/folder/preview`,
+        { method: 'POST', body: JSON.stringify({ parentId: listing.folder.id, name: folderName }) },
+      );
+      if (!window.confirm(preview.confirmation)) return;
+      await api(`/projects/${selected}/drive-write/folder`, {
+        method: 'POST',
+        body: JSON.stringify(preview),
+      });
+      setFolderName('');
+      retry();
+    } catch (problem) {
+      setError((problem as Error).message);
+    } finally {
+      setWriteBusy(false);
+    }
+  };
+
+  const uploadFile = async (file: File) => {
+    if (!listing?.folder) return;
+    setWriteBusy(true);
+    setError('');
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      let binary = '';
+      for (let offset = 0; offset < bytes.length; offset += 0x8000)
+        binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+      const preview = await api<{ plan: unknown; planHash: string; confirmation: string }>(
+        `/projects/${selected}/drive-write/upload/preview`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            folderId: listing.folder.id,
+            name: file.name,
+            mimeType: file.type || 'application/octet-stream',
+            contentBase64: btoa(binary),
+          }),
+        },
+      );
+      if (!window.confirm(preview.confirmation)) return;
+      await api(`/projects/${selected}/drive-write/upload`, {
+        method: 'POST',
+        body: JSON.stringify(preview),
+      });
+      retry();
+    } catch (problem) {
+      setError((problem as Error).message);
+    } finally {
+      setWriteBusy(false);
+    }
   };
 
   const scopes = listing?.scopes ?? [];
@@ -211,9 +279,45 @@ export function FilesView({
         </label>
       </div>
 
+      {ready && listing?.folder && (
+        <div className="files-write" aria-label="Confirmed Drive writes">
+          <label>
+            <span>New folder in {listing.folder.name}</span>
+            <input
+              value={folderName}
+              onChange={(event) => setFolderName(event.target.value)}
+              placeholder="Folder name"
+              maxLength={200}
+              disabled={writeBusy}
+            />
+          </label>
+          <button
+            type="button"
+            className="secondary"
+            onClick={createFolder}
+            disabled={writeBusy || !folderName.trim()}
+          >
+            <Plus /> Create folder
+          </button>
+          <label className="buttonlike secondary">
+            <Upload /> Upload file
+            <input
+              type="file"
+              hidden
+              disabled={writeBusy}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = '';
+                if (file) void uploadFile(file);
+              }}
+            />
+          </label>
+        </div>
+      )}
+
       <p className="files-note">
-        <Lock /> Read-only. Files are added, renamed, and removed in Drive itself — and deleting a
-        project or task in Command Center never touches a Drive file.
+        <Lock /> Browsing is read-only. Folder creation and uploads are separate confirmed actions;
+        downloads, moves, renames, and deletes remain unavailable.
       </p>
 
       {loading && (

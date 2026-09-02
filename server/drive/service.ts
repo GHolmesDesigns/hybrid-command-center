@@ -5,6 +5,7 @@ import { createGoogleProvider } from './google.ts';
 import { decryptJson, encryptJson } from './tokens.ts';
 import { DisconnectedDriveProvider, type DriveProvider } from './provider.ts';
 import type { DriveMediaProvider } from './media.ts';
+import { DisconnectedDriveWriteProvider, type DriveWriteProvider } from './write.ts';
 
 const now = () => new Date().toISOString();
 export function getSetting(db: Db, key: string) {
@@ -37,7 +38,7 @@ export function deleteSetting(db: Db, key: string) {
  */
 export function driveClients(
   db: Db,
-): { provider: DriveProvider; media: DriveMediaProvider } | null {
+): { provider: DriveProvider; write: DriveWriteProvider; media: DriveMediaProvider } | null {
   const encrypted = getSetting(db, 'google_tokens');
   if (
     !encrypted ||
@@ -47,7 +48,7 @@ export function driveClients(
   )
     return null;
   const tokens = decryptJson(encrypted, config.google.encryptionKey);
-  const { provider, media, auth } = createGoogleProvider(tokens, config.google);
+  const { provider, write, media, auth } = createGoogleProvider(tokens, config.google);
   auth.on('tokens', (fresh) =>
     setSetting(
       db,
@@ -55,11 +56,15 @@ export function driveClients(
       encryptJson({ ...tokens, ...fresh }, config.google.encryptionKey),
     ),
   );
-  return { provider, media };
+  return { provider, write, media };
 }
 
 export function driveProvider(db: Db): DriveProvider {
   return driveClients(db)?.provider ?? new DisconnectedDriveProvider();
+}
+
+export function driveWriteProvider(db: Db): DriveWriteProvider {
+  return driveClients(db)?.write ?? new DisconnectedDriveWriteProvider();
 }
 
 export async function provisionClient(db: Db, clientId: string, provider = driveProvider(db)) {

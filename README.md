@@ -32,7 +32,7 @@ If IDE agents should plan Signal and workspace work through MCP, read [Multi-Age
 - **Edit details** on a task, opening the full create/edit form from the task detail view
 - Collapsible sidebar with **version tracker** and Settings-editable branding — wording, colours, and an optional logo, with **WCAG AA contrast enforced** and every field resettable to the defaults in `shared/branding.ts`
 - **Campaign playbook import** — an .xlsx workbook or pasted tabs creating a client, its projects, their tasks, checklists, and dependencies in one confirmed transaction, previewed first, duplicates skipped and reported, with a persisted receipt and no Drive side effect
-- **Files** — read-only browsing of a project's Drive folder and its provisioned subfolders: paginated listing, type/size/modified for every item, and "Open in Drive" on every row. It uploads, downloads, moves, renames, and deletes nothing, and every Drive failure mode has its own state and next step
+- **Files** — project-scoped browsing of a project's Drive folder and its provisioned subfolders: paginated listing, type/size/modified for every item, and "Open in Drive" on every row. A separate confirmed write path can create folders or upload files, naming the exact target and action before each write. Downloads, moves, renames, and deletes remain unavailable, and every Drive failure mode has its own state and next step
 - **Integration activity** — an append-only record of what each integration changed, when, and how it ended, naming the affected clients, projects, and tasks by id, bounded to the most recent 200 rows, credential-scrubbed, and shown on the Import page beside the receipt it belongs to
 - **Signal Campaign** — the authoritative store and operable planner for content: month grid, unscheduled queue, quick idea capture, and a full editor for content, channels, ordered media references — public URLs and version-bound Drive files — date, time, format, planning status, lifecycle, delivery provenance, campaigns, and CTA, with duplicate-to-queue, next-open-slot suggestion, and confirmed Retire plan
 - **Queue health** — an in-app summary above the planner deriving seven alerts from your own posts, deliveries, and the last inventory read: a failed or partly delivered post, a manual finish waiting on you, a scheduled slot approaching with nothing submitted, a provider answer that moved at the last check, a channel with nothing planned inside a configurable window, a provider synchronisation that is rate-limited or behind, and posts at the provider that this app did not send. Each line links to the post it is about, and acknowledging one changes no planning or delivery state. In-app only — no email, SMS, or push service
@@ -614,17 +614,18 @@ Every folder receives a stable Command Center idempotency property. Folder IDs�
 
 Expired access tokens refresh through Google's OAuth client. Revoked access produces a visible failed status and a retry path; reconnect in Settings if authorization was revoked.
 
-### Files — read-only Drive browsing
+### Files — scoped Drive browsing and confirmed writes
 
 `/files` browses the Drive folder behind a project. It is a page rather than a modal because a
 paginated list with a folder switcher is cramped in a dialog, and because the project and folder
 both belong in the address: `/files?project=<id>&folder=<id>` reloads and shares as it looks.
 A project's detail page links to it, and the Drive folder itself is one click from every row.
 
-- **Read-only by construction.** The UI has no upload, download, move, rename, or delete
-  control, and there is no endpoint behind it that would accept one. The provider gained exactly
-  one method, `listFiles`, and `server/drive/browse.ts` — the only module the route calls — has
-  no write in it.
+- **Browse and write are separate capabilities.** `server/drive/browse.ts` and `DriveProvider`
+  remain read-only. `server/drive/write.ts` is a separate, project-scoped capability for folder
+  creation and uploads only. Each operation previews the exact target and action, requires the
+  returned plan hash at commit, and records success or failure in the integration activity log.
+  Downloads, moves, renames, and deletes remain unavailable.
 - **One endpoint.** `GET /api/projects/:id/files?folderId=&pageToken=&pageSize=` answers with
   `{ state, projectId, projectName, folder, scopes, files, nextPageToken, error }`. No token,
   credential, or Drive SDK object crosses it; the client never imports `googleapis`.
