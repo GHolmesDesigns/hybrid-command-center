@@ -157,4 +157,28 @@ describe('agent Drive write approval', () => {
     ]);
     expect(listDriveWriteRequests(db).map((request) => request.id)).toHaveLength(2);
   });
+
+  it('refuses an unowned folder and an oversized upload before creating a request', () => {
+    expect(() =>
+      requestDriveWrite(db, 'planner', {
+        kind: 'create-folder',
+        projectId,
+        parentId: 'another-project-folder',
+        name: 'Escape',
+        clientRequestId: 'request-unowned',
+      }),
+    ).toThrow('not part of this project');
+    expect(() =>
+      requestDriveWrite(db, 'planner', {
+        kind: 'upload-file',
+        projectId,
+        folderId,
+        name: 'too-large.bin',
+        mimeType: 'application/octet-stream',
+        contentBase64: Buffer.alloc(10 * 1024 * 1024 + 1).toString('base64'),
+        clientRequestId: 'request-too-large',
+      }),
+    ).toThrow('exceeds the 10 MB limit');
+    expect(listDriveWriteRequests(db)).toHaveLength(0);
+  });
 });
