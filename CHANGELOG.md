@@ -8,6 +8,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.13.4] - 2026-09-02
+
+### Added
+
+- Added the Reports v1 plan, defining a shareable read-only Reports route, local SQLite aggregate
+  questions, and performance and implementation boundaries for a future Reports feature.
+
+### Breaking changes
+
+None.
+
 ## [5.13.3] - 2026-09-02
 
 ### Added
