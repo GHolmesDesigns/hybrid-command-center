@@ -1320,7 +1320,7 @@ const respondTo = (url: string, init?: RequestInit) => {
     const cancelled = {
       ...target,
       state: 'CANCELLED' as const,
-      cancelledAt: '2026-08-26T15:30:00.000Z',
+      cancelledAt: new Date().toISOString(),
       cancelReason: String(body?.reason ?? ''),
       updatedAt: '2026-08-26T15:30:00.000Z',
     };

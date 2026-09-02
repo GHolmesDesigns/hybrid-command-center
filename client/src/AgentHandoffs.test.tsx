@@ -19,8 +19,8 @@ import type { AgentHandoff, AgentHandoffDetail } from '../../shared/agent-coordi
 
 const openHandoff = (overrides: Partial<AgentHandoff> = {}): AgentHandoff => ({
   id: 'handoff-1',
-  createdAt: '2026-08-26T12:00:00.000Z',
-  updatedAt: '2026-08-26T12:00:00.000Z',
+  createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+  updatedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
   fromAgentLabel: 'cursor',
   toAgentLabel: 'claude',
   subjectType: 'task',
