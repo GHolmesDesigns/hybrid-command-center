@@ -8,6 +8,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.13.1] - 2026-09-02
+
+### Added
+
+- Documented the Calendar-to-Signal deep-link decision, including safe handling for stale or
+  unknown post links while keeping Calendar read-only and Signal's editor singular.
+
+### Breaking changes
+
+None.
+
 ## [5.13.0] - 2026-09-02
 
 ### Added
