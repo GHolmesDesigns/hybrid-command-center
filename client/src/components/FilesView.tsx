@@ -317,7 +317,8 @@ export function FilesView({
 
       <p className="files-note">
         <Lock /> Browsing is read-only. Folder creation and uploads are separate confirmed actions;
-        downloads, moves, renames, and deletes remain unavailable.
+        downloads, moves, renames, and deletes remain unavailable. Deleting a project or task never
+        touches a Drive file.
       </p>
 
       {loading && (
