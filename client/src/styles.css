@@ -2344,6 +2344,12 @@ button.tag-chip.toggle.active {
   flex: none;
   color: var(--muted);
 }
+
+.handoff-identity-provenance {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
 .handoff-excerpt {
   font-size: 13px;
   color: var(--ink);

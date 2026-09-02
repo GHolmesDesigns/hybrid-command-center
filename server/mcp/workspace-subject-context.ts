@@ -8,7 +8,11 @@ import type { Db } from '../db.ts';
 import { listIntegrationEvents } from '../integration-log.ts';
 import { getTask, listClients, listProjects } from '../repositories.ts';
 import { getPost } from '../signal/service.ts';
-import type { AgentHandoff, AgentHandoffSubjectType } from '../../shared/agent-coordination.ts';
+import type {
+  AgentHandoff,
+  AgentHandoffSubjectType,
+  AgentIdentityProvenance,
+} from '../../shared/agent-coordination.ts';
 import type { IntegrationEntityType, IntegrationEvent } from '../../shared/integration-log.ts';
 import {
   MCP_SUBJECT_CONTEXT_ACTIVITY_LIMIT,
@@ -73,14 +77,17 @@ interface HandoffRow {
   created_at: string;
   updated_at: string;
   from_agent_label: string;
+  from_agent_provenance: string;
   to_agent_label: string | null;
   subject_type: string;
   subject_id: string | null;
   message: string;
   state: string;
   claimed_by: string | null;
+  claimed_by_provenance: string | null;
   claimed_at: string | null;
   completed_at: string | null;
+  completed_by_provenance: string | null;
   cancelled_at: string | null;
   cancel_reason: string | null;
   client_request_id: string | null;
@@ -91,14 +98,17 @@ const toHandoff = (row: HandoffRow): AgentHandoff => ({
   createdAt: row.created_at,
   updatedAt: row.updated_at,
   fromAgentLabel: row.from_agent_label,
+  fromAgentProvenance: row.from_agent_provenance as AgentIdentityProvenance,
   toAgentLabel: row.to_agent_label,
   subjectType: row.subject_type as AgentHandoffSubjectType,
   subjectId: row.subject_id,
   message: row.message,
   state: row.state as AgentHandoff['state'],
   claimedBy: row.claimed_by,
+  claimedByProvenance: row.claimed_by_provenance as AgentIdentityProvenance | null,
   claimedAt: row.claimed_at,
   completedAt: row.completed_at,
+  completedByProvenance: row.completed_by_provenance as AgentIdentityProvenance | null,
   cancelledAt: row.cancelled_at,
   cancelReason: row.cancel_reason,
   clientRequestId: row.client_request_id,

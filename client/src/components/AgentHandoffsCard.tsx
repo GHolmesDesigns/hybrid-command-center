@@ -5,6 +5,7 @@ import { api, send } from '../api';
 import type { Task } from '../../../shared/types';
 import {
   AGENT_COORDINATION_LIMITS,
+  AGENT_IDENTITY_PROVENANCE_LABEL,
   AGENT_HANDOFF_INBOX_GROUP_LABEL,
   AGENT_HANDOFF_INBOX_GROUPS,
   AGENT_HANDOFF_SUBJECT_TYPE_LABEL,
@@ -164,6 +165,7 @@ export function AgentHandoffsCard({
                   <span className="handoff-state">{detail.state}</span>
                   <p className="handoff-route">
                     <strong>{detail.fromAgentLabel}</strong>
+                    <IdentityProvenance provenance={detail.fromAgentProvenance} />
                     <ArrowRight aria-hidden="true" />
                     <strong>{detail.toAgentLabel ?? 'any agent'}</strong>
                   </p>
@@ -193,6 +195,10 @@ export function AgentHandoffsCard({
                     <dt>Claimed by</dt>
                     <dd>
                       {detail.claimedBy}
+                      {' · '}
+                      {detail.claimedByProvenance
+                        ? AGENT_IDENTITY_PROVENANCE_LABEL[detail.claimedByProvenance]
+                        : AGENT_IDENTITY_PROVENANCE_LABEL.UNKNOWN}
                       {detail.claimedAt ? ` · ${formatDateTime(detail.claimedAt)}` : ''}
                     </dd>
                   </div>
@@ -200,7 +206,12 @@ export function AgentHandoffsCard({
                 {detail.completedAt && (
                   <div>
                     <dt>Completed</dt>
-                    <dd>{formatDateTime(detail.completedAt)}</dd>
+                    <dd>
+                      {formatDateTime(detail.completedAt)} ·{' '}
+                      {detail.completedByProvenance
+                        ? AGENT_IDENTITY_PROVENANCE_LABEL[detail.completedByProvenance]
+                        : AGENT_IDENTITY_PROVENANCE_LABEL.UNKNOWN}
+                    </dd>
                   </div>
                 )}
                 {detail.cancelledAt && (
@@ -259,6 +270,7 @@ export function AgentHandoffsCard({
                   {detail.notes.map((note) => (
                     <li key={note.id}>
                       <strong>{note.agentLabel}</strong>
+                      <IdentityProvenance provenance={note.agentProvenance} />
                       <span>{formatDateTime(note.at)}</span>
                       <p>{note.body}</p>
                     </li>
@@ -338,6 +350,7 @@ function HandoffGroup({
               >
                 <span className="handoff-route">
                   <strong>{row.fromAgentLabel}</strong>
+                  <IdentityProvenance provenance={row.fromAgentProvenance} />
                   <ArrowRight aria-hidden="true" />
                   <span>{row.toAgentLabel ?? 'any agent'}</span>
                 </span>
@@ -359,6 +372,14 @@ function HandoffGroup({
         </ul>
       )}
     </div>
+  );
+}
+
+function IdentityProvenance({ provenance }: { provenance: AgentHandoff['fromAgentProvenance'] }) {
+  return (
+    <span className="handoff-identity-provenance">
+      {AGENT_IDENTITY_PROVENANCE_LABEL[provenance]}
+    </span>
   );
 }
 

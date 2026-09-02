@@ -175,6 +175,21 @@ describe('network MCP (C113)', () => {
     expect(res.body.result.isError).toBe(false);
     const payload = JSON.parse(res.body.result.content[0].text);
     expect(payload.state).toBe('OPEN');
+    expect(payload.fromAgentProvenance).toBe('ASSERTED');
+
+    const listed = await request(app())
+      .post(MCP_HTTP_PATH)
+      .set('Authorization', `Bearer ${bearer}`)
+      .send({
+        jsonrpc: '2.0',
+        id: 3,
+        method: 'tools/call',
+        params: { name: 'coordination_list_handoffs', arguments: {} },
+      });
+    expect(JSON.parse(listed.body.result.content[0].text).handoffs[0]).toMatchObject({
+      fromAgentLabel: 'cursor',
+      fromAgentProvenance: 'ASSERTED',
+    });
   });
 
   it.each(['cursor', 'claude', 'codex'] as const)(
@@ -261,7 +276,24 @@ describe('network MCP (C113)', () => {
         },
       });
     expect(accepted.status).toBe(200);
-    expect(JSON.parse(accepted.body.result.content[0].text).fromAgentLabel).toBe('cursor-planning');
+    expect(JSON.parse(accepted.body.result.content[0].text)).toMatchObject({
+      fromAgentLabel: 'cursor-planning',
+      fromAgentProvenance: 'VERIFIED',
+    });
+
+    const listed = await request(app())
+      .post(MCP_HTTP_PATH)
+      .set('Authorization', `Bearer ${issued.bearerToken}`)
+      .send({
+        jsonrpc: '2.0',
+        id: 22,
+        method: 'tools/call',
+        params: { name: 'coordination_list_handoffs', arguments: {} },
+      });
+    expect(JSON.parse(listed.body.result.content[0].text).handoffs[0]).toMatchObject({
+      fromAgentLabel: 'cursor-planning',
+      fromAgentProvenance: 'VERIFIED',
+    });
   });
 
   it('allows reads but refuses writes without coordination:write', async () => {

@@ -171,6 +171,11 @@ see the chain.
   `to_agent_label` (null = open pool), `subject_type`, optional `subject_id`, bounded `message`,
   `state`, optional `claimed_by`, `claimed_at`, optional `completed_at`, optional `cancelled_at`,
   `cancel_reason` (operator or agent).
+- Identity labels carry provenance beside the post, claim, completion, and note that used them:
+  `VERIFIED` means a scoped credential bound the label server-side, `ASSERTED` means the legacy
+  operator bootstrap credential or local stdio initialization supplied the label, and `UNKNOWN` is
+  the additive migration default for existing rows. Unknown and asserted identities must never be
+  presented as verified.
 - **`subject_type`** enum v1: `task`, `signal_post`, `project`, `client`, `freeform`. Binds the
   handoff to workspace entities when present; `freeform` for general requests.
 - **Directed handoff** (`to_agent_label` set): only that label may claim; others receive `REFUSED`.

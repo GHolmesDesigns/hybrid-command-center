@@ -618,6 +618,8 @@ CREATE TABLE IF NOT EXISTS agent_handoffs (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   from_agent_label TEXT NOT NULL,
+  from_agent_provenance TEXT NOT NULL DEFAULT 'UNKNOWN'
+    CHECK(from_agent_provenance IN ('UNKNOWN','ASSERTED','VERIFIED')),
   to_agent_label TEXT,
   subject_type TEXT NOT NULL
     CHECK(subject_type IN ('task','signal_post','project','client','freeform')),
@@ -625,8 +627,10 @@ CREATE TABLE IF NOT EXISTS agent_handoffs (
   message TEXT NOT NULL CHECK(length(message) BETWEEN 1 AND 2000),
   state TEXT NOT NULL CHECK(state IN ('OPEN','CLAIMED','COMPLETED','CANCELLED')),
   claimed_by TEXT,
+  claimed_by_provenance TEXT CHECK(claimed_by_provenance IS NULL OR claimed_by_provenance IN ('UNKNOWN','ASSERTED','VERIFIED')),
   claimed_at TEXT,
   completed_at TEXT,
+  completed_by_provenance TEXT CHECK(completed_by_provenance IS NULL OR completed_by_provenance IN ('UNKNOWN','ASSERTED','VERIFIED')),
   cancelled_at TEXT,
   cancel_reason TEXT CHECK(cancel_reason IS NULL OR length(cancel_reason) BETWEEN 1 AND 500),
   client_request_id TEXT,
@@ -642,6 +646,8 @@ CREATE TABLE IF NOT EXISTS agent_handoff_notes (
   id TEXT PRIMARY KEY,
   handoff_id TEXT NOT NULL REFERENCES agent_handoffs(id) ON DELETE CASCADE,
   agent_label TEXT NOT NULL,
+  agent_provenance TEXT NOT NULL DEFAULT 'UNKNOWN'
+    CHECK(agent_provenance IN ('UNKNOWN','ASSERTED','VERIFIED')),
   body TEXT NOT NULL CHECK(length(body) BETWEEN 1 AND 2000),
   at TEXT NOT NULL
 );
