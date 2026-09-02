@@ -13,6 +13,19 @@ import { z } from 'zod';
 export const AGENT_HANDOFF_STATES = ['OPEN', 'CLAIMED', 'COMPLETED', 'CANCELLED'] as const;
 export type AgentHandoffState = (typeof AGENT_HANDOFF_STATES)[number];
 
+export const AGENT_HANDOFF_LIST_DEFAULT_LIMIT = 50;
+export const AGENT_HANDOFF_LIST_MAX_LIMIT = 100;
+
+export const agentHandoffListFilterSchema = z
+  .object({
+    state: z.enum(AGENT_HANDOFF_STATES).optional(),
+    limit: z.number().int().min(1).max(AGENT_HANDOFF_LIST_MAX_LIMIT).optional(),
+    offset: z.number().int().min(0).optional(),
+  })
+  .strict();
+
+export type AgentHandoffListFilter = z.infer<typeof agentHandoffListFilterSchema>;
+
 export const AGENT_HANDOFF_SUBJECT_TYPES = [
   'task',
   'signal_post',
@@ -232,6 +245,13 @@ export interface AgentHandoff {
   references?: string[];
   validations?: Array<{ command: string; outcome: string }>;
   remainingRisks?: string[];
+}
+
+export interface AgentHandoffPage {
+  handoffs: AgentHandoff[];
+  limit: number;
+  offset: number;
+  truncated: boolean;
 }
 
 export interface AgentHandoffNote {

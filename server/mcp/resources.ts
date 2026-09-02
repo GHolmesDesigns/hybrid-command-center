@@ -91,10 +91,11 @@ export function readCoordinationResource(
   const claimed = listHandoffs(db, { state: 'CLAIMED' });
   const payload = redactToolResult({
     state: 'open',
-    handoffs: [...open, ...claimed].sort((a, b) => {
+    handoffs: [...open.handoffs, ...claimed.handoffs].sort((a, b) => {
       const byCreated = b.createdAt.localeCompare(a.createdAt);
       return byCreated !== 0 ? byCreated : b.id.localeCompare(a.id);
     }),
+    truncated: open.truncated || claimed.truncated,
   });
   return {
     uri: COORDINATION_INBOX_URI,

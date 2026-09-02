@@ -32,7 +32,7 @@ import {
   workSessionReleaseSchema,
 } from '../../shared/agent-work-sessions.ts';
 import {
-  AGENT_HANDOFF_STATES,
+  agentHandoffListFilterSchema,
   agentHandoffCancelReasonSchema,
   agentHandoffClientRequestIdSchema,
   agentHandoffCompletionInputSchema,
@@ -40,7 +40,6 @@ import {
   agentHandoffNoteBodySchema,
   agentHandoffSubjectIdSchema,
   agentLabelSchema,
-  type AgentHandoffState,
   type AgentHandoffSubjectType,
   AGENT_HANDOFF_SUBJECT_TYPES,
 } from '../../shared/agent-coordination.ts';
@@ -75,11 +74,7 @@ export interface McpToolCallResult {
   retryAfterMs?: number;
 }
 
-const listArgsSchema = z
-  .object({
-    state: z.enum(AGENT_HANDOFF_STATES).optional(),
-  })
-  .strict();
+const listArgsSchema = agentHandoffListFilterSchema;
 
 const getArgsSchema = z
   .object({
@@ -224,7 +219,7 @@ export function callCoordinationTool(
     switch (tool) {
       case 'coordination_list_handoffs': {
         const args = listArgsSchema.parse(rawArgs ?? {});
-        const data = listHandoffs(db, args.state ? { state: args.state as AgentHandoffState } : {});
+        const data = listHandoffs(db, args);
         return finish(db, session, tool, { outcome: 'SUCCESS', data }, { audit: false });
       }
       case 'coordination_get_handoff': {

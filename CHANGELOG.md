@@ -8,6 +8,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.13.7] - 2026-09-02
+
+### Fixed
+
+- Bounded coordination handoff listings with explicit pagination metadata while keeping older history reachable through limit and offset.
+
+### Breaking changes
+
+- Coordination handoff list responses now return a pagination envelope containing `handoffs`, `limit`, `offset`, and `truncated` instead of a bare array.
+
 ## [5.13.6] - 2026-09-02
 
 ### Fixed

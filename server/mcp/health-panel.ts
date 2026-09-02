@@ -17,7 +17,12 @@ import {
   type McpHealthPanel,
   type McpHealthStaleHandoff,
 } from '../../shared/mcp-health.ts';
-import { handoffInInboxHistory, isStaleOpenHandoff } from '../../shared/agent-coordination.ts';
+import {
+  handoffInInboxHistory,
+  isStaleOpenHandoff,
+  type AgentHandoff,
+  type AgentHandoffState,
+} from '../../shared/agent-coordination.ts';
 import { MCP_AGENT_EVENT_LIMIT } from '../../shared/mcp-agent-events.ts';
 import { listMcpAgentEvents } from './events.ts';
 
@@ -27,6 +32,17 @@ type EventRow = {
   outcome: string;
   summary: string;
 };
+
+function allHandoffsInState(db: Db, state: AgentHandoffState): AgentHandoff[] {
+  const handoffs: AgentHandoff[] = [];
+  let offset = 0;
+  for (;;) {
+    const page = listHandoffs(db, { state, limit: 100, offset });
+    handoffs.push(...page.handoffs);
+    if (!page.truncated) return handoffs;
+    offset += page.limit;
+  }
+}
 
 export function buildMcpHealthPanel(
   db: Db,
@@ -52,7 +68,7 @@ export function buildMcpHealthPanel(
   const agents = aggregateAgentStats(registry, events);
   const errorSummary = aggregateErrorSummary(events);
   const staleHandoffs = gatherStaleHandoffs(db, now);
-  const recentCompletions = listHandoffs(db, { state: 'COMPLETED' })
+  const recentCompletions = allHandoffsInState(db, 'COMPLETED')
     .filter((handoff) => handoffInInboxHistory(handoff, now))
     .map((handoff) => ({
       id: handoff.id,
@@ -146,8 +162,8 @@ function aggregateErrorSummary(events: EventRow[]): McpHealthErrorSummary[] {
 }
 
 function gatherStaleHandoffs(db: Db, now: Date): McpHealthStaleHandoff[] {
-  const open = listHandoffs(db, { state: 'OPEN' });
-  const claimed = listHandoffs(db, { state: 'CLAIMED' });
+  const open = allHandoffsInState(db, 'OPEN');
+  const claimed = allHandoffsInState(db, 'CLAIMED');
   const stale: McpHealthStaleHandoff[] = [];
   for (const handoff of open) {
     if (!isStaleOpenHandoff(handoff, now)) continue;

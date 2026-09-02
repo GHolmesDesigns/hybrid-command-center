@@ -15,6 +15,7 @@ import {
   type AgentHandoff,
   type AgentHandoffDetail,
   type AgentHandoffInboxGroup,
+  type AgentHandoffPage,
 } from '../../../shared/agent-coordination';
 import { formatDateTime } from './formatting';
 import { Empty } from './Primitives';
@@ -44,7 +45,8 @@ export function AgentHandoffsCard({
 
   const load = useCallback(async () => {
     try {
-      setHandoffs(await api<AgentHandoff[]>('/agent-handoffs'));
+      const page = await api<AgentHandoffPage>('/agent-handoffs');
+      setHandoffs(page.handoffs);
       setError('');
     } catch (problem) {
       setError((problem as Error).message);

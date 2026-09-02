@@ -76,7 +76,7 @@ describe('callMcpTool', () => {
       },
     );
     expect(result.outcome).toBe('SUCCESS');
-    expect(result.data).toEqual([]);
+    expect(result.data).toEqual({ handoffs: [], limit: 50, offset: 0, truncated: false });
   });
 
   it('refuses unknown tools and coordination writes without write scope', async () => {

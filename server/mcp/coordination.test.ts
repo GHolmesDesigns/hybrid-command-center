@@ -51,7 +51,12 @@ describe('coordination MCP tools', () => {
 
     const listed = callCoordinationTool(db, session, 'coordination_list_handoffs', {}, NOW);
     expect(listed.outcome).toBe('SUCCESS');
-    expect(listed.data).toHaveLength(1);
+    expect(listed.data).toMatchObject({
+      handoffs: [expect.objectContaining({ id })],
+      limit: 50,
+      offset: 0,
+      truncated: false,
+    });
 
     const events = listMcpAgentEvents(db, { tool: 'coordination_post_handoff' });
     expect(events).toHaveLength(2);
@@ -141,7 +146,7 @@ describe('coordination MCP tools', () => {
     expect(reader.agentLabel).toBeNull();
     const listed = callCoordinationTool(db, reader, 'coordination_list_handoffs', {}, NOW);
     expect(listed.outcome).toBe('SUCCESS');
-    expect(listed.data).toHaveLength(1);
+    expect(listed.data).toMatchObject({ handoffs: [expect.any(Object)], truncated: false });
 
     const got = callCoordinationTool(db, reader, 'coordination_get_handoff', { handoffId }, NOW);
     expect(got.outcome).toBe('SUCCESS');
@@ -163,6 +168,38 @@ describe('coordination MCP tools', () => {
         (event) => event.outcome === 'REFUSED',
       ),
     ).toBe(true);
+  });
+
+  it('passes bounded pagination arguments through the list tool', () => {
+    const session = labeled('cursor');
+    for (const [index, message] of ['First', 'Second', 'Third'].entries()) {
+      expect(
+        callCoordinationTool(
+          db,
+          session,
+          'coordination_post_handoff',
+          { subjectType: 'freeform', message },
+          new Date(NOW.getTime() + index * 1000),
+        ).outcome,
+      ).toBe('SUCCESS');
+    }
+
+    const listed = callCoordinationTool(
+      db,
+      session,
+      'coordination_list_handoffs',
+      { limit: 1, offset: 1 },
+      NOW,
+    );
+    expect(listed).toMatchObject({
+      outcome: 'SUCCESS',
+      data: {
+        handoffs: [expect.objectContaining({ message: 'Second' })],
+        limit: 1,
+        offset: 1,
+        truncated: true,
+      },
+    });
   });
 
   it('refuses excess coordination writes with REFUSED in mcp_agent_events', () => {
@@ -250,7 +287,7 @@ describe('coordination MCP tools', () => {
     ).toBe('FAILURE');
     expect(
       callCoordinationTool(db, session, 'coordination_list_handoffs', { state: 'OPEN' }, NOW).data,
-    ).toEqual([]);
+    ).toEqual({ handoffs: [], limit: 50, offset: 0, truncated: false });
   });
 
   it('accepts a matching fromAgentLabel on post', () => {

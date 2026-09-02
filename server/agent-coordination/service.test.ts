@@ -13,6 +13,7 @@ import {
   listHandoffs,
   postHandoff,
 } from './service.ts';
+import { AGENT_HANDOFF_LIST_DEFAULT_LIMIT } from '../../shared/agent-coordination.ts';
 
 let db: Db;
 const NOW = new Date('2026-08-26T15:00:00.000Z');
@@ -48,7 +49,7 @@ describe('postHandoff', () => {
     });
     expect(second.id).toBe(first.id);
     expect(second.message).toBe(first.message);
-    expect(listHandoffs(db)).toHaveLength(1);
+    expect(listHandoffs(db).handoffs).toHaveLength(1);
     expect(db.prepare('SELECT COUNT(*) AS n FROM integration_events').get()).toMatchObject({
       n: 0,
     });
@@ -58,7 +59,71 @@ describe('postHandoff', () => {
     const a = post();
     const b = post();
     expect(a.id).not.toBe(b.id);
-    expect(listHandoffs(db)).toHaveLength(2);
+    expect(listHandoffs(db).handoffs).toHaveLength(2);
+  });
+
+  it('bounds the default page and keeps every ordered handoff reachable', () => {
+    const ids: string[] = [];
+    for (let index = 0; index < AGENT_HANDOFF_LIST_DEFAULT_LIMIT + 2; index += 1) {
+      ids.push(
+        postHandoff(
+          db,
+          {
+            fromAgentLabel: 'cursor',
+            subjectType: 'freeform',
+            message: `History ${index}`,
+          },
+          new Date(NOW.getTime() + index * 1000),
+        ).id,
+      );
+    }
+
+    const first = listHandoffs(db);
+    const second = listHandoffs(db, { offset: AGENT_HANDOFF_LIST_DEFAULT_LIMIT });
+
+    expect(first).toMatchObject({
+      limit: AGENT_HANDOFF_LIST_DEFAULT_LIMIT,
+      offset: 0,
+      truncated: true,
+    });
+    expect(first.handoffs).toHaveLength(AGENT_HANDOFF_LIST_DEFAULT_LIMIT);
+    expect(second).toMatchObject({
+      limit: AGENT_HANDOFF_LIST_DEFAULT_LIMIT,
+      offset: AGENT_HANDOFF_LIST_DEFAULT_LIMIT,
+      truncated: false,
+    });
+    expect(second.handoffs).toHaveLength(2);
+    expect([...first.handoffs, ...second.handoffs].map((handoff) => handoff.id)).toEqual(
+      ids.reverse(),
+    );
+  });
+
+  it('keeps state filtering while paginating', () => {
+    const olderOpen = postHandoff(
+      db,
+      { fromAgentLabel: 'cursor', subjectType: 'freeform', message: 'Older open.' },
+      NOW,
+    );
+    const claimed = post({ message: 'Claimed.' });
+    claimHandoff(db, claimed.id, 'claude', NOW);
+    const newerOpen = postHandoff(
+      db,
+      { fromAgentLabel: 'cursor', subjectType: 'freeform', message: 'Newer open.' },
+      new Date(NOW.getTime() + 1000),
+    );
+
+    expect(listHandoffs(db, { state: 'OPEN', limit: 1 })).toMatchObject({
+      handoffs: [expect.objectContaining({ id: newerOpen.id, state: 'OPEN' })],
+      limit: 1,
+      offset: 0,
+      truncated: true,
+    });
+    expect(listHandoffs(db, { state: 'OPEN', limit: 1, offset: 1 })).toMatchObject({
+      handoffs: [expect.objectContaining({ id: olderOpen.id, state: 'OPEN' })],
+      limit: 1,
+      offset: 1,
+      truncated: false,
+    });
   });
 });
 
@@ -225,7 +290,8 @@ describe('operator HTTP cancel', () => {
 
     const listed = await request(app).get('/api/agent-handoffs');
     expect(listed.status).toBe(200);
-    expect(listed.body).toHaveLength(4);
+    expect(listed.body).toMatchObject({ limit: 50, offset: 0, truncated: false });
+    expect(listed.body.handoffs).toHaveLength(4);
 
     const cancelOpen = await request(app)
       .post(`/api/agent-handoffs/${open.id}/cancel`)
