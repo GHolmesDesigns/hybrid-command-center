@@ -6,6 +6,7 @@ export const MCP_AGENT_SCOPES = [
   'coordination:write',
   'workspace:read',
   'workspace:write',
+  'drive:write-request',
 ] as const;
 export type McpAgentScope = (typeof MCP_AGENT_SCOPES)[number];
 

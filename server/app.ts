@@ -102,6 +102,7 @@ import {
   driveWritePlanSchema,
   type DriveWriteProvider,
 } from './drive/write.ts';
+import { decideDriveWrite, listDriveWriteRequests } from './drive/agent-write.ts';
 import {
   SignalMediaError,
   SignalPostNotFoundError,
@@ -747,6 +748,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
    */
   app.use('/api/import', express.json({ limit: IMPORT_BODY_LIMIT_BYTES }));
   app.use('/api/projects/:id/drive-write', express.json({ limit: '12mb' }));
+  app.use('/api/drive-write-requests', express.json({ limit: '12mb' }));
   app.use(express.json({ limit: '1mb' }));
   app.use(requestLogger(options.logStream));
 
@@ -1383,6 +1385,50 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     } catch (e) {
       next(e);
     }
+  });
+
+  /**
+   * Agent Drive write requests. MCP can create a pending request only; these operator routes are
+   * the sole path that can decide one and execute through commitDriveWrite.
+   */
+  app.get('/api/drive-write-requests', (req, res, next) => {
+    try {
+      const status = z
+        .enum(['PENDING', 'EXECUTING', 'APPROVED', 'DENIED', 'FAILED'])
+        .optional()
+        .parse(req.query.status);
+      res.json({ requests: listDriveWriteRequests(db, status) });
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/drive-write-requests/:id/approve', async (req, res, next) => {
+    try {
+      const request = await decideDriveWrite(
+        db,
+        req.params.id,
+        'approve',
+        options.driveWrite ? options.driveWrite(db) : driveWriteProvider(db),
+      );
+      res.json(request);
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/drive-write-requests/:id/deny', (req, res, next) => {
+    void (async () => {
+      try {
+        const request = await decideDriveWrite(
+          db,
+          req.params.id,
+          'deny',
+          options.driveWrite ? options.driveWrite(db) : driveWriteProvider(db),
+        );
+        res.json(request);
+      } catch (error) {
+        next(error);
+      }
+    })();
   });
 
   /**

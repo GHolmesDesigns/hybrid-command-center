@@ -2,6 +2,7 @@ import type { Task } from '../../../shared/types';
 import { AgentHandoffsCard } from './AgentHandoffsCard';
 import { McpConnectionSetupCard } from './McpConnectionSetupCard';
 import { McpHealthPanelCard } from './McpHealthPanelCard';
+import { DriveWriteRequestsCard } from './DriveWriteRequestsCard';
 import { PageHead } from './Shell';
 
 /**
@@ -27,6 +28,7 @@ export function AgentsView({
       <div className="agents-layout">
         <McpConnectionSetupCard flash={flash} />
         <McpHealthPanelCard flash={flash} />
+        <DriveWriteRequestsCard flash={flash} />
         <AgentHandoffsCard tasks={tasks} flash={flash} />
       </div>
     </div>

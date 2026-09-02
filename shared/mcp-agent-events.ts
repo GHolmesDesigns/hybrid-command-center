@@ -106,6 +106,10 @@ export const INTEGRATION_READ_TOOLS = [
 ] as const;
 export type IntegrationReadTool = (typeof INTEGRATION_READ_TOOLS)[number];
 
+/** Agent Drive writes are requests only; an operator must approve every request. */
+export const DRIVE_WRITE_REQUEST_TOOLS = ['drive_request_write'] as const;
+export type DriveWriteRequestTool = (typeof DRIVE_WRITE_REQUEST_TOOLS)[number];
+
 export const COORDINATION_INBOX_URI = 'hcc://coordination/inbox?state=open';
 
 export const mcpAgentEventOutcomeSchema = z.enum(MCP_AGENT_EVENT_OUTCOMES);

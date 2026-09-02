@@ -125,6 +125,20 @@ CREATE TABLE IF NOT EXISTS agent_credentials (
   last_used_at TEXT,
   revoked_at TEXT
 );
+-- Agent Drive writes are requests, never direct MCP execution. Content is bounded by the Drive
+-- write plan and retained only until the operator decides it.
+CREATE TABLE IF NOT EXISTS drive_write_requests (
+  id TEXT PRIMARY KEY,
+  agent_label TEXT NOT NULL,
+  client_request_id TEXT NOT NULL,
+  plan_json TEXT NOT NULL,
+  plan_hash TEXT NOT NULL,
+  confirmation TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('PENDING','EXECUTING','APPROVED','DENIED','FAILED')),
+  created_at TEXT NOT NULL,
+  decided_at TEXT,
+  error TEXT
+);
 -- Drive OAuth pending states (C52): one row per connect attempt, bound to a session when auth is on.
 -- Keep in sync with OAUTH_PENDING_STATES_TABLE_SQL in server/drive/oauth.ts.
 CREATE TABLE IF NOT EXISTS oauth_pending_states (
@@ -732,6 +746,10 @@ CREATE INDEX IF NOT EXISTS idx_operator_sessions_idle ON operator_sessions(idle_
 CREATE INDEX IF NOT EXISTS idx_operator_mcp_bearers_session ON operator_mcp_bearers(session_token_hash);
 CREATE INDEX IF NOT EXISTS idx_agent_credentials_agent ON agent_credentials(agent_id);
 CREATE INDEX IF NOT EXISTS idx_agent_credentials_expiry ON agent_credentials(expires_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_drive_write_requests_replay
+  ON drive_write_requests(agent_label, client_request_id);
+CREATE INDEX IF NOT EXISTS idx_drive_write_requests_status
+  ON drive_write_requests(status, created_at);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_registrations_label
   ON agent_registrations(display_label COLLATE NOCASE);
 -- Expired OAuth pending rows are deleted by expires_at on begin/consume and on a periodic purge.

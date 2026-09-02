@@ -16,6 +16,7 @@ describe('shared mcp oauth metadata', () => {
         'coordination:write',
         'workspace:read',
         'workspace:write',
+        'drive:write-request',
       ],
       bearer_methods_supported: ['header'],
     });

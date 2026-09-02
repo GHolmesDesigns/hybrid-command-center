@@ -282,6 +282,15 @@ That is the whole operation. Despite the word "sync", it does not:
 
 Existing folders are matched by a stable Command Center property rather than by name, so running it repeatedly is safe and cannot create duplicates. If Drive is disconnected, or no root folder is selected, the button reports what to fix instead of making changes.
 
+### 6.9 Approve agent Drive writes
+
+Agent credentials do not receive Drive write access by default. An operator may explicitly issue the
+separate `drive:write-request` scope from **Agents**, which lets an agent request only a folder
+creation or a bounded file upload. Every request appears in **Agents → Drive write requests** with
+the exact action and target. Approve or deny it there; approval is the only path that executes the
+Drive write. Requests and outcomes are audited without storing credentials or writing file bytes to
+the audit log.
+
 ### 6.8 Revoke Drive access after a suspected token exposure
 
 Use this procedure if the local database, a database backup, or

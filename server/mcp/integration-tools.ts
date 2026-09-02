@@ -14,9 +14,8 @@ import {
   INTEGRATION_LOCAL_WRITE_TOOLS,
   INTEGRATION_READ_TOOLS,
   INTEGRATION_WRITE_TOOLS,
-  type IntegrationLocalWriteTool,
+  DRIVE_WRITE_REQUEST_TOOLS,
   type IntegrationReadTool,
-  type IntegrationWriteTool,
 } from '../../shared/mcp-agent-events.ts';
 import {
   mcpCoordinationAgentLabelRequired,
@@ -38,6 +37,7 @@ import {
   type DriveMediaProvider,
 } from '../drive/media.ts';
 import { driveProvider, syncAllToDrive } from '../drive/service.ts';
+import { requestDriveWrite, driveWriteRequestInput } from '../drive/agent-write.ts';
 import type { DriveProvider } from '../drive/provider.ts';
 import { ImportInputError, commitPlaybook, playbookInput, previewPlaybook } from '../import.ts';
 import { listIntegrationEvents } from '../integration-log.ts';
@@ -81,7 +81,10 @@ export type McpIntegrationToolDeps = {
 
 const READ_TOOLS = new Set<string>(INTEGRATION_READ_TOOLS);
 const LOCAL_WRITE_TOOLS = new Set<string>(INTEGRATION_LOCAL_WRITE_TOOLS);
-const INTEGRATION_TOOLS = new Set<string>(INTEGRATION_WRITE_TOOLS);
+const INTEGRATION_TOOLS = new Set<string>([
+  ...INTEGRATION_WRITE_TOOLS,
+  ...DRIVE_WRITE_REQUEST_TOOLS,
+]);
 const ALL_TOOLS = new Set<string>([...READ_TOOLS, ...LOCAL_WRITE_TOOLS, ...INTEGRATION_TOOLS]);
 
 const clientRequestIdField = {
@@ -400,7 +403,18 @@ async function runWrite(
     const media = resolveDriveMediaDep(db, deps);
     const drive = resolveDriveDep(db, deps);
 
-    switch (tool as IntegrationLocalWriteTool | IntegrationWriteTool) {
+    switch (tool as string) {
+      case 'drive_request_write': {
+        const args = driveWriteRequestInput.parse(rawArgs);
+        const data = requestDriveWrite(db, session.agentLabel, args, now);
+        return finish(db, session, tool, success(data), {
+          entityType: 'drive_write_request',
+          entityId: data.id,
+          summary: `Requested human approval for ${data.confirmation}.`,
+          clientRequestId,
+          persistIdempotency: true,
+        });
+      }
       case 'workspace_merge_clients_commit': {
         const args = mergeCommitArgs.parse(rawArgs);
         const data = commitClientMerge(
@@ -548,6 +562,16 @@ async function runWrite(
           persistIdempotency: true,
         });
       }
+      default:
+        return finish(
+          db,
+          session,
+          tool,
+          failed(`Unknown integration tool: ${tool}.`, mcpCoordinationUnknownTool()),
+          {
+            summary: `Unknown tool ${tool}.`,
+          },
+        );
     }
   } catch (error) {
     return finish(db, session, tool, mapDomainError(error), {
