@@ -36,6 +36,11 @@ The summary is delivery wording, not a replacement for the **Planning status** v
 **Mark published** action remains available for the operator when the plan should carry that
 claim. A successful provider response must not silently trigger that action.
 
+This decision does not remove or redefine C108's existing post-submit auto-reconciliation. That
+flow may refresh the stored publication and target delivery rows after a confirmed submit; it
+still does not write `signal_posts.status`. The decision applies equally to that automatic
+reconciliation and to a later explicit delivery check.
+
 ## Later delivery failure
 
 If a later reconciliation changes a previously successful delivery to `FAILED`, `PARTIAL`, or
