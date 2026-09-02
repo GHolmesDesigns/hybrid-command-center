@@ -4,6 +4,7 @@ import { createDb, type Db } from '../db.ts';
 import { MockDriveMediaProvider, MockDriveProvider, mockDriveFile } from './mock-provider.ts';
 import { projectScopes } from './browse.ts';
 import { provisionClient, provisionProject, setSetting } from './service.ts';
+import { DisconnectedDriveMediaProvider } from './media.ts';
 import { resolveDriveMediaBatch, SIGNAL_DRIVE_MEDIA_BATCH_MAX_ITEMS } from './media-batch.ts';
 
 let db: Db;
@@ -100,5 +101,48 @@ describe('folder-batch Drive media resolution', () => {
       items: [],
     });
     expect(media.calls).toEqual([]);
+  });
+
+  it('refuses when either Drive capability is disconnected', async () => {
+    const { drive, folderId } = await setup();
+    const media = new MockDriveMediaProvider();
+    drive.connected = false;
+    await expect(
+      resolveDriveMediaBatch({ db, projectId, folderId, provider: drive, mediaProvider: media }),
+    ).rejects.toThrow(/Drive is not connected/i);
+
+    drive.connected = true;
+    await expect(
+      resolveDriveMediaBatch({
+        db,
+        projectId,
+        folderId,
+        provider: drive,
+        mediaProvider: new DisconnectedDriveMediaProvider(),
+      }),
+    ).rejects.toThrow(/media cannot be checked/i);
+  });
+
+  it('refuses a project without a provisioned folder', async () => {
+    const drive = new MockDriveProvider();
+    const media = new MockDriveMediaProvider();
+    await expect(
+      resolveDriveMediaBatch({ db, projectId, provider: drive, mediaProvider: media }),
+    ).rejects.toThrow(/no Drive folder/i);
+  });
+
+  it('refuses a repeated Drive page token instead of looping', async () => {
+    const { drive, folderId } = await setup();
+    const media = new MockDriveMediaProvider();
+    const original = drive.listFiles.bind(drive);
+    drive.listFiles = async (input) => {
+      if (input.pageToken) return { files: [], nextPageToken: input.pageToken };
+      const first = await original(input);
+      return { ...first, nextPageToken: 'repeated-token' };
+    };
+
+    await expect(
+      resolveDriveMediaBatch({ db, projectId, folderId, provider: drive, mediaProvider: media }),
+    ).rejects.toThrow(/repeated page token/i);
   });
 });
