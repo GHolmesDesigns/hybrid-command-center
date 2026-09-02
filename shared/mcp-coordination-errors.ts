@@ -12,6 +12,7 @@ export const MCP_COORDINATION_ERROR_CODES = [
   'COORDINATION_CREDENTIAL_LABEL_MISMATCH',
   'COORDINATION_SCOPE_REQUIRED',
   'WORKSPACE_SCOPE_REQUIRED',
+  'DRIVE_SCOPE_REQUIRED',
   'WORKSPACE_REVISION_CONFLICT',
   'WORKSPACE_CONFIRMATION_REQUIRED',
   'COORDINATION_RATE_LIMIT_EXCEEDED',
@@ -77,6 +78,13 @@ export const mcpWorkspaceScopeRequired = (
     code: 'WORKSPACE_SCOPE_REQUIRED',
     retryable: false,
     requiredAction: `Ask the operator to issue a credential with ${scope}.`,
+  });
+
+export const mcpDriveScopeRequired = (): McpCoordinationErrorDetail =>
+  mcpCoordinationErrorDetail({
+    code: 'DRIVE_SCOPE_REQUIRED',
+    retryable: false,
+    requiredAction: 'Ask the operator to issue a credential with drive:write-request.',
   });
 
 export const mcpWorkspaceRevisionConflict = (

@@ -20,10 +20,11 @@ describe('mcp tool registry', () => {
     expect(names).toContain('workspace_create_task');
     expect(names).toContain('workspace_merge_clients_preview');
     expect(names).toContain('drive_sync');
+    expect(names).toContain('drive_request_write');
     expect(names).toContain('files_browse_project');
     expect(
       names.filter((name) => name !== 'system_capabilities' && name !== 'system_connection_status'),
-    ).toHaveLength(59);
+    ).toHaveLength(60);
     expect(names).toContain('system_connection_status');
     expect(isRegisteredMcpTool('system_capabilities')).toBe(true);
     expect(isRegisteredMcpTool('not_a_tool')).toBe(false);

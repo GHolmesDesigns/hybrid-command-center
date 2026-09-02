@@ -47,6 +47,31 @@ const coordinationScope = (name: CoordinationTool): McpAgentScope =>
     ? 'coordination:write'
     : 'coordination:read';
 
+const driveWriteRequestTool: McpToolRegistryEntry = {
+  name: 'drive_request_write',
+  description:
+    'Request a Drive folder creation or bounded file upload for human approval. Never writes Drive directly.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      kind: { type: 'string', enum: ['create-folder', 'upload-file'] },
+      projectId: { type: 'string' },
+      parentId: { type: 'string' },
+      folderId: { type: 'string' },
+      name: { type: 'string' },
+      mimeType: { type: 'string' },
+      contentBase64: { type: 'string' },
+      clientRequestId: { type: 'string' },
+    },
+    required: ['kind', 'projectId', 'name', 'clientRequestId'],
+    additionalProperties: false,
+  },
+  class: 'I',
+  requiredScope: 'drive:write-request',
+  owner: 'server/drive/agent-write.ts',
+  handler: 'integration_write',
+};
+
 const coordinationTools: McpToolRegistryEntry[] = [
   {
     name: 'coordination_list_handoffs',
@@ -1166,6 +1191,7 @@ const integrationTools: McpToolRegistryEntry[] = [
 ];
 
 export const MCP_TOOL_REGISTRY: readonly McpToolRegistryEntry[] = [
+  driveWriteRequestTool,
   ...coordinationTools,
   ...workSessionTools,
   ...workspaceReadTools,

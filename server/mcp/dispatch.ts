@@ -55,6 +55,13 @@ function scopeRefusal(entry: McpToolRegistryEntry): McpToolCallResult {
       mcpWorkspaceScopeRequired(scope as 'workspace:read' | 'workspace:write'),
     );
   }
+  if (scope === 'drive:write-request') {
+    return refused(`Credential lacks ${scope}.`, {
+      code: 'DRIVE_SCOPE_REQUIRED',
+      retryable: false,
+      requiredAction: 'Ask the operator to issue a credential with drive:write-request.',
+    });
+  }
   return refused(
     `Credential lacks ${scope}.`,
     mcpCoordinationScopeRequired(scope as 'coordination:read' | 'coordination:write'),

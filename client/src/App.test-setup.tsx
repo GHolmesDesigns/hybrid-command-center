@@ -247,6 +247,14 @@ export const testState = {
     enabled: boolean;
     credentials: import('../../shared/mcp-agent-registry').McpAgentCredentialSummary[];
   },
+  driveWriteRequestsPayload: [] as {
+    id: string;
+    agentLabel: string;
+    confirmation: string;
+    status: string;
+    createdAt: string;
+    error: string | null;
+  }[],
   mcpHealthPanelPayload: {
     enabled: true,
     state: 'never_connected',
@@ -763,6 +771,8 @@ const payloadFor = (url: string) => {
       }
     );
   if (url.endsWith('/api/auth/mcp-agents')) return testState.mcpAgentRegistryPayload;
+  if (url.endsWith('/api/drive-write-requests?status=PENDING'))
+    return { requests: testState.driveWriteRequestsPayload };
   if (url.endsWith('/api/mcp/health')) return testState.mcpHealthPanelPayload;
   if (url.endsWith('/api/projects')) return testState.projectsPayload;
   if (url.endsWith('/api/clients')) return testState.clientsPayload;
@@ -852,6 +862,18 @@ const respondTo = (url: string, init?: RequestInit) => {
       credential,
     ];
     return { ok: true, bearerToken: 'hcc_mcp_shown-once', credential };
+  }
+  const driveWriteDecision = url.match(/\/api\/drive-write-requests\/([^/]+)\/(approve|deny)$/);
+  if (driveWriteDecision && method === 'POST') {
+    const request = testState.driveWriteRequestsPayload.find(
+      (candidate) => candidate.id === driveWriteDecision[1],
+    );
+    if (!request) return reply(404, { error: 'Drive write request not found.' });
+    request.status = driveWriteDecision[2] === 'approve' ? 'APPROVED' : 'DENIED';
+    testState.driveWriteRequestsPayload = testState.driveWriteRequestsPayload.filter(
+      (candidate) => candidate.id !== request.id,
+    );
+    return request;
   }
   const revokeMcpCredential = url.match(/\/api\/auth\/mcp-credentials\/([^/?]+)\/revoke$/);
   if (revokeMcpCredential && method === 'POST') {
@@ -1771,6 +1793,7 @@ beforeEach(() => {
   testState.agentHandoffDetailPayload = null;
   testState.agentHandoffDetailError = null;
   testState.mcpAgentRegistryPayload = { enabled: false, credentials: [] };
+  testState.driveWriteRequestsPayload = [];
   testState.mcpCredentialVerificationPayload = {
     credentialId: 'credential-issued',
     agentLabel: 'cursor-planning',

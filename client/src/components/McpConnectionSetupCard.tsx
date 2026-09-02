@@ -51,6 +51,7 @@ const SCOPE_LABEL: Record<McpAgentScope, string> = {
   'coordination:write': 'Write coordination',
   'workspace:read': 'Read workspace and Signal data',
   'workspace:write': 'Write workspace and Signal data',
+  'drive:write-request': 'Request Drive writes for human approval',
 };
 
 const DEFAULT_SCOPES: McpAgentScope[] = ['coordination:read', 'coordination:write'];

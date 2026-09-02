@@ -71,7 +71,8 @@ export type McpJsonRpcOptions = {
   beforeToolsCall?: (signal: AbortSignal) => Promise<void>;
 };
 
-const defaultGrantedScopes = (): readonly McpAgentScope[] => MCP_AGENT_SCOPES;
+const defaultGrantedScopes = (): readonly McpAgentScope[] =>
+  MCP_AGENT_SCOPES.filter((scope) => scope !== 'drive:write-request');
 
 const RESOURCE_TIP_BY_TOOL: Record<string, readonly string[]> = {
   coordination_post_handoff: [COORDINATION_INBOX_URI, COORDINATION_CHANGES_URI],

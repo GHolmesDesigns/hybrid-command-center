@@ -15,6 +15,7 @@ import { OAUTH_STATE_TTL_MS, purgeExpiredAuthorizations } from './drive/oauth.ts
 import { DRIVE_OAUTH_SCOPE } from '../shared/drive-oauth.ts';
 import { getSetting, provisionProject, setSetting } from './drive/service.ts';
 import type { DriveWriteProvider } from './drive/write.ts';
+import { requestDriveWrite } from './drive/agent-write.ts';
 import {
   DRIVE_BUDGET,
   DRIVE_OAUTH_BUDGET,
@@ -85,6 +86,86 @@ const stampsOf = (projectId: string) =>
     )
     .get(projectId) as { updatedAt: string; lastActivityAt: string };
 describe('command center API', () => {
+  it('lists and decides agent Drive requests through the operator boundary', async () => {
+    const { p } = await setup();
+    db.prepare('UPDATE projects SET drive_folder_id=?, drive_folder_url=? WHERE id=?').run(
+      'project-folder',
+      'https://drive.test/project',
+      p.id,
+    );
+    const pending = requestDriveWrite(db, 'planner', {
+      kind: 'create-folder',
+      projectId: p.id,
+      parentId: 'project-folder',
+      name: 'Approved folder',
+      clientRequestId: 'http-approve',
+    });
+    const denied = requestDriveWrite(db, 'planner', {
+      kind: 'create-folder',
+      projectId: p.id,
+      parentId: 'project-folder',
+      name: 'Denied folder',
+      clientRequestId: 'http-deny',
+    });
+    let writes = 0;
+    const provider: DriveWriteProvider = {
+      connected: true,
+      async createFolder(input) {
+        writes++;
+        return { id: 'created-folder', name: input.name, url: 'https://drive.test/created' };
+      },
+      async uploadFile(input) {
+        writes++;
+        return {
+          id: 'uploaded-file',
+          name: input.name,
+          mimeType: input.mimeType,
+          url: 'https://drive.test/uploaded',
+          modifiedAt: null,
+          size: input.bytes.length,
+        };
+      },
+    };
+    const app = createApp(db, { driveWrite: () => provider });
+
+    await request(app)
+      .get('/api/drive-write-requests?status=PENDING')
+      .expect(200)
+      .expect(({ body }) =>
+        expect(body.requests.map((item: { id: string }) => item.id)).toEqual([
+          denied.id,
+          pending.id,
+        ]),
+      );
+    await request(app).post(`/api/drive-write-requests/${pending.id}/approve`).expect(200);
+    await request(app).post(`/api/drive-write-requests/${denied.id}/deny`).expect(200);
+    expect(writes).toBe(1);
+    expect(
+      db.prepare('SELECT status FROM drive_write_requests WHERE id=?').get(pending.id),
+    ).toEqual({
+      status: 'APPROVED',
+    });
+    expect(db.prepare('SELECT status FROM drive_write_requests WHERE id=?').get(denied.id)).toEqual(
+      {
+        status: 'DENIED',
+      },
+    );
+    expect(
+      db
+        .prepare(
+          "SELECT COUNT(*) AS count FROM integration_events WHERE operation='drive.agent-write-request'",
+        )
+        .get(),
+    ).toEqual({ count: 4 });
+  });
+
+  it('returns boundary errors for invalid status and stale operator decisions', async () => {
+    const app = createApp(db);
+    await request(app).get('/api/drive-write-requests?status=NOPE').expect(400);
+    await request(app).post('/api/drive-write-requests/missing/approve').expect(500);
+    await request(app).post('/api/drive-write-requests/missing/deny').expect(500);
+  });
+
   it('enables the documented CSP only for production responses', async () => {
     const development = await request(createApp(db, { production: false })).get('/api/health');
     expect(development.headers['content-security-policy']).toBeUndefined();

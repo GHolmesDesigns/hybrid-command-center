@@ -48,6 +48,7 @@ import type { McpWorkspaceWriteDeps } from './workspace-write.ts';
 import {
   mcpCoordinationCredentialLabelMismatch,
   mcpCoordinationScopeRequired,
+  mcpDriveScopeRequired,
   mcpWorkspaceScopeRequired,
 } from '../../shared/mcp-coordination-errors.ts';
 import { recordMcpAgentEvent } from './events.ts';
@@ -291,7 +292,9 @@ function refuseScope(
   const detail =
     required === 'workspace:read' || required === 'workspace:write'
       ? mcpWorkspaceScopeRequired(required)
-      : mcpCoordinationScopeRequired(required);
+      : required === 'drive:write-request'
+        ? mcpDriveScopeRequired()
+        : mcpCoordinationScopeRequired(required);
   recordMcpAgentEvent(options.db, {
     agentLabel: auth.agentCredential!.agentLabel,
     tool: requestedTool(request),

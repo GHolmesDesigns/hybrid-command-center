@@ -30,6 +30,7 @@ const ERROR_CODE_LABEL: Record<McpCoordinationErrorCode, string> = {
   COORDINATION_CREDENTIAL_LABEL_MISMATCH: 'Credential label mismatch',
   COORDINATION_SCOPE_REQUIRED: 'Coordination scope required',
   WORKSPACE_SCOPE_REQUIRED: 'Workspace scope required',
+  DRIVE_SCOPE_REQUIRED: 'Drive request scope required',
   WORKSPACE_REVISION_CONFLICT: 'Revision conflict',
   WORKSPACE_CONFIRMATION_REQUIRED: 'Confirmation required',
   COORDINATION_RATE_LIMIT_EXCEEDED: 'Rate limit exceeded',
