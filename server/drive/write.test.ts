@@ -221,4 +221,20 @@ describe('confirmed Drive writes', () => {
     ).resolves.toMatchObject({ id: 'uploaded', size: 5 });
     expect(creates).toHaveLength(2);
   });
+
+  it('refuses provider responses that omit the new item ID', async () => {
+    const drive = { files: { create: async () => ({ data: {} }) } };
+    const provider = new GoogleDriveWriteProvider(drive as never);
+    await expect(provider.createFolder({ name: 'Assets', parentId: folderId })).rejects.toThrow(
+      'new folder',
+    );
+    await expect(
+      provider.uploadFile({
+        name: 'brief.txt',
+        mimeType: 'text/plain',
+        parentId: folderId,
+        bytes: new Uint8Array([1]),
+      }),
+    ).rejects.toThrow('uploaded file');
+  });
 });
