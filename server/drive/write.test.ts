@@ -8,6 +8,7 @@ import {
   previewDriveUpload,
   type DriveWriteProvider,
 } from './write.ts';
+import { GoogleDriveWriteProvider } from './google.ts';
 
 let db: Db;
 const projectId = crypto.randomUUID();
@@ -151,5 +152,38 @@ describe('confirmed Drive writes', () => {
         bytes: new Uint8Array([1]),
       }),
     ).rejects.toThrow('not connected');
+  });
+
+  it('keeps the real provider write methods separate from the browse provider', async () => {
+    const creates: unknown[] = [];
+    const drive = {
+      files: {
+        create: async (input: unknown) => {
+          creates.push(input);
+          return {
+            data: {
+              id: 'uploaded',
+              name: 'brief.txt',
+              mimeType: 'text/plain',
+              webViewLink: 'https://drive.test/uploaded',
+              size: '5',
+            },
+          };
+        },
+      },
+    };
+    const provider = new GoogleDriveWriteProvider(drive as never);
+    await expect(
+      provider.createFolder({ name: 'Assets', parentId: folderId }),
+    ).resolves.toMatchObject({ id: 'uploaded' });
+    await expect(
+      provider.uploadFile({
+        name: 'brief.txt',
+        mimeType: 'text/plain',
+        parentId: folderId,
+        bytes: new Uint8Array([1, 2]),
+      }),
+    ).resolves.toMatchObject({ id: 'uploaded', size: 5 });
+    expect(creates).toHaveLength(2);
   });
 });
