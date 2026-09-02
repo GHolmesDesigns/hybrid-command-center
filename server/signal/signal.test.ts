@@ -77,6 +77,29 @@ describe('the date/time vocabulary', () => {
 });
 
 describe('writing posts', () => {
+  it('binds a post to the client of its project and leaves an unassigned post unbound', async () => {
+    const timestamp = new Date().toISOString();
+    db.prepare(
+      `INSERT INTO clients(id,name,slug,branding_color_one,branding_color_two,created_at,updated_at)
+       VALUES('client-1','Acme Studio','acme-studio','#18201d','#ffffff',?,?)`,
+    ).run(timestamp, timestamp);
+    db.prepare(
+      `INSERT INTO projects(id,client_id,name,created_at,updated_at)
+       VALUES('project-1','client-1','Launch',?,?)`,
+    ).run(timestamp, timestamp);
+
+    const bound = await add({ projectId: 'project-1', date: '2026-09-14' });
+    const unbound = await add({ date: '2026-09-14' });
+
+    expect(bound.client).toEqual({
+      id: 'client-1',
+      name: 'Acme Studio',
+      branding: { logoUrl: '', colorOne: '#18201d', colorTwo: '#ffffff' },
+    });
+    expect(unbound.client).toBeUndefined();
+    expect(listPostsInRange(db, '2026-09-14', '2026-09-14').posts).toHaveLength(2);
+  });
+
   it('creates an unscheduled post by default and puts it in the queue', async () => {
     const created = await add();
     expect(created.date).toBeNull();

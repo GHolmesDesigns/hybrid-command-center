@@ -8,6 +8,7 @@ import type {
   SignalPost,
 } from '../../shared/signal.ts';
 import type { SignalPostMedia } from '../../shared/signal-media.ts';
+import type { ClientBranding } from '../../shared/branding.ts';
 import { campaignsByPost } from './campaigns.ts';
 import type { PublishPlatform, PublishPostKind } from '../../shared/publish-capabilities.ts';
 import type { PublishTargetSelection } from '../../shared/publish.ts';
@@ -49,7 +50,20 @@ export interface SignalPostRow {
   created_at: string;
   updated_at: string;
   revision: number;
+  client_id: string | null;
+  client_name: string | null;
+  branding_logo_url: string | null;
+  branding_color_one: string | null;
+  branding_color_two: string | null;
 }
+
+/** One read shape for Signal posts, with the sole project-to-client binding resolved. */
+export const signalPostSelect = `
+  SELECT p.*, c.id AS client_id, c.name AS client_name,
+         c.branding_logo_url, c.branding_color_one, c.branding_color_two
+    FROM signal_posts p
+    LEFT JOIN projects pr ON pr.id = p.project_id
+    LEFT JOIN clients c ON c.id = pr.client_id`;
 
 /**
  * SQL fragment for the lifecycle filter a list or count applies.
@@ -167,9 +181,26 @@ export function toSignalPost(
   media: SignalPostMedia[],
   campaigns: SignalCampaign[],
 ): SignalPost {
+  const client =
+    row.client_id && row.client_name
+      ? {
+          id: row.client_id,
+          name: row.client_name,
+          ...(row.branding_logo_url || row.branding_color_one || row.branding_color_two
+            ? {
+                branding: {
+                  logoUrl: row.branding_logo_url ?? '',
+                  colorOne: row.branding_color_one ?? '',
+                  colorTwo: row.branding_color_two ?? '',
+                } satisfies ClientBranding,
+              }
+            : {}),
+        }
+      : undefined;
   return {
     id: row.id,
     projectId: row.project_id,
+    ...(client ? { client } : {}),
     text: row.text,
     // Empty rather than absent, so every consumer can read `post.channels.length`.
     channels,

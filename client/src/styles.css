@@ -4338,6 +4338,36 @@ button.tag-chip.toggle.active {
 .signal-status.status-scheduled {
   color: var(--blue);
 }
+.signal-client-cue {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  padding: 1px 5px 1px 2px;
+  border: 1px solid var(--client-cue-fg);
+  border-radius: 999px;
+  background: var(--client-cue-bg);
+  color: var(--client-cue-fg);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.signal-client-cue > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--client-cue-fg);
+  color: var(--client-cue-bg);
+  font-size: 8px;
+}
+.signal-client-cue > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .signal-lifecycle,
 .signal-provenance {
   display: inline-flex;
