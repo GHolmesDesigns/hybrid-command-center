@@ -1003,6 +1003,25 @@ const integrationTools: McpToolRegistryEntry[] = [
     handler: 'integration_write',
   },
   {
+    name: 'signal_resolve_drive_media_batch',
+    description:
+      'Resolve every item in a project-owned Drive folder to Signal media metadata. Returns per-item outcomes, never reads bytes, and refuses folders over the batch limit.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        clientRequestId: { type: 'string' },
+        projectId: { type: 'string', format: 'uuid' },
+        folderId: { type: 'string' },
+      },
+      required: ['clientRequestId', 'projectId'],
+      additionalProperties: false,
+    },
+    class: 'I',
+    requiredScope: 'workspace:write',
+    owner: 'server/drive/media-batch.ts',
+    handler: 'integration_write',
+  },
+  {
     name: 'signal_recheck_post_media',
     description:
       'Recheck one stored Drive media reference on a Signal post against current Drive metadata.',

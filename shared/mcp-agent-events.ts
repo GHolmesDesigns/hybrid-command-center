@@ -80,6 +80,7 @@ export const INTEGRATION_WRITE_LIMIT_PER_MINUTE = 6;
 export const INTEGRATION_WRITE_TOOLS = [
   'import_signal_commit',
   'signal_resolve_drive_media',
+  'signal_resolve_drive_media_batch',
   'signal_recheck_post_media',
   'signal_recheck_variant_media',
   'drive_sync',

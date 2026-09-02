@@ -92,6 +92,7 @@ import {
   resolveDriveMedia,
   type DriveMediaProvider,
 } from './drive/media.ts';
+import { resolveDriveMediaBatch } from './drive/media-batch.ts';
 import {
   SignalMediaError,
   SignalPostNotFoundError,
@@ -2175,6 +2176,30 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     try {
       const { link } = z.object({ link: z.string().min(1).max(2048) }).parse(req.body);
       res.json(await resolveDriveMedia({ link, provider: driveMedia() }));
+    } catch (error) {
+      next(error);
+    }
+  });
+  /**
+   * Resolve the files in one project-owned Drive folder. This is deliberately a separate route:
+   * the single-file route continues to refuse folder links, while this route gets its scope from
+   * the project and its recorded Drive step folders.
+   */
+  app.post('/api/signal/drive-media/resolve-batch', async (req, res, next) => {
+    try {
+      const data = z
+        .object({
+          projectId: z.string().uuid(),
+          folderId: z.string().trim().min(5).max(200).optional(),
+        })
+        .parse(req.body);
+      const result = await resolveDriveMediaBatch({
+        db,
+        ...data,
+        provider: options.drive ? options.drive(db) : driveProvider(db),
+        mediaProvider: driveMedia(),
+      });
+      res.status(result.outcome === 'REFUSED' ? 400 : 200).json(result);
     } catch (error) {
       next(error);
     }

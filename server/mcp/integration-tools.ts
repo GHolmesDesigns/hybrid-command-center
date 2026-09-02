@@ -30,6 +30,7 @@ import {
 import { previewClientMerge, commitClientMerge } from '../client-merge.ts';
 import { ClientMergeError } from '../domain/client-merge.ts';
 import { DriveScopeError, listProjectFiles } from '../drive/browse.ts';
+import { resolveDriveMediaBatch } from '../drive/media-batch.ts';
 import {
   DriveMediaError,
   driveMediaProvider,
@@ -157,6 +158,14 @@ const signalImportCommitArgs = signalImportBody.and(
 const resolveDriveMediaArgs = z
   .object({
     link: z.string().trim().min(1),
+    ...clientRequestIdField,
+  })
+  .strict();
+
+const resolveDriveMediaBatchArgs = z
+  .object({
+    projectId: z.string().uuid(),
+    folderId: z.string().trim().min(1).optional(),
     ...clientRequestIdField,
   })
   .strict();
@@ -442,6 +451,26 @@ async function runWrite(
           entityType: 'drive_file',
           entityId: data.driveFileId,
           summary: 'Resolved Drive media metadata.',
+          clientRequestId,
+          persistIdempotency: true,
+        });
+      }
+      case 'signal_resolve_drive_media_batch': {
+        const args = resolveDriveMediaBatchArgs.parse(rawArgs);
+        const data = await resolveDriveMediaBatch({
+          db,
+          projectId: args.projectId,
+          ...(args.folderId ? { folderId: args.folderId } : {}),
+          provider: resolveDriveDep(db, deps),
+          mediaProvider: resolveDriveMediaDep(db, deps),
+        });
+        return finish(db, session, tool, success(data), {
+          entityType: 'drive_folder',
+          entityId: data.folder.id,
+          summary:
+            data.outcome === 'SUCCESS'
+              ? `Resolved ${data.items.length} Drive media items.`
+              : data.error,
           clientRequestId,
           persistIdempotency: true,
         });

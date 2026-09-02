@@ -2,7 +2,11 @@ import crypto from 'node:crypto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createDb, type Db } from '../db.ts';
 import { PROJECT_SUBFOLDERS } from '../config.ts';
-import { MockDriveMediaProvider, MockDriveProvider } from '../drive/mock-provider.ts';
+import {
+  MockDriveMediaProvider,
+  MockDriveProvider,
+  mockDriveFile,
+} from '../drive/mock-provider.ts';
 import { provisionClient, provisionProject, setSetting } from '../drive/service.ts';
 import { projectScopes } from '../drive/browse.ts';
 import { previewClientMerge } from '../client-merge.ts';
@@ -273,6 +277,35 @@ describe('MCP integration tools', () => {
     expect(media.calls).toEqual([fileId]);
     expect(media.openCalls).toEqual([]);
     expect((result.data as { driveFileId: string }).driveFileId).toBe(fileId);
+  });
+
+  it('resolves a project folder through the distinct batch tool', async () => {
+    const { clientId, projectId } = seedProject();
+    const drive = new MockDriveProvider();
+    await provisionClient(db, clientId, drive);
+    await provisionProject(db, projectId, drive);
+    const folderId = projectScopes(db, projectId)[0]!.id;
+    const fileId = 'batch-file-123456789';
+    drive.seed(folderId, [[mockDriveFile(fileId, 'batch.png')]]);
+    const media = new MockDriveMediaProvider();
+    media.seed(fileId);
+
+    const result = await callIntegrationTool(
+      db,
+      session(),
+      'signal_resolve_drive_media_batch',
+      { clientRequestId: 'batch-1', projectId },
+      { drive, driveMedia: media },
+    );
+
+    expect(result.outcome).toBe('SUCCESS');
+    expect((result.data as { outcome: string; items: { driveFileId?: string }[] }).outcome).toBe(
+      'SUCCESS',
+    );
+    expect(
+      (result.data as { items: { media?: { driveFileId?: string } }[] }).items[0]?.media
+        ?.driveFileId,
+    ).toBe(fileId);
   });
 
   it('leaves prior inventory generation when refresh fails', async () => {
