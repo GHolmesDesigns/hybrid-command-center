@@ -181,4 +181,63 @@ describe('agent Drive write approval', () => {
     ).toThrow('exceeds the 10 MB limit');
     expect(listDriveWriteRequests(db)).toHaveLength(0);
   });
+
+  it('keeps idempotency scoped to the requesting agent', () => {
+    const input = {
+      kind: 'create-folder' as const,
+      projectId,
+      parentId: folderId,
+      name: 'Shared',
+      clientRequestId: 'same-client-id',
+    };
+    const plannerRequest = requestDriveWrite(db, 'planner', input);
+    const reviewerRequest = requestDriveWrite(db, 'reviewer', input);
+    expect(reviewerRequest.id).not.toBe(plannerRequest.id);
+    expect(listDriveWriteRequests(db)).toHaveLength(2);
+  });
+
+  it('allows only one concurrent approval to claim a request', async () => {
+    const request = requestDriveWrite(db, 'planner', {
+      kind: 'create-folder',
+      projectId,
+      parentId: folderId,
+      name: 'Once',
+      clientRequestId: 'concurrent-approval',
+    });
+    const provider = new Provider();
+    const results = await Promise.allSettled([
+      decideDriveWrite(db, request.id, 'approve', provider),
+      decideDriveWrite(db, request.id, 'approve', provider),
+    ]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+    expect(provider.writes).toBe(1);
+    expect(listDriveWriteRequests(db)[0]).toMatchObject({ status: 'APPROVED' });
+  });
+
+  it('audits a failed upload without exposing its bytes', async () => {
+    const request = requestDriveWrite(db, 'planner', {
+      kind: 'upload-file',
+      projectId,
+      folderId,
+      name: 'private.txt',
+      mimeType: 'text/plain',
+      contentBase64: Buffer.from('private bytes').toString('base64'),
+      clientRequestId: 'upload-failure',
+    });
+    const provider = new Provider();
+    provider.uploadFile = async () => {
+      throw new Error('upload failed');
+    };
+    await expect(decideDriveWrite(db, request.id, 'approve', provider)).rejects.toThrow(
+      'upload failed',
+    );
+    const audit = db
+      .prepare(
+        "SELECT outcome,summary,error FROM integration_events WHERE operation='drive.agent-write-request' ORDER BY rowid DESC",
+      )
+      .get() as { outcome: string; summary: string; error: string | null };
+    expect(audit).toMatchObject({ outcome: 'FAILURE', error: 'upload failed' });
+    expect(audit.summary).not.toContain('private bytes');
+  });
 });
