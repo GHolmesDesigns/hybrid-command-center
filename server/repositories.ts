@@ -148,6 +148,81 @@ export function hydrateTask(db: Db, raw: any): Task {
     checklistTotal: checklist.length,
   } as Task;
 }
+
+function grouped<T>(rows: T[], taskId: (row: T) => string): Map<string, T[]> {
+  const result = new Map<string, T[]>();
+  for (const row of rows) {
+    const id = taskId(row);
+    const values = result.get(id) ?? [];
+    values.push(row);
+    result.set(id, values);
+  }
+  return result;
+}
+
+/** Hydrates one bounded page with one query per relation, rather than four queries per task. */
+function hydrateTaskPage(db: Db, rows: any[]): Task[] {
+  if (rows.length === 0) return [];
+  const taskIds = rows.map((row) => row.id as string);
+  const placeholders = taskIds.map(() => '?').join(',');
+  const tags = grouped(
+    db
+      .prepare(
+        `SELECT task_tags.task_id, tags.id, tags.name, tags.color FROM task_tags
+         JOIN tags ON tags.id=task_tags.tag_id WHERE task_tags.task_id IN (${placeholders})
+         ORDER BY task_tags.task_id, tags.name COLLATE NOCASE`,
+      )
+      .all(...taskIds) as any[],
+    (row) => row.task_id,
+  );
+  const checklist = grouped(
+    db
+      .prepare(
+        `SELECT id, task_id, text, completed, position FROM checklist_items
+         WHERE task_id IN (${placeholders}) ORDER BY task_id, position`,
+      )
+      .all(...taskIds) as any[],
+    (row) => row.task_id,
+  );
+  const dependencies = db
+    .prepare(
+      `SELECT d.task_id, d.dependency_id, t.title, t.status FROM task_dependencies d
+       JOIN tasks t ON t.id=d.dependency_id WHERE d.task_id IN (${placeholders})
+       ORDER BY d.task_id, t.title`,
+    )
+    .all(...taskIds) as any[];
+  const dependencyIds = grouped(dependencies, (row) => row.task_id);
+  const blocking = grouped(
+    dependencies.filter((row) => row.status !== 'COMPLETE'),
+    (row) => row.task_id,
+  );
+  return rows.map((raw) => {
+    const task: any = camel(raw);
+    const taskTags = (tags.get(task.id) ?? []).map((row) =>
+      camel({ id: row.id, name: row.name, color: row.color }),
+    );
+    const items = (checklist.get(task.id) ?? []).map((item) => ({
+      ...camel(item),
+      completed: Boolean(item.completed),
+    }));
+    const ids = (dependencyIds.get(task.id) ?? []).map((row) => row.dependency_id as string);
+    const blockers = (blocking.get(task.id) ?? []).map((row) => ({
+      id: row.dependency_id as string,
+      title: row.title as string,
+    }));
+    return {
+      ...task,
+      tags: taskTags,
+      checklist: items,
+      dependencyIds: ids,
+      blockingDependencies: blockers,
+      blocked: blockers.length > 0,
+      overdue: isOverdue(task),
+      checklistCompleted: items.filter((item) => item.completed).length,
+      checklistTotal: items.length,
+    } as Task;
+  });
+}
 /**
  * Workflow order for `status`, which is stored as text. Ordering by the column itself sorts
  * alphabetically — BACKLOG, COMPLETE, IN_PROGRESS, REVIEW, TODO — which is invisible on the
@@ -157,6 +232,27 @@ export function hydrateTask(db: Db, raw: any): Task {
 const STATUS_RANK = `CASE t.status ${TASK_STATUSES.map(
   (status, rank) => `WHEN '${status}' THEN ${rank}`,
 ).join(' ')} ELSE ${TASK_STATUSES.length} END`;
+
+export type TaskPage = { tasks: Task[]; truncated: boolean };
+
+/** A bounded task page. `orderBy` is an internal SQL fragment, never external input. */
+export function listTasksPage(
+  db: Db,
+  where: string,
+  params: (string | number | null)[],
+  limit: number,
+  offset = 0,
+  orderBy = `${STATUS_RANK}, t.position, t.updated_at DESC`,
+): TaskPage {
+  const rows = db
+    .prepare(
+      `SELECT t.*, p.name project_name, p.client_id, c.name client_name FROM tasks t
+       JOIN projects p ON p.id=t.project_id JOIN clients c ON c.id=p.client_id ${where}
+       ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
+    )
+    .all(...params, limit + 1, offset) as any[];
+  return { tasks: hydrateTaskPage(db, rows.slice(0, limit)), truncated: rows.length > limit };
+}
 
 export function listTasks(db: Db, where = '', params: (string | number | null)[] = []) {
   const rows = db
