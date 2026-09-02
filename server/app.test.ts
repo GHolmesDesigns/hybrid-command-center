@@ -14,6 +14,7 @@ import { MockDriveProvider, MockOAuthClient, mockDriveFile } from './drive/mock-
 import { OAUTH_STATE_TTL_MS, purgeExpiredAuthorizations } from './drive/oauth.ts';
 import { DRIVE_OAUTH_SCOPE } from '../shared/drive-oauth.ts';
 import { getSetting, provisionProject, setSetting } from './drive/service.ts';
+import type { DriveWriteProvider } from './drive/write.ts';
 import {
   DRIVE_BUDGET,
   DRIVE_OAUTH_BUDGET,
@@ -989,6 +990,62 @@ describe('command center API', () => {
         request(app).delete(`/api/projects/${project.id}/files/f1`),
       ])
         expect((await attempt).status).toBe(404);
+    });
+
+    it('keeps confirmed folder and upload writes on their separate route', async () => {
+      const drive = new MockDriveProvider();
+      const { p } = await setup();
+      setSetting(db, 'drive_root_id', 'root');
+      await provisionProject(db, p.id, drive);
+      const writes: string[] = [];
+      const write: DriveWriteProvider = {
+        connected: true,
+        async createFolder(input) {
+          writes.push(`folder:${input.parentId}:${input.name}`);
+          return {
+            id: 'created-folder',
+            name: input.name,
+            url: 'https://drive.test/created-folder',
+          };
+        },
+        async uploadFile(input) {
+          writes.push(`upload:${input.parentId}:${input.name}:${input.bytes.length}`);
+          return mockDriveFile('created-file', input.name, {
+            mimeType: input.mimeType,
+            size: input.bytes.length,
+          });
+        },
+      };
+      const app = createApp(db, { drive: () => drive, driveWrite: () => write });
+      const scope = projectScopes(db, p.id)[0];
+      const folderPreview = await request(app)
+        .post(`/api/projects/${p.id}/drive-write/folder/preview`)
+        .send({ parentId: scope.id, name: 'Assets' });
+      expect(folderPreview.status).toBe(200);
+      const folder = await request(app)
+        .post(`/api/projects/${p.id}/drive-write/folder`)
+        .send(folderPreview.body);
+      expect(folder.status).toBe(201);
+
+      const uploadPreview = await request(app)
+        .post(`/api/projects/${p.id}/drive-write/upload/preview`)
+        .send({
+          folderId: scope.id,
+          name: 'brief.txt',
+          mimeType: 'text/plain',
+          contentBase64: Buffer.from('hello').toString('base64'),
+        });
+      const upload = await request(app)
+        .post(`/api/projects/${p.id}/drive-write/upload`)
+        .send(uploadPreview.body);
+      expect(upload.status).toBe(201);
+      expect(writes).toEqual([`folder:${scope.id}:Assets`, `upload:${scope.id}:brief.txt:5`]);
+      expect(
+        db.prepare('SELECT operation,outcome FROM integration_events ORDER BY created_at').all(),
+      ).toEqual([
+        { operation: 'drive.create-folder', outcome: 'SUCCESS' },
+        { operation: 'drive.upload-file', outcome: 'SUCCESS' },
+      ]);
     });
   });
 

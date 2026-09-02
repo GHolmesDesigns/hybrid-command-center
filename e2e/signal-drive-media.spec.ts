@@ -23,10 +23,9 @@ test('a Drive asset previews, streams through the mock providers, and shows deli
   const post = await created.json();
 
   await page.goto('/signal?month=2099-11');
-  await page
-    .getByRole('region', { name: '2099-11-18' })
-    .getByRole('button', { name: `Edit ${text}` })
-    .click();
+  const postCard = page.getByRole('region', { name: '2099-11-18' });
+  await expect(postCard.getByRole('button', { name: /Edit Wave 11 Drive media/ })).toBeVisible();
+  await postCard.getByRole('button', { name: /Edit Wave 11 Drive media/ }).click();
   const editor = page.getByRole('dialog');
 
   await editor
@@ -60,10 +59,7 @@ test('a Drive asset previews, streams through the mock providers, and shows deli
     },
   ]);
 
-  await page
-    .getByRole('region', { name: '2099-11-18' })
-    .getByRole('button', { name: `Edit ${text}` })
-    .click();
+  await postCard.getByRole('button', { name: /Edit Wave 11 Drive media/ }).click();
   await editor.getByRole('button', { name: 'Show preview' }).click();
   const preview = editor.getByRole('region', { name: 'Publish confirmation' });
   await expect(preview).toContainText('LinkedIn → @gholmes-designs · Ready to send');

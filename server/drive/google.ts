@@ -1,6 +1,7 @@
 ﻿import { google, drive_v3 } from 'googleapis';
 import type { DriveFile } from '../../shared/drive.ts';
 import type { DriveFilePage, DriveFolder, DriveProvider } from './provider.ts';
+import type { DriveWriteProvider } from './write.ts';
 import type { DriveMediaFile, DriveMediaProvider } from './media.ts';
 
 const escapeQuery = (value: string) => value.replace(/'/g, "\\'");
@@ -111,6 +112,50 @@ export class GoogleDriveProvider implements DriveProvider {
   }
 }
 
+/** Confirmed operator writes, deliberately separate from the Files browsing provider. */
+export class GoogleDriveWriteProvider implements DriveWriteProvider {
+  readonly connected = true;
+  private drive: drive_v3.Drive;
+  constructor(drive: drive_v3.Drive) {
+    this.drive = drive;
+  }
+
+  async createFolder({ name, parentId }: { name: string; parentId: string }) {
+    const result = await this.drive.files.create({
+      requestBody: { name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] },
+      fields: 'id,name,webViewLink',
+      supportsAllDrives: true,
+    });
+    if (!result.data.id) throw new Error('Drive did not return an ID for the new folder.');
+    return {
+      id: result.data.id,
+      name: result.data.name || name,
+      url: result.data.webViewLink || `https://drive.google.com/drive/folders/${result.data.id}`,
+    };
+  }
+
+  async uploadFile({
+    name,
+    mimeType,
+    parentId,
+    bytes,
+  }: {
+    name: string;
+    mimeType: string;
+    parentId: string;
+    bytes: Uint8Array;
+  }) {
+    const result = await this.drive.files.create({
+      requestBody: { name, mimeType, parents: [parentId] },
+      media: { mimeType, body: Buffer.from(bytes) },
+      fields: 'id,name,mimeType,webViewLink,modifiedTime,size',
+      supportsAllDrives: true,
+    });
+    if (!result.data.id) throw new Error('Drive did not return an ID for the uploaded file.');
+    return toFile(result.data, result.data.id);
+  }
+}
+
 /**
  * Metadata for one file by id, for the Signal media reference in `media.ts`.
  *
@@ -198,6 +243,7 @@ export function createGoogleProvider(
   const drive = google.drive({ version: 'v3', auth });
   return {
     provider: new GoogleDriveProvider(drive),
+    write: new GoogleDriveWriteProvider(drive),
     media: new GoogleDriveMediaProvider(drive),
     auth,
   };

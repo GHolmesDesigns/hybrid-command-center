@@ -1064,7 +1064,7 @@ A playbook with neither column, or with the cells left blank, matches by name ex
 has. Identity is for clients only: projects and tasks still match by name under the client or project
 they belong to.
 
-### Files
+### Files — scoped Drive browsing and confirmed writes
 
 **Files** shows what is actually in a project's Google Drive folder, without leaving the
 application. Choose a project at the top of the page, and a folder beside it — the project's own
@@ -1077,10 +1077,13 @@ than a misleading zero. **Open** on any row opens that item in Google Drive itse
 belonging to this project can also be opened here to browse into it. Long folders load 25 items
 at a time; **Show 25 more** adds the next page to the list.
 
-This page only ever reads. There is no upload, download, move, rename, or delete anywhere on it,
-and there is no hidden one: adding, renaming, and removing files is done in Google Drive, which
-every row links to. Deleting a project or a task in Command Center never touches a Drive file
-either — see [Removing records](#removing-records).
+Browsing remains read-only, but the separate **Create folder** and **Upload file** actions can
+write inside the project's own Drive folder or one of its recorded subfolders. Before either
+write, the confirmation names the exact action and target; confirming only the unchanged preview
+is accepted. Every attempt appears in Integration activity. Downloads, moves, renames, and deletes
+remain unavailable, and deleting a project or task in Command Center never touches a Drive file
+either — see [Removing records](#removing-records). Agent Drive write is a separate grant and is
+off by default.
 
 If files cannot be shown, the page says which of four things is wrong and what to do about it:
 

@@ -17,6 +17,7 @@ import {
   within,
   App,
 } from './App.test-setup';
+import { vi } from 'vitest';
 
 const openFiles = async (entry = '/files?project=p1') => {
   render(
@@ -165,17 +166,59 @@ describe('Files module', () => {
     expect(listingCalls().at(-1)?.url).not.toContain('folderId');
   });
 
-  it('offers no way to change a file, and says deletion leaves Drive alone', async () => {
+  it('offers only the approved confirmed writes, with destructive actions absent', async () => {
     testState.driveListingPayload = () =>
       driveListing({ files: [driveFile('f1', 'Creative brief.pdf')] });
     await openFiles();
     await screen.findByRole('table');
 
-    for (const forbidden of [/upload/i, /delete/i, /rename/i, /move/i, /download/i])
+    expect(screen.getByRole('button', { name: /create folder/i })).toBeVisible();
+    expect(screen.getByText(/Upload file/i)).toBeVisible();
+    for (const forbidden of [/delete/i, /rename/i, /move/i, /download/i])
       expect(screen.queryByRole('button', { name: forbidden })).toBeNull();
-    expect(screen.getByText(/never touches a Drive file/)).toBeVisible();
-    // Read-only means read-only at the wire too: the page only ever issues GETs.
+    // No write is sent until the operator confirms a preview.
     expect(requests.every((call) => call.method === 'GET')).toBe(true);
+  });
+
+  it('previews a folder write and asks for the exact confirmation before committing it', async () => {
+    testState.driveListingPayload = () => driveListing({ files: [driveFile('f1', 'Brief.txt')] });
+    testState.driveWritePreviewPayload = {
+      plan: { kind: 'create-folder', projectId: 'p1', parentId: 'folder-p1', name: 'Assets' },
+      planHash: 'a'.repeat(64),
+      confirmation: 'Create folder "Assets" in "Project folder".',
+    };
+    testState.driveWriteCommitPayload = { id: 'folder-new', name: 'Assets' };
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    await openFiles();
+    fireEvent.change(await screen.findByPlaceholderText('Folder name'), {
+      target: { value: 'Assets' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /create folder/i }));
+    await screen.findByRole('table');
+    expect(confirm).toHaveBeenCalledWith('Create folder "Assets" in "Project folder".');
+    expect(
+      requests.some((call) => call.method === 'POST' && call.url.endsWith('/drive-write/folder')),
+    ).toBe(true);
+    confirm.mockRestore();
+  });
+
+  it('previews an upload and sends it only after the operator confirms', async () => {
+    testState.driveListingPayload = () => driveListing({ files: [] });
+    testState.driveWritePreviewPayload = {
+      plan: { kind: 'upload-file', projectId: 'p1', folderId: 'folder-p1', name: 'brief.txt' },
+      planHash: 'b'.repeat(64),
+      confirmation: 'Upload "brief.txt" (5 bytes) to "Project folder".',
+    };
+    testState.driveWriteCommitPayload = { id: 'file-new', name: 'brief.txt' };
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    await openFiles();
+    const file = new File(['hello'], 'brief.txt', { type: 'text/plain' });
+    fireEvent.change(screen.getByLabelText('Upload file'), { target: { files: [file] } });
+    await waitFor(() => expect(confirm).toHaveBeenCalled());
+    expect(
+      requests.some((call) => call.method === 'POST' && call.url.endsWith('/drive-write/upload')),
+    ).toBe(true);
+    confirm.mockRestore();
   });
 
   it('sends the user to Projects when there is nothing to browse', async () => {

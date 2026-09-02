@@ -74,6 +74,7 @@ import {
 } from './domain/revisions.ts';
 import {
   driveProvider,
+  driveWriteProvider,
   getSetting,
   provisionClient,
   provisionProject,
@@ -93,6 +94,14 @@ import {
   type DriveMediaProvider,
 } from './drive/media.ts';
 import { resolveDriveMediaBatch } from './drive/media-batch.ts';
+import {
+  commitDriveWrite,
+  DriveWriteConfirmationError,
+  previewDriveFolderCreate,
+  previewDriveUpload,
+  driveWritePlanSchema,
+  type DriveWriteProvider,
+} from './drive/write.ts';
 import {
   SignalMediaError,
   SignalPostNotFoundError,
@@ -380,6 +389,8 @@ export type AppOptions = {
    * and one option covering both would quietly erase it here.
    */
   driveMedia?: (db: Db) => DriveMediaProvider;
+  /** Test-only confirmed Drive write capability; never used by Files browsing. */
+  driveWrite?: (db: Db) => DriveWriteProvider;
   /** Test-only publishing provider; automated tests never contact the real service. */
   publish?: PublishProvider;
   /**
@@ -735,6 +746,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
    * that is already read and passes it through.
    */
   app.use('/api/import', express.json({ limit: IMPORT_BODY_LIMIT_BYTES }));
+  app.use('/api/projects/:id/drive-write', express.json({ limit: '12mb' }));
   app.use(express.json({ limit: '1mb' }));
   app.use(requestLogger(options.logStream));
 
@@ -1372,6 +1384,89 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       next(e);
     }
   });
+
+  /**
+   * Confirmed Drive writes (C162). This is deliberately beside, not inside, the Files browse
+   * route. Preview is read-only; commit accepts only the exact plan hash returned by preview.
+   * There is no agent route: agent Drive write remains a separate, default-off grant.
+   */
+  app.post('/api/projects/:id/drive-write/folder/preview', (req, res, next) => {
+    try {
+      const data = z
+        .object({
+          parentId: z.string().trim().min(1).max(200),
+          name: z.string().trim().min(1).max(200),
+        })
+        .strict()
+        .parse(req.body);
+      res.json(previewDriveFolderCreate(db, { projectId: req.params.id, ...data }));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/projects/:id/drive-write/folder', async (req, res, next) => {
+    try {
+      const data = z
+        .object({
+          plan: driveWritePlanSchema,
+          planHash: z.string().length(64),
+          confirmation: z.string().min(1).max(500),
+        })
+        .strict()
+        .parse(req.body);
+      if (data.plan.kind !== 'create-folder' || data.plan.projectId !== req.params.id)
+        throw new DriveWriteConfirmationError('The confirmed plan does not match this project.');
+      const folder = await commitDriveWrite(
+        db,
+        data.plan,
+        data.planHash,
+        options.driveWrite ? options.driveWrite(db) : driveWriteProvider(db),
+      );
+      res.status(201).json(folder);
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/projects/:id/drive-write/upload/preview', (req, res, next) => {
+    try {
+      const data = z
+        .object({
+          folderId: z.string().trim().min(1).max(200),
+          name: z.string().trim().min(1).max(200),
+          mimeType: z.string().trim().min(1).max(200),
+          contentBase64: z.string().min(1),
+        })
+        .strict()
+        .parse(req.body);
+      res.json(previewDriveUpload(db, { projectId: req.params.id, ...data }));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/projects/:id/drive-write/upload', async (req, res, next) => {
+    try {
+      const data = z
+        .object({
+          plan: driveWritePlanSchema,
+          planHash: z.string().length(64),
+          confirmation: z.string().min(1).max(500),
+        })
+        .strict()
+        .parse(req.body);
+      if (data.plan.kind !== 'upload-file' || data.plan.projectId !== req.params.id)
+        throw new DriveWriteConfirmationError('The confirmed plan does not match this project.');
+      const file = await commitDriveWrite(
+        db,
+        data.plan,
+        data.planHash,
+        options.driveWrite ? options.driveWrite(db) : driveWriteProvider(db),
+      );
+      res.status(201).json(file);
+    } catch (error) {
+      next(error);
+    }
+  });
+
   /**
    * One page of a project's Drive folder, read-only (FR8). This is the whole API surface
    * the Files page has: there is no POST, PATCH, or DELETE beside it, and nothing here
@@ -2798,6 +2893,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       error instanceof z.ZodError ||
       error instanceof ImportInputError ||
       error instanceof DriveScopeError ||
+      error instanceof DriveWriteConfirmationError ||
       // An override the capability contract will not carry is the caller naming something the
       // provider cannot do, which is their problem to fix and not a failure of the write.
       error instanceof SignalVariantError ||
