@@ -8,6 +8,18 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.12.6] - 2026-09-01
+
+### Added
+
+- Clients can store an optional HTTPS logo and two-colour palette, with WCAG contrast validation
+  and a clear fallback to the global branding.
+- Client editing explains that logos are loaded by the browser and are never fetched by the server.
+
+### Breaking changes
+
+None.
+
 ## [5.12.5] - 2026-09-01
 
 ### Changed
