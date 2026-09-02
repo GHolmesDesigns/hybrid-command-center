@@ -1410,6 +1410,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         .object({
           plan: driveWritePlanSchema,
           planHash: z.string().length(64),
+          confirmation: z.string().min(1).max(500),
         })
         .strict()
         .parse(req.body);
@@ -1448,6 +1449,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         .object({
           plan: driveWritePlanSchema,
           planHash: z.string().length(64),
+          confirmation: z.string().min(1).max(500),
         })
         .strict()
         .parse(req.body);
