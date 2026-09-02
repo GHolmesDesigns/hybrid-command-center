@@ -167,6 +167,9 @@ describe('additive schema migration', () => {
 
     expect(applied.length).toBeGreaterThan(0);
     expect(applied.every((statement) => statement.startsWith('ALTER TABLE '))).toBe(true);
+    expect(columnsOf(db, 'clients')).toEqual(
+      expect.arrayContaining(['branding_logo_url', 'branding_color_one', 'branding_color_two']),
+    );
     expect(columnsOf(db, 'projects')).toEqual(
       expect.arrayContaining([
         'start_date',
@@ -206,6 +209,9 @@ describe('additive schema migration', () => {
     expect(rows(db, 'SELECT position, drive_status, drive_error FROM projects')).toEqual([
       { position: 0, drive_status: 'DISCONNECTED', drive_error: null },
     ]);
+    expect(
+      rows(db, 'SELECT branding_logo_url, branding_color_one, branding_color_two FROM clients'),
+    ).toEqual([{ branding_logo_url: null, branding_color_one: null, branding_color_two: null }]);
   });
 
   it('creates the tables an older database never had', () => {

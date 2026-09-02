@@ -35,10 +35,22 @@ export function listClients(db: Db) {
       merged_into_id: mergedIntoId,
       merged_into_name: mergedIntoName,
       merged_at: mergedAt,
+      branding_logo_url: brandingLogoUrl,
+      branding_color_one: brandingColorOne,
+      branding_color_two: brandingColorTwo,
       ...client
     } = row;
     return {
       ...camel(client),
+      ...(brandingLogoUrl || brandingColorOne || brandingColorTwo
+        ? {
+            branding: {
+              logoUrl: brandingLogoUrl ?? '',
+              colorOne: brandingColorOne ?? '',
+              colorTwo: brandingColorTwo ?? '',
+            },
+          }
+        : {}),
       ...(mergedIntoId ? { mergedInto: { id: mergedIntoId, name: mergedIntoName, mergedAt } } : {}),
     };
   });

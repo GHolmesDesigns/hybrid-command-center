@@ -141,6 +141,56 @@ describe('command center API', () => {
     expect(p.clientId).toBe(c.id);
     expect(p.driveStatus).toBe('DISCONNECTED');
   });
+  it('persists readable client branding, preserves omitted fields, and clears to fallback', async () => {
+    const app = createApp(db);
+    const created = (
+      await request(app).post('/api/clients').send({
+        name: 'Branded Client',
+        brandingLogoUrl: 'https://cdn.example/logo.svg',
+        brandingColorOne: '#18201d',
+        brandingColorTwo: '#ffffff',
+      })
+    ).body;
+    expect(created.branding).toEqual({
+      logoUrl: 'https://cdn.example/logo.svg',
+      colorOne: '#18201d',
+      colorTwo: '#ffffff',
+    });
+
+    const preserved = (
+      await request(app)
+        .patch(`/api/clients/${created.id}`)
+        .send({ notes: 'Kept', revision: created.revision })
+    ).body;
+    expect(preserved.branding).toEqual(created.branding);
+
+    const invalidLogo = await request(app).post('/api/clients').send({
+      name: 'Invalid Logo Client',
+      brandingLogoUrl: 'http://cdn.example/logo.svg',
+      brandingColorOne: '#18201d',
+      brandingColorTwo: '#ffffff',
+    });
+    expect(invalidLogo.status).toBe(400);
+    expect(invalidLogo.body.error).toContain('https://');
+
+    const invalid = await request(app).patch(`/api/clients/${created.id}`).send({
+      brandingColorOne: '#ffffff',
+      brandingColorTwo: '#eeeeee',
+      revision: preserved.revision,
+    });
+    expect(invalid.status).toBe(400);
+    expect(invalid.body.error).toContain('WCAG AA');
+
+    const cleared = (
+      await request(app).patch(`/api/clients/${created.id}`).send({
+        brandingLogoUrl: '',
+        brandingColorOne: '',
+        brandingColorTwo: '',
+        revision: preserved.revision,
+      })
+    ).body;
+    expect(cleared.branding).toBeUndefined();
+  });
   it('regenerates a client slug only when a PATCH includes the name', async () => {
     const app = createApp(db);
     const client = (await createClient('Original Name')).body;

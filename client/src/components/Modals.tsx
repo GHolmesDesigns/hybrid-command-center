@@ -1,6 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { send } from '../api';
+import { clientBrandingIssues, type ClientBranding } from '../../../shared/branding';
 import type { Category, Client, Project, Tag, Task } from '../../../shared/types';
 import { TASK_STATUSES, TASK_TYPES } from '../../../shared/types';
 import { type Modal } from './App';
@@ -178,10 +179,19 @@ function EntityModal({
 function ClientForm({ value, saved }: { value?: Client; saved: (s: string) => Promise<void> }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState('');
+  const [branding, setBranding] = useState<ClientBranding>(
+    value?.branding ?? { logoUrl: '', colorOne: '', colorTwo: '' },
+  );
+  const brandingIssues = clientBrandingIssues(branding);
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setBusy(true);
     const data = Object.fromEntries(new FormData(e.currentTarget));
+    if (brandingIssues.length) {
+      setError(brandingIssues[0].message);
+      setBusy(false);
+      return;
+    }
     try {
       await send(
         value ? `/clients/${value.id}` : '/clients',
@@ -207,6 +217,59 @@ function ClientForm({ value, saved }: { value?: Client; saved: (s: string) => Pr
         <Field label="Phone" name="phone" value={value?.phone} />
         <Field label="Website" name="website" type="url" value={value?.website} />
       </div>
+      <fieldset className="form-section">
+        <legend>Client branding</legend>
+        <p className="field-hint">
+          Optional. The browser loads this public HTTPS logo directly; the server never fetches or
+          stores the image.
+        </p>
+        <label>
+          Logo URL
+          <input
+            name="brandingLogoUrl"
+            type="url"
+            value={branding.logoUrl}
+            onChange={(e) => setBranding({ ...branding, logoUrl: e.target.value })}
+            placeholder="https://example.com/logo.svg"
+          />
+        </label>
+        <div className="form-row">
+          <label>
+            Colour one
+            <input
+              name="brandingColorOne"
+              value={branding.colorOne}
+              onChange={(e) => setBranding({ ...branding, colorOne: e.target.value })}
+              placeholder="#18201d"
+            />
+          </label>
+          <label>
+            Colour two
+            <input
+              name="brandingColorTwo"
+              value={branding.colorTwo}
+              onChange={(e) => setBranding({ ...branding, colorTwo: e.target.value })}
+              placeholder="#ffffff"
+            />
+          </label>
+        </div>
+        {!!brandingIssues.length && (
+          <div className="inline-warning" role="alert">
+            {brandingIssues.map((issue) => (
+              <span key={`${issue.field}-${issue.message}`}>{issue.message}</span>
+            ))}
+          </div>
+        )}
+        {(branding.logoUrl || branding.colorOne || branding.colorTwo) && (
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => setBranding({ logoUrl: '', colorOne: '', colorTwo: '' })}
+          >
+            Use global branding
+          </button>
+        )}
+      </fieldset>
       <TextArea label="Notes" name="notes" value={value?.notes} />
       <FormEnd error={error} busy={busy} label={value ? 'Save changes' : 'Create client'} />
     </form>

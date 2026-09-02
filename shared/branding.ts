@@ -8,7 +8,7 @@ import {
   softestReadable,
 } from './contrast.ts';
 
-export const APP_VERSION = '5.12.5';
+export const APP_VERSION = '5.12.6';
 
 export interface Branding {
   mark: string;
@@ -25,6 +25,13 @@ export interface Branding {
   logoUrl: string;
   /** Required whenever `logoUrl` is set; ignored and stored empty when it is not. */
   logoAlt: string;
+}
+
+/** Optional branding carried by one client. Empty values mean use the global branding. */
+export interface ClientBranding {
+  logoUrl: string;
+  colorOne: string;
+  colorTwo: string;
 }
 
 export const DEFAULT_BRANDING: Branding = {
@@ -44,6 +51,61 @@ export const BRANDING_SETTING_KEY = 'branding';
 /** Only `https:` logos are accepted; see the storage decision in `README.md`. */
 export const LOGO_URL_PATTERN = /^https:\/\/\S+$/;
 export const LOGO_URL_MAX = 500;
+
+export const CLIENT_BRANDING_COLOR_FIELDS = ['colorOne', 'colorTwo'] as const;
+
+export type ClientBrandingIssue = { field: keyof ClientBranding; message: string };
+
+/**
+ * Client palettes use the first colour as their surface and the second as text. The same
+ * normal-text WCAG rule used by the sidebar is deliberately applied here so a client palette
+ * can be handed to a future client-specific surface without a second, weaker rule.
+ */
+export function clientBrandingIssues(branding: ClientBranding): ClientBrandingIssue[] {
+  const issues: ClientBrandingIssue[] = [];
+  const colorOne = normalizeHex(branding.colorOne);
+  const colorTwo = normalizeHex(branding.colorTwo);
+  const hasAny = Boolean(branding.logoUrl || branding.colorOne || branding.colorTwo);
+  if (!hasAny) return issues;
+  if (!colorOne)
+    issues.push({
+      field: 'colorOne',
+      message: `Expected a hex colour such as #18201d, received "${branding.colorOne}"`,
+    });
+  if (!colorTwo)
+    issues.push({
+      field: 'colorTwo',
+      message: `Expected a hex colour such as #ffffff, received "${branding.colorTwo}"`,
+    });
+  if (issues.length) return issues;
+  const ratio = roundRatio(contrastRatio(colorTwo!, colorOne!));
+  if (ratio < AA_TEXT_CONTRAST)
+    issues.push({
+      field: 'colorTwo',
+      message: `Client text on client colour one is ${ratio}:1. WCAG AA needs ${AA_TEXT_CONTRAST}:1.`,
+    });
+  if (branding.logoUrl && !LOGO_URL_PATTERN.test(branding.logoUrl))
+    issues.push({ field: 'logoUrl', message: 'A logo address must start with https://' });
+  return issues;
+}
+
+/** Convert a valid client palette to the existing branding shape, or use global defaults. */
+export function resolveClientBranding(client?: Partial<ClientBranding> | null): Branding {
+  const candidate: ClientBranding = {
+    logoUrl: client?.logoUrl ?? '',
+    colorOne: client?.colorOne ?? '',
+    colorTwo: client?.colorTwo ?? '',
+  };
+  return clientBrandingIssues(candidate).length || !candidate.colorOne || !candidate.colorTwo
+    ? { ...DEFAULT_BRANDING }
+    : {
+        ...DEFAULT_BRANDING,
+        background: normalizeHex(candidate.colorOne)!,
+        foreground: normalizeHex(candidate.colorTwo)!,
+        logoUrl: candidate.logoUrl,
+        logoAlt: '',
+      };
+}
 
 export const BRANDING_COLOR_FIELDS = ['background', 'foreground', 'accent'] as const;
 export type BrandingColorField = (typeof BRANDING_COLOR_FIELDS)[number];
