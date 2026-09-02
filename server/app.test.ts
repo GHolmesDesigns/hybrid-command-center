@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { addDays, format, subDays } from 'date-fns';
 import { createDb, type Db } from './db.ts';
-import { SERVER_ERROR_MESSAGE, createApp, type AppOptions } from './app.ts';
+import { SERVER_ERROR_MESSAGE, createApp, safeError, type AppOptions } from './app.ts';
 import { PROJECT_SUBFOLDERS, config } from './config.ts';
 import { projectScopes } from './drive/browse.ts';
 import { MockDriveProvider, MockOAuthClient, mockDriveFile } from './drive/mock-provider.ts';
@@ -1790,41 +1790,60 @@ describe('Drive OAuth connect', () => {
    * the defect was that a live code reached stdout, so the test has to look at what was
    * actually written.
    */
-  it('logs no authorization code, Authorization header, or Cookie header during a connect', async () => {
-    const logs = captureLogs();
-    const { app } = connect({ logStream: logs.stream });
-    const state = await start(app);
+  it.each(['debug', 'trace'] as const)(
+    'logs no credential-shaped request data at %s',
+    async (level) => {
+      config.logLevel = level;
+      const logs = captureLogs();
+      const { app } = connect({ logStream: logs.stream });
+      const state = await start(app);
 
-    await request(app)
-      .get('/api/drive/oauth/callback')
-      .query({ state, code: CODE })
-      .set('Authorization', 'Bearer ya29.a-live-access-token')
-      .set('Cookie', 'session=a-live-session')
-      .expect(302);
+      await request(app)
+        .get('/api/drive/oauth/callback')
+        .query({
+          state,
+          code: CODE,
+          access_token: 'query-access-token',
+          token_hash: 'query-token-hash',
+          session_secret: 'query-session-secret',
+        })
+        .set('Authorization', 'Bearer ya29.a-live-access-token')
+        .set('Cookie', 'session=a-live-session')
+        .set('x-provider-key', 'provider-key')
+        .set('x-token-hash', 'header-token-hash')
+        .set('x-session-secret', 'header-session-secret')
+        .expect(302);
 
-    const written = logs.lines.join('');
-    expect(written).not.toBe('');
-    expect(written).not.toContain(CODE);
-    expect(written).not.toContain('4/0A');
-    expect(written).not.toContain('ya29.');
-    expect(written).not.toContain('a-live-session');
-    expect(written).not.toContain(state);
-    // The request is still logged — the path survives, and only the query is dropped.
-    expect(written).toContain('/api/drive/oauth/callback');
+      const written = logs.lines.join('');
+      expect(written).not.toBe('');
+      for (const secret of [
+        CODE,
+        '4/0A',
+        'ya29.',
+        'a-live-session',
+        'query-access-token',
+        'query-token-hash',
+        'query-session-secret',
+        'provider-key',
+        'header-token-hash',
+        'header-session-secret',
+        state,
+      ]) {
+        expect(written).not.toContain(secret);
+      }
+      // The request is still logged — the path survives, while query and headers are absent.
+      expect(written).toContain('/api/drive/oauth/callback');
 
-    const requests = logs.lines
-      .map((line) => JSON.parse(line) as { req?: Record<string, unknown> })
-      .flatMap((entry) => (entry.req ? [entry.req] : []));
-    expect(requests).not.toHaveLength(0);
-    for (const logged of requests) {
-      // The serializer keeps named fields, so the parsed query pino-http offers is not one
-      // of them — the code cannot come back through a field nobody looked at.
-      expect(logged).not.toHaveProperty('query');
-      const headers = (logged.headers ?? {}) as Record<string, string>;
-      if ('authorization' in headers) expect(headers.authorization).toBe('[redacted]');
-      if ('cookie' in headers) expect(headers.cookie).toBe('[redacted]');
-    }
-  });
+      const requests = logs.lines
+        .map((line) => JSON.parse(line) as { req?: Record<string, unknown> })
+        .flatMap((entry) => (entry.req ? [entry.req] : []));
+      expect(requests).not.toHaveLength(0);
+      for (const logged of requests) {
+        expect(logged).not.toHaveProperty('query');
+        expect(logged).not.toHaveProperty('headers');
+      }
+    },
+  );
 
   it('writes nothing when LOG_LEVEL silences the logger', async () => {
     config.logLevel = 'silent';
@@ -1834,6 +1853,19 @@ describe('Drive OAuth connect', () => {
     await request(app).get('/api/drive/oauth/callback').query({ state, code: CODE }).expect(302);
 
     expect(logs.lines).toEqual([]);
+  });
+
+  it('does not serialize secrets from an error object', () => {
+    const error = Object.assign(
+      new Error('provider-key=provider-secret session_secret=session-secret token_hash=token-hash'),
+      {
+        cause: 'refresh_token=refresh-secret',
+        providerKey: 'provider-secret',
+      },
+    );
+
+    expect(safeError(error)).toEqual({ name: 'Error' });
+    expect(JSON.stringify(safeError(error))).not.toContain('provider-secret');
   });
 
   it('rate-limits Drive OAuth start under the oauth budget', async () => {
@@ -1941,7 +1973,7 @@ describe('HTTP boundary', () => {
    */
   const breakTheDatabase = () => db.prepare('DROP TABLE clients').run();
 
-  it('answers a server error with a fixed message and a correlation ID, and logs the detail against it', async () => {
+  it('answers a server error with a fixed message and a correlation ID without logging details', async () => {
     const logs = captureLogs();
     const app = createApp(db, { logStream: logs.stream });
     breakTheDatabase();
@@ -1954,10 +1986,11 @@ describe('HTTP boundary', () => {
     // have no reader in the browser who benefits from them.
     expect(JSON.stringify(response.body)).not.toContain('no such table');
 
-    // ...but it is in the log, beside the ID the caller was handed, so the two can be joined.
+    // The error name and correlation ID are enough to join the report without exposing SQLite
+    // messages, paths, provider responses, or credentials.
     const against = logs.lines.filter((line) => line.includes(response.body.errorId));
     expect(against).not.toHaveLength(0);
-    expect(against.join('')).toContain('no such table');
+    expect(against.join('')).not.toContain('no such table');
   });
 
   it('gives each server error its own ID, so two reports are two errors', async () => {
