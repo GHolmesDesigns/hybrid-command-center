@@ -162,7 +162,7 @@ Required environment variables:
 | `BUFFER_API_KEY` | Optional Buffer GraphQL API key; server-side only; refreshes TikTok and YouTube account metadata. Runtime writes remain fail-closed until the dated owner-run C83 round trip is recorded |
 | `BUFFER_KEY` | One-release migration alias for `BUFFER_API_KEY`; ignored when the canonical setting is present |
 | `BUFFER_ORGANIZATION_ID` | Optional Buffer organization id when the account has more than one organization |
-| `LOG_LEVEL` | Structured API/Drive logging level: `fatal`, `error`, `warn`, `info` (default), `debug`, `trace`, or `silent`. An unrecognized value falls back to `info` |
+| `LOG_LEVEL` | Structured API/Drive logging level: `fatal`, `error`, `warn`, `info` (default), `debug`, `trace`, or `silent`. An unrecognized value falls back to `info`; see [Debug logging](docs/debug-logging.md) |
 
 The environment is validated when the server starts, and every problem is reported at once,
 naming the variable and what was wrong with it — a rejected value is never printed back, because

@@ -30,7 +30,6 @@ import {
   revokeMcpAgentCredential,
   rotateMcpAgentCredential,
 } from './auth/mcp-agent-credentials.ts';
-import { CSRF_HEADER_NAME } from '../shared/auth.ts';
 import { MCP_BEARER_ISSUE_PATH, MCP_HTTP_PATH } from '../shared/mcp-network.ts';
 import {
   createMcpAgentCredentialSchema,
@@ -451,42 +450,42 @@ export type AppOptions = {
   logStream?: DestinationStream;
 };
 
-/** Query strings carry the authorization code, so the path is all a request log keeps. */
+/** Query strings carry authorization codes and tokens, so the path is all a request log keeps. */
 const pathOnly = (url: string | undefined) => (url ?? '').split('?')[0];
+
+/**
+ * Error messages, stacks, causes, and custom properties are untrusted provider/application data.
+ * Keeping only the built-in name makes the no-secrets guarantee independent of a provider's error
+ * format and avoids relying on a finite list of token patterns.
+ */
+export const safeError = (error: unknown) => ({
+  name:
+    error instanceof Error && /^[A-Za-z][A-Za-z0-9]*(?:Error)?$/.test(error.name)
+      ? error.name
+      : 'Error',
+});
 
 /**
  * The request logger.
  *
- * Registered with no options, `pinoHttp()` logs the request's query string and its full header
- * set — so every Drive connect wrote a live `code=4/0A…` to stdout, the one place
- * `redactSecrets` cannot reach because it never sees the request. Three things fix that: the
- * level comes from `LOG_LEVEL`, so the variable `.env.example` documents is the one in use; the
- * two credential-bearing headers are redacted; and the request is serialized down to fields
- * that cannot carry a query.
+ * The level comes from `LOG_LEVEL`, so the variable `.env.example` documents is the one in use.
+ * The request serializer keeps no headers and removes the query from the URL. The error
+ * serializer keeps only an error name, so provider messages, stacks, causes, and custom fields
+ * cannot carry credentials at any log level.
  *
- * The serializer names the fields it keeps rather than deleting the ones it does not, because
- * the query reaches the log by more than one route — `url` carries it as text and pino-http
- * parses it again into `query` — and an allowlist is what keeps a field added by a future
- * version of the serializer from quietly putting it back a third way.
+ * The serializer names the fields it keeps rather than deleting the ones it does not. This
+ * allowlist keeps fields added by a future pino-http version from quietly reintroducing secrets.
  */
 function requestLogger(stream?: DestinationStream) {
   return pinoHttp(
     {
       level: config.logLevel,
-      redact: {
-        paths: [
-          'req.headers.authorization',
-          'req.headers.cookie',
-          `req.headers.${CSRF_HEADER_NAME}`,
-        ],
-        censor: '[redacted]',
-      },
       serializers: {
         req(request) {
-          const { id, method, url, headers, remoteAddress, remotePort } =
-            stdSerializers.req(request);
-          return { id, method, url: pathOnly(url), headers, remoteAddress, remotePort };
+          const { id, method, url, remoteAddress, remotePort } = stdSerializers.req(request);
+          return { id, method, url: pathOnly(url), remoteAddress, remotePort };
         },
+        err: safeError,
       },
     },
     stream,
@@ -2875,7 +2874,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         }));
       } catch (error) {
         if (!(error instanceof OAuthStateError)) throw error;
-        req.log.warn({ reason: error.message }, 'Rejected a Drive OAuth callback');
+        req.log.warn({ reason: error.name }, 'Rejected a Drive OAuth callback');
         return res.status(400).send('Invalid OAuth state.');
       }
       const code = z.string().min(1).max(2048).parse(req.query.code);
