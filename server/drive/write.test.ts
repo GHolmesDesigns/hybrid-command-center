@@ -4,6 +4,7 @@ import { createDb, type Db } from '../db.ts';
 import {
   commitDriveWrite,
   DisconnectedDriveWriteProvider,
+  DRIVE_UPLOAD_MAX_BYTES,
   previewDriveFolderCreate,
   previewDriveUpload,
   type DriveWriteProvider,
@@ -122,6 +123,13 @@ describe('confirmed Drive writes', () => {
 
   it('refuses empty, invalid, and out-of-scope write targets', () => {
     expect(() =>
+      previewDriveFolderCreate(db, {
+        projectId: crypto.randomUUID(),
+        parentId: folderId,
+        name: 'Assets',
+      }),
+    ).toThrow('not part of this project');
+    expect(() =>
       previewDriveFolderCreate(db, { projectId, parentId: 'other', name: 'Assets' }),
     ).toThrow('not part of this project');
     expect(() =>
@@ -136,6 +144,33 @@ describe('confirmed Drive writes', () => {
         contentBase64: '',
       }),
     ).toThrow('empty');
+    expect(() =>
+      previewDriveUpload(db, {
+        projectId,
+        folderId,
+        name: 'x'.repeat(201),
+        mimeType: 'text/plain',
+        contentBase64: Buffer.from('hello').toString('base64'),
+      }),
+    ).toThrow('too long');
+    expect(() =>
+      previewDriveUpload(db, {
+        projectId,
+        folderId,
+        name: 'brief.txt',
+        mimeType: ' ',
+        contentBase64: Buffer.from('hello').toString('base64'),
+      }),
+    ).toThrow('MIME');
+    expect(() =>
+      previewDriveUpload(db, {
+        projectId,
+        folderId,
+        name: 'brief.txt',
+        mimeType: 'text/plain',
+        contentBase64: Buffer.alloc(DRIVE_UPLOAD_MAX_BYTES + 1).toString('base64'),
+      }),
+    ).toThrow('10 MB');
   });
 
   it('has no connected write capability when Drive is disconnected', async () => {
