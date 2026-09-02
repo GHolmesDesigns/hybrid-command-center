@@ -14,8 +14,10 @@ The version a card ships as is decided at merge time — see the bump rule in `A
 
 - Added project-scoped, human-confirmed Google Drive folder creation and file uploads from Files.
 - Drive write previews name the exact action and target, reject stale confirmations, and record
-  successful or failed attempts in Integration activity. Agent Drive write remains a separate grant
-  that is disabled by default.
+  successful or failed attempts in Integration activity. Agent Drive write requests are now
+  persisted and appear in Agents for human approval; the separate grant remains disabled by
+  default. This capability shipped across two pull requests, #499 for operator writes and #500
+  for agent requests and approval.
 
 ### Breaking changes
 
