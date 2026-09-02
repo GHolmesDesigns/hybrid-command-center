@@ -205,13 +205,22 @@ export async function resolveDriveMedia(input: {
   now?: () => string;
 }): Promise<SignalPostMedia> {
   const fileId = parseDriveMediaLink(input.link);
+  return resolveDriveMediaFile({ fileId, provider: input.provider, now: input.now });
+}
+
+/** Resolves an already project-scoped Drive file id for the folder-batch capability. */
+export async function resolveDriveMediaFile(input: {
+  fileId: string;
+  provider: DriveMediaProvider;
+  now?: () => string;
+}): Promise<SignalPostMedia> {
   const now = input.now ?? (() => new Date().toISOString());
   if (!input.provider.connected)
     throw new DriveMediaError(
       'Google Drive is not connected, so a Drive file cannot be checked. Connect it in Settings.',
     );
 
-  let file = await read(input.provider, fileId);
+  let file = await read(input.provider, input.fileId);
   if (file.mimeType === SHORTCUT_MIME) {
     if (!file.shortcutTargetId)
       throw new DriveMediaError(
