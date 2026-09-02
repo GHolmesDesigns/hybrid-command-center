@@ -11,6 +11,7 @@ import {
   mcpWorkspaceConfirmationRequired,
   mcpWorkspaceRevisionConflict,
   mcpWorkspaceScopeRequired,
+  mcpDriveScopeRequired,
   MCP_COORDINATION_ERROR_CODES,
 } from './mcp-coordination-errors.ts';
 
@@ -103,6 +104,11 @@ describe('mcpCoordinationErrorDetail', () => {
     expect(mcpWorkspaceScopeRequired('workspace:read')).toMatchObject({
       code: 'WORKSPACE_SCOPE_REQUIRED',
       retryable: false,
+    });
+    expect(mcpDriveScopeRequired()).toMatchObject({
+      code: 'DRIVE_SCOPE_REQUIRED',
+      retryable: false,
+      requiredAction: expect.stringContaining('drive:write-request'),
     });
   });
 

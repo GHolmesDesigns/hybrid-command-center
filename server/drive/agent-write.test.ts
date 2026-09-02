@@ -106,4 +106,33 @@ describe('agent Drive write approval', () => {
         .get(),
     ).toEqual({ count: 1 });
   });
+
+  it('records provider failures and makes the request terminal', async () => {
+    const request = requestDriveWrite(db, 'planner', {
+      kind: 'create-folder',
+      projectId,
+      parentId: folderId,
+      name: 'Broken',
+      clientRequestId: 'request-failure',
+    });
+    const provider = new Provider();
+    provider.createFolder = async () => {
+      throw new Error('provider rejected secret=hidden');
+    };
+    await expect(decideDriveWrite(db, request.id, 'approve', provider)).rejects.toThrow(
+      'provider rejected',
+    );
+    expect(
+      db.prepare('SELECT status,error FROM drive_write_requests WHERE id=?').get(request.id),
+    ).toMatchObject({ status: 'FAILED', error: 'provider rejected secret=[redacted]' });
+    await expect(decideDriveWrite(db, request.id, 'approve', provider)).rejects.toThrow(
+      'already decided',
+    );
+  });
+
+  it('rejects unknown requests before any provider call', async () => {
+    await expect(
+      decideDriveWrite(db, 'missing-request', 'approve', new Provider()),
+    ).rejects.toThrow('not found');
+  });
 });

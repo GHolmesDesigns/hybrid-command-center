@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { z } from 'zod';
 import type { Db } from '../db.ts';
 import { transaction } from '../db.ts';
-import { recordIntegrationEvent } from '../integration-log.ts';
+import { recordIntegrationEvent, redactSecrets } from '../integration-log.ts';
 import {
   commitDriveWrite,
   previewDriveFolderCreate,
@@ -177,7 +177,9 @@ export async function decideDriveWrite(
       id,
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message.slice(0, 500) : 'Drive write failed.';
+    const message = redactSecrets(
+      error instanceof Error ? error.message.slice(0, 500) : 'Drive write failed.',
+    );
     db.prepare(
       "UPDATE drive_write_requests SET status='FAILED', decided_at=?, error=? WHERE id=?",
     ).run(now.toISOString(), message, id);
