@@ -440,6 +440,22 @@ export function listQueue(db: Db, lifecycle: SignalLifecycleFilter = 'active'): 
   return toSignalPosts(db, rows);
 }
 
+/** A bounded unscheduled queue page, including one lookahead row for truncation. */
+export function listQueuePage(
+  db: Db,
+  lifecycle: SignalLifecycleFilter,
+  limit: number,
+): { posts: SignalPost[]; truncated: boolean } {
+  const lifecycleClause = signalLifecycleSql(lifecycle);
+  const rows = db
+    .prepare(
+      `${signalPostSelect} WHERE p.date IS NULL${lifecycleClause.sql.replaceAll('lifecycle', 'p.lifecycle')}
+       ORDER BY p.position, p.created_at, p.id LIMIT ?`,
+    )
+    .all(limit + 1) as unknown as SignalPostRow[];
+  return { posts: toSignalPosts(db, rows.slice(0, limit)), truncated: rows.length > limit };
+}
+
 /**
  * The write itself, over media that is already resolved.
  *

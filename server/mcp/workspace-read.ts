@@ -7,14 +7,14 @@
 import { addDays, format } from 'date-fns';
 import { z } from 'zod';
 import type { Db } from '../db.ts';
-import { buildDashboardSummary } from '../domain/dashboard.ts';
+import { buildBoundedDashboardSummary } from '../domain/dashboard.ts';
 import { DisconnectedDriveMediaProvider } from '../drive/media.ts';
 import { PublishService, PublishRequestError } from '../publish/service.ts';
 import { UnavailablePublishProvider } from '../publish/provider.ts';
-import { listTasks } from '../repositories.ts';
+import { listTasksPage } from '../repositories.ts';
 import { listPostsInRange, signalProvider } from '../signal/read.ts';
 import { readQueueHealth } from '../signal/queue-health.ts';
-import { listQueue } from '../signal/service.ts';
+import { listQueuePage } from '../signal/service.ts';
 import type { DashboardData } from '../../shared/types.ts';
 import {
   mcpCoordinationInvalidArguments,
@@ -23,7 +23,6 @@ import {
   type McpCoordinationErrorDetail,
 } from '../../shared/mcp-coordination-errors.ts';
 import {
-  MCP_DASHBOARD_PROJECT_LIMIT,
   MCP_DASHBOARD_TASK_LIMIT,
   MCP_QUEUE_UNSCHEDULED_LIMIT,
   MCP_QUEUE_UPCOMING_DAYS,
@@ -55,37 +54,10 @@ const failed = (error: string, errorDetail: McpCoordinationErrorDetail): McpTool
   errorDetail,
 });
 
-function capDashboardSummary(summary: DashboardData): DashboardData & {
-  truncated?: { overdueTasks: boolean; dueTodayTasks: boolean; upcomingTasks: boolean };
-} {
-  const overdueTasks = summary.overdueTasks.slice(0, MCP_DASHBOARD_TASK_LIMIT);
-  const dueTodayTasks = summary.dueTodayTasks.slice(0, MCP_DASHBOARD_TASK_LIMIT);
-  const upcomingTasks = summary.upcomingTasks.slice(0, MCP_DASHBOARD_TASK_LIMIT);
-  const recentProjects = summary.recentProjects.slice(0, MCP_DASHBOARD_PROJECT_LIMIT);
-  const truncated =
-    overdueTasks.length < summary.overdueTasks.length ||
-    dueTodayTasks.length < summary.dueTodayTasks.length ||
-    upcomingTasks.length < summary.upcomingTasks.length
-      ? {
-          overdueTasks: overdueTasks.length < summary.overdueTasks.length,
-          dueTodayTasks: dueTodayTasks.length < summary.dueTodayTasks.length,
-          upcomingTasks: upcomingTasks.length < summary.upcomingTasks.length,
-        }
-      : undefined;
-  return {
-    ...summary,
-    overdueTasks,
-    dueTodayTasks,
-    upcomingTasks,
-    recentProjects,
-    ...(truncated ? { truncated } : {}),
-  };
-}
-
 function listActiveTasksForMcp(
   db: Db,
   args: z.infer<typeof mcpTaskListArgsSchema>,
-): { tasks: ReturnType<typeof listTasks>; limit: number; offset: number; truncated: boolean } {
+): { tasks: DashboardData['overdueTasks']; limit: number; offset: number; truncated: boolean } {
   const limit = args.limit ?? MCP_TASK_LIST_DEFAULT_LIMIT;
   const offset = args.offset ?? 0;
   const clauses = ["p.status<>'ARCHIVED'", "c.status<>'ARCHIVED'"];
@@ -106,13 +78,12 @@ function listActiveTasksForMcp(
     clauses.push('t.priority=?');
     params.push(args.priority);
   }
-  const all = listTasks(db, `WHERE ${clauses.join(' AND ')}`, params);
-  const page = all.slice(offset, offset + limit);
+  const page = listTasksPage(db, `WHERE ${clauses.join(' AND ')}`, params, limit, offset);
   return {
-    tasks: page,
+    tasks: page.tasks,
     limit,
     offset,
-    truncated: offset + limit < all.length,
+    truncated: page.truncated,
   };
 }
 
@@ -137,7 +108,7 @@ export async function callWorkspaceReadTool(
   try {
     switch (tool) {
       case 'workspace_dashboard_summary':
-        return success(capDashboardSummary(buildDashboardSummary(db, now)));
+        return success(buildBoundedDashboardSummary(db, now, MCP_DASHBOARD_TASK_LIMIT));
       case 'workspace_list_tasks': {
         const args = mcpTaskListArgsSchema.parse(rawArgs ?? {});
         return success(listActiveTasksForMcp(db, args));
@@ -164,16 +135,15 @@ export async function callWorkspaceReadTool(
           return failed('The range ends before it starts.', mcpCoordinationInvalidArguments());
         }
         const lifecycle = args.lifecycle ?? 'active';
-        const unscheduledAll = listQueue(db, lifecycle);
-        const unscheduled = unscheduledAll.slice(0, MCP_QUEUE_UNSCHEDULED_LIMIT);
+        const unscheduledPage = listQueuePage(db, lifecycle, MCP_QUEUE_UNSCHEDULED_LIMIT);
         const upcoming = listPostsInRange(db, from, to, lifecycle);
         return success({
           from,
           to,
-          unscheduled,
+          unscheduled: unscheduledPage.posts,
           upcoming: upcoming.posts,
           truncated: {
-            unscheduled: unscheduled.length < unscheduledAll.length,
+            unscheduled: unscheduledPage.truncated,
             upcoming: upcoming.truncated,
           },
         });

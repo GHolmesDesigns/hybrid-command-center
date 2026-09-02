@@ -14,6 +14,8 @@ import {
   MCP_TASK_LIST_MAX_LIMIT,
 } from '../../shared/mcp-read-tools.ts';
 import { SIGNAL_RANGE_LIMIT } from '../../shared/signal.ts';
+import { listTasks } from '../repositories.ts';
+import { buildDashboardSummary } from '../domain/dashboard.ts';
 
 const NOW = new Date('2026-08-11T12:00:00.000Z');
 
@@ -73,6 +75,22 @@ describe('callWorkspaceReadTool', () => {
     expect(data.truncated?.overdueTasks).toBe(true);
   });
 
+  it('bounds dashboard and queue queries before hydrating capped rows', async () => {
+    for (let index = 0; index < 500; index += 1) {
+      addTask(`dashboard-${index}`, 'p1', `Dashboard ${index}`);
+      seedSignalPost(db, { id: `queue-bounded-${index}`, date: null, position: index });
+    }
+    const dashboardPrepare = vi.spyOn(db, 'prepare');
+    await callWorkspaceReadTool(db, 'workspace_dashboard_summary', {}, { now: NOW });
+    const dashboardQueries = dashboardPrepare.mock.calls.length;
+    dashboardPrepare.mockRestore();
+    const queuePrepare = vi.spyOn(db, 'prepare');
+    await callWorkspaceReadTool(db, 'signal_queue_snapshot', {}, { now: NOW });
+
+    expect(dashboardQueries).toBe(9);
+    expect(queuePrepare).toHaveBeenCalledTimes(5);
+  });
+
   it('lists active tasks with pagination and refuses uncapped overflow', async () => {
     for (let index = 0; index < MCP_TASK_LIST_MAX_LIMIT + 10; index += 1) {
       addTask(`task-${index}`, 'p1', `Listed ${index}`);
@@ -87,6 +105,49 @@ describe('callWorkspaceReadTool', () => {
     const defaultPage = await callWorkspaceReadTool(db, 'workspace_list_tasks', {});
     const defaultPayload = defaultPage.data as { limit: number };
     expect(defaultPayload.limit).toBe(MCP_TASK_LIST_DEFAULT_LIMIT);
+  });
+
+  it.each([1, 25])(
+    'bounds task-list queries independently of total rows for limit %i',
+    async (limit) => {
+      for (let index = 0; index < 500; index += 1) {
+        addTask(`bounded-${index}`, 'p1', `Bounded ${index}`);
+      }
+      const prepare = vi.spyOn(db, 'prepare');
+
+      const result = await callWorkspaceReadTool(db, 'workspace_list_tasks', { limit, offset: 10 });
+
+      expect(result.outcome).toBe('SUCCESS');
+      expect((result.data as { tasks: unknown[] }).tasks).toHaveLength(limit);
+      // One page query, plus tags, checklist, and dependency/blocker relations in batches.
+      expect(prepare).toHaveBeenCalledTimes(4);
+    },
+  );
+
+  it('keeps task page ordering, relations, derived fields, and truncation identical', async () => {
+    addTask('dependency', 'p1', 'Dependency');
+    addTask('page-task', 'p1', 'Page task');
+    db.prepare(`INSERT INTO tags(id,name,color) VALUES('tag-1','Alpha','#123456')`).run();
+    db.prepare(`INSERT INTO task_tags(task_id,tag_id) VALUES('page-task','tag-1')`).run();
+    db.prepare(
+      `INSERT INTO checklist_items(id,task_id,text,completed,position)
+       VALUES('check-1','page-task','First',1,0)`,
+    ).run();
+    db.prepare(
+      `INSERT INTO task_dependencies(task_id,dependency_id) VALUES('page-task','dependency')`,
+    ).run();
+    const expected = listTasks(db, "WHERE p.status<>'ARCHIVED' AND c.status<>'ARCHIVED'").slice(
+      0,
+      2,
+    );
+
+    const result = await callWorkspaceReadTool(db, 'workspace_list_tasks', {
+      limit: 2,
+      offset: 0,
+    });
+
+    expect(result.outcome).toBe('SUCCESS');
+    expect(result.data).toEqual({ tasks: expected, limit: 2, offset: 0, truncated: false });
   });
 
   it('lists signal posts in range with truncation flag from the read service', async () => {
@@ -214,10 +275,10 @@ describe('callWorkspaceReadTool', () => {
 
   it('returns an uncapped dashboard when buckets stay under the limit', async () => {
     addTask('small-1', 'p1', 'One overdue');
+    const expected = buildDashboardSummary(db, NOW);
     const result = await callWorkspaceReadTool(db, 'workspace_dashboard_summary', {}, { now: NOW });
     expect(result.outcome).toBe('SUCCESS');
-    const data = result.data as { truncated?: unknown };
-    expect(data.truncated).toBeUndefined();
+    expect(result.data).toEqual(expected);
   });
 
   it('filters active tasks and reports an uncapped page', async () => {
