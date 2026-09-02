@@ -5,7 +5,7 @@
  * ceiling with declared truncation and optional section filters.
  */
 import type { Db } from '../db.ts';
-import { listHandoffs } from '../agent-coordination/service.ts';
+import { countHandoffs } from '../agent-coordination/service.ts';
 import { listActiveTasks, listClients, listProjects } from '../repositories.ts';
 import { readQueueHealth } from '../signal/queue-health.ts';
 import { APP_VERSION } from '../../shared/branding.ts';
@@ -97,8 +97,8 @@ export function buildWorkspaceContextDescriptor(
 
   if (sectionEnabled(filters, 'handoffs')) {
     descriptor.handoffs = {
-      open: listHandoffs(db, { state: 'OPEN' }).length,
-      claimed: listHandoffs(db, { state: 'CLAIMED' }).length,
+      open: countHandoffs(db, 'OPEN'),
+      claimed: countHandoffs(db, 'CLAIMED'),
     };
   }
 

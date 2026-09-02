@@ -282,6 +282,7 @@ import {
   WorkspaceValidationError,
 } from './workspace/writes.ts';
 import {
+  AGENT_HANDOFF_LIST_MAX_LIMIT,
   AGENT_HANDOFF_STATES,
   agentHandoffCancelInputSchema,
   agentHandoffPostInputSchema,
@@ -2767,6 +2768,8 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       const query = z
         .object({
           state: z.enum(AGENT_HANDOFF_STATES).optional(),
+          limit: z.coerce.number().int().min(1).max(AGENT_HANDOFF_LIST_MAX_LIMIT).optional(),
+          offset: z.coerce.number().int().min(0).optional(),
         })
         .parse(req.query);
       res.json(listHandoffs(db, query));

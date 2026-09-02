@@ -5,6 +5,7 @@
  * hand-maintained tool list cannot drift from what the server actually exposes.
  */
 import {
+  AGENT_HANDOFF_LIST_MAX_LIMIT,
   AGENT_HANDOFF_STATES,
   AGENT_HANDOFF_SUBJECT_TYPES,
 } from '../../shared/agent-coordination.ts';
@@ -75,11 +76,13 @@ const driveWriteRequestTool: McpToolRegistryEntry = {
 const coordinationTools: McpToolRegistryEntry[] = [
   {
     name: 'coordination_list_handoffs',
-    description: 'List agent handoffs, optionally filtered by state.',
+    description: 'List a bounded page of agent handoffs, optionally filtered by state.',
     inputSchema: {
       type: 'object',
       properties: {
         state: { type: 'string', enum: [...AGENT_HANDOFF_STATES] },
+        limit: { type: 'integer', minimum: 1, maximum: AGENT_HANDOFF_LIST_MAX_LIMIT },
+        offset: { type: 'integer', minimum: 0 },
       },
       additionalProperties: false,
     },

@@ -337,7 +337,7 @@ describe.each([['stdio'], ['http']] as const)('MCP protocol conformance (%s)', (
       expect(res.messages.some((message) => 'result' in message || 'error' in message)).toBe(false);
     }
 
-    expect(listHandoffs(db, { state: 'OPEN' })).toHaveLength(0);
+    expect(listHandoffs(db, { state: 'OPEN' }).handoffs).toHaveLength(0);
   });
 
   it('subscribes to a resource and receives an update tip without replacing cursors', async () => {

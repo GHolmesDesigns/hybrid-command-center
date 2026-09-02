@@ -25,6 +25,8 @@ import {
   agentHandoffCompletionInputSchema,
   agentHandoffNoteInputSchema,
   agentHandoffPostInputSchema,
+  agentHandoffListFilterSchema,
+  AGENT_HANDOFF_LIST_DEFAULT_LIMIT,
   agentLabelSchema,
   type AgentHandoff,
   type AgentHandoffCancelInput,
@@ -33,6 +35,7 @@ import {
   type AgentHandoffOutcome,
   type AgentHandoffNote,
   type AgentHandoffNoteInput,
+  type AgentHandoffPage,
   type AgentHandoffPostInput,
   type AgentHandoffState,
   type AgentHandoffSubjectType,
@@ -187,22 +190,40 @@ export function getHandoff(db: Db, handoffId: string): AgentHandoffDetail {
   return { ...handoff, notes: notesFor(db, handoffId) };
 }
 
-export function listHandoffs(db: Db, filter: { state?: AgentHandoffState } = {}): AgentHandoff[] {
-  if (filter.state) {
-    return (
-      db
+export function listHandoffs(db: Db, rawFilter: unknown = {}): AgentHandoffPage {
+  const filter = agentHandoffListFilterSchema.parse(rawFilter);
+  const limit = filter.limit ?? AGENT_HANDOFF_LIST_DEFAULT_LIMIT;
+  const offset = filter.offset ?? 0;
+  const rows = filter.state
+    ? (db
         .prepare(
           `SELECT * FROM agent_handoffs WHERE state = ?
-           ORDER BY created_at DESC, id DESC`,
+           ORDER BY created_at DESC, id DESC
+           LIMIT ? OFFSET ?`,
         )
-        .all(filter.state) as unknown as HandoffRow[]
-    ).map(toHandoff);
-  }
-  return (
-    db
-      .prepare('SELECT * FROM agent_handoffs ORDER BY created_at DESC, id DESC')
-      .all() as unknown as HandoffRow[]
-  ).map(toHandoff);
+        .all(filter.state, limit + 1, offset) as unknown as HandoffRow[])
+    : (db
+        .prepare(
+          `SELECT * FROM agent_handoffs
+           ORDER BY created_at DESC, id DESC
+           LIMIT ? OFFSET ?`,
+        )
+        .all(limit + 1, offset) as unknown as HandoffRow[]);
+  return {
+    handoffs: rows.slice(0, limit).map(toHandoff),
+    limit,
+    offset,
+    truncated: rows.length > limit,
+  };
+}
+
+export function countHandoffs(db: Db, state: AgentHandoffState): number {
+  const row = db
+    .prepare('SELECT COUNT(*) AS count FROM agent_handoffs WHERE state = ?')
+    .get(state) as {
+    count: number;
+  };
+  return row.count;
 }
 
 /**

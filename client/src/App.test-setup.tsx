@@ -1312,7 +1312,12 @@ const respondTo = (url: string, init?: RequestInit) => {
   if (url.endsWith('/api/agent-handoffs') && method === 'GET')
     return testState.agentHandoffsError
       ? reply(503, { error: testState.agentHandoffsError })
-      : testState.agentHandoffsPayload;
+      : {
+          handoffs: testState.agentHandoffsPayload,
+          limit: 50,
+          offset: 0,
+          truncated: false,
+        };
   const agentHandoffCancel = url.match(/\/api\/agent-handoffs\/([^/?]+)\/cancel$/);
   if (agentHandoffCancel && method === 'POST') {
     const target = testState.agentHandoffsPayload.find((row) => row.id === agentHandoffCancel[1]);
