@@ -8,6 +8,18 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.13.2] - 2026-09-02
+
+### Added
+
+- Documented that successful delivery checks show a delivery summary without automatically
+  changing a post's planning status to `PUBLISHED`; the operator's explicit status action remains
+  authoritative.
+
+### Breaking changes
+
+None.
+
 ## [5.13.1] - 2026-09-02
 
 ### Added
