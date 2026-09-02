@@ -2,7 +2,12 @@ import crypto from 'node:crypto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createDb, type Db } from '../db.ts';
 import { requestDriveWrite, decideDriveWrite, listDriveWriteRequests } from './agent-write.ts';
-import type { DriveWriteProvider } from './write.ts';
+import {
+  commitDriveWrite,
+  previewDriveFolderCreate,
+  previewDriveUpload,
+  type DriveWriteProvider,
+} from './write.ts';
 
 let db: Db;
 const projectId = crypto.randomUUID();
@@ -196,6 +201,25 @@ describe('agent Drive write approval', () => {
     expect(listDriveWriteRequests(db)).toHaveLength(2);
   });
 
+  it('replays the persisted plan when an agent reuses an id with new input', () => {
+    const original = requestDriveWrite(db, 'planner', {
+      kind: 'create-folder',
+      projectId,
+      parentId: folderId,
+      name: 'Original',
+      clientRequestId: 'replayed-plan',
+    });
+    const replay = requestDriveWrite(db, 'planner', {
+      kind: 'create-folder',
+      projectId,
+      parentId: folderId,
+      name: 'Changed after submission',
+      clientRequestId: 'replayed-plan',
+    });
+    expect(replay).toEqual(original);
+    expect(listDriveWriteRequests(db)).toHaveLength(1);
+  });
+
   it('allows only one concurrent approval to claim a request', async () => {
     const request = requestDriveWrite(db, 'planner', {
       kind: 'create-folder',
@@ -239,5 +263,79 @@ describe('agent Drive write approval', () => {
       .get() as { outcome: string; summary: string; error: string | null };
     expect(audit).toMatchObject({ outcome: 'FAILURE', error: 'upload failed' });
     expect(audit.summary).not.toContain('private bytes');
+  });
+
+  it('persists a bounded fallback when the provider rejects without an Error', async () => {
+    const request = requestDriveWrite(db, 'planner', {
+      kind: 'create-folder',
+      projectId,
+      parentId: folderId,
+      name: 'Unknown failure',
+      clientRequestId: 'non-error-failure',
+    });
+    const provider = new Provider();
+    provider.createFolder = async () => {
+      throw 'provider rejected';
+    };
+    await expect(decideDriveWrite(db, request.id, 'approve', provider)).rejects.toBe(
+      'provider rejected',
+    );
+    expect(
+      db
+        .prepare('SELECT status,error,decided_at FROM drive_write_requests WHERE id=?')
+        .get(request.id),
+    ).toMatchObject({ status: 'FAILED', error: 'Drive write failed.' });
+    expect(provider.writes).toBe(0);
+  });
+
+  it('rejects invalid folder and upload previews before any request is persisted', () => {
+    expect(() =>
+      previewDriveFolderCreate(db, { projectId, parentId: folderId, name: '   ' }),
+    ).toThrow('Folder name is required');
+    expect(() =>
+      previewDriveFolderCreate(db, { projectId, parentId: folderId, name: 'x'.repeat(201) }),
+    ).toThrow('Folder name is too long');
+    expect(() =>
+      previewDriveUpload(db, {
+        projectId,
+        folderId,
+        name: 'file.txt',
+        mimeType: '   ',
+        contentBase64: 'aGVsbG8=',
+      }),
+    ).toThrow('valid MIME type');
+    expect(() =>
+      previewDriveUpload(db, {
+        projectId,
+        folderId,
+        name: 'file.txt',
+        mimeType: 'text/plain',
+        contentBase64: '',
+      }),
+    ).toThrow('empty or exceeds');
+    expect(listDriveWriteRequests(db)).toHaveLength(0);
+  });
+
+  it('refuses a stale confirmation without calling the provider', async () => {
+    const request = requestDriveWrite(db, 'planner', {
+      kind: 'create-folder',
+      projectId,
+      parentId: folderId,
+      name: 'Stale',
+      clientRequestId: 'stale-confirmation',
+    });
+    const provider = new Provider();
+    const stalePlan = { ...request.plan, name: 'Changed after approval' };
+    await expect(commitDriveWrite(db, stalePlan, request.planHash, provider)).rejects.toThrow(
+      'confirmation is stale',
+    );
+    expect(provider.writes).toBe(0);
+    expect(
+      db
+        .prepare(
+          "SELECT COUNT(*) AS count FROM integration_events WHERE operation='drive.create-folder'",
+        )
+        .get(),
+    ).toEqual({ count: 0 });
   });
 });
