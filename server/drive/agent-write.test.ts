@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createDb, type Db } from '../db.ts';
-import { requestDriveWrite, decideDriveWrite } from './agent-write.ts';
+import { requestDriveWrite, decideDriveWrite, listDriveWriteRequests } from './agent-write.ts';
 import type { DriveWriteProvider } from './write.ts';
 
 let db: Db;
@@ -134,5 +134,27 @@ describe('agent Drive write approval', () => {
     await expect(
       decideDriveWrite(db, 'missing-request', 'approve', new Provider()),
     ).rejects.toThrow('not found');
+  });
+
+  it('lists pending requests separately from decided history', async () => {
+    const pending = requestDriveWrite(db, 'planner', {
+      kind: 'create-folder',
+      projectId,
+      parentId: folderId,
+      name: 'Pending',
+      clientRequestId: 'request-pending',
+    });
+    const denied = requestDriveWrite(db, 'planner', {
+      kind: 'create-folder',
+      projectId,
+      parentId: folderId,
+      name: 'Denied',
+      clientRequestId: 'request-denied',
+    });
+    await decideDriveWrite(db, denied.id, 'deny', new Provider());
+    expect(listDriveWriteRequests(db, 'PENDING').map((request) => request.id)).toEqual([
+      pending.id,
+    ]);
+    expect(listDriveWriteRequests(db).map((request) => request.id)).toHaveLength(2);
   });
 });
