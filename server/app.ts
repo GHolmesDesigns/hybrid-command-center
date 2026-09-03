@@ -101,7 +101,11 @@ import {
   driveWritePlanSchema,
   type DriveWriteProvider,
 } from './drive/write.ts';
-import { decideDriveWrite, listDriveWriteRequests } from './drive/agent-write.ts';
+import {
+  decideDriveWrite,
+  listDriveWriteRequests,
+  summarizeDriveWriteRequests,
+} from './drive/agent-write.ts';
 import {
   SignalMediaError,
   SignalPostNotFoundError,
@@ -1394,10 +1398,21 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   app.get('/api/drive-write-requests', (req, res, next) => {
     try {
       const status = z
-        .enum(['PENDING', 'EXECUTING', 'APPROVED', 'DENIED', 'FAILED'])
+        .enum([
+          'PENDING',
+          'EXECUTING',
+          'APPROVED',
+          'DENIED',
+          'FAILED',
+          'EXPIRED',
+          'PROVIDER_UNCERTAIN',
+        ])
         .optional()
         .parse(req.query.status);
-      res.json({ requests: listDriveWriteRequests(db, status) });
+      res.json({
+        requests: listDriveWriteRequests(db, status, clock()),
+        summary: summarizeDriveWriteRequests(db, clock()),
+      });
     } catch (error) {
       next(error);
     }

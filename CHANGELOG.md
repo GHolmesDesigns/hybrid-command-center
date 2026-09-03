@@ -8,6 +8,20 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.13.15] - 2026-09-03
+
+### Changed
+
+- Agent Drive write requests now expire after 24 hours, stay within global 20-request and 50 MiB
+  pending limits, and use a one-hour execution lease.
+- Terminal request rows retain decision metadata without retaining upload payloads. Provider-
+  uncertain outcomes are non-retryable until an operator reconciles Drive, with queue metrics and
+  procedures documented for operators.
+
+### Breaking changes
+
+None.
+
 ## [5.13.14] - 2026-09-03
 
 ### Changed

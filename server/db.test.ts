@@ -304,6 +304,52 @@ describe('additive schema migration', () => {
     expect(columnsOf(db, 'signal_posts')).toContain('campaign');
   });
 
+  it('rebuilds a legacy Drive request CHECK and purges old terminal upload bytes', () => {
+    const file = scratch('legacy-drive-write-requests.db');
+    const legacy = new DatabaseSync(file);
+    legacy.exec(`
+      CREATE TABLE drive_write_requests (
+        id TEXT PRIMARY KEY,
+        agent_label TEXT NOT NULL,
+        client_request_id TEXT NOT NULL,
+        plan_json TEXT NOT NULL,
+        plan_hash TEXT NOT NULL,
+        confirmation TEXT NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('PENDING','EXECUTING','APPROVED','DENIED','FAILED')),
+        created_at TEXT NOT NULL,
+        executing_at TEXT,
+        decided_at TEXT,
+        error TEXT
+      );
+      INSERT INTO drive_write_requests
+        (id, agent_label, client_request_id, plan_json, plan_hash, confirmation, status, created_at)
+      VALUES
+        ('old-request', 'planner', 'old', '{"kind":"upload-file","contentBase64":"c2Vuc2l0aXZl"}',
+         'hash', 'old upload', 'FAILED', '${NOW}');
+    `);
+    legacy.close();
+
+    const db = track(createDb(file));
+    expect(() =>
+      db
+        .prepare(
+          `
+        INSERT INTO drive_write_requests
+          (id, agent_label, client_request_id, plan_json, plan_hash, confirmation, status, created_at)
+        VALUES ('expired-request', 'planner', 'expired', '{}', 'hash-2', 'expired', 'EXPIRED', ?)
+      `,
+        )
+        .run(NOW),
+    ).not.toThrow();
+    expect(
+      rows<{ plan_json: string }>(
+        db,
+        `SELECT plan_json FROM drive_write_requests WHERE id='old-request'`,
+      ),
+    ).toEqual([{ plan_json: '{"kind":"upload-file"}' }]);
+    expect(rows(db, 'PRAGMA integrity_check')).toEqual([{ integrity_check: 'ok' }]);
+  });
+
   it('adds the media join to a populated Signal database without changing existing posts', () => {
     const file = scratch('signal-before-media.db');
     const legacy = new DatabaseSync(file);

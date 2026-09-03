@@ -107,6 +107,15 @@ describe('command center API', () => {
       name: 'Denied folder',
       clientRequestId: 'http-deny',
     });
+    const upload = requestDriveWrite(db, 'planner', {
+      kind: 'upload-file',
+      projectId: p.id,
+      folderId: 'project-folder',
+      name: 'brief.txt',
+      mimeType: 'text/plain',
+      contentBase64: Buffer.from('secret bytes').toString('base64'),
+      clientRequestId: 'http-upload',
+    });
     let writes = 0;
     const provider: DriveWriteProvider = {
       connected: true,
@@ -131,12 +140,25 @@ describe('command center API', () => {
     await request(app)
       .get('/api/drive-write-requests?status=PENDING')
       .expect(200)
-      .expect(({ body }) =>
+      .expect(({ body }) => {
         expect(body.requests.map((item: { id: string }) => item.id)).toEqual([
+          upload.id,
           denied.id,
           pending.id,
-        ]),
-      );
+        ]);
+        expect(
+          body.requests.find((item: { id: string }) => item.id === upload.id),
+        ).not.toHaveProperty('plan.contentBase64');
+        expect(body.summary).toMatchObject({
+          pendingCount: 3,
+          pendingDecodedBytes: 12,
+          oldestPendingAt: pending.createdAt,
+          limits: {
+            pendingCount: expect.any(Number),
+            pendingDecodedBytes: expect.any(Number),
+          },
+        });
+      });
     await request(app).post(`/api/drive-write-requests/${pending.id}/approve`).expect(200);
     await request(app).post(`/api/drive-write-requests/${denied.id}/deny`).expect(200);
     expect(writes).toBe(1);
@@ -156,12 +178,32 @@ describe('command center API', () => {
           "SELECT COUNT(*) AS count FROM integration_events WHERE operation='drive.agent-write-request'",
         )
         .get(),
-    ).toEqual({ count: 4 });
+    ).toEqual({ count: 5 });
   });
 
   it('returns boundary errors for invalid status and stale operator decisions', async () => {
     const app = createApp(db);
     await request(app).get('/api/drive-write-requests?status=NOPE').expect(400);
+    for (const status of ['EXPIRED', 'PROVIDER_UNCERTAIN']) {
+      db.prepare(
+        `INSERT INTO drive_write_requests
+          (id,agent_label,client_request_id,plan_json,plan_hash,confirmation,status,created_at,executing_at,decided_at,error)
+         VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+      ).run(
+        crypto.randomUUID(),
+        'planner',
+        `status-${status}`,
+        JSON.stringify({ kind: 'create-folder' }),
+        'hash',
+        status,
+        status,
+        BACKDATED,
+        null,
+        BACKDATED,
+        status,
+      );
+      await request(app).get(`/api/drive-write-requests?status=${status}`).expect(200);
+    }
     await request(app).post('/api/drive-write-requests/missing/approve').expect(500);
     await request(app).post('/api/drive-write-requests/missing/deny').expect(500);
   });

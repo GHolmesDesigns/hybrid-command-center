@@ -291,6 +291,30 @@ the exact action and target. Approve or deny it there; approval is the only path
 Drive write. Requests and outcomes are audited without storing credentials or writing file bytes to
 the audit log.
 
+The pending queue is globally limited to 20 requests and 50 MiB of decoded upload data. A pending
+request expires after 24 hours, and the card shows the pending count, pending bytes, oldest pending
+age, and counts of expired and provider-uncertain requests. Expiry is checked when the queue is
+used, so an idle application may not change a row until you open or otherwise use this card.
+
+Use this operator procedure:
+
+1. Read the exact action, target, agent label, and request time before approving. Deny anything
+   unexpected or no longer needed.
+2. Approve only a request that still matches the intended work. The provider is called immediately
+   after approval; the request then becomes terminal and its upload content is removed while its
+   metadata, outcome, timestamps, and confirmation evidence remain.
+3. If a request is **Expired**, do not try to approve it. Ask the agent to submit a new request
+   only if the work is still required.
+4. If a request is **Provider outcome is uncertain**, do not retry or approve it again. Inspect
+   the exact project folder and Drive activity for the possible folder or file, reconcile what
+   happened, and record any incident detail in the operator's normal incident notes before asking
+   for a new request. A timeout or an abandoned one-hour execution lease can mean that Drive
+   accepted the write even though the application did not receive a final response.
+
+Database backups made before a request reached a terminal state may still contain its upload
+content. Protect those backups like the live database, retain them only according to the backup
+policy, and do not assume that compacting the live row removes bytes from older snapshots.
+
 ### 6.8 Revoke Drive access after a suspected token exposure
 
 Use this procedure if the local database, a database backup, or

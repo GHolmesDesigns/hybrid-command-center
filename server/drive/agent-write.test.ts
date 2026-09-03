@@ -1,7 +1,12 @@
 import crypto from 'node:crypto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createDb, type Db } from '../db.ts';
-import { requestDriveWrite, decideDriveWrite, listDriveWriteRequests } from './agent-write.ts';
+import {
+  cleanupDriveWriteRequests,
+  requestDriveWrite,
+  decideDriveWrite,
+  listDriveWriteRequests,
+} from './agent-write.ts';
 import {
   commitDriveWrite,
   previewDriveFolderCreate,
@@ -103,6 +108,25 @@ describe('agent Drive write approval', () => {
       status: 'APPROVED',
     });
     expect(provider.writes).toBe(1);
+    const stored = db
+      .prepare(
+        'SELECT plan_json,plan_hash,confirmation,created_at,decided_at,error FROM drive_write_requests WHERE id=?',
+      )
+      .get(request.id) as {
+      plan_json: string;
+      plan_hash: string;
+      confirmation: string;
+      created_at: string;
+      decided_at: string | null;
+      error: string | null;
+    };
+    expect(stored.plan_json).not.toContain('contentBase64');
+    expect(stored.plan_json).toContain('"size":5');
+    expect(stored.plan_hash).toBe(request.planHash);
+    expect(stored.confirmation).toBe(request.confirmation);
+    expect(stored.created_at).toBe(request.createdAt);
+    expect(stored.decided_at).not.toBeNull();
+    expect(stored.error).toBeNull();
     expect(
       db
         .prepare(
@@ -284,7 +308,7 @@ describe('agent Drive write approval', () => {
       db
         .prepare('SELECT status,error,decided_at FROM drive_write_requests WHERE id=?')
         .get(request.id),
-    ).toMatchObject({ status: 'FAILED', error: 'Drive write failed.' });
+    ).toMatchObject({ status: 'PROVIDER_UNCERTAIN', error: 'Drive write failed.' });
     expect(provider.writes).toBe(0);
   });
 
@@ -325,7 +349,10 @@ describe('agent Drive write approval', () => {
       clientRequestId: 'stale-confirmation',
     });
     const provider = new Provider();
-    const stalePlan = { ...request.plan, name: 'Changed after approval' };
+    const stalePlan = {
+      ...(request.plan as Extract<typeof request.plan, { kind: 'create-folder' }>),
+      name: 'Changed after approval',
+    };
     await expect(commitDriveWrite(db, stalePlan, request.planHash, provider)).rejects.toThrow(
       'confirmation is stale',
     );
@@ -337,5 +364,90 @@ describe('agent Drive write approval', () => {
         )
         .get(),
     ).toEqual({ count: 0 });
+  });
+
+  it('expires old pending uploads and purges bytes while preserving evidence', () => {
+    const request = requestDriveWrite(
+      db,
+      'planner',
+      {
+        kind: 'upload-file',
+        projectId,
+        folderId,
+        name: 'old.txt',
+        mimeType: 'text/plain',
+        contentBase64: Buffer.from('old bytes').toString('base64'),
+        clientRequestId: 'expired',
+      },
+      new Date('2026-01-01T00:00:00.000Z'),
+    );
+    cleanupDriveWriteRequests(db, new Date('2026-01-02T01:00:00.000Z'));
+    expect(listDriveWriteRequests(db, 'EXPIRED')).toHaveLength(1);
+    const stored = db
+      .prepare(
+        'SELECT status,plan_json,plan_hash,confirmation,error FROM drive_write_requests WHERE id=?',
+      )
+      .get(request.id) as {
+      status: string;
+      plan_json: string;
+      plan_hash: string;
+      confirmation: string;
+      error: string;
+    };
+    expect(stored).toMatchObject({
+      status: 'EXPIRED',
+      plan_hash: request.planHash,
+      confirmation: request.confirmation,
+    });
+    expect(stored.plan_json).not.toContain('contentBase64');
+    expect(stored.error).toContain('expired');
+  });
+
+  it('enforces the global pending request limit', () => {
+    for (let index = 0; index < 20; index++)
+      requestDriveWrite(db, 'planner', {
+        kind: 'create-folder',
+        projectId,
+        parentId: folderId,
+        name: `Folder ${index}`,
+        clientRequestId: `limit-${index}`,
+      });
+    expect(() =>
+      requestDriveWrite(db, 'planner', {
+        kind: 'create-folder',
+        projectId,
+        parentId: folderId,
+        name: 'Too many',
+        clientRequestId: 'limit-21',
+      }),
+    ).toThrow('pending Drive write request limit');
+  });
+
+  it('marks stale executing work uncertain and refuses approval', async () => {
+    const request = requestDriveWrite(db, 'planner', {
+      kind: 'create-folder',
+      projectId,
+      parentId: folderId,
+      name: 'Lease',
+      clientRequestId: 'stale-lease',
+    });
+    db.prepare("UPDATE drive_write_requests SET status='EXECUTING', executing_at=? WHERE id=?").run(
+      '2026-01-01T00:00:00.000Z',
+      request.id,
+    );
+    const provider = new Provider();
+    await expect(
+      decideDriveWrite(db, request.id, 'approve', provider, new Date('2026-01-01T02:00:00.000Z')),
+    ).rejects.toThrow('already decided');
+    expect(provider.writes).toBe(0);
+    expect(
+      db
+        .prepare('SELECT status,plan_hash,confirmation,error FROM drive_write_requests WHERE id=?')
+        .get(request.id),
+    ).toMatchObject({
+      status: 'PROVIDER_UNCERTAIN',
+      plan_hash: request.planHash,
+      confirmation: request.confirmation,
+    });
   });
 });
