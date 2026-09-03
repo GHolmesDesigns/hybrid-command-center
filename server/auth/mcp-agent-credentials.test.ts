@@ -53,6 +53,76 @@ describe('scoped MCP agent credentials', () => {
     });
   });
 
+  it('debounces repeated touches but touches again after thirty seconds', () => {
+    const issued = issue('burst-test', 1_000);
+    const changes = () =>
+      (
+        db.prepare('SELECT total_changes() AS count').get() as {
+          count: number;
+        }
+      ).count;
+
+    resolveMcpAgentCredential(db, {
+      rawToken: issued.rawToken,
+      sessionSecret: SECRET,
+      origin: '203.0.113.8',
+      now: 2_000,
+    });
+    const afterFirstTouch = changes();
+    resolveMcpAgentCredential(db, {
+      rawToken: issued.rawToken,
+      sessionSecret: SECRET,
+      origin: '203.0.113.8',
+      now: 31_999,
+    });
+    expect(changes()).toBe(afterFirstTouch);
+
+    resolveMcpAgentCredential(db, {
+      rawToken: issued.rawToken,
+      sessionSecret: SECRET,
+      origin: '203.0.113.8',
+      now: 32_000,
+    });
+    expect(changes()).toBe(afterFirstTouch + 2);
+  });
+
+  it('updates the diagnostic origin even inside the debounce window', () => {
+    const issued = issue('origin-test', 1_000);
+    resolveMcpAgentCredential(db, {
+      rawToken: issued.rawToken,
+      sessionSecret: SECRET,
+      origin: '203.0.113.8',
+      now: 2_000,
+    });
+    const before = db
+      .prepare(
+        `SELECT r.last_used_at, r.last_origin
+         FROM agent_registrations r JOIN agent_credentials c ON c.agent_id=r.id
+         WHERE c.id=?`,
+      )
+      .get(issued.credential.id) as { last_used_at: string; last_origin: string };
+
+    resolveMcpAgentCredential(db, {
+      rawToken: issued.rawToken,
+      sessionSecret: SECRET,
+      origin: '198.51.100.4',
+      now: 2_001,
+    });
+    expect(
+      db
+        .prepare(
+          `SELECT r.last_used_at, r.last_origin
+           FROM agent_registrations r JOIN agent_credentials c ON c.agent_id=r.id
+           WHERE c.id=?`,
+        )
+        .get(issued.credential.id),
+    ).toEqual({
+      last_used_at: new Date(2_001).toISOString(),
+      last_origin: '198.51.100.4',
+    });
+    expect(before.last_used_at).not.toBe(new Date(2_001).toISOString());
+  });
+
   it('expires and revokes credentials independently', () => {
     const first = issue('cursor', 1_000);
     const second = issue('codex', 1_000);
