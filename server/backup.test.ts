@@ -202,6 +202,83 @@ describe('backupDatabase', () => {
     expect(naked.prepare(`SELECT label FROM items`).all()).toEqual([]);
   });
 
+  it('backs up terminal Drive requests without their upload payloads (#516)', async () => {
+    const source = scratch('command-center.db');
+    seedCurrentDatabase(source);
+
+    const plan = {
+      kind: 'upload-file',
+      projectId: 'p1',
+      folderId: PROJECT_FOLDER_ID,
+      folderName: 'Project folder',
+      name: 'brief.pdf',
+      mimeType: 'application/pdf',
+      size: 7,
+      contentBase64: 'c2Vuc2l0aXZl',
+    };
+    const planHash = 'plan-hash-that-must-survive';
+    const confirmation = 'Upload "brief.pdf" (7 bytes) to "Project folder".';
+    const seeded = new DatabaseSync(source);
+    seeded
+      .prepare(
+        `INSERT INTO drive_write_requests(
+           id, agent_label, client_request_id, plan_json, plan_hash, confirmation, status, created_at
+         ) VALUES(?,?,?,?,?,?,?,?)`,
+      )
+      .run(
+        'request-516',
+        'test-agent',
+        'client-request-516',
+        JSON.stringify(plan),
+        planHash,
+        confirmation,
+        'APPROVED',
+        NOW,
+      );
+    seeded.close();
+
+    // The normal database-open path purges bytes from terminal rows before this backup runs.
+    const current = track(createDb(source));
+    current.close();
+    open.pop();
+
+    const result = await backupDatabase({
+      sourcePath: source,
+      backupDir: scratch('backups'),
+      now: STAMP,
+    });
+
+    const snapshot = track(new DatabaseSync(result.backupPath, { readOnly: true }));
+    const row = snapshot
+      .prepare(
+        `SELECT plan_json, plan_hash, confirmation, status
+         FROM drive_write_requests WHERE id = 'request-516'`,
+      )
+      .get() as {
+      plan_json: string;
+      plan_hash: string;
+      confirmation: string;
+      status: string;
+    };
+    const backedUpPlan = JSON.parse(row.plan_json) as Record<string, unknown>;
+
+    expect(backedUpPlan).toEqual({
+      kind: 'upload-file',
+      projectId: 'p1',
+      folderId: PROJECT_FOLDER_ID,
+      folderName: 'Project folder',
+      name: 'brief.pdf',
+      mimeType: 'application/pdf',
+      size: 7,
+    });
+    expect(backedUpPlan).not.toHaveProperty('contentBase64');
+    expect(row.plan_hash).toBe(planHash);
+    expect(row.confirmation).toBe(confirmation);
+    expect(row.status).toBe('APPROVED');
+    expect(inspectDatabase(result.backupPath).integrityOk).toBe(true);
+    expect(inspectDatabase(result.backupPath).clients).toBe(1);
+  });
+
   it('does not migrate a legacy source while backing it up', async () => {
     const source = scratch('legacy.db');
     seedLegacyDatabase(source);

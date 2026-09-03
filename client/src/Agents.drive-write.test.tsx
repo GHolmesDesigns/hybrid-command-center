@@ -24,6 +24,13 @@ describe('agent Drive write requests', () => {
         error: null,
       },
     ];
+    testState.driveWriteQueueSummary = {
+      ...testState.driveWriteQueueSummary,
+      pendingCount: 1,
+      pendingDecodedBytes: 42,
+      oldestPendingAt: '2026-09-02T12:00:00.000Z',
+      oldestPendingAgeMs: 90 * 60 * 1000,
+    };
 
     render(<DriveWriteRequestsCard flash={() => undefined} />);
 
@@ -40,6 +47,39 @@ describe('agent Drive write requests', () => {
           request.url.endsWith('/api/drive-write-requests/request-1/approve'),
       ),
     ).toBe(true);
+  });
+
+  it('explains expired and uncertain requests without offering decisions', async () => {
+    testState.driveWriteRequestsPayload = [
+      {
+        id: 'expired-request',
+        agentLabel: 'content-agent',
+        confirmation: 'Create folder "Old assets".',
+        status: 'EXPIRED',
+        createdAt: '2026-09-01T12:00:00.000Z',
+        error: 'Pending Drive write request expired.',
+      },
+      {
+        id: 'uncertain-request',
+        agentLabel: 'content-agent',
+        confirmation: 'Upload "clip.mp4".',
+        status: 'PROVIDER_UNCERTAIN',
+        createdAt: '2026-09-01T13:00:00.000Z',
+        error: 'Execution lease expired; provider outcome is uncertain.',
+      },
+    ];
+    testState.driveWriteQueueSummary = {
+      ...testState.driveWriteQueueSummary,
+      expiredCount: 1,
+      providerUncertainCount: 1,
+    };
+
+    render(<DriveWriteRequestsCard flash={() => undefined} />);
+
+    expect(await screen.findByText(/Expired without operator action/)).toBeVisible();
+    expect(screen.getByText(/Provider outcome is uncertain/)).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Deny' })).not.toBeInTheDocument();
   });
 
   it('keeps the default empty state when no agent request exists', async () => {

@@ -91,6 +91,21 @@ export type { DriveFile, DriveListing };
 export type { IntegrationEvent };
 export type { CalendarRange, SignalPost };
 
+type DriveWriteQueueSummary = {
+  pendingCount: number;
+  pendingDecodedBytes: number;
+  oldestPendingAt: string | null;
+  oldestPendingAgeMs: number | null;
+  expiredCount: number;
+  providerUncertainCount: number;
+  limits: {
+    pendingCount: number;
+    pendingDecodedBytes: number;
+    pendingAgeMs: number;
+    executionLeaseMs: number;
+  };
+};
+
 export const emptyDashboard: DashboardData = {
   counts: {
     activeClients: 0,
@@ -255,6 +270,20 @@ export const testState = {
     createdAt: string;
     error: string | null;
   }[],
+  driveWriteQueueSummary: {
+    pendingCount: 0,
+    pendingDecodedBytes: 0,
+    oldestPendingAt: null,
+    oldestPendingAgeMs: null,
+    expiredCount: 0,
+    providerUncertainCount: 0,
+    limits: {
+      pendingCount: 20,
+      pendingDecodedBytes: 50 * 1024 * 1024,
+      pendingAgeMs: 24 * 60 * 60 * 1000,
+      executionLeaseMs: 60 * 60 * 1000,
+    },
+  } as DriveWriteQueueSummary,
   mcpHealthPanelPayload: {
     enabled: true,
     state: 'never_connected',
@@ -771,8 +800,11 @@ const payloadFor = (url: string) => {
       }
     );
   if (url.endsWith('/api/auth/mcp-agents')) return testState.mcpAgentRegistryPayload;
-  if (url.endsWith('/api/drive-write-requests?status=PENDING'))
-    return { requests: testState.driveWriteRequestsPayload };
+  if (url.endsWith('/api/drive-write-requests'))
+    return {
+      requests: testState.driveWriteRequestsPayload,
+      summary: testState.driveWriteQueueSummary,
+    };
   if (url.endsWith('/api/mcp/health')) return testState.mcpHealthPanelPayload;
   if (url.endsWith('/api/projects')) return testState.projectsPayload;
   if (url.endsWith('/api/clients')) return testState.clientsPayload;
@@ -1799,6 +1831,20 @@ beforeEach(() => {
   testState.agentHandoffDetailError = null;
   testState.mcpAgentRegistryPayload = { enabled: false, credentials: [] };
   testState.driveWriteRequestsPayload = [];
+  testState.driveWriteQueueSummary = {
+    pendingCount: 0,
+    pendingDecodedBytes: 0,
+    oldestPendingAt: null,
+    oldestPendingAgeMs: null,
+    expiredCount: 0,
+    providerUncertainCount: 0,
+    limits: {
+      pendingCount: 20,
+      pendingDecodedBytes: 50 * 1024 * 1024,
+      pendingAgeMs: 24 * 60 * 60 * 1000,
+      executionLeaseMs: 60 * 60 * 1000,
+    },
+  };
   testState.mcpCredentialVerificationPayload = {
     credentialId: 'credential-issued',
     agentLabel: 'cursor-planning',

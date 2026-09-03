@@ -134,8 +134,9 @@ CREATE TABLE IF NOT EXISTS drive_write_requests (
   plan_json TEXT NOT NULL,
   plan_hash TEXT NOT NULL,
   confirmation TEXT NOT NULL,
-  status TEXT NOT NULL CHECK(status IN ('PENDING','EXECUTING','APPROVED','DENIED','FAILED')),
+  status TEXT NOT NULL CHECK(status IN ('PENDING','EXECUTING','APPROVED','DENIED','FAILED','EXPIRED','PROVIDER_UNCERTAIN')),
   created_at TEXT NOT NULL,
+  executing_at TEXT,
   decided_at TEXT,
   error TEXT
 );
@@ -1114,6 +1115,69 @@ export function applyAdditiveMigrations(db: Db, referenceSchema = schema): strin
 }
 
 /**
+ * Rebuilds the Drive write request table when it still has the pre-C516 status CHECK.
+ *
+ * `CREATE TABLE IF NOT EXISTS` does not reconcile constraints, and SQLite has no ALTER TABLE
+ * operation for replacing a CHECK constraint. This migration is intentionally narrow: it only
+ * rebuilds when both terminal statuses introduced by C516 are absent from the live table, so a
+ * current table is left alone and every existing row is copied unchanged.
+ */
+export function migrateDriveWriteRequestStatuses(db: Db): boolean {
+  const row = db
+    .prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='drive_write_requests'`)
+    .get() as { sql: string | null } | undefined;
+  const sql = row?.sql ?? '';
+  if (/\bEXPIRED\b/i.test(sql) && /\bPROVIDER_UNCERTAIN\b/i.test(sql)) return false;
+
+  transaction(db, () => {
+    db.exec(`CREATE TABLE drive_write_requests_status_migration (
+      id TEXT PRIMARY KEY,
+      agent_label TEXT NOT NULL,
+      client_request_id TEXT NOT NULL,
+      plan_json TEXT NOT NULL,
+      plan_hash TEXT NOT NULL,
+      confirmation TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('PENDING','EXECUTING','APPROVED','DENIED','FAILED','EXPIRED','PROVIDER_UNCERTAIN')),
+      created_at TEXT NOT NULL,
+      executing_at TEXT,
+      decided_at TEXT,
+      error TEXT
+    )`);
+    db.exec(`INSERT INTO drive_write_requests_status_migration
+      (id, agent_label, client_request_id, plan_json, plan_hash, confirmation, status,
+       created_at, executing_at, decided_at, error)
+      SELECT id, agent_label, client_request_id, plan_json, plan_hash, confirmation, status,
+             created_at, executing_at, decided_at, error
+        FROM drive_write_requests`);
+    db.exec('DROP TABLE drive_write_requests');
+    db.exec('ALTER TABLE drive_write_requests_status_migration RENAME TO drive_write_requests');
+  });
+  return true;
+}
+
+/** Removes upload bytes from terminal Drive request rows during database startup. */
+export function purgeDriveWriteRequestPayloads(db: Db): number {
+  return transaction(db, () => {
+    const terminal = db
+      .prepare(
+        `SELECT id, plan_json FROM drive_write_requests
+         WHERE status IN ('APPROVED','DENIED','FAILED','EXPIRED','PROVIDER_UNCERTAIN')`,
+      )
+      .all() as { id: string; plan_json: string }[];
+    const update = db.prepare('UPDATE drive_write_requests SET plan_json=? WHERE id=?');
+    let purged = 0;
+    for (const row of terminal) {
+      const plan = JSON.parse(row.plan_json) as Record<string, unknown>;
+      if (plan.kind !== 'upload-file' || !('contentBase64' in plan)) continue;
+      delete plan.contentBase64;
+      update.run(JSON.stringify(plan), row.id);
+      purged += 1;
+    }
+    return purged;
+  });
+}
+
+/**
  * Relaxes `signal_publications.scheduled_instant` from NOT NULL to nullable so Publish now rows
  * can record the absence of a scheduled instant. SQLite cannot drop NOT NULL through `ALTER TABLE`,
  * so an existing table is rebuilt once when the live column still carries the constraint.
@@ -1525,6 +1589,8 @@ export function createDb(
     new Date().toISOString(),
   );
   const applied = applyAdditiveMigrations(db);
+  migrateDriveWriteRequestStatuses(db);
+  purgeDriveWriteRequestPayloads(db);
   relaxPublicationScheduledInstant(db);
   backfillProjectActivity(db);
   backfillSignalCampaigns(db);
