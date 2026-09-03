@@ -347,9 +347,23 @@ async function runJsonRpc(
   });
 }
 
-function rejectMcpUnauthenticated(res: Response, options: McpHttpHandlerOptions): void {
+function rejectMcpUnauthenticated(
+  req: Request,
+  res: Response,
+  options: McpHttpHandlerOptions,
+): void {
+  const hasBearer = Boolean(readMcpBearerToken(req.headers[MCP_BEARER_HEADER]));
   if (options.appOrigin) {
-    sendMcpUnauthorized(res, options.appOrigin);
+    sendMcpUnauthorized(res, options.appOrigin, hasBearer ? 'invalid' : 'missing');
+    return;
+  }
+  if (hasBearer) {
+    res.status(401).json({
+      error: 'MCP authentication failed.',
+      code: 'MCP_CREDENTIAL_INVALID',
+      message:
+        'The MCP bearer credential was not accepted. It may have been issued under a previous SESSION_SECRET; issue a new credential after rotating that secret.',
+    });
     return;
   }
   res.status(401).json({ error: 'Authentication required.' });
@@ -362,7 +376,7 @@ export async function handleMcpHttpPost(
 ): Promise<void> {
   const auth = resolveMcpHttpAuth(req, options);
   if (!auth) {
-    rejectMcpUnauthenticated(res, options);
+    rejectMcpUnauthenticated(req, res, options);
     return;
   }
   if (!mcpHttpCsrfOk(auth, req)) {
@@ -538,7 +552,7 @@ export async function handleMcpHttpGet(
 ): Promise<void> {
   const auth = resolveMcpHttpAuth(req, options);
   if (!auth) {
-    rejectMcpUnauthenticated(res, options);
+    rejectMcpUnauthenticated(req, res, options);
     return;
   }
   if (!wantsEventStream(req)) {
@@ -600,7 +614,7 @@ export async function handleMcpHttpDelete(
 ): Promise<void> {
   const auth = resolveMcpHttpAuth(req, options);
   if (!auth) {
-    rejectMcpUnauthenticated(res, options);
+    rejectMcpUnauthenticated(req, res, options);
     return;
   }
   if (!mcpHttpCsrfOk(auth, req)) {

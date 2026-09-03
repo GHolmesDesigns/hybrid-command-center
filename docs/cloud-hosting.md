@@ -370,7 +370,7 @@ parameter leaf names.
 
 | Parameter name | Env var | Owner | Notes |
 | --- | --- | --- | --- |
-| `/hcc/production/SESSION_SECRET` | `SESSION_SECRET` | Operator (C51) | ≥32 characters. Session HMAC / cookie binding. |
+| `/hcc/production/SESSION_SECRET` | `SESSION_SECRET` | Operator (C51) | ≥32 characters. Session HMAC / cookie binding; rotating it also invalidates all MCP bearer credentials, which must be reissued after restart. See [MCP credential key rotation](mcp-credential-key-rotation.md). |
 | `/hcc/production/OPERATOR_PASSWORD_HASH` | `OPERATOR_PASSWORD_HASH` | Operator (C51) | Argon2id hash from the bootstrap CLI — never the password. |
 | `/hcc/production/GOOGLE_CLIENT_ID` | `GOOGLE_CLIENT_ID` | Operator | OAuth client id. |
 | `/hcc/production/GOOGLE_CLIENT_SECRET` | `GOOGLE_CLIENT_SECRET` | Operator | OAuth client secret. |

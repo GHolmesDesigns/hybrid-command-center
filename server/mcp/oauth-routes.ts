@@ -468,7 +468,20 @@ export function createMcpOAuthRouter(options: McpOAuthRouteOptions): Router {
   return router;
 }
 
-export function sendMcpUnauthorized(res: Response, appOrigin: string): void {
+export function sendMcpUnauthorized(
+  res: Response,
+  appOrigin: string,
+  reason: 'missing' | 'invalid' = 'missing',
+): void {
   res.setHeader('WWW-Authenticate', mcpOAuthWwwAuthenticateHeader(appOrigin));
+  if (reason === 'invalid') {
+    res.status(401).json({
+      error: 'MCP authentication failed.',
+      code: 'MCP_CREDENTIAL_INVALID',
+      message:
+        'The MCP bearer credential was not accepted. It may have been issued under a previous SESSION_SECRET; issue a new credential after rotating that secret.',
+    });
+    return;
+  }
   res.status(401).json({ error: 'Authentication required.' });
 }
