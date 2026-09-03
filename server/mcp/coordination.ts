@@ -245,6 +245,7 @@ export function callCoordinationTool(
           db,
           {
             fromAgentLabel: label,
+            fromAgentProvenance: session.agentIdentityProvenance,
             toAgentLabel: args.toAgentLabel,
             subjectType: args.subjectType as AgentHandoffSubjectType,
             subjectId: args.subjectId,
@@ -267,7 +268,13 @@ export function callCoordinationTool(
       }
       case 'coordination_claim_handoff': {
         const args = claimArgsSchema.parse(rawArgs ?? {});
-        const data = claimHandoff(db, args.handoffId, session.agentLabel!, now);
+        const data = claimHandoff(
+          db,
+          args.handoffId,
+          session.agentLabel!,
+          now,
+          session.agentIdentityProvenance,
+        );
         return finish(
           db,
           session,
@@ -298,6 +305,7 @@ export function callCoordinationTool(
           {
             clientRequestId: args.clientRequestId,
             mutationTool: 'coordination_complete_handoff',
+            agentIdentityProvenance: session.agentIdentityProvenance,
           },
         );
         return finish(
@@ -342,7 +350,11 @@ export function callCoordinationTool(
         const data = addHandoffNote(
           db,
           args.handoffId,
-          { agentLabel: session.agentLabel!, body: args.body },
+          {
+            agentLabel: session.agentLabel!,
+            agentProvenance: session.agentIdentityProvenance,
+            body: args.body,
+          },
           now,
           {
             clientRequestId: args.clientRequestId,

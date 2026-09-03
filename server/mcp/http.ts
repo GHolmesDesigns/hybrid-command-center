@@ -40,7 +40,12 @@ import {
   type JsonRpcResponse,
   type McpOutboundMessage,
 } from './stdio.ts';
-import { createMcpSession, setMcpSessionAgentLabel, type McpSession } from './session.ts';
+import {
+  createMcpSession,
+  setMcpSessionAgentLabel,
+  setMcpSessionIdentityProvenance,
+  type McpSession,
+} from './session.ts';
 import type { McpWriteLimiterRegistry } from './write-limiter-registry.ts';
 import type { McpIntegrationToolDeps } from './integration-tools.ts';
 import type { McpWorkspaceReadDeps } from './workspace-read.ts';
@@ -199,6 +204,7 @@ function applyAgentLabel(
       // the built-in full-coordination registration, while retaining their established label
       // header until the operator rotates them to a scoped credential.
       if (fromHeader !== null) setMcpSessionAgentLabel(session, fromHeader);
+      setMcpSessionIdentityProvenance(session, 'ASSERTED');
       return session.agentLabel;
     }
     if (fromHeader !== null && fromHeader !== credential.agentLabel) {
@@ -207,10 +213,12 @@ function applyAgentLabel(
       });
     }
     setMcpSessionAgentLabel(session, credential.agentLabel);
+    setMcpSessionIdentityProvenance(session, 'VERIFIED');
     return credential.agentLabel;
   }
   if (fromHeader !== null) {
     setMcpSessionAgentLabel(session, fromHeader);
+    setMcpSessionIdentityProvenance(session, 'ASSERTED');
     return fromHeader;
   }
   return session.agentLabel;

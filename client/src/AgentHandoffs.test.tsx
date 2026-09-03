@@ -22,14 +22,17 @@ const openHandoff = (overrides: Partial<AgentHandoff> = {}): AgentHandoff => ({
   createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
   updatedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
   fromAgentLabel: 'cursor',
+  fromAgentProvenance: 'UNKNOWN',
   toAgentLabel: 'claude',
   subjectType: 'task',
   subjectId: 't1',
   message: 'Please finish the caption review.',
   state: 'OPEN',
   claimedBy: null,
+  claimedByProvenance: null,
   claimedAt: null,
   completedAt: null,
+  completedByProvenance: null,
   cancelledAt: null,
   cancelReason: null,
   clientRequestId: null,
@@ -135,5 +138,46 @@ describe('Agents Agent handoffs card', () => {
     expect(detail).toHaveTextContent('PR #410');
     expect(detail).toHaveTextContent('npm test');
     expect(detail).toHaveTextContent('Owner import remains.');
+  });
+
+  it('distinguishes verified, asserted, and legacy identity provenance', async () => {
+    const verified = openHandoff({
+      id: 'verified',
+      fromAgentLabel: 'scoped-agent',
+      fromAgentProvenance: 'VERIFIED',
+    });
+    const asserted = openHandoff({
+      id: 'asserted',
+      fromAgentLabel: 'bootstrap-agent',
+      fromAgentProvenance: 'ASSERTED',
+    });
+    const legacy = openHandoff({ id: 'legacy', fromAgentProvenance: 'UNKNOWN' });
+    testState.agentHandoffsPayload = [verified, asserted, legacy];
+    testState.agentHandoffDetailPayload = {
+      ...asserted,
+      claimedBy: 'bootstrap-agent',
+      claimedByProvenance: 'ASSERTED',
+      claimedAt: new Date().toISOString(),
+      notes: [
+        {
+          id: 'note-1',
+          handoffId: asserted.id,
+          agentLabel: 'scoped-agent',
+          agentProvenance: 'VERIFIED',
+          body: 'Verified note.',
+          at: new Date().toISOString(),
+        },
+      ],
+    };
+
+    await openSettings();
+    expect(await screen.findByText('Identity verified by scoped credential')).toBeVisible();
+    expect(screen.getByText('Identity asserted, not scoped-credential verified')).toBeVisible();
+    expect(screen.getByText('Identity provenance unknown')).toBeVisible();
+
+    fireEvent.click(screen.getByRole('button', { name: /bootstrap-agent/i }));
+    const detail = await screen.findByRole('region', { name: 'Handoff detail' });
+    expect(detail).toHaveTextContent('Identity asserted, not scoped-credential verified');
+    expect(detail).toHaveTextContent('Identity verified by scoped credential');
   });
 });

@@ -29,6 +29,7 @@ import {
   AGENT_HANDOFF_LIST_DEFAULT_LIMIT,
   agentLabelSchema,
   type AgentHandoff,
+  type AgentIdentityProvenance,
   type AgentHandoffCancelInput,
   type AgentHandoffDetail,
   type AgentHandoffCompletionInput,
@@ -71,14 +72,17 @@ interface HandoffRow {
   created_at: string;
   updated_at: string;
   from_agent_label: string;
+  from_agent_provenance: string;
   to_agent_label: string | null;
   subject_type: string;
   subject_id: string | null;
   message: string;
   state: string;
   claimed_by: string | null;
+  claimed_by_provenance: string | null;
   claimed_at: string | null;
   completed_at: string | null;
+  completed_by_provenance: string | null;
   cancelled_at: string | null;
   cancel_reason: string | null;
   client_request_id: string | null;
@@ -96,6 +100,7 @@ interface NoteRow {
   id: string;
   handoff_id: string;
   agent_label: string;
+  agent_provenance: string;
   body: string;
   at: string;
 }
@@ -105,14 +110,17 @@ const toHandoff = (row: HandoffRow): AgentHandoff => ({
   createdAt: row.created_at,
   updatedAt: row.updated_at,
   fromAgentLabel: row.from_agent_label,
+  fromAgentProvenance: row.from_agent_provenance as AgentIdentityProvenance,
   toAgentLabel: row.to_agent_label,
   subjectType: row.subject_type as AgentHandoffSubjectType,
   subjectId: row.subject_id,
   message: row.message,
   state: row.state as AgentHandoffState,
   claimedBy: row.claimed_by,
+  claimedByProvenance: row.claimed_by_provenance as AgentIdentityProvenance | null,
   claimedAt: row.claimed_at,
   completedAt: row.completed_at,
+  completedByProvenance: row.completed_by_provenance as AgentIdentityProvenance | null,
   cancelledAt: row.cancelled_at,
   cancelReason: row.cancel_reason,
   clientRequestId: row.client_request_id,
@@ -128,6 +136,7 @@ const toNote = (row: NoteRow): AgentHandoffNote => ({
   id: row.id,
   handoffId: row.handoff_id,
   agentLabel: row.agent_label,
+  agentProvenance: row.agent_provenance as AgentIdentityProvenance,
   body: row.body,
   at: row.at,
 });
@@ -158,6 +167,7 @@ const refuse = (reason: string): never => {
 export interface HandoffMutationOptions {
   clientRequestId?: string;
   mutationTool?: AgentHandoffMutationTool;
+  agentIdentityProvenance?: AgentIdentityProvenance;
 }
 
 const replayHandoffOutcome = (
@@ -256,15 +266,16 @@ export function postHandoff(
     const handoffId = id();
     db.prepare(
       `INSERT INTO agent_handoffs(
-         id, created_at, updated_at, from_agent_label, to_agent_label,
+         id, created_at, updated_at, from_agent_label, from_agent_provenance, to_agent_label,
          subject_type, subject_id, message, state,
          claimed_by, claimed_at, completed_at, cancelled_at, cancel_reason, client_request_id
-       ) VALUES(?,?,?,?,?,?,?,?, 'OPEN', NULL, NULL, NULL, NULL, NULL, ?)`,
+       ) VALUES(?,?,?,?,?,?,?,?,?, 'OPEN', NULL, NULL, NULL, NULL, NULL, ?)`,
     ).run(
       handoffId,
       instant,
       instant,
       input.fromAgentLabel,
+      input.fromAgentProvenance ?? 'UNKNOWN',
       toAgentLabel,
       input.subjectType,
       subjectId,
@@ -282,6 +293,7 @@ export function claimHandoff(
   handoffId: string,
   agentLabelRaw: string,
   now: Date = new Date(),
+  agentIdentityProvenance: AgentIdentityProvenance = 'UNKNOWN',
 ): AgentHandoff {
   const agentLabel = agentLabelSchema.parse(agentLabelRaw);
   const instant = now.toISOString();
@@ -292,9 +304,9 @@ export function claimHandoff(
     if (decision.kind === 'refused') refuse(decision.reason);
     db.prepare(
       `UPDATE agent_handoffs
-       SET state = 'CLAIMED', claimed_by = ?, claimed_at = ?, updated_at = ?
+       SET state = 'CLAIMED', claimed_by = ?, claimed_by_provenance = ?, claimed_at = ?, updated_at = ?
        WHERE id = ? AND state = 'OPEN'`,
-    ).run(agentLabel, instant, instant, handoffId);
+    ).run(agentLabel, agentIdentityProvenance, instant, instant, handoffId);
     const next = requireHandoff(db, handoffId);
     if (next.state !== 'CLAIMED' || next.claimedBy !== agentLabel) {
       refuse('Another agent claimed this handoff first.');
@@ -352,11 +364,12 @@ export function completeHandoff(
     if (decision.kind === 'refused') refuse(decision.reason);
     db.prepare(
       `UPDATE agent_handoffs
-       SET state = 'COMPLETED', completed_at = ?, updated_at = ?, outcome = ?, result_summary = ?,
+       SET state = 'COMPLETED', completed_at = ?, completed_by_provenance = ?, updated_at = ?, outcome = ?, result_summary = ?,
            changed_paths_json = ?, references_json = ?, validations_json = ?, remaining_risks_json = ?
        WHERE id = ? AND state = 'CLAIMED' AND claimed_by = ?`,
     ).run(
       instant,
+      options.agentIdentityProvenance ?? 'UNKNOWN',
       instant,
       input.outcome,
       evidence.resultSummary,
@@ -495,9 +508,9 @@ export function addHandoffNote(
     if (decision.kind === 'refused') refuse(decision.reason);
     const noteId = id();
     db.prepare(
-      `INSERT INTO agent_handoff_notes(id, handoff_id, agent_label, body, at)
-       VALUES(?,?,?,?,?)`,
-    ).run(noteId, handoffId, input.agentLabel, body, instant);
+      `INSERT INTO agent_handoff_notes(id, handoff_id, agent_label, agent_provenance, body, at)
+       VALUES(?,?,?,?,?,?)`,
+    ).run(noteId, handoffId, input.agentLabel, input.agentProvenance ?? 'UNKNOWN', body, instant);
     // Touch updated_at so list views notice activity without changing handoff state.
     db.prepare('UPDATE agent_handoffs SET updated_at = ? WHERE id = ?').run(instant, handoffId);
     recordCoordinationChange(db, 'handoff.note_added', handoffId, 'Handoff note added.', instant);

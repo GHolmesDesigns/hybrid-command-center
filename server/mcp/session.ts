@@ -13,6 +13,7 @@ import {
   normalizeOptionalAgentLabel,
 } from '../../shared/mcp-agent-events.ts';
 import { RollingWindowLimiter, type CoordinationWriteLimiter } from './rate-limit.ts';
+import type { AgentIdentityProvenance } from '../../shared/agent-coordination.ts';
 
 const ONE_MINUTE_MS = 60_000;
 
@@ -22,6 +23,8 @@ export interface McpInFlightRequest {
 
 export interface McpSession {
   agentLabel: string | null;
+  /** Whether the transport cryptographically bound this label to a scoped credential. */
+  agentIdentityProvenance: AgentIdentityProvenance;
   /**
    * Defaults to a fresh per-session `RollingWindowLimiter`, which is what stdio uses for the
    * life of its one long-lived process session. The network HTTP transport overwrites this per
@@ -41,9 +44,15 @@ export interface McpSession {
   inFlight: Map<string | number, McpInFlightRequest>;
 }
 
-export function createMcpSession(options: { agentLabel?: string | null } = {}): McpSession {
+export function createMcpSession(
+  options: {
+    agentLabel?: string | null;
+    agentIdentityProvenance?: AgentIdentityProvenance;
+  } = {},
+): McpSession {
   return {
     agentLabel: normalizeOptionalAgentLabel(options.agentLabel ?? null),
+    agentIdentityProvenance: options.agentIdentityProvenance ?? 'ASSERTED',
     coordinationWrites: new RollingWindowLimiter(
       COORDINATION_WRITE_LIMIT_PER_MINUTE,
       ONE_MINUTE_MS,
@@ -57,6 +66,13 @@ export function createMcpSession(options: { agentLabel?: string | null } = {}): 
 /** Apply a label discovered during MCP `initialize` (or from `MCP_AGENT_LABEL`). */
 export function setMcpSessionAgentLabel(session: McpSession, raw: string | null | undefined): void {
   session.agentLabel = normalizeOptionalAgentLabel(raw);
+}
+
+export function setMcpSessionIdentityProvenance(
+  session: McpSession,
+  provenance: AgentIdentityProvenance,
+): void {
+  session.agentIdentityProvenance = provenance;
 }
 
 export function registerMcpInFlight(

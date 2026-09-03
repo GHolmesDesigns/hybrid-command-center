@@ -18,6 +18,57 @@ beforeEach(() => {
 const labeled = (label = 'cursor') => createMcpSession({ agentLabel: label });
 
 describe('coordination MCP tools', () => {
+  it('persists identity provenance for every authored coordination action', () => {
+    const asserted = createMcpSession({
+      agentLabel: 'bootstrap-agent',
+      agentIdentityProvenance: 'ASSERTED',
+    });
+    const verified = createMcpSession({
+      agentLabel: 'scoped-agent',
+      agentIdentityProvenance: 'VERIFIED',
+    });
+    const posted = callCoordinationTool(
+      db,
+      asserted,
+      'coordination_post_handoff',
+      { subjectType: 'freeform', message: 'Provenance check.' },
+      NOW,
+    );
+    const handoffId = (posted.data as { id: string }).id;
+    expect(posted.data).toMatchObject({ fromAgentProvenance: 'ASSERTED' });
+
+    expect(
+      callCoordinationTool(db, verified, 'coordination_claim_handoff', { handoffId }, NOW).data,
+    ).toMatchObject({ claimedByProvenance: 'VERIFIED' });
+    expect(
+      callCoordinationTool(
+        db,
+        verified,
+        'coordination_add_note',
+        { handoffId, body: 'Scoped note.' },
+        NOW,
+      ).data,
+    ).toMatchObject({ agentProvenance: 'VERIFIED' });
+    expect(
+      callCoordinationTool(
+        db,
+        verified,
+        'coordination_complete_handoff',
+        { handoffId, outcome: 'SUCCEEDED', resultSummary: 'Complete.' },
+        NOW,
+      ).data,
+    ).toMatchObject({ completedByProvenance: 'VERIFIED' });
+
+    expect(
+      callCoordinationTool(db, verified, 'coordination_get_handoff', { handoffId }, NOW).data,
+    ).toMatchObject({
+      fromAgentProvenance: 'ASSERTED',
+      claimedByProvenance: 'VERIFIED',
+      completedByProvenance: 'VERIFIED',
+      notes: [expect.objectContaining({ agentProvenance: 'VERIFIED' })],
+    });
+  });
+
   it('maps each write tool to the handoff service and honours client_request_id idempotency', () => {
     const session = labeled('cursor');
     const first = callCoordinationTool(

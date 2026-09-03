@@ -56,6 +56,15 @@ export const AGENT_HANDOFF_OUTCOMES = [
 ] as const;
 export type AgentHandoffOutcome = (typeof AGENT_HANDOFF_OUTCOMES)[number];
 
+export const AGENT_IDENTITY_PROVENANCE = ['UNKNOWN', 'ASSERTED', 'VERIFIED'] as const;
+export type AgentIdentityProvenance = (typeof AGENT_IDENTITY_PROVENANCE)[number];
+
+export const AGENT_IDENTITY_PROVENANCE_LABEL: Record<AgentIdentityProvenance, string> = {
+  UNKNOWN: 'Identity provenance unknown',
+  ASSERTED: 'Identity asserted, not scoped-credential verified',
+  VERIFIED: 'Identity verified by scoped credential',
+};
+
 /**
  * Portable agent label: non-empty, trimmed, max 64, letters/digits plus `.` `_` `-`.
  * MCP-C106 owns init wiring; this is the charset both layers share.
@@ -196,6 +205,7 @@ export const agentHandoffSubjectIdSchema = z
 export const agentHandoffPostInputSchema = z
   .object({
     fromAgentLabel: agentLabelSchema,
+    fromAgentProvenance: z.enum(AGENT_IDENTITY_PROVENANCE).optional(),
     toAgentLabel: agentLabelSchema.nullable().optional(),
     subjectType: z.enum(AGENT_HANDOFF_SUBJECT_TYPES),
     subjectId: agentHandoffSubjectIdSchema.nullable().optional(),
@@ -217,6 +227,7 @@ export type AgentHandoffCancelInput = z.infer<typeof agentHandoffCancelInputSche
 export const agentHandoffNoteInputSchema = z
   .object({
     agentLabel: agentLabelSchema,
+    agentProvenance: z.enum(AGENT_IDENTITY_PROVENANCE).optional(),
     body: agentHandoffNoteBodySchema,
   })
   .strict();
@@ -228,14 +239,17 @@ export interface AgentHandoff {
   createdAt: string;
   updatedAt: string;
   fromAgentLabel: string;
+  fromAgentProvenance: AgentIdentityProvenance;
   toAgentLabel: string | null;
   subjectType: AgentHandoffSubjectType;
   subjectId: string | null;
   message: string;
   state: AgentHandoffState;
   claimedBy: string | null;
+  claimedByProvenance: AgentIdentityProvenance | null;
   claimedAt: string | null;
   completedAt: string | null;
+  completedByProvenance: AgentIdentityProvenance | null;
   cancelledAt: string | null;
   cancelReason: string | null;
   clientRequestId: string | null;
@@ -258,6 +272,7 @@ export interface AgentHandoffNote {
   id: string;
   handoffId: string;
   agentLabel: string;
+  agentProvenance: AgentIdentityProvenance;
   body: string;
   at: string;
 }
