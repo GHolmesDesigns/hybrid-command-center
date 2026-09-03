@@ -8,6 +8,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.13.11] - 2026-09-03
+
+### Changed
+
+- MCP credential failures now identify authentication problems and document the required
+  credential reissue after `SESSION_SECRET` rotation.
+
+### Breaking changes
+
+None.
+
 ## [5.13.10] - 2026-09-03
 
 ### Fixed
