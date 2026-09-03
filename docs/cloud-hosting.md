@@ -428,7 +428,7 @@ sentinel is not a secret. C53 boot must refuse required secrets still set to `UN
 | Disk | CloudWatch alarm on EBS volume free space (warn below **20%**, critical below **10%**) → SNS topic in §12. |
 | Deploy / app logs | journald for the systemd unit; optional CloudWatch Logs agent in C53. Logs must keep the existing redaction rules (no cookies, secrets, or token material). |
 | Alert destination | **SNS topic** `hcc-production-alerts` → operator email subscription (§12). |
-| Restart | systemd `Restart=on-failure`; SIGINT/SIGTERM use `server/shutdown.ts` (stop HTTP, then close SQLite once). |
+| Restart | systemd `Restart=on-failure`; SIGINT/SIGTERM use `server/shutdown.ts` (stop HTTP, allow 5 seconds for graceful draining, force-close remaining connections, then close SQLite once). |
 
 ### 11.8 Recovery objectives and retention
 

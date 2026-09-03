@@ -31,7 +31,7 @@ describe('production shutdown with active MCP SSE', () => {
     }
   });
 
-  it('waits for the active MCP SSE client to disconnect before completing shutdown', async () => {
+  async function openServerAndStream() {
     db = createDb(':memory:');
     const passwordHash = await hashPassword(PASSWORD);
     setSetting(db, OPERATOR_PASSWORD_HASH_SETTING_KEY, passwordHash);
@@ -86,19 +86,33 @@ describe('production shutdown with active MCP SSE', () => {
     expect(stream.statusCode).toBe(200);
     expect(stream.headers['content-type']).toMatch(/^text\/event-stream/);
 
+    return { db, server, stream };
+  }
+
+  function shutdownRuntime() {
     const signals = new EventEmitter();
     let resolveExit!: (code: number) => void;
     const exited = new Promise<number>((resolve) => {
       resolveExit = resolve;
     });
-    const runtime = {
-      once(signal: 'SIGINT' | 'SIGTERM', listener: () => void) {
-        signals.once(signal, listener);
+    return {
+      signals,
+      exited,
+      runtime: {
+        once(signal: 'SIGINT' | 'SIGTERM', listener: () => void) {
+          signals.once(signal, listener);
+        },
+        exit: vi.fn((code: number) => resolveExit(code)),
       },
-      exit: vi.fn((code: number) => resolveExit(code)),
     };
-    const closeDb = vi.spyOn(db, 'close');
-    closeOnSignals(server, db, runtime);
+  }
+
+  it('exits zero without forcing a client that disconnects within the drain bound', async () => {
+    const active = await openServerAndStream();
+    const { signals, exited, runtime } = shutdownRuntime();
+    const closeDb = vi.spyOn(active.db, 'close');
+    const forceClose = vi.spyOn(active.server, 'closeAllConnections');
+    closeOnSignals(active.server, active.db, runtime, 1_000);
 
     signals.emit('SIGTERM');
     await new Promise<void>((resolve) => setImmediate(resolve));
@@ -106,7 +120,7 @@ describe('production shutdown with active MCP SSE', () => {
     expect(runtime.exit).not.toHaveBeenCalled();
     expect(closeDb).not.toHaveBeenCalled();
 
-    stream.destroy();
+    active.stream.destroy();
     const exitCode = await Promise.race([
       exited,
       new Promise<never>((_, reject) =>
@@ -114,6 +128,29 @@ describe('production shutdown with active MCP SSE', () => {
       ),
     ]);
     expect(exitCode).toBe(0);
+    expect(forceClose).not.toHaveBeenCalled();
     expect(closeDb).toHaveBeenCalledTimes(1);
+  });
+
+  it('force-closes an MCP SSE client at the bound and exits zero', async () => {
+    const active = await openServerAndStream();
+    const { signals, exited, runtime } = shutdownRuntime();
+    const closeDb = vi.spyOn(active.db, 'close');
+    const forceClose = vi.spyOn(active.server, 'closeAllConnections');
+    closeOnSignals(active.server, active.db, runtime, 25);
+
+    signals.emit('SIGTERM');
+    signals.emit('SIGINT');
+
+    const exitCode = await Promise.race([
+      exited,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('shutdown exceeded its forced drain bound')), 1_000),
+      ),
+    ]);
+    expect(exitCode).toBe(0);
+    expect(forceClose).toHaveBeenCalledTimes(1);
+    expect(closeDb).toHaveBeenCalledTimes(1);
+    expect(runtime.exit).toHaveBeenCalledTimes(1);
   });
 });
