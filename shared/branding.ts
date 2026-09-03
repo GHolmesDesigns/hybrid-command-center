@@ -8,7 +8,7 @@ import {
   softestReadable,
 } from './contrast.ts';
 
-export const APP_VERSION = '5.13.13';
+export const APP_VERSION = '5.13.14';
 
 export interface Branding {
   mark: string;

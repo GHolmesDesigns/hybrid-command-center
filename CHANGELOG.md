@@ -8,6 +8,18 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.13.14] - 2026-09-03
+
+### Changed
+
+- Added a dated security and operating-cost review for the project-scoped, operator-approved
+  Drive-write boundary. The review records its conditional-acceptance decision, current limits,
+  evidence, abuse cases, and required retention and volume follow-up.
+
+### Breaking changes
+
+None.
+
 ## [5.13.13] - 2026-09-03
 
 ### Fixed
