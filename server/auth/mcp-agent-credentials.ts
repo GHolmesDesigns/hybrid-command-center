@@ -59,6 +59,10 @@ export function operatorBootstrapCredential(tokenHash: string): ResolvedMcpAgent
 }
 
 const iso = (now: number) => new Date(now).toISOString();
+// Thirty seconds keeps the dashboard's last-used signal fresh while removing repeated WAL
+// writes from request bursts. A changed origin still forces a touch so diagnostics do not
+// silently retain a previous caller for the duration of the debounce window.
+const LAST_USED_DEBOUNCE_MS = 30_000;
 const parseScopes = (raw: string): McpAgentScope[] =>
   mcpAgentScopesSchema.parse(JSON.parse(raw) as unknown);
 const orderedScopes = (scopes: readonly McpAgentScope[]): McpAgentScope[] =>
@@ -160,15 +164,21 @@ export function resolveMcpAgentCredential(
   const row = db.prepare(`${SELECT_CREDENTIAL} WHERE c.token_hash=?`).get(tokenHash) as
     CredentialRow | undefined;
   if (!row || row.revoked_at || Date.parse(row.expires_at) <= now) return null;
-  const usedAt = iso(now);
-  transaction(db, () => {
-    db.prepare('UPDATE agent_credentials SET last_used_at=? WHERE id=?').run(usedAt, row.id);
-    db.prepare('UPDATE agent_registrations SET last_used_at=?, last_origin=? WHERE id=?').run(
-      usedAt,
-      options.origin,
-      row.agent_id,
-    );
-  });
+  const lastUsedAt = [row.credential_last_used_at, row.registration_last_used_at];
+  const touchDue = lastUsedAt.some(
+    (value) => !value || now - Date.parse(value) >= LAST_USED_DEBOUNCE_MS,
+  );
+  if (touchDue || row.last_origin !== options.origin) {
+    const usedAt = iso(now);
+    transaction(db, () => {
+      db.prepare('UPDATE agent_credentials SET last_used_at=? WHERE id=?').run(usedAt, row.id);
+      db.prepare('UPDATE agent_registrations SET last_used_at=?, last_origin=? WHERE id=?').run(
+        usedAt,
+        options.origin,
+        row.agent_id,
+      );
+    });
+  }
   return {
     credentialId: row.id,
     tokenHash,
