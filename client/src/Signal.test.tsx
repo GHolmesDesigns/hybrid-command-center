@@ -632,10 +632,11 @@ describe('Signal planner', () => {
     expect(screen.getByRole('button', { name: 'Save changes before preview' })).toBeDisabled();
   });
 
-  it('refreshes provider delivery and leaves Mark published as an explicit patch', async () => {
+  it('refreshes provider delivery and marks published with the opened post revision', async () => {
     const post = signalPost('delivery', 'Delivered campaign post', '2026-09-14', {
       channels: ['x'],
       status: 'SCHEDULED',
+      revision: 7,
     });
     const submitted: (typeof testState.publicationsPayload)[number] = {
       id: 'publication-2',
@@ -662,9 +663,66 @@ describe('Signal planner', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Edit Delivered campaign post' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Refresh delivery' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Mark published' }));
-    await waitFor(() =>
-      expect(requests.find((entry) => entry.method === 'PATCH')?.body.status).toBe('PUBLISHED'),
-    );
+    await waitFor(() => {
+      expect(requests.filter((entry) => entry.method === 'PATCH')).toEqual([
+        expect.objectContaining({
+          body: { status: 'PUBLISHED', revision: 7 },
+        }),
+      ]);
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+    expect(screen.getByText('Delivered campaign post')).toBeInTheDocument();
+  });
+
+  it('surfaces a revision conflict from Mark published without retrying', async () => {
+    const post = signalPost('stale-delivery', 'Newer campaign post', '2026-09-14', {
+      channels: ['x'],
+      status: 'SCHEDULED',
+      revision: 3,
+    });
+    testState.signalPostsPayload = [post];
+    testState.publicationsPayload = [
+      {
+        id: 'publication-stale',
+        postId: post.id,
+        state: 'CONFIRMED',
+        provider: 'post-bridge',
+        providerPostId: 'provider-stale',
+        scheduledInstant: '2026-09-14T13:00:00.000Z',
+        timezone: 'America/New_York',
+        sentCaption: post.text,
+        sentMedia: [],
+        sentChannels: ['x'],
+        targets: [
+          {
+            channel: 'x',
+            platform: 'twitter',
+            accountId: 4,
+            handle: '@gholmes',
+            mode: 'AUTOMATIC',
+          },
+        ],
+        checkAttempts: 1,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ];
+    testState.signalMutationError =
+      'This Signal post changed after you opened it. Reload it and try again.';
+
+    await openSignal();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Newer campaign post' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Mark published' }));
+
+    expect(
+      await screen.findByText(
+        'This Signal post changed after you opened it. Reload it and try again.',
+      ),
+    ).toBeInTheDocument();
+    expect(requests.filter((entry) => entry.method === 'PATCH')).toEqual([
+      expect.objectContaining({ body: { status: 'PUBLISHED', revision: 3 } }),
+    ]);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
   it('moves a saved post between queue and grid and reloads both API views', async () => {
