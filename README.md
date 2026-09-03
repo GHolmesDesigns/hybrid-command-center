@@ -164,6 +164,11 @@ Required environment variables:
 | `BUFFER_ORGANIZATION_ID` | Optional Buffer organization id when the account has more than one organization |
 | `LOG_LEVEL` | Structured API/Drive logging level: `fatal`, `error`, `warn`, `info` (default), `debug`, `trace`, or `silent`. An unrecognized value falls back to `info`; see [Debug logging](docs/debug-logging.md) |
 
+`SESSION_SECRET` is also the keying secret for MCP bearer credential lookup. Rotating it
+invalidates every existing MCP agent credential and operator MCP bearer after restart; issue new
+credentials and update connected agents as described in
+[MCP credential key rotation](docs/mcp-credential-key-rotation.md).
+
 The environment is validated when the server starts, and every problem is reported at once,
 naming the variable and what was wrong with it — a rejected value is never printed back, because
 two of these are secrets. A value the schema refuses stops the boot rather than surfacing later as

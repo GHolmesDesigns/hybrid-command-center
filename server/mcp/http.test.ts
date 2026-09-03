@@ -477,6 +477,11 @@ describe('network MCP (C113)', () => {
       .set('Authorization', 'Bearer hcc_mcp_not-in-database')
       .send({ jsonrpc: '2.0', id: 1, method: 'ping' });
     expect(badBearer.status).toBe(401);
+    expect(badBearer.body).toMatchObject({
+      error: 'MCP authentication failed.',
+      code: 'MCP_CREDENTIAL_INVALID',
+    });
+    expect(badBearer.body.message).toMatch(/previous SESSION_SECRET/);
 
     const { cookie, csrfToken } = await login();
     const invalidBody = await request(app())
