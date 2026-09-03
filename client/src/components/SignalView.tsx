@@ -1027,7 +1027,10 @@ function Editor({
     setError('');
     try {
       await saved(
-        await send<SignalPost>(`/signal/posts/${post.id}`, 'PATCH', { status: 'PUBLISHED' }),
+        await send<SignalPost>(`/signal/posts/${post.id}`, 'PATCH', {
+          status: 'PUBLISHED',
+          revision: post.revision,
+        }),
       );
     } catch (reason) {
       setError((reason as Error).message);

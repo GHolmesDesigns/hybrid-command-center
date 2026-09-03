@@ -505,6 +505,40 @@ describe('the HTTP boundary', () => {
     await request(app()).get(`/api/signal/posts/${created.body.id}`).expect(404);
   });
 
+  it('marks published with the current revision and refuses a stale revision without overwriting', async () => {
+    const created = await request(app())
+      .post('/api/signal/posts')
+      .send({ text: 'Publish this version', channels: ['li'], date: '2026-09-21' })
+      .expect(201);
+
+    const published = await request(app())
+      .patch(`/api/signal/posts/${created.body.id}`)
+      .send({ status: 'PUBLISHED', revision: created.body.revision })
+      .expect(200);
+    expect(published.body).toMatchObject({
+      text: 'Publish this version',
+      status: 'PUBLISHED',
+      revision: created.body.revision + 1,
+    });
+
+    const stale = await request(app())
+      .patch(`/api/signal/posts/${created.body.id}`)
+      .send({ status: 'SCHEDULED', revision: created.body.revision })
+      .expect(409);
+    expect(stale.body).toMatchObject({
+      code: 'conflict',
+      currentRevision: created.body.revision + 1,
+      changedFields: ['status'],
+    });
+    expect(
+      (await request(app()).get(`/api/signal/posts/${created.body.id}`).expect(200)).body,
+    ).toMatchObject({
+      text: 'Publish this version',
+      status: 'PUBLISHED',
+      revision: created.body.revision + 1,
+    });
+  });
+
   it('answers 404 for a patch or delete against a post that is not there', async () => {
     await request(app())
       .patch('/api/signal/posts/nope')
