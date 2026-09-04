@@ -8,6 +8,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.13.22] - 2026-09-04
+
+### Added
+
+- Added Building as a distinct project workflow status across project forms, status filters,
+  imports, workspace writes, and project presentation.
+
+### Breaking changes
+
+None.
+
 ## [5.13.21] - 2026-09-04
 
 ### Added
