@@ -8,6 +8,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.13.20] - 2026-09-04
+
+### Changed
+
+- Reordered Settings into the requested label and workspace-module stacks, keeping the desktop,
+  narrow-screen, keyboard, and screen-reader reading order consistent.
+
+### Breaking changes
+
+None.
+
 ## [5.13.19] - 2026-09-04
 
 ### Changed
