@@ -674,6 +674,29 @@ describe('command center API', () => {
       [...d.dueTodayTasks, ...d.upcomingTasks, ...d.overdueTasks].map((t: any) => t.title),
     ).not.toContain('Finished today');
   });
+  it('round-trips a Building project without changing literal Active counts', async () => {
+    const { c } = await setup();
+    const app = createApp(db);
+    const created = (
+      await request(app)
+        .post('/api/projects')
+        .send({ clientId: c.id, name: 'Building microsite', status: 'BUILDING' })
+    ).body;
+
+    expect(created.status).toBe('BUILDING');
+    const edited = (
+      await request(app)
+        .patch(`/api/projects/${created.id}`)
+        .send({ status: 'BUILDING', revision: created.revision })
+    ).body;
+    expect(edited.status).toBe('BUILDING');
+    expect(
+      (await request(app).get('/api/projects')).body.find(
+        (project: any) => project.id === created.id,
+      ).status,
+    ).toBe('BUILDING');
+    expect((await request(app).get('/api/dashboard')).body.counts.activeProjects).toBe(1);
+  });
   it('keeps archived work out of every dashboard number while leaving it reachable', async () => {
     const app = createApp(db);
     const live = await setup();

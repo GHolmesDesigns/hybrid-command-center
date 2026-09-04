@@ -15,11 +15,18 @@ export type ProjectPresentation = (typeof PROJECT_PRESENTATIONS)[number];
 export const CANONICAL_PROJECT_PRESENTATION: ProjectPresentation = 'grid';
 
 /** Live planning statuses a Projects filter may select. Archive scope stays on `visibility`. */
-export const LIVE_PROJECT_STATUSES = ['PLANNING', 'ACTIVE', 'ON_HOLD', 'COMPLETE'] as const;
+export const LIVE_PROJECT_STATUSES = [
+  'PLANNING',
+  'BUILDING',
+  'ACTIVE',
+  'ON_HOLD',
+  'COMPLETE',
+] as const;
 export type LiveProjectStatus = (typeof LIVE_PROJECT_STATUSES)[number];
 
 export const LIVE_PROJECT_STATUS_LABEL: Record<LiveProjectStatus, string> = {
   PLANNING: 'Planning',
+  BUILDING: 'Building',
   ACTIVE: 'Active',
   ON_HOLD: 'On hold',
   COMPLETE: 'Complete',

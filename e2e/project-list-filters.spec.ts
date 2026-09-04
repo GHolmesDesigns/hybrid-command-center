@@ -18,7 +18,7 @@ test('Projects list presentation and live-status filters survive reload and stay
     await page.request.post('/api/clients', { data: { name: `E2E Rows Client ${run}` } })
   ).json();
   const nameFor = (status: string) => `E2E Rows ${status} ${run}`;
-  for (const status of ['PLANNING', 'ACTIVE', 'ON_HOLD'] as const) {
+  for (const status of ['PLANNING', 'BUILDING', 'ACTIVE', 'ON_HOLD'] as const) {
     await page.request.post('/api/projects', {
       data: { clientId: client.id, name: nameFor(status), status },
     });
@@ -28,10 +28,11 @@ test('Projects list presentation and live-status filters survive reload and stay
   const visibility = page.getByRole('group', { name: 'Project visibility' });
   const statusFilter = page.getByRole('group', { name: 'Status' });
 
-  await gotoSettled(page, `/projects?client=${client.id}&statuses=ACTIVE,PLANNING`);
+  await gotoSettled(page, `/projects?client=${client.id}&statuses=ACTIVE,PLANNING,BUILDING`);
   await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
   await expect(page.getByRole('heading', { level: 2, name: nameFor('PLANNING') })).toBeVisible();
   await expect(page.getByRole('heading', { level: 2, name: nameFor('ACTIVE') })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 2, name: nameFor('BUILDING') })).toBeVisible();
   await expect(page.getByRole('heading', { level: 2, name: nameFor('ON_HOLD') })).toHaveCount(0);
 
   await presentation.getByRole('button', { name: 'List', exact: true }).click();
@@ -41,6 +42,9 @@ test('Projects list presentation and live-status filters survive reload and stay
   ).toBeVisible();
   await expect(
     page.locator('.project-row-link strong', { hasText: nameFor('ACTIVE') }),
+  ).toBeVisible();
+  await expect(
+    page.locator('.project-row-link strong', { hasText: nameFor('BUILDING') }),
   ).toBeVisible();
   await expect(
     page.locator('.project-row-link strong', { hasText: nameFor('ON_HOLD') }),

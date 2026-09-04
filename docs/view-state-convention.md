@@ -69,8 +69,8 @@ or `list` over the same filtered result set. Grid is the canonical default, but 
 configured is omitted from the address; an explicit `view` always overrides it. List keeps every
 filter and link; Custom order remains a sort in list mode, but rearranging by hand is grid-only.
 
-Projects `statuses` is a multi-value filter over live planning statuses — `PLANNING`, `ACTIVE`,
-`ON_HOLD`, and `COMPLETE` — combined with OR within the dimension and AND with client, category,
+Projects `statuses` is a multi-value filter over live planning statuses — `PLANNING`, `BUILDING`,
+`ACTIVE`, `ON_HOLD`, and `COMPLETE` — combined with OR within the dimension and AND with client, category,
 and search. Archive scope stays on `visibility`: choosing Archived clears any `statuses` value
 rather than leaving a bookmark that silently matches nothing. An empty `statuses` list means no
 extra narrowing and is omitted from the address.
