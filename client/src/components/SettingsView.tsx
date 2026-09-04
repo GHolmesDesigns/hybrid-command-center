@@ -235,8 +235,41 @@ export function SettingsView({
             flash={flash}
           />
           <TagsCard tags={tags} tasks={tasks} refresh={refresh} flash={flash} />
+          {/* Campaigns label Signal posts just as categories label projects and tags label tasks. */}
+          <SignalCampaignsCard flash={flash} />
         </div>
         <div className="settings-column">
+          <section className="panel settings-card">
+            <div className="settings-icon neutral">
+              <FileText />
+            </div>
+            <div className="section-title">
+              <div>
+                <span className="eyebrow">Help</span>
+                <h2>User manual</h2>
+              </div>
+              {manual?.version && <span className="version-pill">v{manual.version}</span>}
+            </div>
+            <p>Open the operating manual for the version running on this device.</p>
+            {manualError || (manual && !manual.available) ? (
+              <p className="field-hint" role="status">
+                The user manual for this version is not available yet.
+              </p>
+            ) : manual ? (
+              <a
+                className="buttonlike secondary settings-link"
+                href={manual.url ?? manualUrlForVersion(manual.version)}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <FileText /> Open user manual <ExternalLink aria-hidden="true" />
+              </a>
+            ) : (
+              <p className="field-hint" role="status">
+                Checking for the matching manual…
+              </p>
+            )}
+          </section>
           <section className="panel settings-card">
             <div className="settings-icon neutral">
               <LayoutDashboard />
@@ -408,37 +441,6 @@ export function SettingsView({
                 </button>
               </div>
             </form>
-          </section>
-          <section className="panel settings-card">
-            <div className="settings-icon neutral">
-              <FileText />
-            </div>
-            <div className="section-title">
-              <div>
-                <span className="eyebrow">Help</span>
-                <h2>User manual</h2>
-              </div>
-              {manual?.version && <span className="version-pill">v{manual.version}</span>}
-            </div>
-            <p>Open the operating manual for the version running on this device.</p>
-            {manualError || (manual && !manual.available) ? (
-              <p className="field-hint" role="status">
-                The user manual for this version is not available yet.
-              </p>
-            ) : manual ? (
-              <a
-                className="buttonlike secondary settings-link"
-                href={manual.url ?? manualUrlForVersion(manual.version)}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <FileText /> Open user manual <ExternalLink aria-hidden="true" />
-              </a>
-            ) : (
-              <p className="field-hint" role="status">
-                Checking for the matching manual…
-              </p>
-            )}
           </section>
           <section className="panel settings-card">
             <div className="settings-icon neutral">
@@ -748,9 +750,6 @@ export function SettingsView({
               moves, or deletes one.
             </p>
           </section>
-          {/* Beside the other settings modules, because campaigns label Signal posts just as
-              categories label projects and tags label tasks. */}
-          <SignalCampaignsCard flash={flash} />
         </div>
       </div>
     </>

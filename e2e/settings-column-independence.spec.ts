@@ -32,13 +32,13 @@ const GAP = 18;
 const READING_ORDER = [
   'Project categories',
   'Task tags',
-  'Default views',
+  'Signal campaigns',
   'User manual',
+  'Default views',
   'Branding',
   'Google Drive',
   'Local timezone',
   'Calendar',
-  'Signal campaigns',
 ];
 
 type CardBox = {
@@ -128,9 +128,9 @@ test('each Settings column stacks on its own at desktop width', async ({ page })
 
   const cards = await cardBoxes(page);
   expect(cards.map((card) => card.heading)).toEqual(READING_ORDER);
-  // Two cards in the left stack and seven in the right, and every card in one — a card left as
+  // Three cards in the left stack and six in the right, and every card in one — a card left as
   // the grid's own child would report column -1 and be back in a shared row track.
-  expect(cards.map((card) => card.column)).toEqual([0, 0, 1, 1, 1, 1, 1, 1, 1]);
+  expect(cards.map((card) => card.column)).toEqual([0, 0, 0, 1, 1, 1, 1, 1, 1]);
 
   const [left, right] = [0, 1].map((column) => cards.filter((card) => card.column === column));
 
@@ -177,7 +177,7 @@ test('a Settings card follows its own column, and no card follows the other one'
   // Every later card in the Drive card's own column moved up by exactly what it lost. Not
   // "moved up somewhat": the whole point is that the distance is the content's and nothing
   // else's, so any other number means something is still setting these starting edges.
-  for (const heading of ['Local timezone', 'Calendar', 'Signal campaigns']) {
+  for (const heading of ['Local timezone', 'Calendar']) {
     expect(Math.round(find(connected, heading).top - find(disconnected, heading).top)).toBe(
       Math.round(shrankBy),
     );
@@ -185,7 +185,7 @@ test('a Settings card follows its own column, and no card follows the other one'
 
   // And the neighbouring column did not move at all. This is what leaves no gap: the label
   // stack's start has nothing to do with how tall Drive is, in either state.
-  for (const heading of ['Project categories', 'Task tags']) {
+  for (const heading of ['Project categories', 'Task tags', 'Signal campaigns']) {
     expect(Math.round(find(disconnected, heading).top - find(connected, heading).top)).toBe(0);
   }
 });
