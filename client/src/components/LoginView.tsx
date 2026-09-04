@@ -12,6 +12,7 @@ import { brandStyle } from './ui-shared';
 export function LoginView({ onAuthenticated }: { onAuthenticated: () => void }) {
   const passwordId = useId();
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const branding = DEFAULT_BRANDING;
@@ -45,17 +46,28 @@ export function LoginView({ onAuthenticated }: { onAuthenticated: () => void }) 
         <form className="login-form" onSubmit={submit} noValidate>
           <label htmlFor={passwordId}>
             Password
-            <input
-              id={passwordId}
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              autoFocus
-              required
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              disabled={submitting}
-            />
+            <span className="password-input-wrap">
+              <input
+                id={passwordId}
+                name="password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
+                autoFocus
+                required
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                disabled={submitting}
+              />
+              <button
+                className="password-toggle"
+                type="button"
+                aria-controls={passwordId}
+                aria-expanded={showPassword}
+                onClick={() => setShowPassword((visible) => !visible)}
+              >
+                {showPassword ? 'Hide password' : 'Show password'}
+              </button>
+            </span>
           </label>
           {error ? (
             <p className="form-error" role="alert">
