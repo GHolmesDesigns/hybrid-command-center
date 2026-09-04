@@ -695,13 +695,6 @@ function Editor({
   const [recheckErrors, setRecheckErrors] = useState<Record<string, string>>({});
   const [recheckingId, setRecheckingId] = useState('');
   const [publishPreview, setPublishPreview] = useState<PublishPreview | null>(null);
-  /**
-   * Explicit, per-send permission to send a Buffer target's Drive media as Drive's direct-download
-   * address rather than refuse it. Local to this open post rather than persisted: it is a risk
-   * accepted for one send, not a standing setting, and toggling it re-previews so the plan on
-   * screen always reflects it.
-   */
-  const [driveOverride, setDriveOverride] = useState(false);
   const [publications, setPublications] = useState<SignalPublication[]>([]);
   /**
    * The open provider comparison, keyed by the publication it belongs to.
@@ -895,9 +888,7 @@ function Editor({
     const run = (async () => {
       try {
         setPublishPreview(
-          await send<PublishPreview>(`/signal/posts/${post.id}/publish/preview`, 'POST', {
-            driveOverride,
-          }),
+          await send<PublishPreview>(`/signal/posts/${post.id}/publish/preview`, 'POST', {}),
         );
       } catch (reason) {
         setError((reason as Error).message);
@@ -918,9 +909,7 @@ function Editor({
     const run = (async () => {
       try {
         setPublishPreview(
-          await send<PublishPreview>(`/signal/posts/${post.id}/publish-now/preview`, 'POST', {
-            driveOverride,
-          }),
+          await send<PublishPreview>(`/signal/posts/${post.id}/publish-now/preview`, 'POST', {}),
         );
       } catch (reason) {
         setError((reason as Error).message);
@@ -967,33 +956,9 @@ function Editor({
         publishPreview?.timing === 'now'
           ? `/signal/posts/${post.id}/publish-now/preview`
           : `/signal/posts/${post.id}/publish/preview`;
-      setPublishPreview(await send<PublishPreview>(previewPath, 'POST', { driveOverride }));
+      setPublishPreview(await send<PublishPreview>(previewPath, 'POST', {}));
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Could not save the accounts.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  /**
-   * Flips the Drive override and re-previews against it, the same way a target selection does: a
-   * toggle the open preview does not reflect would be a plan the person confirms after looking at a
-   * different one, and the plan hash would refuse it at commit anyway — later and less clearly.
-   */
-  const toggleDriveOverride = async (next: boolean) => {
-    if (!post) return;
-    setDriveOverride(next);
-    if (previewInFlight.current) await previewInFlight.current;
-    setBusy(true);
-    setError('');
-    try {
-      const previewPath =
-        publishPreview?.timing === 'now'
-          ? `/signal/posts/${post.id}/publish-now/preview`
-          : `/signal/posts/${post.id}/publish/preview`;
-      setPublishPreview(await send<PublishPreview>(previewPath, 'POST', { driveOverride: next }));
-    } catch (reason) {
-      setError((reason as Error).message);
     } finally {
       setBusy(false);
     }
@@ -1010,7 +975,6 @@ function Editor({
           : `/signal/posts/${post.id}/publish`;
       const publication = await send<SignalPublication>(path, 'POST', {
         planHash: publishPreview.planHash,
-        driveOverride,
       });
       setPublications((current) => [publication, ...current]);
       setPublishPreview(null);
@@ -1994,8 +1958,6 @@ function Editor({
                 onRecheckRole={recheckRoleMedia}
                 resolveDrive={resolveRoleDrive}
                 busy={busy}
-                driveOverride={driveOverride}
-                onDriveOverrideChange={(next) => void toggleDriveOverride(next)}
               />
               {publishPreview.warnings.map((warning) => (
                 <p className="form-warning" key={warning}>

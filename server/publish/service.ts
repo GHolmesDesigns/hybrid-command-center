@@ -159,7 +159,6 @@ export class PublishService {
   async preview(
     postId: string,
     listedTargets?: readonly PublishTarget[],
-    driveOverride = false,
     timing: PublishTiming = 'scheduled',
   ): Promise<PublishPreview & { request?: PublishRequest; mediaSources?: SignalPostMedia[] }> {
     const publishingConfigured = this.provider.available || bufferConfigured();
@@ -217,14 +216,13 @@ export class PublishService {
         this.clock(),
         await this.signal.listVariants(postId),
         await this.signal.listPublishTargets(postId),
-        driveOverride,
         timing,
       ),
     );
   }
 
-  previewNow(postId: string, listedTargets?: readonly PublishTarget[], driveOverride = false) {
-    return this.preview(postId, listedTargets, driveOverride, 'now');
+  previewNow(postId: string, listedTargets?: readonly PublishTarget[]) {
+    return this.preview(postId, listedTargets, 'now');
   }
 
   /** Uploads Drive sources once, after the hash gate and immediately before the post operation. */
@@ -318,10 +316,9 @@ export class PublishService {
     postId: string,
     expectedHash: string,
     listedTargets?: readonly PublishTarget[],
-    driveOverride = false,
     timing: PublishTiming = 'scheduled',
   ): Promise<SignalPublication> {
-    const plan = await this.preview(postId, listedTargets, driveOverride, timing);
+    const plan = await this.preview(postId, listedTargets, timing);
     // The gate is every refusal in the plan, per-channel ones included, so a reason the preview
     // showed the user can never be stepped over at commit.
     const blockers = publishPreviewRefusals(plan);
@@ -509,13 +506,8 @@ export class PublishService {
     return this.reconcileAfterAnsweredSubmit(this.get(publicationId) as SignalPublication);
   }
 
-  submitNow(
-    postId: string,
-    expectedHash: string,
-    listedTargets?: readonly PublishTarget[],
-    driveOverride = false,
-  ) {
-    return this.submit(postId, expectedHash, listedTargets, driveOverride, 'now');
+  submitNow(postId: string, expectedHash: string, listedTargets?: readonly PublishTarget[]) {
+    return this.submit(postId, expectedHash, listedTargets, 'now');
   }
 
   /**

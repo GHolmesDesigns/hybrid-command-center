@@ -155,7 +155,7 @@ export async function callWorkspaceReadTool(
           return failed('Signal post not found.', mcpCoordinationNotFound());
         }
         const publisher = deps.previewPublisher ?? defaultPreviewPublisher(db, now);
-        const preview = await publisher.preview(args.postId, [], args.driveOverride ?? false);
+        const preview = await publisher.preview(args.postId, []);
         return success(preview);
       }
       case 'workspace_get_subject_context': {

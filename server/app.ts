@@ -2519,58 +2519,34 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   });
   app.post('/api/signal/posts/:id/publish/preview', async (req, res, next) => {
     try {
-      const input = z.object({ driveOverride: z.boolean().optional() }).parse(req.body ?? {});
       const listed = await resolvePublishingTargets(db, publishProvider, bufferAccounts, clock);
-      res.json(await publisher.preview(req.params.id, listed, input.driveOverride ?? false));
+      res.json(await publisher.preview(req.params.id, listed));
     } catch (error) {
       next(error);
     }
   });
   app.post('/api/signal/posts/:id/publish-now/preview', async (req, res, next) => {
     try {
-      const input = z.object({ driveOverride: z.boolean().optional() }).parse(req.body ?? {});
       const listed = await resolvePublishingTargets(db, publishProvider, bufferAccounts, clock);
-      res.json(await publisher.previewNow(req.params.id, listed, input.driveOverride ?? false));
+      res.json(await publisher.previewNow(req.params.id, listed));
     } catch (error) {
       next(error);
     }
   });
   app.post('/api/signal/posts/:id/publish', async (req, res, next) => {
     try {
-      const input = z
-        .object({ planHash: z.string().length(64), driveOverride: z.boolean().optional() })
-        .parse(req.body);
+      const input = z.object({ planHash: z.string().length(64) }).parse(req.body);
       const listed = await resolvePublishingTargets(db, publishProvider, bufferAccounts, clock);
-      res
-        .status(201)
-        .json(
-          await publisher.submit(
-            req.params.id,
-            input.planHash,
-            listed,
-            input.driveOverride ?? false,
-          ),
-        );
+      res.status(201).json(await publisher.submit(req.params.id, input.planHash, listed));
     } catch (error) {
       next(error);
     }
   });
   app.post('/api/signal/posts/:id/publish-now', async (req, res, next) => {
     try {
-      const input = z
-        .object({ planHash: z.string().length(64), driveOverride: z.boolean().optional() })
-        .parse(req.body);
+      const input = z.object({ planHash: z.string().length(64) }).parse(req.body);
       const listed = await resolvePublishingTargets(db, publishProvider, bufferAccounts, clock);
-      res
-        .status(201)
-        .json(
-          await publisher.submitNow(
-            req.params.id,
-            input.planHash,
-            listed,
-            input.driveOverride ?? false,
-          ),
-        );
+      res.status(201).json(await publisher.submitNow(req.params.id, input.planHash, listed));
     } catch (error) {
       next(error);
     }
