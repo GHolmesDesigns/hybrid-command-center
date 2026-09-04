@@ -20,6 +20,7 @@ import {
   App,
 } from './App.test-setup';
 import { SIGNAL_CHANNEL_TREATMENT } from '../../shared/signal';
+import { DEFAULT_BRANDING } from '../../shared/branding';
 
 const openCalendar = async (entry = '/calendar?month=2026-09', heading = /September 2026/) => {
   render(
@@ -142,6 +143,53 @@ describe('Calendar', () => {
       expect(chip.style.getPropertyValue('--channel-border')).toBe(border);
       expect(chip.style.getPropertyValue('--channel-text')).toBe(text);
     }
+  });
+
+  it('shows a bound client by name and initials with its custom branding', async () => {
+    septemberWith({
+      posts: [
+        signalPost('s1', 'Client-owned post', '2026-09-14', {
+          client: {
+            id: 'client-1',
+            name: 'North Star',
+            branding: { logoUrl: '', colorOne: '#14213d', colorTwo: '#fca311' },
+          },
+        }),
+      ],
+    });
+    await openCalendar();
+
+    const day = await screen.findByRole('region', { name: /September 14, 2026/ });
+    const cue = within(day).getByTitle('Client: North Star');
+    expect(within(cue).getByText('NS')).toHaveAttribute('aria-hidden', 'true');
+    expect(within(cue).getByText('North Star')).toBeVisible();
+    expect(cue.style.getPropertyValue('--client-cue-bg')).toBe('#14213d');
+    expect(cue.style.getPropertyValue('--client-cue-fg')).toBe('#fca311');
+  });
+
+  it('uses readable fallback branding for a bound client without a custom palette', async () => {
+    septemberWith({
+      posts: [
+        signalPost('s1', 'Fallback-branded post', '2026-09-14', {
+          client: { id: 'client-1', name: 'Plain Client' },
+        }),
+      ],
+    });
+    await openCalendar();
+
+    const cue = await screen.findByTitle('Client: Plain Client');
+    expect(cue.style.getPropertyValue('--client-cue-bg')).toBe(DEFAULT_BRANDING.background);
+    expect(cue.style.getPropertyValue('--client-cue-fg')).toBe(DEFAULT_BRANDING.foreground);
+    expect(cue).toHaveTextContent('PCPlain Client');
+  });
+
+  it('shows no guessed client cue when a scheduled post is unbound', async () => {
+    septemberWith({ posts: [signalPost('s1', 'Unbound post', '2026-09-14')] });
+    await openCalendar();
+
+    const day = await screen.findByRole('region', { name: /September 14, 2026/ });
+    expect(within(day).queryByTitle(/Client:/)).toBeNull();
+    expect(within(day).queryByText(/No client/i)).toBeNull();
   });
 
   it('counts the two kinds separately rather than as one total', async () => {
