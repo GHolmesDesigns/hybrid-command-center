@@ -357,6 +357,27 @@ const productionContentSecurityPolicy = {
   },
 } as const;
 
+const manualContentSecurityPolicy = (html: string): string => {
+  const hashesFor = (tag: 'style' | 'script') =>
+    Array.from(
+      html.matchAll(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'gi')),
+      ([, body]) => `'sha256-${crypto.createHash('sha256').update(body).digest('base64')}'`,
+    );
+
+  return [
+    "default-src 'none'",
+    `style-src ${hashesFor('style').join(' ')} https://fonts.googleapis.com`,
+    "style-src-attr 'none'",
+    'font-src https://fonts.gstatic.com',
+    `script-src ${hashesFor('script').join(' ')}`,
+    "script-src-attr 'none'",
+    'img-src data: https:',
+    "base-uri 'none'",
+    "form-action 'none'",
+    "frame-ancestors 'none'",
+  ].join('; ');
+};
+
 export type AppOptions = {
   production?: boolean;
   /**
@@ -1913,24 +1934,15 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       url: available ? manualUrlForVersion(APP_VERSION) : null,
     });
   });
-  app.get(`${MANUAL_ROUTE}/:version`, (req, res, next) => {
+  app.get(`${MANUAL_ROUTE}/:version`, (req, res) => {
     const manualPath = path.resolve('docs/manual', MANUAL_FILENAME);
     if (req.params.version !== APP_VERSION || !fs.existsSync(manualPath)) {
       res.status(404).json({ error: 'The user manual for this version is unavailable.' });
       return;
     }
-    res.sendFile(
-      manualPath,
-      { headers: { 'Content-Type': 'text/html; charset=utf-8' } },
-      (error?: Error) => {
-        if (!error) return;
-        if (res.headersSent) {
-          req.log.error({ err: error }, 'User manual delivery failed');
-          return;
-        }
-        next(error);
-      },
-    );
+    const html = fs.readFileSync(manualPath, 'utf8');
+    if (production) res.set('Content-Security-Policy', manualContentSecurityPolicy(html));
+    res.type('html').send(html);
   });
   app.put('/api/settings/branding', (req, res, next) => {
     try {

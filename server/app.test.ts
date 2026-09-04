@@ -870,6 +870,30 @@ describe('command center API', () => {
     await request(app).get(manualUrlForVersion('0.0.0')).expect(404);
   });
 
+  it('allows only the manual exact embedded style and script in production', async () => {
+    const response = await request(createApp(db, { production: true }))
+      .get(manualUrlForVersion(APP_VERSION))
+      .expect(200);
+    const policy = response.headers['content-security-policy'];
+    const hashesFor = (tag: 'style' | 'script') =>
+      Array.from(
+        response.text.matchAll(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'gi')),
+        ([, body]) => `'sha256-${crypto.createHash('sha256').update(body).digest('base64')}'`,
+      );
+
+    expect(hashesFor('style')).not.toHaveLength(0);
+    expect(hashesFor('script')).not.toHaveLength(0);
+    for (const hash of [...hashesFor('style'), ...hashesFor('script')]) {
+      expect(policy).toContain(hash);
+    }
+    expect(policy).toContain("default-src 'none'");
+    expect(policy).toContain('https://fonts.googleapis.com');
+    expect(policy).toContain('font-src https://fonts.gstatic.com');
+    expect(policy).not.toContain("script-src 'unsafe-inline'");
+    expect(policy).not.toContain("style-src 'unsafe-inline'");
+    expect(policy).toContain("style-src-attr 'none'");
+  });
+
   describe('sidebar colours and logo', () => {
     const branding = (overrides: Record<string, string> = {}) => ({
       mark: 'GH',
