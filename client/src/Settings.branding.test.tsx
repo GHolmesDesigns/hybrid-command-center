@@ -64,7 +64,7 @@ describe('sidebar branding', () => {
     expect(sidebar().querySelector('.brand-mark')).toBeNull();
   });
 
-  it('links the brand mark to the company site with a visible new-tab affordance', async () => {
+  it('links the brand mark to the company site without a new-tab icon', async () => {
     await renderSettings();
 
     const link = sidebar().querySelector<HTMLAnchorElement>('.brand-mark-link');
@@ -73,7 +73,8 @@ describe('sidebar branding', () => {
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
     expect(link).toHaveAccessibleName('Open Test Command Center website in a new tab');
-    expect(link?.querySelector('.brand-new-tab')).toBeVisible();
+    expect(link?.querySelector('.brand-new-tab')).toBeNull();
+    expect(link?.querySelector('svg')).toBeNull();
     expect(link?.querySelector('.brand-mark')).toHaveTextContent('TC');
   });
 

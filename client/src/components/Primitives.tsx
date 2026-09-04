@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { CalendarDays, ExternalLink, FolderKanban, Search, X } from 'lucide-react';
+import { CalendarDays, FolderKanban, Search, X } from 'lucide-react';
 import type { DriveStatus, Priority, Task, TaskStatus, TaskType } from '../../../shared/types';
 import type { Branding } from '../../../shared/branding';
 import { formatDate } from './formatting';
@@ -38,7 +38,6 @@ export function BrandMark({ branding }: { branding: Branding }) {
           {branding.mark}
         </div>
       )}
-      <ExternalLink className="brand-new-tab" aria-hidden="true" />
     </a>
   );
 }
