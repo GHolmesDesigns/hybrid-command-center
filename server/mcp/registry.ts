@@ -394,7 +394,6 @@ const workspaceReadTools: McpToolRegistryEntry[] = [
       type: 'object',
       properties: {
         postId: { type: 'string' },
-        driveOverride: { type: 'boolean' },
       },
       required: ['postId'],
       additionalProperties: false,

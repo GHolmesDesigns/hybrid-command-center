@@ -8,6 +8,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.13.18] - 2026-09-04
+
+### Fixed
+
+- Buffer now refuses Drive media before submission and explains how to complete the post through a
+  supported route.
+
+### Breaking changes
+
+None.
+
 ## [5.13.17] - 2026-09-04
 
 ### Added

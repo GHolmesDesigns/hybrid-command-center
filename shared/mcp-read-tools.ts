@@ -80,7 +80,6 @@ export const mcpSignalQueueSnapshotArgsSchema = z
 export const mcpSignalPublishPreviewArgsSchema = z
   .object({
     postId: z.string().trim().min(1).max(200),
-    driveOverride: z.boolean().optional(),
   })
   .strict();
 
