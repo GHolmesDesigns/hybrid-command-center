@@ -35,6 +35,7 @@ import {
 } from '../../../shared/signal';
 import type { Task } from '../../../shared/types';
 import { signalChannelStyle } from './ui-shared';
+import { ClientCue } from './ClientCue';
 import { Empty } from './Primitives';
 import { PageHead } from './Shell';
 
@@ -113,6 +114,7 @@ function PostRow({ post }: { post: SignalPost }) {
       </div>
       <p className="cal-text">{post.text}</p>
       <div className="cal-item-foot">
+        <ClientCue client={post.client} />
         {post.channels.length > 0 && (
           <ul className="cal-channels">
             {post.channels.map((channel) => {

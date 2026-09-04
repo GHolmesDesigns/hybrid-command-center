@@ -1,13 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-  type FormEvent,
-} from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -65,7 +56,6 @@ import {
   type SignalPostMedia,
 } from '../../../shared/signal-media';
 import { formatFileSize } from '../../../shared/drive';
-import { resolveClientBranding } from '../../../shared/branding';
 import {
   CALENDAR_VIEWS,
   calendarViewRange,
@@ -78,6 +68,7 @@ import {
   type ViewDefaults,
 } from '../../../shared/view-defaults';
 import { signalChannelStyle, type TagDraft } from './ui-shared';
+import { ClientCue } from './ClientCue';
 import { Empty } from './Primitives';
 import { Select, TagChipInput } from './FormControls';
 import { SignalCampaignAnalyticsPanel } from './SignalCampaignAnalytics';
@@ -302,36 +293,6 @@ function ChannelChip({ channel, labelled = true }: { channel: SignalChannel; lab
   );
 }
 
-const clientInitials = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join('')
-    .toUpperCase();
-
-/** A client cue is named and initialled; its palette is supportive, never the sole identifier. */
-function ClientCue({ post }: { post: SignalPost }) {
-  if (!post.client) return null;
-  const clientBranding = resolveClientBranding(post.client.branding);
-  return (
-    <span
-      className="signal-client-cue"
-      style={
-        {
-          '--client-cue-bg': clientBranding.background,
-          '--client-cue-fg': clientBranding.foreground,
-        } as CSSProperties
-      }
-      title={`Client: ${post.client.name}`}
-    >
-      <span aria-hidden="true">{clientInitials(post.client.name)}</span>
-      <span>{post.client.name}</span>
-    </span>
-  );
-}
-
 /**
  * Planning status, delivery, and lifecycle/provenance cues — each named separately.
  *
@@ -347,7 +308,7 @@ function PostMeta({ post, delivery }: { post: SignalPost; delivery: CardDelivery
         <span className="sr-only">Planning: </span>
         {SIGNAL_STATUS_LABEL[post.status]}
       </span>
-      <ClientCue post={post} />
+      <ClientCue client={post.client} />
       <span className={`signal-card-delivery delivery-${delivery.state.toLowerCase()}`}>
         <CardDeliveryIcon state={delivery.state} />
         <span className="sr-only">Delivery: </span>
