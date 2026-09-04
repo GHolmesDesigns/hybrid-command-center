@@ -145,7 +145,6 @@ button svg,
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
   flex: none;
   color: var(--sidebar-fg);
   text-decoration: none;
@@ -166,12 +165,6 @@ button svg,
   font-weight: 800;
   font-size: 13px;
   letter-spacing: -0.5px;
-  flex: none;
-}
-.brand-new-tab {
-  width: 13px;
-  height: 13px;
-  color: var(--sidebar-fg);
   flex: none;
 }
 .brand-logo {

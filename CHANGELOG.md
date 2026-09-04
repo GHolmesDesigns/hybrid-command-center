@@ -8,6 +8,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.13.19] - 2026-09-04
+
+### Changed
+
+- The sidebar brand mark keeps its company website link without showing a decorative new-tab icon.
+
+### Breaking changes
+
+None.
+
 ## [5.13.18] - 2026-09-04
 
 ### Fixed
