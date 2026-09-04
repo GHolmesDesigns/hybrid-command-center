@@ -6022,6 +6022,25 @@ button.tag-chip.toggle.active {
   padding: 12px 14px;
   background: #fff;
 }
+.password-input-wrap {
+  position: relative;
+  display: block;
+}
+.password-input-wrap input {
+  padding-right: 116px;
+}
+.login-form .password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  width: auto;
+  min-height: 32px;
+  padding: 4px 6px;
+  transform: translateY(-50%);
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+}
 .login-form button {
   width: 100%;
 }
