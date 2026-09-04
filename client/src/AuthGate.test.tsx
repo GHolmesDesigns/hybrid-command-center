@@ -104,6 +104,37 @@ describe('AuthGate', () => {
 });
 
 describe('LoginView', () => {
+  it('keeps the password hidden by default and announces visibility changes', () => {
+    const setItem = vi.spyOn(window.localStorage, 'setItem');
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
+    render(<LoginView onAuthenticated={vi.fn()} />);
+
+    const password = screen.getByLabelText('Password');
+    const toggle = screen.getByRole('button', { name: 'Show password' });
+    expect(password).toHaveAttribute('type', 'password');
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(toggle).toHaveAttribute('aria-controls', password.id);
+
+    toggle.focus();
+    expect(document.activeElement).toBe(toggle);
+    fireEvent.change(password, { target: { value: 'operator-secret' } });
+    fireEvent.click(toggle);
+
+    expect(password).toHaveAttribute('type', 'text');
+    expect(password).toHaveValue('operator-secret');
+    expect(screen.getByRole('button', { name: 'Hide password' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(setItem).not.toHaveBeenCalled();
+    expect(log).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide password' }));
+    expect(password).toHaveAttribute('type', 'password');
+    expect(password).toHaveValue('operator-secret');
+  });
+
   it('shows a generic error when sign-in fails', async () => {
     vi.spyOn(api, 'login').mockRejectedValue(new Error('Invalid credentials.'));
     const onAuthenticated = vi.fn();
