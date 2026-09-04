@@ -56,31 +56,34 @@ describe('the Settings layout', () => {
     await renderSettings();
 
     const [connections, appearance] = columns();
-    expect(headingsIn(connections)).toEqual(['Project categories', 'Task tags']);
+    expect(headingsIn(connections)).toEqual([
+      'Project categories',
+      'Task tags',
+      'Signal campaigns',
+    ]);
     expect(headingsIn(appearance)).toEqual([
-      'Default views',
       'User manual',
+      'Default views',
       'Branding',
       'Google Drive',
       'Local timezone',
       'Calendar',
-      'Signal campaigns',
     ]);
 
     // One reading order, and it is the document's. Nothing reorders these in CSS, so this is
     // also the order the cards appear in at both widths, and the order the keyboard walks:
-    // below 1100px the two stacks sit one under the other and the eight cards read straight
+    // below 1100px the two stacks sit one under the other and the nine cards read straight
     // through. `e2e/settings-column-independence.spec.ts` measures that they really do.
     expect(headingsIn(document.querySelector('.settings-layout')!)).toEqual([
       'Project categories',
       'Task tags',
-      'Default views',
+      'Signal campaigns',
       'User manual',
+      'Default views',
       'Branding',
       'Google Drive',
       'Local timezone',
       'Calendar',
-      'Signal campaigns',
     ]);
     expect(
       headingsIn(document.querySelector('.settings-layout')!).filter((heading) =>
