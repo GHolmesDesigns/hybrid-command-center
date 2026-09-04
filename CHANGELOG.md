@@ -8,6 +8,18 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.13.16] - 2026-09-04
+
+### Fixed
+
+- Brought the hosted manual back in sync with the current Files, Agents, MCP, Drive-write, backup,
+  and operations workflows, and restored its full presentation under the production security
+  policy.
+
+### Breaking changes
+
+None.
+
 ## [5.13.15] - 2026-09-03
 
 ### Changed

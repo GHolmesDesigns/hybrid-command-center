@@ -968,7 +968,7 @@
 
     <div class="railfoot">
       <b>G.Holmes Designs</b><br />
-      Version 5.13.15<br />
+      Version 5.13.16<br />
       Local-first &middot; hosted-capable
     </div>
   </aside>
@@ -978,7 +978,7 @@
       <div class="inner">
         <p class="eyebrow">
           <span>G.Holmes Designs &middot; Studio operations</span>
-          <span class="draft">Release 5.13.15</span>
+          <span class="draft">Release 5.13.16</span>
         </p>
         <h1>Hybrid Command Center</h1>
         <p class="deck">
@@ -989,7 +989,7 @@
         <dl class="stats">
           <div class="stat">
             <dt>Version</dt>
-            <dd>5.13.15</dd>
+            <dd>5.13.16</dd>
           </div>
           <div class="stat">
             <dt>Runtime</dt>
@@ -1364,9 +1364,11 @@
             <pre><code>client/     React + TypeScript + Vite; typed HTTP boundary in src/api.ts
 server/     Express local API
   domain/   deadline and dependency rules, framework-free
-  drive/    DriveProvider, Google impl, provisioning, read-only browse.ts
+  drive/    read-only browse, confirmed writes, agent approvals, media resolution
   signal/   SignalProvider (read), service.ts (writes), campaigns, queue-health
-  publish/  Post Bridge wire, upload, analytics
+  publish/  Post Bridge + Buffer providers, inventory, analytics
+  mcp/      stdio + authenticated HTTP, tools, resources, prompts, work sessions
+  agent-coordination/  handoffs, leases, notes, retained audit events
   app.ts    validated HTTP endpoints        db.ts  SQLite schema
 shared/     cross-layer types, workflow constants, branding defaults
 e2e/        Playwright critical-flow coverage
@@ -1376,7 +1378,8 @@ data/       gitignored SQLite database and backups</code></pre>
               outside system sits behind a narrow provider interface: <code>DriveProvider</code> for
               browsing, <code>DriveMediaProvider</code> for one resolved media link,
               <code>SignalProvider</code> for reading the schedule,
-              <code>AnalyticsProvider</code> for figures.
+              <code>AnalyticsProvider</code> for figures, and separate provider interfaces for
+              confirmed Drive writes, Buffer reads and writes, and provider inventory.
             </p>
             <p>
               Timestamps are stored as UTC ISO strings. Date-only deadlines are interpreted in the
@@ -1400,10 +1403,10 @@ data/       gitignored SQLite database and backups</code></pre>
             <ul>
               <li><code>client/</code> never imports a Google SDK and never reads a secret.</li>
               <li>
-                <code>server/drive/browse.ts</code> is the read-only half of Drive and must stay
-                that way. Writes live in <code>service.ts</code>. Adding upload, download, move,
-                rename, or delete means a <em>new module beside</em> <code>browse.ts</code> with its
-                own confirmation flow &mdash; never a method on the browsing path.
+                <code>server/drive/browse.ts</code> is the read-only half of Drive and stays that
+                way. Folder creation and uploads live in the separate confirmed write path. Each
+                write names its exact target and action, is hash-checked against its preview, and
+                records an audit event. Downloads, moves, renames, and deletes remain unavailable.
               </li>
               <li>
                 <code>SignalProvider</code> has no write method <em>by construction</em>. Adding one
@@ -1960,6 +1963,33 @@ http://localhost:8787</code></pre>
               <code>drive_steps</code> recorded for it, matched by ID. Any other folder ID is
               refused rather than fetched.
             </p>
+            <p>
+              <strong>Create folder</strong> and <strong>Upload file</strong> are separate confirmed
+              capabilities beside browsing. Preview the exact name, destination, size, MIME type,
+              and content hash, then confirm that unchanged plan. Files still cannot download,
+              move, rename, or delete anything in Drive.
+            </p>
+            <h4>Agent Drive-write approvals</h4>
+            <p>
+              The optional <code>drive:write-request</code> scope lets an agent request only a
+              folder creation or a bounded upload. It does not execute the write. Review the exact
+              action, target, agent label, request time, content metadata, and confirmation text in
+              <strong>Agents &rarr; Drive write requests</strong>, then approve or deny it yourself.
+            </p>
+            <ul>
+              <li>The global pending queue is limited to 20 requests and 50 MiB decoded upload data.</li>
+              <li>One upload is limited to 10 MiB; a pending request expires after 24 hours.</li>
+              <li>An approval executes immediately under a one-hour lease.</li>
+              <li>
+                A timeout or abandoned lease becomes <strong>Provider outcome is uncertain</strong>.
+                Never retry it blindly: inspect the exact Drive folder and activity first because
+                Google may have accepted the write.
+              </li>
+              <li>
+                Terminal rows retain metadata and evidence but purge upload content. The card shows
+                pending count/bytes, oldest pending age, expired count, and uncertain count.
+              </li>
+            </ul>
           </article>
         </div>
       </section>
@@ -2107,7 +2137,7 @@ http://localhost:8787</code></pre>
           <h2>The modules</h2>
         </div>
         <p class="sintro">
-          Nine places to be. Each one is labelled with what it is allowed to do to your data.
+          Ten places to be. Each one is labelled with what it is allowed to do to your data.
         </p>
 
         <div class="lanes">
@@ -2115,7 +2145,7 @@ http://localhost:8787</code></pre>
             <span class="chip">Operator</span>
             <h3>Where each job lives</h3>
             <p>
-              Nine areas, reached from the sidebar. The tag beside each name says what it is allowed
+              Ten areas, reached from the sidebar. The tag beside each name says what it is allowed
               to do: <strong>READ</strong> only shows you things, <strong>WRITE</strong> changes
               them, and <strong>READ ONLY</strong> means the area physically cannot alter what it is
               showing you, however hard you click.
@@ -2166,10 +2196,11 @@ http://localhost:8787</code></pre>
                 </p>
               </div>
               <div class="mod">
-                <h4>Files <span class="rw">READ ONLY</span></h4>
+                <h4>Files <span class="rw">READ / CONFIRMED WRITE</span></h4>
                 <p>
                   Browse a project's Drive folder. Type, size, and modified date on every row, with
-                  Open in Drive. It cannot upload, download, move, rename, or delete.
+                  Open in Drive. A separate preview-and-confirm flow can create a folder or upload a
+                  file; downloads, moves, renames, and deletes remain unavailable.
                 </p>
               </div>
               <div class="mod">
@@ -2177,6 +2208,14 @@ http://localhost:8787</code></pre>
                 <p>
                   A month agenda putting scheduled content beside task due dates, kept as two groups
                   rather than one merged list.
+                </p>
+              </div>
+              <div class="mod">
+                <h4>Agents <span class="rw">READ / CONTROL</span></h4>
+                <p>
+                  Set up local or hosted MCP connections, issue scoped credentials, verify
+                  connection health, review handoffs and leased work sessions, and approve or deny
+                  agent-requested Drive writes.
                 </p>
               </div>
               <div class="mod">
@@ -2214,8 +2253,8 @@ http://localhost:8787</code></pre>
                   </tr>
                   <tr>
                     <td>Files</td>
-                    <td><code>DriveProvider</code> via <code>browse.ts</code></td>
-                    <td>nothing</td>
+                    <td>scoped browse + separate <code>DriveWriteProvider</code></td>
+                    <td>confirmed folder create or upload only</td>
                   </tr>
                   <tr>
                     <td>Calendar</td>
@@ -2236,6 +2275,11 @@ http://localhost:8787</code></pre>
                     <td>Figures</td>
                     <td><code>AnalyticsProvider</code></td>
                     <td>metrics tables only</td>
+                  </tr>
+                  <tr>
+                    <td>Agents</td>
+                    <td>MCP registry, credentials, handoffs, leases, Drive approvals</td>
+                    <td>agent registry and coordination rows; explicit Drive decisions</td>
                   </tr>
                   <tr>
                     <td>Settings / branding</td>
@@ -2262,9 +2306,9 @@ http://localhost:8787</code></pre>
             <h3>Module-level rules</h3>
             <ul>
               <li>
-                <strong>Files reads and nothing else.</strong> Widening it changes what
-                <code>/files</code> promises, so <code>README.md</code> and the user manual change
-                in the same branch.
+                <strong>Files browsing remains read-only.</strong> Its separate confirmed-write
+                service may create folders and upload files after an exact preview; it cannot
+                download, move, rename, or delete.
               </li>
               <li>
                 <strong>Branding validates from one place.</strong> <code>brandingIssues</code>,
@@ -2539,8 +2583,10 @@ http://localhost:8787</code></pre>
             <p>
               An <strong>agent</strong> is an AI assistant working inside a code editor. Left alone,
               one of those assistants has no idea what another one is doing. Connecting them to this
-              app gives them a shared noticeboard: one can pin up a job, another can take it down
-              and report back, and you can read the board. That is the entire feature.
+              app gives them a governed workspace connection. Depending on the scopes you approve,
+              they can read bounded workspace and Signal context, perform selected local writes,
+              coordinate handoffs and leased work sessions, and request a Drive write for you to
+              approve. Provider publishing is never exposed as an MCP write.
             </p>
             <p>
               Making the connection is an engineer's job and it is described in the next panel. What
@@ -2653,12 +2699,10 @@ http://localhost:8787</code></pre>
 
             <h4>When a client says the server failed</h4>
             <p>
-              Each connected client starts its own private copy of the coordination server and stops
-              it when the client closes. Nothing is shared, and you never start one yourself. If a
-              client shows the connection as <em>failed</em>, that client's copy died and it will
-              not start another one on its own &mdash; there is no retry and usually no restart
-              button. Quit that client fully and reopen it. On Windows that means quitting from the
-              system tray, not closing the window.
+              A local stdio client starts its own helper and stops it when the client closes. A
+              hosted client instead shares the authenticated HTTPS service. Open
+              <strong>Agents &rarr; Connection health</strong> to distinguish configuration,
+              authentication, transport, and target-workspace failures before restarting anything.
             </p>
             <p>
               Restarting one client does not affect the others, and a failed connection never harms
@@ -2674,9 +2718,10 @@ http://localhost:8787</code></pre>
               any row to read its notes.
             </p>
             <p>
-              One control here is yours: cancelling a row that has stalled. It asks you for a
-              reason, and that reason is kept. Creating, claiming, annotating, and completing are
-              done by the assistants themselves &mdash; there are no buttons for those.
+              You can cancel a stalled handoff with a retained reason and reclaim an expired work
+              lease. The same page shows connection setup, scoped credentials, target-client
+              verification, work sessions, the append-only agent activity trail, and pending Drive
+              write approvals.
             </p>
 
             <div class="note is-crit">
@@ -2688,10 +2733,13 @@ http://localhost:8787</code></pre>
 
             <h4>What a connected assistant cannot do</h4>
             <p>
-              In version 5.5.0 this connection carries seven handoff actions and one inbox list, and
-              nothing else. Through it, an assistant cannot create a client or a project, edit a
-              task, schedule or publish content, or reach Google Drive. Those tools are planned;
-              tools that would publish on your behalf are deliberately left out.
+              The current registry contains 62 bounded tools across coordination, leased work,
+              workspace tasks and projects, Signal planning, imports, settings, Drive requests,
+              diagnostics, and read-only provider views. Capabilities are credential-scoped. There
+              is no MCP tool that submits, updates, cancels, or retries a provider publication.
+              Ad hoc Drive folder creation and uploads stop at an operator approval request; the
+              separately scoped <code>drive_sync</code> tool can only provision standard folder
+              skeletons.
             </p>
             <p>
               So anything an assistant genuinely changes in your workspace, it changes the same way
@@ -2708,10 +2756,10 @@ http://localhost:8787</code></pre>
               them can be edited afterwards.
             </p>
             <div class="note">
-              <strong>That record has no screen yet.</strong> What you can read in the app is the
-              handoff history under <strong>Agents &rarr; Agent handoffs</strong>. Reaching the
-              fuller record means opening the database directly, which is an engineer's task. Ask
-              for it, and ask them to take a backup first &mdash; Section 08.
+              <strong>The Agents page is the control room.</strong> It exposes the retained activity
+              trail without exposing credentials or raw provider responses. Rotate or revoke a
+              credential there, and use target-client verification after the replacement client
+              makes a successful call.
             </div>
           </article>
 
@@ -2799,25 +2847,29 @@ MCP_AGENT_LABEL = "codex-release"</code></pre>
 
             <h3>Hosted HTTPS connection</h3>
             <p>
-              First sign in as the operator. An authenticated
-              <code>POST /api/auth/mcp-bearer</code> issues a bearer once; a cookie-authenticated
-              request must include the session's CSRF token. Store the returned
-              <code>hcc_mcp_&hellip;</code> value in the MCP client's secret storage, never in this
-              repository or a handoff message. Configure the client with:
+              Start in <strong>Agents &rarr; Connection setup</strong>. Choose the client, assign its
+              unique label and least-privilege scopes, then issue the one-time credential. Cursor,
+              Claude Code, and Codex receive a client-specific ready-to-paste setup. Store the
+              returned <code>hcc_mcp_&hellip;</code> value only in that client's secret storage.
             </p>
             <pre><code>{
   "url": "https://your-hcc-host/api/mcp",
   "headers": {
-    "Authorization": "Bearer &lt;issued MCP bearer&gt;",
-    "x-agent-label": "cursor-planning"
+    "Authorization": "Bearer &lt;issued MCP bearer&gt;"
   }
 }</code></pre>
             <p>
-              Send the <code>x-agent-label</code> header on every request. Bearer-authenticated MCP
-              calls do not need a CSRF header. Logout, password change, and database restore revoke
-              the bearer because it is bound to the operator session; issue a new one and update the
-              client's secret when that happens. Network MCP is not available in the ordinary
-              passwordless loopback runtime.
+              Every request sends the Authorization header. The label and scopes are bound to the
+              credential, so do <strong>not</strong> add <code>x-agent-label</code> by hand; a
+              conflicting label is rejected. Password change, session-secret rotation, credential
+              rotation or revocation, and database restore can require a replacement credential.
+              Verify the replacement only after that target client makes a successful call.
+            </p>
+            <p>
+              Claude Desktop, claude.ai chat, and Cowork use MCP OAuth instead: add only the server
+              URL under account-level Connectors, click Connect, then sign in and approve the label
+              and scopes in the browser. Do not paste a bearer or add request headers to that OAuth
+              connection.
             </p>
             <div class="note">
               <strong>Why the passwordless runtime has no <code>/api/mcp</code>.</strong> Pinned by
@@ -2838,17 +2890,41 @@ MCP_AGENT_LABEL = "codex-release"</code></pre>
               <code>initialize</code>, <code>notifications/initialized</code>, <code>ping</code>,
               <code>tools/list</code>, <code>tools/call</code>, <code>resources/list</code>,
               <code>resources/read</code>, <code>prompts/list</code>, and
-              <code>prompts/get</code>. Nothing else is served. A client that expects
-              <code>completion/*</code>, sampling, or server-initiated notifications will not find
-              them &mdash; configure it for tools, resources, and workflow prompts.
-              Network MCP accepts one JSON-RPC request per <code>POST</code> and answers with one
-              response.
+              <code>prompts/get</code>, and cancellation notifications. HTTP clients may initialize
+              a stateful session and retain the returned <code>Mcp-Session-Id</code>, open
+              <code>GET /api/mcp</code> for SSE notifications, and end it with
+              <code>DELETE /api/mcp</code>. Progress and cancellation are session-scoped. One-shot
+              JSON-RPC POSTs without a session header remain valid.
             </p>
             <p>
               Set <code>MCP_AGENT_LABEL</code> in the server entry's <code>env</code> block, as
               above. It is the only MCP-specific environment variable and it belongs to the MCP
               client's configuration, not to the application's <code>.env</code>.
             </p>
+            <h4>Current tools, resources, and prompts</h4>
+            <p>
+              The canonical registry currently exposes 62 tools. Use <code>tools/list</code> and
+              <code>system_capabilities</code> instead of copying a remembered list: scopes can hide
+              tools a credential was not granted. The groups are coordination and work sessions;
+              workspace reads and writes; Signal planning and queue health; import preview/commit;
+              media resolution; Files browsing, Drive approval requests, and standard folder
+              provisioning; provider inventory and analytics reads; branding/view defaults;
+              integration activity; and diagnostics.
+            </p>
+            <p>
+              4 resources are available: <code>hcc://coordination/inbox</code>, the resumable
+              coordination change feed, bounded <code>hcc://workspace/context</code>, and the
+              resumable workspace change feed. 5 workflow prompts compose safe sequences:
+              <code>start_claimed_work</code>, <code>review_project_status</code>,
+              <code>prepare_handoff</code>, <code>verify_before_complete</code>, and
+              <code>triage_signal_queue</code>.
+            </p>
+            <div class="note is-crit">
+              <strong>Publishing stays human-confirmed.</strong> MCP can inspect planning state and
+              build a publish preview, but no registered tool submits, updates, cancels, retries, or
+              reconciles a provider publication. Ad hoc Drive creates/uploads stop at operator
+              approval; <code>drive_sync</code> is limited to the standard folder skeleton.
+            </div>
           </article>
 
           <article class="lane" data-lane="agent">
@@ -2885,6 +2961,15 @@ MCP_AGENT_LABEL = "codex-release"</code></pre>
               </li>
             </ol>
 
+            <h4>Leased work sessions</h4>
+            <p>
+              A claimed handoff can be paired with a durable work session. Start it, send
+              heartbeats while work continues, checkpoint material progress, request operator input
+              when necessary, and release or complete it honestly. A lease prevents two agents from
+              silently doing the same job forever; expired sessions appear in Agents for operator
+              reclaim. Resume context is bounded and does not turn a stale lease into proof of work.
+            </p>
+
             <h4>Creating a handoff</h4>
             <p>
               Call <code>coordination_post_handoff</code> with a subject type, a concise actionable
@@ -2906,21 +2991,20 @@ MCP_AGENT_LABEL = "codex-release"</code></pre>
               <code>fromAgentLabel</code> from the MCP session and refuses a conflicting value.
             </p>
             <div class="note">
-              <strong>Polling and limits.</strong> There is no push subscription in 5.5.0; poll the
-              list tool or inbox resource at a reasonable interval. Coordination writes are capped
-              at 10 in a rolling minute. Reads do not spend that write budget.
+              <strong>Resume and limits.</strong> Stateful HTTP sessions can receive SSE resource
+              update notifications. Durable resume comes from the coordination and workspace
+              change-feed cursors, not from the notification stream. Coordination writes are
+              capped at 10 in a rolling minute; reads do not spend that write budget.
             </div>
             <div class="note is-crit">
-              <strong>5.5.0 makes the write budget per credential, and makes it persist.</strong>
-              Over HTTPS the cap is now enforced two ways at once, both at 10 writes per rolling
+              <strong>The network write budget is persistent and credential-bound.</strong> Over
+              HTTPS the cap is enforced two ways at once, both at 10 writes per rolling
               minute: an <em>outer</em> budget keyed on the credential alone &mdash; the bearer, or
               the session for cookie auth &mdash; and an <em>inner</em> budget keyed on that
               credential plus the agent label, nested inside it. The outer one is the ceiling.
-              Rotating <code>x-agent-label</code> between requests does not buy more writes; ten a
-              minute per credential is the whole allowance however many labels you spend it under.
-              Before 5.5.0 the network transport built a fresh session per <code>POST</code>, so the
-              budget reset on every call and the documented limit did nothing over HTTP. Budgets
-              live for the life of the server process and reset when it restarts; idle keys are
+              A credential is already bound to one label; ten a minute per credential is the whole
+              allowance. Budgets live for the life of the server process and reset when it
+              restarts; idle keys are
               pruned. Local stdio is unchanged &mdash; it keeps its own per-session limiter.
             </div>
             <h4>Field limits</h4>
@@ -2955,9 +3039,8 @@ MCP_AGENT_LABEL = "codex-release"</code></pre>
               </li>
               <li>
                 <strong>No agent label:</strong> reads succeed, writes are refused. Set
-                <code>MCP_AGENT_LABEL</code> or send <code>_meta.agent_label</code> on
-                <code>initialize</code>; over HTTPS, send <code>x-agent-label</code> on every
-                request.
+                <code>MCP_AGENT_LABEL</code> or send <code>_meta.agent_label</code> on a local
+                <code>initialize</code>. Over HTTPS, issue a credential bound to the intended label.
               </li>
               <li>
                 <strong>Claiming someone else's directed handoff:</strong> refused. A directed item
@@ -3003,6 +3086,13 @@ MCP_AGENT_LABEL = "codex-release"</code></pre>
               Your actual documents are not in that file. Those are in Google Drive and are backed
               up by Google. This file holds the records <em>about</em> the work.
             </p>
+            <div class="note is-crit">
+              <strong>Pending agent uploads are the exception.</strong> Until an upload request is
+              denied, expires, or finishes, its bounded content is held in SQLite awaiting your
+              decision. Terminal rows purge those bytes, but an older backup can still contain
+              them. Protect and expire database backups accordingly; cleaning the live row cannot
+              retroactively scrub a snapshot.
+            </div>
 
             <h4>Taking a copy</h4>
             <ol>
@@ -3588,6 +3678,21 @@ npm run cutover:rehearse -- --plan</code></pre>
                     <td>Required before the preview can submit.</td>
                   </tr>
                   <tr>
+                    <td><code>BUFFER_API_KEY</code></td>
+                    <td>blank</td>
+                    <td>Canonical Buffer credential. Keep server-side.</td>
+                  </tr>
+                  <tr>
+                    <td><code>BUFFER_KEY</code></td>
+                    <td>blank</td>
+                    <td>One-release migration alias; <code>BUFFER_API_KEY</code> wins.</td>
+                  </tr>
+                  <tr>
+                    <td><code>BUFFER_ORGANIZATION_ID</code></td>
+                    <td>blank</td>
+                    <td>Required only when the Buffer account exposes multiple organizations.</td>
+                  </tr>
+                  <tr>
                     <td><code>PUBLISH_TIMEZONE</code></td>
                     <td>blank</td>
                     <td>Explicit IANA zone, e.g. <code>America/New_York</code>.</td>
@@ -3618,6 +3723,17 @@ npm run cutover:rehearse -- --plan</code></pre>
                     <td>
                       Hosted bind gate; the AWS Caddy contract uses <code>true</code> and
                       <code>1</code>.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <code>HCC_BACKUP_BUCKET</code>, <code>HCC_BACKUP_DIR</code>,
+                      <code>HCC_BACKUP_STATE_DIR</code>, <code>HCC_ALERT_TOPIC_ARN</code>
+                    </td>
+                    <td>deployment-specific</td>
+                    <td>
+                      Used by the hosted off-site backup job and monitoring, not by the interactive
+                      app process. See <code>docs/offsite-backup-operations.md</code>.
                     </td>
                   </tr>
                 </tbody>
@@ -3800,7 +3916,8 @@ npm run cutover:rehearse -- --plan</code></pre>
                     <td>
                       <code>/api/drive/oauth/start|callback</code>,
                       <code>POST /api/drive/sync</code>, <code>/api/settings/drive</code>,
-                      <code>/api/settings/branding</code>
+                      <code>/api/settings/branding</code>, project-scoped file browse,
+                      confirmed folder/upload preview and commit, and agent write decisions
                     </td>
                   </tr>
                   <tr>
@@ -3814,30 +3931,28 @@ npm run cutover:rehearse -- --plan</code></pre>
                     <td>Authentication &amp; MCP</td>
                     <td>
                       <code>GET /api/auth/status</code>, <code>POST /api/auth/login|logout</code>,
-                      <code>POST /api/auth/mcp-bearer</code>, and streamable HTTP
-                      <code>POST /api/mcp</code>
+                      scoped credential issue/rotate/revoke, MCP OAuth routes, connection health,
+                      and streamable HTTP <code>POST|GET|DELETE /api/mcp</code>
                     </td>
                   </tr>
                   <tr>
                     <td>Agent coordination</td>
                     <td>
-                      <code>/api/coordination/*</code> for the operator inbox; the same handoff
-                      tools and <code>hcc://coordination/inbox?state=open</code> resource are
-                      exposed through local stdio and network MCP
+                      <code>/api/coordination/*</code> for the operator inbox plus
+                      <code>/api/agent-work-sessions</code> for lease recovery; handoffs, resources,
+                      change feeds, prompts, and leased-work tools are exposed on both transports
                     </td>
                   </tr>
                 </tbody>
               </table>
               <h4>MCP tool surface</h4>
               <p>
-                Seven tools, coordination only. Reads &mdash;
-                <code>coordination_list_handoffs</code>, <code>coordination_get_handoff</code>
-                &mdash; need no agent label and do not spend the write budget. Writes &mdash;
-                <code>coordination_post_handoff</code>, <code>coordination_claim_handoff</code>,
-                <code>coordination_complete_handoff</code>,
-                <code>coordination_cancel_handoff</code>, <code>coordination_add_note</code> &mdash;
-                require a label and share 10 calls per rolling minute per session. Workspace and
-                Signal tools are not built; provider-write tools are excluded by design.
+                The registry contains 62 scoped tools. Discover the current subset with
+                <code>tools/list</code>; do not hard-code availability because each credential may
+                receive a different scope set. The surface covers coordination and work leases,
+                bounded workspace and Signal reads, selected local writes, imports, settings,
+                diagnostics, Drive approval requests, standard folder provisioning, and read-only
+                provider views. Provider publishing tools are excluded by design.
               </p>
             </div>
             <h4>Companion documents</h4>
@@ -3880,7 +3995,7 @@ npm run cutover:rehearse -- --plan</code></pre>
     <footer class="footer">
       <div class="inner">
         <p>
-          Hybrid Command Center 5.13.15 &mdash; operating manual, updated 2026-09-03. Compiled from
+          Hybrid Command Center 5.13.16 &mdash; operating manual, updated 2026-09-04. Compiled from
           <code>USER_MANUAL.md</code>, <code>README.md</code>, and <code>AGENTS.md</code>. Where
           this page and those files disagree, the repository is correct.
         </p>
