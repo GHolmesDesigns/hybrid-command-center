@@ -113,6 +113,7 @@ export interface Project {
   description?: string;
   status: 'PLANNING' | 'BUILDING' | 'ACTIVE' | 'ON_HOLD' | 'COMPLETE' | 'ARCHIVED';
   startDate?: string;
+  launchDate?: string;
   targetDeadline?: string;
   priority: Priority;
   notes?: string;

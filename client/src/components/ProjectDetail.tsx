@@ -149,7 +149,7 @@ export function ProjectDetail({
         focusOnMount
         eyebrow={p.clientName || 'Project'}
         title={p.name}
-        body={p.description || 'Project tasks, deadline, and Drive workspace.'}
+        body={p.description || 'Project tasks, launch plan, deadline, and Drive workspace.'}
         action={
           <div className="head-actions">
             {p.driveFolderUrl && (
@@ -178,7 +178,11 @@ export function ProjectDetail({
             <strong>{p.status.replace('_', ' ')}</strong>
           </div>
           <div>
-            <span>Deadline</span>
+            <span>Planned launch</span>
+            <strong>{p.launchDate ? formatDate(p.launchDate) : 'Not set'}</strong>
+          </div>
+          <div>
+            <span>Target deadline</span>
             <strong>{p.targetDeadline ? formatDate(p.targetDeadline) : 'Not set'}</strong>
           </div>
           <div>

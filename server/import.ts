@@ -349,8 +349,8 @@ function applyPlan(db: Db, plan: PlaybookPlan): AppliedPlan {
     );
 
   const insertProject = db.prepare(
-    `INSERT INTO projects(id,client_id,name,description,status,start_date,target_deadline,priority,notes,position,drive_status,created_at,updated_at,last_activity_at)
-     VALUES(?,?,?,?,?,?,?,?,?,?,'DISCONNECTED',?,?,?)`,
+    `INSERT INTO projects(id,client_id,name,description,status,start_date,launch_date,target_deadline,priority,notes,position,drive_status,created_at,updated_at,last_activity_at)
+     VALUES(?,?,?,?,?,?,?,?,?,?,?,'DISCONNECTED',?,?,?)`,
   );
   for (const project of plan.projects) {
     const projectId = id();
@@ -361,6 +361,7 @@ function applyPlan(db: Db, plan: PlaybookPlan): AppliedPlan {
       project.description,
       project.status,
       project.startDate,
+      project.launchDate,
       project.targetDeadline,
       project.priority,
       project.notes,

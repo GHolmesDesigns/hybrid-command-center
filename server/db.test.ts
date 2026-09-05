@@ -173,6 +173,7 @@ describe('additive schema migration', () => {
     expect(columnsOf(db, 'projects')).toEqual(
       expect.arrayContaining([
         'start_date',
+        'launch_date',
         'target_deadline',
         'notes',
         'position',
