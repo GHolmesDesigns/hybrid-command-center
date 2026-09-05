@@ -141,6 +141,29 @@ describe('campaign playbook plan', () => {
     expect(result.dependencies).toEqual([{ row: 2, taskKey: 'TSK-2', prerequisiteKey: 'TSK-1' }]);
   });
 
+  it('preserves Building as a project workflow status', () => {
+    const result = plan({
+      Projects: [
+        [
+          'project_key',
+          'client_key',
+          'name',
+          'status',
+          'priority',
+          'start_date',
+          'target_deadline',
+          'description',
+          'notes',
+          'position',
+        ],
+        ['PRJ-A', 'CLI-A', 'Spring Campaign', 'BUILDING', 'HIGH', '', '', '', '', '1'],
+      ],
+    });
+
+    expect(messages(result)).toEqual([]);
+    expect(result.projects[0]).toMatchObject({ status: 'BUILDING' });
+  });
+
   it('orders rows by their workbook position rather than the order they were written', () => {
     const result = plan({
       Tasks: [
@@ -381,7 +404,7 @@ describe('campaign playbook plan', () => {
         ],
       });
       expect(messages(result)).toContain(
-        'Projects 2 status: expected one of PLANNING, ACTIVE, ON_HOLD, COMPLETE.',
+        'Projects 2 status: expected one of PLANNING, BUILDING, ACTIVE, ON_HOLD, COMPLETE.',
       );
     });
 

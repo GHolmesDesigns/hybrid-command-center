@@ -338,7 +338,7 @@ function ProjectForm({
           label="Status"
           name="status"
           value={value?.status || 'ACTIVE'}
-          options={['PLANNING', 'ACTIVE', 'ON_HOLD', 'COMPLETE']}
+          options={['PLANNING', 'BUILDING', 'ACTIVE', 'ON_HOLD', 'COMPLETE']}
         />
         <Select
           label="Priority"

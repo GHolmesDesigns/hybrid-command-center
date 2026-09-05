@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { Archive, CircleCheck, CircleDashed, CirclePause, CirclePlay } from 'lucide-react';
+import { Archive, Blocks, CircleCheck, CircleDashed, CirclePause, CirclePlay } from 'lucide-react';
 import type { Project } from '../../../shared/types';
 import { mixHex } from '../../../shared/contrast';
 
@@ -8,6 +8,7 @@ export type ProjectStatus = Project['status'];
 /** Planning through archived, in the order work moves through them. */
 export const PROJECT_STATUSES = [
   'PLANNING',
+  'BUILDING',
   'ACTIVE',
   'ON_HOLD',
   'COMPLETE',
@@ -17,7 +18,7 @@ export const PROJECT_STATUSES = [
 export interface ProjectStatusPresentation {
   /** The status word the chip always shows. Colour is never the only carrier. */
   label: string;
-  /** A shape of its own per status, so a greyscale grid still separates the five. */
+  /** A shape of its own per status, so a greyscale grid still separates the six. */
   Icon: typeof CircleDashed;
   /** Chip text, chip outline, and the tile's top edge. */
   ink: string;
@@ -56,6 +57,7 @@ const entry = (
  */
 export const PROJECT_STATUS_PRESENTATION: Record<ProjectStatus, ProjectStatusPresentation> = {
   PLANNING: entry('Planning', CircleDashed, '#6a4a9c', '#ece4f7'),
+  BUILDING: entry('Building', Blocks, '#275d8c', '#dcecf7'),
   ACTIVE: entry('Active', CirclePlay, '#2f6f52', '#dcece4'),
   ON_HOLD: entry('On hold', CirclePause, '#8a5711', '#faead0'),
   COMPLETE: entry('Complete', CircleCheck, '#315f79', '#e1edf4'),

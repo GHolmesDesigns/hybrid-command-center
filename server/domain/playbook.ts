@@ -37,7 +37,7 @@ import {
 import { columnLetter, findSheet, type Cell, type Workbook } from './workbook.ts';
 
 const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const;
-const PROJECT_STATUSES = ['PLANNING', 'ACTIVE', 'ON_HOLD', 'COMPLETE'] as const;
+const PROJECT_STATUSES = ['PLANNING', 'BUILDING', 'ACTIVE', 'ON_HOLD', 'COMPLETE'] as const;
 
 /** Tabs that must be present. `ChecklistItems` and `Dependencies` absent means none of them. */
 const REQUIRED_SHEETS = [

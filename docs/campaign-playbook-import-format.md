@@ -138,6 +138,7 @@ Duplicate dependency pairs and dependency cycles are errors. Cross-project depen
 Project status:
 
 - `PLANNING`
+- `BUILDING`
 - `ACTIVE`
 - `ON_HOLD`
 - `COMPLETE`

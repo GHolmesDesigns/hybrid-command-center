@@ -57,11 +57,11 @@ describe('project status on a tile', () => {
     }
   });
 
-  it('separates the five with colour removed', async () => {
+  it('separates the six with colour removed', async () => {
     await renderGrid();
 
     // The word and the icon are the two channels a greyscale screenshot keeps. Both have to
-    // differ across all five, or two statuses collapse into one the moment the hue is gone.
+    // differ across all six, or two statuses collapse into one the moment the hue is gone.
     const words = PROJECT_STATUSES.map((status) => tile(status).querySelector('.status-label')!);
     expect(new Set(words.map((chip) => chip.textContent)).size).toBe(PROJECT_STATUSES.length);
     const icons = words.map((chip) => chip.querySelector('svg')!.getAttribute('class'));
@@ -104,7 +104,7 @@ describe('project status contrast', () => {
     '--red': '#b9473f',
   };
 
-  it('clears AA in both contexts, for all five statuses', () => {
+  it('clears AA in both contexts, for all six statuses', () => {
     for (const status of PROJECT_STATUSES) {
       const { ink, surface, wash } = PROJECT_STATUS_PRESENTATION[status];
       // Context one: the chip, where the status word is ink on its own fill.

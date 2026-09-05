@@ -42,7 +42,7 @@ const nullableTaskType = z
   .optional()
   .transform((v) => (v === undefined ? undefined : v || null));
 
-export const PROJECT_STATUSES = ['PLANNING', 'ACTIVE', 'ON_HOLD', 'COMPLETE'] as const;
+export const PROJECT_STATUSES = ['PLANNING', 'BUILDING', 'ACTIVE', 'ON_HOLD', 'COMPLETE'] as const;
 
 const projectFields = {
   clientId: z.string().uuid(),

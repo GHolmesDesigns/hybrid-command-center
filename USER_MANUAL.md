@@ -551,8 +551,8 @@ presentation.
 
 #### Filtering by status
 
-The **Status** row filters live projects by planning status — Planning, Active, On hold, and
-Complete. Selecting more than one shows projects that match any of them. The filter combines with
+The **Status** row filters live projects by planning status — Planning, Building, Active, On hold,
+and Complete. Selecting more than one shows projects that match any of them. The filter combines with
 the client filter, the category filter, the search box, and the sort order. Archive visibility
 stays separate: while **Archived** is selected, the status row is hidden and any status selection
 is cleared from the address, so a bookmark cannot ask for archived and active at once and silently

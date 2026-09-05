@@ -111,7 +111,7 @@ export interface Project {
   clientName?: string;
   name: string;
   description?: string;
-  status: 'PLANNING' | 'ACTIVE' | 'ON_HOLD' | 'COMPLETE' | 'ARCHIVED';
+  status: 'PLANNING' | 'BUILDING' | 'ACTIVE' | 'ON_HOLD' | 'COMPLETE' | 'ARCHIVED';
   startDate?: string;
   targetDeadline?: string;
   priority: Priority;
