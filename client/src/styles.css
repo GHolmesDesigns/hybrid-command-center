@@ -4244,8 +4244,11 @@ button.tag-chip.toggle.active {
 .signal-grid.view-today .signal-day {
   border-right: 0;
 }
-.signal-day.is-blank {
+.signal-day.is-adjacent-month {
   background: #f7f7f4;
+}
+.signal-day.is-adjacent-month > header > span {
+  color: var(--muted);
 }
 .signal-day.is-today {
   box-shadow: inset 0 0 0 2px var(--blue);

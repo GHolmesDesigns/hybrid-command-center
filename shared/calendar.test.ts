@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calendarViewRange, shiftCalendarAnchor } from './calendar.ts';
+import { calendarMonthGridRange, calendarViewRange, shiftCalendarAnchor } from './calendar.ts';
 
 describe('calendar agenda ranges', () => {
   it('keeps Today on exactly the supplied local-date label', () => {
@@ -28,6 +28,15 @@ describe('calendar agenda ranges', () => {
       from: '2028-02-01',
       to: '2028-02-29',
     });
+  });
+
+  it.each([
+    ['a month already spanning complete weeks', '2015-02-12', '2015-02-01', '2015-02-28'],
+    ['a leap February', '2020-02-12', '2020-01-26', '2020-02-29'],
+    ['a month needing days on both sides', '2026-09-14', '2026-08-30', '2026-10-03'],
+    ['a year boundary', '2026-12-14', '2026-11-29', '2027-01-02'],
+  ])('defines the Sunday-through-Saturday month grid for %s', (_, anchor, from, to) => {
+    expect(calendarMonthGridRange(anchor)).toEqual({ from, to });
   });
 
   it('steps each view by its own span and clamps short months', () => {

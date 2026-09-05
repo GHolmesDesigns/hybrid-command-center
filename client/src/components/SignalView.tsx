@@ -65,6 +65,7 @@ import {
 import { formatFileSize } from '../../../shared/drive';
 import {
   CALENDAR_VIEWS,
+  calendarMonthGridRange,
   calendarViewRange,
   shiftCalendarAnchor,
   type CalendarViewMode,
@@ -2054,7 +2055,10 @@ export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
     : /^\d{4}-(0[1-9]|1[0-2])$/.test(requestedMonth ?? '')
       ? `${requestedMonth}-01`
       : now;
-  const bounds = useMemo(() => calendarViewRange(view, anchor), [view, anchor]);
+  const bounds = useMemo(
+    () => (view === 'month' ? calendarMonthGridRange(anchor) : calendarViewRange(view, anchor)),
+    [view, anchor],
+  );
   const [posts, setPosts] = useState<SignalPost[]>([]);
   const [queue, setQueue] = useState<SignalPost[]>([]);
   /**
@@ -2322,12 +2326,6 @@ export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
   };
 
   const days = dateLabels(bounds.from, bounds.to);
-  const [firstYear, firstMonth, firstDay] = bounds.from.split('-').map(Number) as [
-    number,
-    number,
-    number,
-  ];
-  const leading = view === 'month' ? new Date(firstYear, firstMonth - 1, firstDay).getDay() : 0;
   const weekdays =
     view === 'month'
       ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -2380,6 +2378,7 @@ export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
         ? `${dayHeading(bounds.from, { month: 'short', day: 'numeric', year: 'numeric' })} – ${dayHeading(bounds.to, { month: 'short', day: 'numeric', year: 'numeric' })}`
         : monthHeading(anchor.slice(0, 7));
   const spanLabel = view === 'today' ? 'day' : view;
+  const truncationSpanLabel = view === 'month' ? 'visible month grid' : spanLabel;
 
   return (
     <>
@@ -2400,7 +2399,7 @@ export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
       )}
       {truncated && (
         <div className="refresh-error" role="status">
-          This {spanLabel} matches more than 500 posts. Only the first 500 are shown.
+          This {truncationSpanLabel} matches more than 500 posts. Only the first 500 are shown.
         </div>
       )}
       {/* Above the planner, because it narrows what both the grid and the queue below show: a
@@ -2585,14 +2584,12 @@ export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
             ))}
           </div>
           <div className={`signal-grid view-${view}`}>
-            {Array.from({ length: leading }, (_, index) => (
-              <div className="signal-day is-blank" key={`blank-${index}`} />
-            ))}
             {days.map((date) => {
               const scheduled = byDate.get(date) ?? [];
+              const adjacent = view === 'month' && date.slice(0, 7) !== anchor.slice(0, 7);
               return (
                 <section
-                  className={`signal-day ${date === now ? 'is-today' : ''}`}
+                  className={`signal-day ${adjacent ? 'is-adjacent-month' : ''} ${date === now ? 'is-today' : ''}`}
                   key={date}
                   aria-label={date}
                 >

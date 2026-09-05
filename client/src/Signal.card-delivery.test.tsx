@@ -62,8 +62,8 @@ describe('Signal planner card delivery', () => {
       (entry) => entry.url.includes('/api/signal/card-delivery?') && entry.method === 'GET',
     );
     expect(batchReads).toHaveLength(1);
-    expect(batchReads[0]?.url).toContain('from=2026-09-01');
-    expect(batchReads[0]?.url).toContain('to=2026-09-30');
+    expect(batchReads[0]?.url).toContain('from=2026-08-30');
+    expect(batchReads[0]?.url).toContain('to=2026-10-03');
     // Opening the planner never fans out into one publications request per card.
     expect(
       requests.filter((entry) => entry.url.includes('/publications') && entry.method === 'GET'),

@@ -89,14 +89,14 @@ const HEADERS = {
  */
 const OPTIONAL_HEADERS = {
   Clients: CLIENT_IDENTITY_COLUMNS,
-  Projects: [],
+  Projects: ['launch_date'],
   Tasks: [],
   ChecklistItems: [],
   Dependencies: [],
 } as const satisfies Record<PlaybookSheet, readonly string[]>;
 
 /** Columns holding a calendar date, so an Excel date serial can be named as the mistake it is. */
-const DATE_COLUMNS = new Set(['start_date', 'target_deadline', 'due_date']);
+const DATE_COLUMNS = new Set(['start_date', 'launch_date', 'target_deadline', 'due_date']);
 /** Columns holding a native boolean. */
 const BOOLEAN_COLUMNS = new Set(['completed']);
 /** Columns holding a workbook order value. */
@@ -254,6 +254,7 @@ const ROW_SCHEMAS = {
     status: enumWithDefault(PROJECT_STATUSES, 'ACTIVE'),
     priority: enumWithDefault(PRIORITIES, 'MEDIUM'),
     start_date: optionalDate,
+    launch_date: optionalDate,
     target_deadline: optionalDate,
     description: optionalText,
     notes: optionalText,
@@ -386,6 +387,7 @@ export interface PlannedProject {
   status: (typeof PROJECT_STATUSES)[number];
   priority: Priority;
   startDate: string | null;
+  launchDate: string | null;
   targetDeadline: string | null;
   description: string | null;
   notes: string | null;
@@ -1045,6 +1047,7 @@ export function buildPlan(workbook: Workbook, workspace: WorkspaceSnapshot): Pla
       status: value.status,
       priority: value.priority,
       startDate: value.start_date,
+      launchDate: value.launch_date,
       targetDeadline: value.target_deadline,
       description: value.description,
       notes: value.notes,
