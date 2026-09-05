@@ -92,6 +92,7 @@ client's *identity*, and [Client identity](#client-identity) is what the importe
 | `status` | `projects.status` | No | Default `ACTIVE`; use an allowed value below. |
 | `priority` | `projects.priority` | No | Default `MEDIUM`; use an allowed value below. |
 | `start_date` | `projects.start_date` | No | Real `YYYY-MM-DD` date. |
+| `launch_date` | `projects.launch_date` | No | Optional column. Real `YYYY-MM-DD` planned launch date, independent of `start_date` and `target_deadline`. |
 | `target_deadline` | `projects.target_deadline` | No | Real `YYYY-MM-DD` date, not before `start_date`. |
 | `description` | `projects.description` | No | Literal text. |
 | `notes` | `projects.notes` | No | Literal text. |

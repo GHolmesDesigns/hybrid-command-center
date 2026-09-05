@@ -156,7 +156,7 @@ export function createProject(db: Db, raw: z.input<typeof projectInput> | Projec
     db.prepare('SELECT COALESCE(MAX(position),-1)+1 next FROM projects').get() as { next: number }
   ).next;
   db.prepare(
-    `INSERT INTO projects(id,client_id,name,description,status,start_date,target_deadline,priority,notes,position,drive_status,created_at,updated_at,last_activity_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO projects(id,client_id,name,description,status,start_date,launch_date,target_deadline,priority,notes,position,drive_status,created_at,updated_at,last_activity_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
   ).run(
     projectId,
     data.clientId,
@@ -164,6 +164,7 @@ export function createProject(db: Db, raw: z.input<typeof projectInput> | Projec
     data.description ?? null,
     data.status,
     data.startDate ?? null,
+    data.launchDate ?? null,
     data.targetDeadline ?? null,
     data.priority,
     data.notes ?? null,
@@ -196,13 +197,14 @@ export function updateProject(db: Db, projectId: string, data: ProjectPatch, rev
   transaction(db, () => {
     requireRevision(db, 'project', projectId, revision);
     db.prepare(
-      `UPDATE projects SET client_id=?,name=?,description=?,status=?,start_date=?,target_deadline=?,priority=?,notes=?,updated_at=?,last_activity_at=? WHERE id=?`,
+      `UPDATE projects SET client_id=?,name=?,description=?,status=?,start_date=?,launch_date=?,target_deadline=?,priority=?,notes=?,updated_at=?,last_activity_at=? WHERE id=?`,
     ).run(
       patch(data.clientId, p.client_id as string),
       patch(data.name, p.name as string),
       patch(data.description, p.description as string | null),
       patch(data.status, p.status as string),
       patch(data.startDate, p.start_date as string | null),
+      patch(data.launchDate, p.launch_date as string | null),
       patch(data.targetDeadline, p.target_deadline as string | null),
       patch(data.priority, p.priority as string),
       patch(data.notes, p.notes as string | null),

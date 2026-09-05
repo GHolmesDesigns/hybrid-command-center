@@ -49,6 +49,7 @@ const projectFields = {
   name: z.string().trim().min(2).max(160),
   description: nullable,
   startDate: nullableDate,
+  launchDate: nullableDate,
   targetDeadline: nullableDate,
   notes: nullable,
 };
