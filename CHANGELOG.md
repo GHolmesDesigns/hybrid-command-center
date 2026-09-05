@@ -8,6 +8,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.13.23] - 2026-09-05
+
+### Added
+
+- Projects now carry an optional **Planned launch date** (`YYYY-MM-DD`), independent of Start date
+  and Target deadline. Create and edit forms, project detail, HTTP and MCP workspace writes,
+  backup/restore, and campaign playbook import all preserve it. Existing databases migrate with a
+  null launch date on every project.
+
+### Breaking changes
+
+None.
+
 ## [5.13.22] - 2026-09-04
 
 ### Added

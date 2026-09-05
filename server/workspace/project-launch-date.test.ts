@@ -162,8 +162,9 @@ describe('project launch date', () => {
       targetDeadline: '2026-09-01',
     });
     expect(created.outcome).toBe('SUCCESS');
-    const project = (created.data as { after: { id: string; revision: number; launchDate?: string } })
-      .after;
+    const project = (
+      created.data as { after: { id: string; revision: number; launchDate?: string } }
+    ).after;
     expect(project.launchDate).toBe('2026-08-01');
 
     const updated = await callWorkspaceWriteTool(db, session, 'workspace_update_project', {
@@ -173,9 +174,9 @@ describe('project launch date', () => {
       launchDate: '2026-08-10',
     });
     expect(updated.outcome).toBe('SUCCESS');
-    expect((updated.data as { after: { launchDate?: string; targetDeadline?: string } }).after).toEqual(
-      expect.objectContaining({ launchDate: '2026-08-10', targetDeadline: '2026-09-01' }),
-    );
+    expect(
+      (updated.data as { after: { launchDate?: string; targetDeadline?: string } }).after,
+    ).toEqual(expect.objectContaining({ launchDate: '2026-08-10', targetDeadline: '2026-09-01' }));
 
     const playbook = [
       '[Clients]',
@@ -212,7 +213,17 @@ describe('project launch date', () => {
     db.prepare(
       `INSERT INTO projects(id,client_id,name,status,start_date,launch_date,target_deadline,priority,position,drive_status,created_at,updated_at,last_activity_at)
        VALUES(?,?,?,'ACTIVE',?,?,?,'MEDIUM',0,'DISCONNECTED',?,?,?)`,
-    ).run(projectId, clientId, 'Backup launch', '2026-01-01', '2026-02-01', '2026-03-01', stamp, stamp, stamp);
+    ).run(
+      projectId,
+      clientId,
+      'Backup launch',
+      '2026-01-01',
+      '2026-02-01',
+      '2026-03-01',
+      stamp,
+      stamp,
+      stamp,
+    );
     db.close();
 
     const source = new DatabaseSync(sourcePath);
