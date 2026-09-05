@@ -355,6 +355,12 @@ function ProjectForm({
           value={dateInput(value?.startDate)}
         />
         <Field
+          label="Planned launch date"
+          name="launchDate"
+          type="date"
+          value={dateInput(value?.launchDate)}
+        />
+        <Field
           label="Target deadline"
           name="targetDeadline"
           type="date"
