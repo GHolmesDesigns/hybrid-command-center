@@ -15,6 +15,7 @@ import {
   Plus,
   Paperclip,
   RefreshCw,
+  RotateCcw,
   Trash2,
   X,
 } from 'lucide-react';
@@ -30,6 +31,8 @@ import {
   SIGNAL_DELIVERY_PROVENANCES,
   SIGNAL_FORMAT_LABEL,
   SIGNAL_FORMATS,
+  SIGNAL_CLIENT_UNBOUND,
+  SIGNAL_CLIENT_UNBOUND_LABEL,
   SIGNAL_LIFECYCLE_FILTER_LABEL,
   SIGNAL_LIFECYCLE_FILTERS,
   SIGNAL_STATUS_LABEL,
@@ -51,6 +54,10 @@ import {
   type SignalStatus,
 } from '../../../shared/signal';
 import {
+  SIGNAL_CAMPAIGN_NONE,
+  SIGNAL_CAMPAIGN_NONE_LABEL,
+} from '../../../shared/signal-campaign-analytics';
+import {
   urlPostMedia,
   signalPostMediaIssue,
   type SignalPostMedia,
@@ -67,9 +74,10 @@ import {
   resolveViewChoice,
   type ViewDefaults,
 } from '../../../shared/view-defaults';
+import type { Client, Project } from '../../../shared/types';
 import { signalChannelStyle, type TagDraft } from './ui-shared';
 import { ClientCue } from './ClientCue';
-import { Empty } from './Primitives';
+import { Empty, SearchBox } from './Primitives';
 import { Select, TagChipInput } from './FormControls';
 import { SignalCampaignAnalyticsPanel } from './SignalCampaignAnalytics';
 import { PageHead } from './Shell';
@@ -2003,6 +2011,38 @@ function Editor({
   );
 }
 
+/** A comma-separated URL parameter, read defensively: unknown members are simply not applied. */
+const listParam = (value: string | null) =>
+  (value ?? '')
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+/**
+ * One filter value, on or off — the same toggle chip the campaign-figures panel and the board's
+ * tag filter use, so a filter behaves the same way everywhere it appears.
+ */
+function FilterChip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`tag-chip toggle ${active ? 'active' : ''}`}
+      aria-pressed={active}
+      onClick={onClick}
+    >
+      {label}
+    </button>
+  );
+}
+
 export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
   const [params, setParams] = useSearchParams();
   const now = today();
@@ -2069,20 +2109,95 @@ export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
   const creating = createRequest.creating && !requestedPost ? { date: createRequest.date } : null;
   const opened = useRef<string | null>(null);
 
+  /**
+   * C186's durable planner scope: client, project, and campaign, each read defensively from the
+   * address per `docs/view-state-convention.md`. Named singular (`client`/`project`/`campaign`) and
+   * deliberately distinct from the campaign-figures panel's own `campaigns`/`channels`/`accounts` —
+   * the two filter sets share this page's one address bar, and a shared name would make choosing
+   * one silently move the other.
+   */
+  const clientIds = listParam(params.get('client'));
+  const projectIds = listParam(params.get('project'));
+  const campaignIds = listParam(params.get('campaign'));
+  /**
+   * Copy search over post text. Transient per `docs/view-state-convention.md`: it represents typing
+   * within this visit, so it lives in component state rather than the address. Debounced before it
+   * reaches the API so a fast typist does not fire a request per keystroke.
+   */
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
+  useEffect(() => {
+    const handle = setTimeout(() => setSearch(searchInput.trim()), 250);
+    return () => clearTimeout(handle);
+  }, [searchInput]);
+  /** Clients and projects the filter chips offer. Loaded once — neither depends on the scope. */
+  const [clients, setClients] = useState<Client[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  useEffect(() => {
+    void api<Client[]>('/clients')
+      .then(setClients)
+      .catch(() => undefined);
+    void api<Project[]>('/projects')
+      .then(setProjects)
+      .catch(() => undefined);
+  }, []);
+  const filtered = Boolean(clientIds.length || projectIds.length || campaignIds.length || search);
+  /** Sets or clears one filter parameter, leaving every other one in the address alone. */
+  const setFilterParam = (key: string, value: string) =>
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        if (value) next.set(key, value);
+        else next.delete(key);
+        return next;
+      },
+      { replace: true },
+    );
+  const toggleFilter = (key: string, chosen: string[], value: string) =>
+    setFilterParam(
+      key,
+      (chosen.includes(value) ? chosen.filter((item) => item !== value) : [...chosen, value]).join(
+        ',',
+      ),
+    );
+  const clearFilters = () => {
+    setSearchInput('');
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        for (const key of ['client', 'project', 'campaign']) next.delete(key);
+        return next;
+      },
+      { replace: true },
+    );
+  };
+  /**
+   * The scope query, as one string every list read appends — a primitive so `load`'s dependency
+   * list can compare it by value rather than by the identity of a freshly split array.
+   */
+  const filterQuery = useMemo(() => {
+    const scope = new URLSearchParams();
+    if (clientIds.length) scope.set('client', clientIds.join(','));
+    if (projectIds.length) scope.set('project', projectIds.join(','));
+    if (campaignIds.length) scope.set('campaign', campaignIds.join(','));
+    if (search) scope.set('q', search);
+    return scope.toString();
+  }, [clientIds, projectIds, campaignIds, search]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
     const { from, to } = bounds;
-    const lifecycleQuery =
-      lifecycleFilter === 'active' ? '' : `&lifecycle=${encodeURIComponent(lifecycleFilter)}`;
-    const queueQuery =
-      lifecycleFilter === 'active' ? '' : `?lifecycle=${encodeURIComponent(lifecycleFilter)}`;
+    const lifecycleParam = lifecycleFilter === 'active' ? '' : `lifecycle=${lifecycleFilter}`;
+    const scope = [lifecycleParam, filterQuery].filter(Boolean).join('&');
+    const scopeQuery = scope ? `&${scope}` : '';
+    const queueQuery = scope ? `?${scope}` : '';
     try {
       const [range, nextQueue, nextCampaigns, nextDeliveries] = await Promise.all([
-        api<SignalRange>(`/signal/posts?from=${from}&to=${to}${lifecycleQuery}`),
+        api<SignalRange>(`/signal/posts?from=${from}&to=${to}${scopeQuery}`),
         api<SignalPost[]>(`/signal/queue${queueQuery}`),
         api<SignalCampaignSummary[]>('/signal/campaigns'),
-        api<CardDeliverySnapshot>(`/signal/card-delivery?from=${from}&to=${to}`),
+        api<CardDeliverySnapshot>(`/signal/card-delivery?from=${from}&to=${to}${scopeQuery}`),
       ]);
       setPosts(range.posts);
       setTruncated(range.truncated);
@@ -2094,7 +2209,7 @@ export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
     } finally {
       setLoading(false);
     }
-  }, [bounds, lifecycleFilter]);
+  }, [bounds, lifecycleFilter, filterQuery]);
 
   const deliveryFor = useCallback(
     (postId: string): CardDelivery =>
@@ -2227,23 +2342,35 @@ export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
       return params;
     });
   };
+  // Durable filter parameters carried across every navigation below: the client/project/campaign
+  // scope is a dimension of the planner, not of the period, so switching view or month must not
+  // silently clear it.
+  const carriedFilterParams = (source: URLSearchParams): [string, string][] =>
+    (['client', 'project', 'campaign'] as const).flatMap((key) => {
+      const value = source.get(key);
+      return value ? [[key, value] as [string, string]] : [];
+    });
   const goto = (nextView: CalendarViewMode, nextAnchor: string) => {
     // Same rule as Calendar: the configured default in the current period keeps a short address.
-    // Lifecycle is a separate dimension and survives navigation when it is not the active default.
+    // Lifecycle and the client/project/campaign scope are separate dimensions and survive
+    // navigation when they are not each dimension's default.
     if (nextView === configuredView && isCurrentTimePeriod(nextView, nextAnchor, now)) {
       setParams((current) => {
-        const params = new URLSearchParams();
+        const params = new URLSearchParams(carriedFilterParams(current));
         const lifecycle = current.get('lifecycle');
         if (lifecycle && lifecycle !== 'active') params.set('lifecycle', lifecycle);
         return params;
       });
       return;
     }
-    const next: Record<string, string> = { month: nextAnchor.slice(0, 7) };
-    if (nextView !== configuredView) next.view = nextView;
-    if (nextView !== 'month') next.date = nextAnchor;
-    if (lifecycleFilter !== 'active') next.lifecycle = lifecycleFilter;
-    setParams(next);
+    setParams((current) => {
+      const next = new URLSearchParams(carriedFilterParams(current));
+      next.set('month', nextAnchor.slice(0, 7));
+      if (nextView !== configuredView) next.set('view', nextView);
+      if (nextView !== 'month') next.set('date', nextAnchor);
+      if (lifecycleFilter !== 'active') next.set('lifecycle', lifecycleFilter);
+      return next;
+    });
   };
 
   const title =
@@ -2273,9 +2400,97 @@ export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
       )}
       {truncated && (
         <div className="refresh-error" role="status">
-          This {spanLabel} has more than 500 posts. Only the first 500 are shown.
+          This {spanLabel} matches more than 500 posts. Only the first 500 are shown.
         </div>
       )}
+      {/* Above the planner, because it narrows what both the grid and the queue below show: a
+          filter chosen here has already been applied to every count and card by the time either
+          renders. Client, project, and campaign are durable URL state; copy search is transient. */}
+      <section className="panel signal-filters" aria-label="Filter the planner">
+        <div className="section-title">
+          <div>
+            <span className="eyebrow">Filter</span>
+            <h2>Client, project, campaign, and copy</h2>
+          </div>
+          {filtered && (
+            <button type="button" className="secondary" onClick={clearFilters}>
+              <RotateCcw aria-hidden="true" /> Clear filters
+            </button>
+          )}
+        </div>
+        <div className="filterbar">
+          <SearchBox value={searchInput} set={setSearchInput} placeholder="Search post copy…" />
+        </div>
+        {clients.length > 0 && (
+          <div className="tag-filter">
+            <span className="tag-filter-label" id="signal-client-filter-label">
+              Client
+            </span>
+            <div role="group" aria-labelledby="signal-client-filter-label">
+              {clients.map((client) => (
+                <FilterChip
+                  key={client.id}
+                  label={client.name}
+                  active={clientIds.includes(client.id)}
+                  onClick={() => toggleFilter('client', clientIds, client.id)}
+                />
+              ))}
+              {/* Unbound posts are a group a person can ask for by name, not a residue reachable
+                  only by clearing every other filter — the same treatment as No campaign below. */}
+              <FilterChip
+                label={SIGNAL_CLIENT_UNBOUND_LABEL}
+                active={clientIds.includes(SIGNAL_CLIENT_UNBOUND)}
+                onClick={() => toggleFilter('client', clientIds, SIGNAL_CLIENT_UNBOUND)}
+              />
+            </div>
+          </div>
+        )}
+        {projects.length > 0 && (
+          <div className="tag-filter">
+            <span className="tag-filter-label" id="signal-project-filter-label">
+              Project
+            </span>
+            <div role="group" aria-labelledby="signal-project-filter-label">
+              {projects.map((project) => (
+                <FilterChip
+                  key={project.id}
+                  label={project.name}
+                  active={projectIds.includes(project.id)}
+                  onClick={() => toggleFilter('project', projectIds, project.id)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+        {campaigns.length > 0 && (
+          <div className="tag-filter">
+            <span className="tag-filter-label" id="signal-campaign-filter-label">
+              Campaign
+            </span>
+            <div role="group" aria-labelledby="signal-campaign-filter-label">
+              {campaigns.map((campaign) => (
+                <FilterChip
+                  key={campaign.id}
+                  label={campaign.name}
+                  active={campaignIds.includes(campaign.id)}
+                  onClick={() => toggleFilter('campaign', campaignIds, campaign.id)}
+                />
+              ))}
+              <FilterChip
+                label={SIGNAL_CAMPAIGN_NONE_LABEL}
+                active={campaignIds.includes(SIGNAL_CAMPAIGN_NONE)}
+                onClick={() => toggleFilter('campaign', campaignIds, SIGNAL_CAMPAIGN_NONE)}
+              />
+            </div>
+          </div>
+        )}
+        {(clientIds.length > 1 || projectIds.length > 1 || campaignIds.length > 1) && (
+          <p className="filterbar-hint">
+            Several selections within one filter are read as <strong>or</strong>; client, project,
+            campaign, and copy search narrow together.
+          </p>
+        )}
+      </section>
       {/* Above the planner, because it is the thing to read first: a failed delivery and an empty
           channel are not visible anywhere in the grid below. */}
       <SignalHealthPanel reloadKey={healthKey} />
@@ -2289,7 +2504,10 @@ export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
                 {SIGNAL_LIFECYCLE_FILTER_LABEL[lifecycleFilter]}
               </p>
             </div>
-            <span className="signal-count" title="Count of plans matching the lifecycle filter">
+            <span
+              className="signal-count"
+              title="Count of plans matching the lifecycle and filter scope"
+            >
               {queue.length}
             </span>
           </div>

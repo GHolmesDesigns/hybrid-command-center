@@ -2,6 +2,7 @@ import type { Db } from '../db.ts';
 import { deriveCardDeliveries, type CardDeliverySnapshot } from '../../shared/card-delivery.ts';
 import { listPostsInRange } from './read.ts';
 import { listQueue } from './service.ts';
+import type { SignalPostFilters } from './rows.ts';
 import { publicationsForPosts } from '../publish/read.ts';
 
 /**
@@ -19,10 +20,19 @@ import { publicationsForPosts } from '../publish/read.ts';
  *
  * Uses `listPostsInRange` rather than a second date query so the card batch and the post grid
  * cannot disagree about truncation: a post the range dropped is not given a delivery chip either.
+ *
+ * `filters` is C186's scope, passed through unchanged to both reads so a client, project, campaign,
+ * or copy filter narrows the delivery snapshot exactly as it narrows the grid and the queue —
+ * never a post one shows that the other omits a chip for.
  */
-export function readCardDeliveries(db: Db, from: string, to: string): CardDeliverySnapshot {
-  const range = listPostsInRange(db, from, to);
-  const queue = listQueue(db);
+export function readCardDeliveries(
+  db: Db,
+  from: string,
+  to: string,
+  filters: SignalPostFilters = {},
+): CardDeliverySnapshot {
+  const range = listPostsInRange(db, from, to, 'active', filters);
+  const queue = listQueue(db, 'active', filters);
   const postIds = [...range.posts, ...queue].map((post) => post.id);
   const publications = publicationsForPosts(db, postIds);
   return {

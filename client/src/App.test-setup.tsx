@@ -1130,7 +1130,7 @@ const respondTo = (url: string, init?: RequestInit) => {
     });
     return testState.signalPostsPayload.find((post) => post.id === recheckPath[1]) ?? {};
   }
-  if (url.endsWith('/api/signal/queue') && method === 'GET') {
+  if (url.split('?')[0]!.endsWith('/api/signal/queue') && method === 'GET') {
     const query = new URLSearchParams(url.split('?')[1] ?? '');
     const lifecycle = query.get('lifecycle') ?? 'active';
     return testState.signalPostsPayload.filter((post) => {

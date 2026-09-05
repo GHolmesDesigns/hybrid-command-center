@@ -126,6 +126,7 @@ import {
   replacePostPublishTargets,
   replacePostVariants,
   retirePost,
+  signalPostFiltersFromQuery,
   signalPostInput,
   signalPostPatch,
   signalQueueQuery,
@@ -2084,9 +2085,18 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
    */
   app.get('/api/signal/posts', (req, res, next) => {
     try {
-      const { from, to, lifecycle } = signalRangeQuery.parse(req.query);
-      if (from > to) return res.status(400).json({ error: 'The range ends before it starts.' });
-      res.json(listPostsInRange(db, from, to, lifecycle));
+      const query = signalRangeQuery.parse(req.query);
+      if (query.from > query.to)
+        return res.status(400).json({ error: 'The range ends before it starts.' });
+      res.json(
+        listPostsInRange(
+          db,
+          query.from,
+          query.to,
+          query.lifecycle,
+          signalPostFiltersFromQuery(query),
+        ),
+      );
     } catch (error) {
       next(error);
     }
@@ -2117,9 +2127,10 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
    */
   app.get('/api/signal/card-delivery', (req, res, next) => {
     try {
-      const { from, to } = signalRangeQuery.parse(req.query);
-      if (from > to) return res.status(400).json({ error: 'The range ends before it starts.' });
-      res.json(readCardDeliveries(db, from, to));
+      const query = signalRangeQuery.parse(req.query);
+      if (query.from > query.to)
+        return res.status(400).json({ error: 'The range ends before it starts.' });
+      res.json(readCardDeliveries(db, query.from, query.to, signalPostFiltersFromQuery(query)));
     } catch (error) {
       next(error);
     }
@@ -2313,8 +2324,8 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   /** The unscheduled queue — posts with no date, which belong to no range and no calendar cell. */
   app.get('/api/signal/queue', (req, res, next) => {
     try {
-      const { lifecycle } = signalQueueQuery.parse(req.query);
-      res.json(listQueue(db, lifecycle));
+      const query = signalQueueQuery.parse(req.query);
+      res.json(listQueue(db, query.lifecycle, signalPostFiltersFromQuery(query)));
     } catch (error) {
       next(error);
     }

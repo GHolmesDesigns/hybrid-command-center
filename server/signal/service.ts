@@ -4,6 +4,7 @@ import { advanceRevision, requireRevision } from '../domain/revisions.ts';
 import {
   SIGNAL_CHANNELS,
   SIGNAL_CHANNEL_LABEL,
+  SIGNAL_CLIENT_UNBOUND,
   SIGNAL_CTAS,
   SIGNAL_DATE_PATTERN,
   SIGNAL_DEFAULT_TIME,
@@ -20,6 +21,7 @@ import {
   type SignalPost,
   type SignalSlot,
 } from '../../shared/signal.ts';
+import { SIGNAL_CAMPAIGN_NONE } from '../../shared/signal-campaign-analytics.ts';
 import {
   listPostVariants,
   toSignalPost,
@@ -27,9 +29,11 @@ import {
   channelsByPost,
   mediaByPost,
   signalLifecycleSql,
+  signalPostFilterSql,
   signalPostSelect,
   variantLayerKey,
   variantMediaByPost,
+  type SignalPostFilters,
   type SignalPostRow,
   type SignalVariantRoleMedia,
 } from './rows.ts';
@@ -265,6 +269,46 @@ export const signalPostPatch = z.object(patchShape);
 export type SignalPostInput = z.output<typeof signalPostInput>;
 export type SignalPostPatch = z.output<typeof signalPostPatch>;
 
+/**
+ * A comma-separated list, as the address carries one.
+ *
+ * The same form the Projects view's `categories` parameter, and the campaign-figures panel's
+ * `campaigns`/`channels`/`accounts`, all use: an empty or absent parameter is *no restriction*
+ * rather than an empty set, so `?client=` behaves exactly as leaving it out does. An unparseable
+ * member fails the request rather than being silently dropped.
+ */
+const commaList = z
+  .string()
+  .optional()
+  .transform((value) =>
+    (value ?? '')
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean),
+  );
+
+/** A resolved client id, plus the reserved value for a post with no client. */
+const clientIdValue = z.union([z.literal(SIGNAL_CLIENT_UNBOUND), z.string().uuid()]);
+/** A campaign id, plus the reserved value for a post carrying none. */
+const campaignIdValue = z.union([z.literal(SIGNAL_CAMPAIGN_NONE), z.string().uuid()]);
+
+/**
+ * C186's planner-level filter fields, shared by the range, queue, and card-delivery routes so the
+ * three cannot silently accept a different scope from one another.
+ *
+ * Named `client`/`project`/`campaign` — singular — deliberately distinct from the campaign-figures
+ * panel's own `campaigns`/`channels`/`accounts`: the two filter sets share one address bar
+ * (`SignalView` and `SignalCampaignAnalyticsPanel` both read `useSearchParams`), so a shared name
+ * would make choosing one silently move the other.
+ */
+const signalFilterFields = {
+  client: commaList.pipe(z.array(clientIdValue)),
+  project: commaList.pipe(z.array(z.string().uuid())),
+  campaign: commaList.pipe(z.array(campaignIdValue)),
+  /** Transient copy search — never a durable filter, per `docs/view-state-convention.md`. */
+  q: z.string().trim().max(200).optional(),
+};
+
 export const signalRangeQuery = z.object({
   from: date,
   to: date,
@@ -272,11 +316,25 @@ export const signalRangeQuery = z.object({
    * Lifecycle scope for the list — not planning status, not delivery. Default active plans only.
    */
   lifecycle: z.enum(SIGNAL_LIFECYCLE_FILTERS).default('active'),
+  ...signalFilterFields,
 });
 
 export const signalQueueQuery = z.object({
   lifecycle: z.enum(SIGNAL_LIFECYCLE_FILTERS).default('active'),
+  ...signalFilterFields,
 });
+
+export type SignalFilterQuery = z.infer<z.ZodObject<typeof signalFilterFields>>;
+
+/** The query's filter fields, as the shape every C186-scoped list read takes. */
+export function signalPostFiltersFromQuery(query: SignalFilterQuery): SignalPostFilters {
+  return {
+    clientIds: query.client,
+    projectIds: query.project,
+    campaignIds: query.campaign,
+    text: query.q,
+  };
+}
 
 /** The local day the planner is looking from. The server never derives this from an instant. */
 export const signalSlotFromQuery = z.object({
@@ -429,14 +487,30 @@ export function getPost(db: Db, postId: string): SignalPost | undefined {
  *
  * Lifecycle defaults to active plans — a retired undated idea stays out of the queue unless the
  * operator asks for retired or all.
+ *
+ * `filters` is C186's scope, applied identically to `listPostsInRange` — see `signalPostFilterSql`.
+ * The queue has no row limit of its own, so there is no truncation boundary for this to sit ahead
+ * of, but the scope must still match the range and the delivery snapshot exactly.
  */
-export function listQueue(db: Db, lifecycle: SignalLifecycleFilter = 'active'): SignalPost[] {
+export function listQueue(
+  db: Db,
+  lifecycle: SignalLifecycleFilter = 'active',
+  filters: SignalPostFilters = {},
+): SignalPost[] {
   const lifecycleClause = signalLifecycleSql(lifecycle);
+  const filterSql = signalPostFilterSql(filters);
+  const clauses = [
+    'p.date IS NULL',
+    ...(lifecycleClause.sql
+      ? [lifecycleClause.sql.replace(/^ AND /, '').replaceAll('lifecycle', 'p.lifecycle')]
+      : []),
+    ...filterSql.clauses,
+  ];
   const rows = db
     .prepare(
-      `${signalPostSelect} WHERE p.date IS NULL${lifecycleClause.sql.replaceAll('lifecycle', 'p.lifecycle')} ORDER BY p.position, p.created_at, p.id`,
+      `${signalPostSelect} WHERE ${clauses.join(' AND ')} ORDER BY p.position, p.created_at, p.id`,
     )
-    .all() as unknown as SignalPostRow[];
+    .all(...filterSql.params) as unknown as SignalPostRow[];
   return toSignalPosts(db, rows);
 }
 
@@ -445,14 +519,23 @@ export function listQueuePage(
   db: Db,
   lifecycle: SignalLifecycleFilter,
   limit: number,
+  filters: SignalPostFilters = {},
 ): { posts: SignalPost[]; truncated: boolean } {
   const lifecycleClause = signalLifecycleSql(lifecycle);
+  const filterSql = signalPostFilterSql(filters);
+  const clauses = [
+    'p.date IS NULL',
+    ...(lifecycleClause.sql
+      ? [lifecycleClause.sql.replace(/^ AND /, '').replaceAll('lifecycle', 'p.lifecycle')]
+      : []),
+    ...filterSql.clauses,
+  ];
   const rows = db
     .prepare(
-      `${signalPostSelect} WHERE p.date IS NULL${lifecycleClause.sql.replaceAll('lifecycle', 'p.lifecycle')}
+      `${signalPostSelect} WHERE ${clauses.join(' AND ')}
        ORDER BY p.position, p.created_at, p.id LIMIT ?`,
     )
-    .all(limit + 1) as unknown as SignalPostRow[];
+    .all(...filterSql.params, limit + 1) as unknown as SignalPostRow[];
   return { posts: toSignalPosts(db, rows.slice(0, limit)), truncated: rows.length > limit };
 }
 

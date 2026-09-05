@@ -113,7 +113,7 @@ describe('Signal planner', () => {
     await openSignal('/signal?view=today&month=2025-01&date=2025-01-03');
 
     expect(
-      screen.getByText('This day has more than 500 posts. Only the first 500 are shown.'),
+      screen.getByText('This day matches more than 500 posts. Only the first 500 are shown.'),
     ).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole('button', { name: 'Today' })[1]!);
     expect(await screen.findByRole('region', { name: '2026-09-14' })).toHaveTextContent(
