@@ -2399,8 +2399,8 @@ export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
       )}
       {truncated && (
         <div className="refresh-error" role="status">
-          This {truncationSpanLabel} {view === 'month' ? 'has' : 'matches'} more than 500 posts. Only
-          the first 500 are shown.
+          This {truncationSpanLabel} {view === 'month' ? 'has' : 'matches'} more than 500 posts.
+          Only the first 500 are shown.
         </div>
       )}
       {/* Above the planner, because it narrows what both the grid and the queue below show: a
