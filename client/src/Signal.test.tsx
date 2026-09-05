@@ -127,7 +127,7 @@ describe('Signal planner', () => {
       signalPost('scheduled', 'The September launch post', '2026-09-14', {
         channels: ['li', 'ig'],
       }),
-      signalPost('october', 'Not in this month', '2026-10-01'),
+      signalPost('outside-grid', 'Not in this visible grid', '2026-10-04'),
     ];
     await openSignal();
 
@@ -139,7 +139,41 @@ describe('Signal planner', () => {
     expect(within(day).getByText('The September launch post')).toBeInTheDocument();
     expect(within(day).getByText('LinkedIn')).toHaveClass('sr-only');
     expect(within(day).getByText('Instagram')).toHaveClass('sr-only');
-    expect(screen.queryByText('Not in this month')).not.toBeInTheDocument();
+    expect(screen.queryByText('Not in this visible grid')).not.toBeInTheDocument();
+  });
+
+  it('renders and fetches the complete Sunday-through-Saturday month grid', async () => {
+    testState.signalPostsTruncated = true;
+    testState.signalPostsPayload = [
+      signalPost('previous-month', 'Previous month spillover', '2026-08-30'),
+      signalPost('next-month', 'Next month spillover', '2026-10-03'),
+      signalPost('outside-grid', 'Outside the visible grid', '2026-10-04'),
+    ];
+    await openSignal('/signal?month=2026-09');
+
+    expect(screen.getByRole('heading', { level: 2, name: 'September 2026' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '2026-08-30' })).toHaveTextContent(
+      'Previous month spillover',
+    );
+    expect(screen.getByRole('region', { name: '2026-10-03' })).toHaveTextContent(
+      'Next month spillover',
+    );
+    expect(screen.queryByRole('region', { name: '2026-10-04' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('region', { name: /^2026-/ })).toHaveLength(35);
+    expect(
+      screen.getByText(
+        'This visible month grid has more than 500 posts. Only the first 500 are shown.',
+      ),
+    ).toBeInTheDocument();
+
+    const rangeCall = requests.find((request) => request.url.includes('/api/signal/posts?'));
+    expect(rangeCall?.url).toContain('from=2026-08-30');
+    expect(rangeCall?.url).toContain('to=2026-10-03');
+    const deliveryCall = requests.find((request) =>
+      request.url.includes('/api/signal/card-delivery?'),
+    );
+    expect(deliveryCall?.url).toContain('from=2026-08-30');
+    expect(deliveryCall?.url).toContain('to=2026-10-03');
   });
 
   it('names a bound client cue and leaves an unbound post without one', async () => {
