@@ -8,6 +8,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.13.23] - 2026-09-05
+
+### Added
+
+- Complete the Signal month grid with the adjacent-month days, posts, delivery summaries, and Add
+  post actions needed to fill every Sunday-through-Saturday week.
+
+### Breaking changes
+
+None.
+
 ## [5.13.22] - 2026-09-04
 
 ### Added
