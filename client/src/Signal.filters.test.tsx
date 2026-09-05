@@ -1,0 +1,158 @@
+import {
+  App,
+  MemoryRouter,
+  beforeEach,
+  branding,
+  client,
+  describe,
+  expect,
+  fireEvent,
+  it,
+  project,
+  render,
+  requests,
+  screen,
+  signalPost,
+  testState,
+  waitFor,
+  within,
+} from './App.test-setup';
+import {
+  SIGNAL_CAMPAIGN_NONE,
+  SIGNAL_CAMPAIGN_NONE_LABEL,
+} from '../../shared/signal-campaign-analytics';
+import { SIGNAL_CLIENT_UNBOUND, SIGNAL_CLIENT_UNBOUND_LABEL } from '../../shared/signal';
+
+/**
+ * C186: the planner's own client/project/campaign filters and copy search — durable URL state for
+ * the first three, transient for search, applied identically to the range, the queue, and the
+ * delivery snapshot per `docs/view-state-convention.md`.
+ *
+ * The mock server in `App.test-setup` answers `from`/`to`/`lifecycle` only; it does not reproduce
+ * the SQL scope `server/signal/filters.test.ts` already proves. What this file covers is the
+ * browser's own half: that a chosen filter reaches the address and every one of the three requests,
+ * that it survives navigation, and that clearing it removes exactly what it added.
+ */
+
+const acme = client('client-acme', 'Acme');
+const brightline = client('client-brightline', 'Brightline');
+const acmeProject = project('project-acme', 'Acme rollout');
+const clarity = { id: 'campaign-1', name: 'Clarity Campaign' };
+
+const openPlanner = async (entry = '/signal?month=2026-09') => {
+  render(
+    <MemoryRouter initialEntries={[entry]}>
+      <App />
+    </MemoryRouter>,
+  );
+  await screen.findByText(branding.title);
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh' })).toBeEnabled());
+};
+
+const filters = () => screen.getByRole('region', { name: 'Filter the planner' });
+const lastRequestTo = (segment: string) =>
+  [...requests].reverse().find((request) => request.url.includes(segment));
+
+describe('the planner filter bar', () => {
+  beforeEach(() => {
+    testState.clientsPayload = [acme, brightline];
+    testState.projectsPayload = [acmeProject];
+    testState.signalCampaignsPayload = [{ ...clarity, postCount: 0 }];
+    testState.signalPostsPayload = [signalPost('p1', 'A scheduled post', '2026-09-14')];
+  });
+
+  it('puts a client filter in the address and sends it to posts, queue, and card-delivery, with several read as or', async () => {
+    await openPlanner();
+
+    fireEvent.click(within(filters()).getByRole('button', { name: 'Acme' }));
+    await waitFor(() =>
+      expect(lastRequestTo('/api/signal/posts?')?.url).toContain(`client=${acme.id}`),
+    );
+    expect(lastRequestTo('/api/signal/queue')?.url).toContain(`client=${acme.id}`);
+    expect(lastRequestTo('/api/signal/card-delivery')?.url).toContain(`client=${acme.id}`);
+    expect(within(filters()).getByRole('button', { name: 'Acme' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
+    fireEvent.click(within(filters()).getByRole('button', { name: 'Brightline' }));
+    await waitFor(() =>
+      expect(lastRequestTo('/api/signal/posts?')?.url).toContain(
+        `client=${encodeURIComponent(`${acme.id},${brightline.id}`)}`,
+      ),
+    );
+
+    // Selecting it again takes it back out.
+    fireEvent.click(within(filters()).getByRole('button', { name: 'Acme' }));
+    await waitFor(() =>
+      expect(lastRequestTo('/api/signal/posts?')?.url).toContain(`client=${brightline.id}`),
+    );
+    expect(lastRequestTo('/api/signal/posts?')?.url).not.toContain(acme.id);
+  });
+
+  it('asks for unbound posts and unclassified posts by their reserved names', async () => {
+    await openPlanner();
+
+    fireEvent.click(within(filters()).getByRole('button', { name: SIGNAL_CLIENT_UNBOUND_LABEL }));
+    await waitFor(() =>
+      expect(lastRequestTo('/api/signal/posts?')?.url).toContain(`client=${SIGNAL_CLIENT_UNBOUND}`),
+    );
+
+    fireEvent.click(within(filters()).getByRole('button', { name: SIGNAL_CAMPAIGN_NONE_LABEL }));
+    await waitFor(() =>
+      expect(lastRequestTo('/api/signal/posts?')?.url).toContain(
+        `campaign=${SIGNAL_CAMPAIGN_NONE}`,
+      ),
+    );
+  });
+
+  it('filters by project and by campaign', async () => {
+    await openPlanner();
+
+    fireEvent.click(within(filters()).getByRole('button', { name: 'Acme rollout' }));
+    await waitFor(() =>
+      expect(lastRequestTo('/api/signal/posts?')?.url).toContain(`project=${acmeProject.id}`),
+    );
+
+    fireEvent.click(within(filters()).getByRole('button', { name: 'Clarity Campaign' }));
+    await waitFor(() =>
+      expect(lastRequestTo('/api/signal/posts?')?.url).toContain(`campaign=${clarity.id}`),
+    );
+  });
+
+  it('sends a debounced, transient copy search that never reaches the address', async () => {
+    await openPlanner();
+
+    fireEvent.change(within(filters()).getByPlaceholderText('Search post copy…'), {
+      target: { value: 'autumn' },
+    });
+    await waitFor(() => expect(lastRequestTo('/api/signal/posts?')?.url).toContain('q=autumn'), {
+      timeout: 2000,
+    });
+    expect(new URL(window.location.href, 'http://localhost').search).not.toContain('q=');
+  });
+
+  it('clears every durable filter at once and leaves the planner’s month alone', async () => {
+    await openPlanner(`/signal?month=2026-09&client=${acme.id}&campaign=${clarity.id}`);
+
+    expect(within(filters()).getByRole('button', { name: 'Acme' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    fireEvent.click(within(filters()).getByRole('button', { name: 'Clear filters' }));
+    await waitFor(() => expect(lastRequestTo('/api/signal/posts?')?.url).not.toContain('client='));
+    expect(lastRequestTo('/api/signal/posts?')?.url).not.toContain('campaign=');
+    expect(screen.getByRole('heading', { name: 'September 2026' })).toBeInTheDocument();
+  });
+
+  it('carries the filter scope across a month/view navigation rather than dropping it', async () => {
+    await openPlanner(`/signal?month=2026-09&client=${acme.id}`);
+    expect(lastRequestTo('/api/signal/posts?')?.url).toContain(`client=${acme.id}`);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next month' }));
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'October 2026' })).toBeInTheDocument(),
+    );
+    expect(lastRequestTo('/api/signal/posts?')?.url).toContain(`client=${acme.id}`);
+  });
+});

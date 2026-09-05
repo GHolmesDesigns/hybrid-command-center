@@ -120,8 +120,8 @@ export async function callWorkspaceReadTool(
         }
         return success(
           listPostsInRange(db, args.from, args.to, args.lifecycle ?? 'active', {
-            projectId: args.projectId,
-            campaign: args.campaign,
+            projectIds: args.projectId ? [args.projectId] : undefined,
+            campaignName: args.campaign,
           }),
         );
       }

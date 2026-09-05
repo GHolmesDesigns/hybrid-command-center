@@ -8,6 +8,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.13.25] - 2026-09-05
+
+### Changed
+
+- Signal's planner now filters and searches the grid and the unscheduled queue by client, project,
+  and campaign, plus a transient copy search, with several selections within one dimension read as
+  OR and every dimension combined with AND. Client and project filters, plus a reserved value for
+  unbound posts and for posts carrying no campaign, apply in SQL before the 500-row range limit, so
+  the grid, the queue, the truncation notice, and the delivery snapshot always agree on scope. Copy
+  search is transient per `docs/view-state-convention.md` and never reaches the address bar.
+
+### Breaking changes
+
+None.
+
 ## [5.13.24] - 2026-09-05
 
 ### Added

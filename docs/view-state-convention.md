@@ -56,7 +56,7 @@ resolving even when they contain an unknown or retired value.
 | Projects | Collection | Live projects by recent activity in configured Grid/List presentation | `visibility`, `view`, `client`, `sort`, `statuses`, and `categories` |
 | Status | Workflow board | Canonical task-status order | Project, client, priority, type, focus, and tag filters |
 | Calendar | Time view | Current month | View and selected date/month when away from the default |
-| Signal | Time view | Current month | View and selected date/month when away from the default, `post` for an open post, `new` for the shared Add Post form, `lifecycle` for active / retired / all plans (lifecycle dimension, not planning status), and `campaigns`, `channels`, `accounts`, `from`, and `to` for the campaign-figures filters |
+| Signal | Time view | Current month | View and selected date/month when away from the default, `post` for an open post, `new` for the shared Add Post form, `lifecycle` for active / retired / all plans (lifecycle dimension, not planning status), `client`, `project`, and `campaign` for the planner's own scope, and `campaigns`, `channels`, `accounts`, `from`, and `to` for the campaign-figures filters |
 | Files | Context browser | Explicit project, remembered project, then first live project | Project and folder selections |
 
 Projects uses `live`, `archived`, and `all`; Clients uses its domain term `active` in place of
@@ -83,6 +83,20 @@ ignored rather than failing the page. `campaigns=none` is the reserved value for
 campaign, so **No campaign** can be asked for by name rather than only reached by clearing everything
 else. They are the panel's own parameters and share the address with the planner's period, so clearing the
 filters leaves the month exactly where it was.
+
+Signal's own `client`, `project`, and `campaign` (C186) narrow the grid, the unscheduled queue, and
+the delivery snapshot together — the same scope applies to every one of the three, so their counts,
+empty states, and truncation notice never disagree about what is in view. Each is a comma-separated
+list of ids, OR'd within itself and AND'd against the other two and against the lifecycle filter.
+Each is omitted from the address when it is empty, and each is read defensively: an id the workspace
+no longer has simply matches nothing. `client=unbound` is the reserved value for a post with no
+resolvable client, and `campaign=none` is the reserved value for a post carrying no campaign — the
+same construction the campaign-figures panel's own `campaigns=none` uses. These three are
+deliberately named singular and distinct from the campaign-figures panel's own `campaigns`,
+`channels`, `accounts`, `from`, and `to`: the two filter sets share this page's one address bar, and
+a shared name would make choosing one silently move the other. Copy search is transient and stays in
+component state rather than the address, per the rule above — it is sent to the API as `q` on every
+request but never written to the URL, and it does not survive a reload or a shared link.
 
 Signal's `post` is a selection rather than a period: it names the post whose editor is open, so a
 queue-health alert can link straight to the post it is about. It is read defensively like every other

@@ -1,9 +1,5 @@
 import type { Db } from '../db.ts';
-import {
-  normalizeSignalCampaignName,
-  SIGNAL_RANGE_LIMIT,
-  type SignalLifecycleFilter,
-} from '../../shared/signal.ts';
+import { SIGNAL_RANGE_LIMIT, type SignalLifecycleFilter } from '../../shared/signal.ts';
 import type { SignalProvider, SignalPostRange } from './provider.ts';
 import type { PublishVariantRecord } from '../../shared/publish-variants.ts';
 import type { PublishTargetSelection } from '../../shared/publish.ts';
@@ -11,8 +7,10 @@ import {
   listPostPublishTargets,
   listPostVariants,
   signalLifecycleSql,
+  signalPostFilterSql,
   toSignalPosts,
   signalPostSelect,
+  type SignalPostFilters,
   type SignalPostRow,
 } from './rows.ts';
 
@@ -38,36 +36,30 @@ import {
  * Lifecycle defaults to active plans only — retired plans stay out of the calendar and planner
  * grid unless the caller asks for `retired` or `all`. That filter is lifecycle, not planning
  * status and not delivery state.
+ *
+ * `filters` is C186's scope (client, project, campaign, copy search) — applied here, in the
+ * `WHERE` clause, so a post outside it never reaches `LIMIT SIGNAL_RANGE_LIMIT + 1` in the first
+ * place. Filtering the already-truncated result instead would make `truncated` lie.
  */
 export function listPostsInRange(
   db: Db,
   from: string,
   to: string,
   lifecycle: SignalLifecycleFilter = 'active',
-  filters: { projectId?: string; campaign?: string } = {},
+  filters: SignalPostFilters = {},
 ): SignalPostRange {
   const lifecycleClause = signalLifecycleSql(lifecycle);
-  const clauses = ['date IS NOT NULL', 'date >= ?', 'date <= ?'];
-  if (lifecycleClause.sql) clauses.push(lifecycleClause.sql.replace(/^ AND /, ''));
+  const clauses = ['p.date IS NOT NULL', 'p.date >= ?', 'p.date <= ?'];
+  if (lifecycleClause.sql)
+    clauses.push(lifecycleClause.sql.replace(/^ AND /, '').replace('lifecycle', 'p.lifecycle'));
   const params: (string | number)[] = [from, to];
-  if (filters.projectId) {
-    clauses.push('project_id = ?');
-    params.push(filters.projectId);
-  }
-  if (filters.campaign) {
-    clauses.push(
-      `EXISTS (
-         SELECT 1 FROM signal_post_campaigns pc
-         JOIN signal_campaigns c ON c.id = pc.campaign_id
-         WHERE pc.post_id = signal_posts.id AND c.name = ? COLLATE NOCASE
-       )`,
-    );
-    params.push(normalizeSignalCampaignName(filters.campaign));
-  }
+  const filterSql = signalPostFilterSql(filters);
+  clauses.push(...filterSql.clauses);
+  params.push(...filterSql.params);
   const rows = db
     .prepare(
       `${signalPostSelect}
-       WHERE ${clauses.map((clause) => clause.replaceAll('signal_posts.', 'p.')).join(' AND ')}
+       WHERE ${clauses.join(' AND ')}
        ORDER BY p.date, p.time, p.created_at, p.id
        LIMIT ?`,
     )

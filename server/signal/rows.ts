@@ -1,12 +1,15 @@
 import type { Db } from '../db.ts';
-import type {
-  SignalCampaign,
-  SignalChannel,
-  SignalDeliveryProvenance,
-  SignalLifecycle,
-  SignalLifecycleFilter,
-  SignalPost,
+import {
+  SIGNAL_CLIENT_UNBOUND,
+  normalizeSignalCampaignName,
+  type SignalCampaign,
+  type SignalChannel,
+  type SignalDeliveryProvenance,
+  type SignalLifecycle,
+  type SignalLifecycleFilter,
+  type SignalPost,
 } from '../../shared/signal.ts';
+import { SIGNAL_CAMPAIGN_NONE } from '../../shared/signal-campaign-analytics.ts';
 import type { SignalPostMedia } from '../../shared/signal-media.ts';
 import type { ClientBranding } from '../../shared/branding.ts';
 import { campaignsByPost } from './campaigns.ts';
@@ -78,6 +81,107 @@ export function signalLifecycleSql(filter: SignalLifecycleFilter = 'active'): {
   if (filter === 'all') return { sql: '', params: [] };
   if (filter === 'retired') return { sql: " AND lifecycle = 'RETIRED'", params: [] };
   return { sql: " AND lifecycle = 'ACTIVE'", params: [] };
+}
+
+/**
+ * What C186 filters a planner list by: client, project, and campaign, each OR'd within itself and
+ * AND'd against the others, plus a transient copy search. Every field is optional and an absent or
+ * empty one narrows nothing — the same *no restriction* rule `SignalCampaignAnalyticsFilters` uses.
+ *
+ * Shared by every list this scope applies to (`listPostsInRange`, `listQueue`, `listQueuePage`) so
+ * the range, the queue, and the delivery snapshot built from them cannot drift apart on what counts
+ * as in scope.
+ */
+export interface SignalPostFilters {
+  /** Workspace project ids. */
+  projectIds?: string[];
+  /** Resolved client ids, plus `SIGNAL_CLIENT_UNBOUND` for a post with no resolvable client. */
+  clientIds?: string[];
+  /** Campaign ids, plus `SIGNAL_CAMPAIGN_NONE` for a post that carries none. */
+  campaignIds?: string[];
+  /**
+   * A single campaign matched by name, `COLLATE NOCASE`. Kept for the `signal_list_posts` MCP tool,
+   * which names a campaign rather than an id — the shape it already had before this filter set
+   * existed. Combined with `campaignIds` as one more OR term when both are given.
+   */
+  campaignName?: string;
+  /** Case-insensitive substring match over post copy. Transient — never stored as a durable filter. */
+  text?: string;
+}
+
+/** Escapes `%`, `_`, and the escape character itself, so a search term is matched literally. */
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
+}
+
+/**
+ * The `WHERE` fragments and bound parameters for `SignalPostFilters`, over the `p`/`pr`/`c` aliases
+ * `signalPostSelect` joins.
+ *
+ * SQL rather than an in-memory filter on purpose: C186 requires scope to narrow *before*
+ * `SIGNAL_RANGE_LIMIT`, which only a `WHERE` clause can do. This is the opposite of
+ * `summariseSignalCampaignAnalytics`, which filters in memory over an already-unbounded read —
+ * appropriate there because that read has no cap to filter ahead of.
+ */
+export function signalPostFilterSql(filters: SignalPostFilters): {
+  clauses: string[];
+  params: (string | number)[];
+} {
+  const clauses: string[] = [];
+  const params: (string | number)[] = [];
+
+  if (filters.projectIds?.length) {
+    clauses.push(`p.project_id IN (${filters.projectIds.map(() => '?').join(',')})`);
+    params.push(...filters.projectIds);
+  }
+
+  if (filters.clientIds?.length) {
+    const named = filters.clientIds.filter((id) => id !== SIGNAL_CLIENT_UNBOUND);
+    const wantsUnbound = filters.clientIds.includes(SIGNAL_CLIENT_UNBOUND);
+    const parts: string[] = [];
+    if (named.length) {
+      parts.push(`c.id IN (${named.map(() => '?').join(',')})`);
+      params.push(...named);
+    }
+    // `c` is the resolved client `signalPostSelect` already joins; a post with none — no project, or
+    // a project whose client no longer resolves — leaves it NULL.
+    if (wantsUnbound) parts.push('c.id IS NULL');
+    if (parts.length) clauses.push(`(${parts.join(' OR ')})`);
+  }
+
+  if (filters.campaignIds?.length || filters.campaignName) {
+    const ids = (filters.campaignIds ?? []).filter((id) => id !== SIGNAL_CAMPAIGN_NONE);
+    const wantsNone = (filters.campaignIds ?? []).includes(SIGNAL_CAMPAIGN_NONE);
+    const parts: string[] = [];
+    if (ids.length) {
+      parts.push(
+        `EXISTS (SELECT 1 FROM signal_post_campaigns spc WHERE spc.post_id = p.id AND spc.campaign_id IN (${ids
+          .map(() => '?')
+          .join(',')}))`,
+      );
+      params.push(...ids);
+    }
+    if (filters.campaignName) {
+      parts.push(
+        `EXISTS (
+           SELECT 1 FROM signal_post_campaigns spc2
+           JOIN signal_campaigns sc2 ON sc2.id = spc2.campaign_id
+           WHERE spc2.post_id = p.id AND sc2.name = ? COLLATE NOCASE
+         )`,
+      );
+      params.push(normalizeSignalCampaignName(filters.campaignName));
+    }
+    if (wantsNone)
+      parts.push('NOT EXISTS (SELECT 1 FROM signal_post_campaigns spc3 WHERE spc3.post_id = p.id)');
+    if (parts.length) clauses.push(`(${parts.join(' OR ')})`);
+  }
+
+  if (filters.text?.trim()) {
+    clauses.push(`p.text LIKE ? ESCAPE '\\' COLLATE NOCASE`);
+    params.push(`%${escapeLikePattern(filters.text.trim())}%`);
+  }
+
+  return { clauses, params };
 }
 
 /**

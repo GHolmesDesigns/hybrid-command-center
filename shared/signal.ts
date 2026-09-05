@@ -537,6 +537,16 @@ export interface SignalPostClient {
 }
 
 /**
+ * Reserved by the planner's client filter for a post with no resolvable client — no project, or a
+ * project whose client no longer resolves (`docs/signal-client-binding-decision-2026-09-01.md`).
+ * Client ids are UUIDs, so this cannot collide with one — the same construction
+ * `SIGNAL_CAMPAIGN_NONE` uses for **No campaign**.
+ */
+export const SIGNAL_CLIENT_UNBOUND = 'unbound';
+/** The name **No client** is shown under, said once so every view says it identically. */
+export const SIGNAL_CLIENT_UNBOUND_LABEL = 'No client';
+
+/**
  * Campaign order, wherever one is listed: case- and accent-insensitive by name, tie-broken by id
  * so two spellings that compare equal cannot swap places between renders.
  */
