@@ -99,6 +99,25 @@ export function calendarViewRange(view: CalendarViewMode, anchor: string): Calen
   return { from, to: addCalendarDays(from, 6) };
 }
 
+/**
+ * Returns the Sunday-through-Saturday grid containing the anchor's complete calendar month.
+ *
+ * The month itself remains the navigation/title anchor. These wider bounds are only the visible
+ * grid span, so callers can fetch and render honest adjacent-month cells without changing what
+ * month the address names.
+ */
+export function calendarMonthGridRange(anchor: string): CalendarViewRange {
+  const month = calendarViewRange('month', anchor);
+  const [fromYear, fromMonth, fromDay] = dateParts(month.from);
+  const leading = new Date(Date.UTC(fromYear, fromMonth - 1, fromDay)).getUTCDay();
+  const [toYear, toMonth, toDay] = dateParts(month.to);
+  const trailing = 6 - new Date(Date.UTC(toYear, toMonth - 1, toDay)).getUTCDay();
+  return {
+    from: addCalendarDays(month.from, -leading),
+    to: addCalendarDays(month.to, trailing),
+  };
+}
+
 /** Moves an agenda by one of its own spans while preserving a useful anchor date. */
 export function shiftCalendarAnchor(
   view: CalendarViewMode,

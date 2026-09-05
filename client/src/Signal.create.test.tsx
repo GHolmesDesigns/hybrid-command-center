@@ -52,6 +52,18 @@ describe('Signal Add Post entry points', () => {
     expect(router.state.location.search).toContain('month=2026-09');
   });
 
+  it('opens the correct adjacent-month date without moving the selected month', async () => {
+    testState.signalPostsPayload = [];
+    const router = await openSignal('/signal?month=2026-09');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add post on 2026-10-03' }));
+
+    const editor = await screen.findByRole('dialog');
+    expect(within(editor).getByLabelText('Date')).toHaveValue('2026-10-03');
+    expect(router.state.location.search).toContain('new=2026-10-03');
+    expect(router.state.location.search).toContain('month=2026-09');
+  });
+
   it('opens an unscheduled draft from the queue Add post action', async () => {
     testState.signalPostsPayload = [];
     const router = await openSignal('/signal?month=2026-09');
