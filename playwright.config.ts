@@ -9,6 +9,11 @@ const gracefulShutdown = { signal: 'SIGTERM', timeout: 5_000 } as const;
 
 export default defineConfig({
   testDir: './e2e',
+  // The Windows runner is materially slower under load: the same critical workflow that takes
+  // seconds locally has crossed Playwright's 30-second default there. Keep every assertion and
+  // fail bounded, but give a single Windows CI flow enough time to finish instead of interrupting
+  // the rest of the required suite. Local and Linux runs retain Playwright's default.
+  timeout: process.env.CI && process.platform === 'win32' ? 60_000 : 30_000,
   // Playwright's default also collects `*.test.ts`, which would hand it the Vitest files
   // that sit beside the helpers they cover. `.spec.ts` is Playwright's, `.test.ts` is
   // Vitest's, and nothing has to live away from what it tests to keep the two apart.

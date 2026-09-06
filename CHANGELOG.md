@@ -19,6 +19,9 @@ The version a card ships as is decided at merge time — see the bump rule in `A
   `400 invalid_client_metadata` and surfaced to operators as "Couldn't register with Hybrid Command
   Center's sign-in service." Registration now succeeds and reports back only the grant and response
   types this server grants (`authorization_code`, `code`), unchanged.
+- Required Windows browser checks retain every flow and assertion while allowing enough bounded
+  time for slower hosted runners to finish, avoiding unrelated timeout failures near the end of the
+  suite.
 
 ### Breaking changes
 
