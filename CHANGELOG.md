@@ -8,6 +8,22 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.13.26] - 2026-09-06
+
+### Fixed
+
+- The MCP OAuth connector registration endpoint (`POST /register`) no longer rejects a client that
+  requests `refresh_token` grant support or a `token` response type alongside the ones this server
+  actually implements. Claude chat, Cowork, and desktop request `refresh_token` support
+  unconditionally during registration, which previously failed the whole registration with
+  `400 invalid_client_metadata` and surfaced to operators as "Couldn't register with Hybrid Command
+  Center's sign-in service." Registration now succeeds and reports back only the grant and response
+  types this server grants (`authorization_code`, `code`), unchanged.
+
+### Breaking changes
+
+None.
+
 ## [5.13.25] - 2026-09-05
 
 ### Changed
