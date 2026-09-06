@@ -228,7 +228,9 @@ jobs:
     # Windows exit on a commit already proved is the exact spend #278 was filed to stop.
     if: github.event.action != 'ready_for_review'
     runs-on: windows-latest
-    timeout-minutes: 8
+    # Installation plus the 55 single-worker browser flows has exceeded eight minutes on a
+    # contended runner. This remains a hard bound and still proves that Playwright exits itself.
+    timeout-minutes: 12
 
     steps:
       - name: Check out repository
@@ -249,7 +251,9 @@ jobs:
       - name: Run end-to-end tests
         id: e2e
         run: npm run test:e2e
-        timeout-minutes: 5
+        # A healthy run is currently close to five minutes on Windows. Leave bounded headroom so
+        # the last flows run instead of being interrupted by the step deadline.
+        timeout-minutes: 8
 
       - name: Upload the Playwright report
         if: failure() && steps.e2e.outcome == 'failure'

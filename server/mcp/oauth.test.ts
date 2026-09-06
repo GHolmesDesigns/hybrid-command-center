@@ -362,6 +362,34 @@ describe('MCP OAuth routes', () => {
     expect(bad.body.error).toBe('invalid_client_metadata');
   });
 
+  it('registers a client that requests refresh_token support, granting only what it supports', async () => {
+    // Claude Desktop's MCP client requests grant_types: ["authorization_code", "refresh_token"]
+    // unconditionally. This server only implements authorization_code — that must not fail the
+    // whole registration, per RFC 7591 (unsupported-but-recognized values just aren't granted).
+    const redirectUri = MCP_OAUTH_ALLOWED_REDIRECT_URIS[0];
+    const register = await request(app())
+      .post('/register')
+      .send({
+        redirect_uris: [redirectUri],
+        client_name: 'Claude Desktop',
+        token_endpoint_auth_method: 'none',
+        grant_types: ['authorization_code', 'refresh_token'],
+        response_types: ['code'],
+      })
+      .expect(201);
+    expect(register.body.grant_types).toEqual(['authorization_code']);
+    expect(register.body.response_types).toEqual(['code']);
+  });
+
+  it('rejects client registration with an unrecognized grant type', async () => {
+    const redirectUri = MCP_OAUTH_ALLOWED_REDIRECT_URIS[0];
+    const bad = await request(app())
+      .post('/register')
+      .send({ redirect_uris: [redirectUri], grant_types: ['client_credentials'] })
+      .expect(400);
+    expect(bad.body.error).toBe('invalid_client_metadata');
+  });
+
   it('labels and names a connector that registered without a name', async () => {
     const redirectUri = MCP_OAUTH_ALLOWED_REDIRECT_URIS[0];
     const register = await request(app())
