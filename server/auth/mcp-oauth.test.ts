@@ -10,6 +10,7 @@ import {
   McpOAuthError,
   parseAuthorizeRequest,
   registerMcpOAuthClient,
+  registrationResponse,
 } from './mcp-oauth.ts';
 import { MCP_OAUTH_CODE_TTL_MS } from '../../shared/mcp-oauth.ts';
 
@@ -76,6 +77,23 @@ describe('mcp oauth', () => {
     });
     expect(resolved?.agentLabel).toBe(label);
     expect(resolved?.scopes).toEqual(['coordination:read', 'coordination:write']);
+  });
+
+  it('registers a client that requests refresh_token/token support it does not grant', () => {
+    // Claude's MCP client asks for refresh_token support unconditionally, regardless of what this
+    // server's grant_types_supported metadata advertises. Registration must not hard-fail on a
+    // requested-but-unsupported grant/response type — it should just not be granted.
+    const db = createDb(':memory:');
+    const client = registerMcpOAuthClient(db, {
+      redirect_uris: [REDIRECT],
+      client_name: 'Claude Desktop',
+      token_endpoint_auth_method: 'none',
+      grant_types: ['authorization_code', 'refresh_token'],
+      response_types: ['code', 'token'],
+    });
+    expect(client.clientId).toBeTruthy();
+    expect(registrationResponse(client).grant_types).toEqual(['authorization_code']);
+    expect(registrationResponse(client).response_types).toEqual(['code']);
   });
 
   it('refuses a reused authorization code', () => {

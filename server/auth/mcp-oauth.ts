@@ -102,12 +102,27 @@ const redirectUriSchema = z
     'redirect_uri is not an allowed MCP connector callback.',
   );
 
+/**
+ * Grant/response types this server actually implements — see `tokenRequestSchema` (only
+ * `authorization_code` has a token-exchange path) and `registrationResponse`, which always reports
+ * exactly this set regardless of what a client requested.
+ */
+const SUPPORTED_GRANT_TYPES = ['authorization_code'] as const;
+const SUPPORTED_RESPONSE_TYPES = ['code'] as const;
+
+/**
+ * Registration may request more than this server grants: the MCP client Claude chat, Cowork, and
+ * desktop connectors use asks for `refresh_token` support unconditionally, regardless of what this
+ * server's `grant_types_supported` metadata advertises. RFC 7591 treats an unsupported-but-recognized
+ * value as something to just not grant, not a reason to fail the whole registration — a client that
+ * requests refresh-token support still registers successfully, it just doesn't get one.
+ */
 const registerClientSchema = z.object({
   redirect_uris: z.array(redirectUriSchema).min(1).max(8),
   client_name: z.string().trim().min(1).max(128).optional(),
   token_endpoint_auth_method: z.literal('none').optional(),
-  grant_types: z.array(z.literal('authorization_code')).optional(),
-  response_types: z.array(z.literal('code')).optional(),
+  grant_types: z.array(z.enum(['authorization_code', 'refresh_token'])).optional(),
+  response_types: z.array(z.enum(['code', 'token'])).optional(),
 });
 
 export type RegisteredMcpOAuthClient = {
@@ -365,8 +380,8 @@ export function registrationResponse(client: RegisteredMcpOAuthClient): Record<s
     redirect_uris: client.redirectUris,
     client_name: client.clientName ?? undefined,
     token_endpoint_auth_method: 'none',
-    grant_types: ['authorization_code'],
-    response_types: ['code'],
+    grant_types: [...SUPPORTED_GRANT_TYPES],
+    response_types: [...SUPPORTED_RESPONSE_TYPES],
   };
 }
 
