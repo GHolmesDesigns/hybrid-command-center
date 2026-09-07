@@ -124,7 +124,7 @@ const registerClientSchema = z.object({
   grant_types: z
     .array(z.union([z.literal('authorization_code'), z.literal('refresh_token')]))
     .optional(),
-  response_types: z.array(z.literal('code')).optional(),
+  response_types: z.array(z.union([z.literal('code'), z.literal('token')])).optional(),
 });
 
 export type RegisteredMcpOAuthClient = {
