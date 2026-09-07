@@ -22,6 +22,7 @@ import {
   PanelLeftClose,
   Plus,
   Settings,
+  Timer,
   Upload,
   Users,
   X,
@@ -44,6 +45,7 @@ import { Projects } from './Projects';
 import { AgentsView } from './AgentsView';
 import { SettingsView } from './SettingsView';
 import { SignalView } from './SignalView';
+import { TasksView } from './TasksView';
 import { Nav } from './Shell';
 import { brandStyle } from './ui-shared';
 
@@ -209,6 +211,7 @@ export function App() {
           <Nav icon={<Users />} to="/clients" label="Clients" collapsed={collapsed} />
           <Nav icon={<BriefcaseBusiness />} to="/projects" label="Projects" collapsed={collapsed} />
           <Nav icon={<FolderKanban />} to="/status" label="Status" collapsed={collapsed} />
+          <Nav icon={<Timer />} to="/tasks" label="Tasks" collapsed={collapsed} />
           <Nav icon={<Upload />} to="/import" label="Import" collapsed={collapsed} />
           <Nav icon={<FileText />} to="/files" label="Files" collapsed={collapsed} />
           <Nav icon={<CalendarDays />} to="/calendar" label="Calendar" collapsed={collapsed} />
@@ -350,6 +353,7 @@ export function App() {
             />
             {/* Bookmarks and older dashboard tiles still use /kanban; keep the query string. */}
             <Route path="/kanban" element={<LegacyKanbanRedirect />} />
+            <Route path="/tasks" element={<TasksView tasks={tasks} />} />
             <Route
               path="/import"
               element={

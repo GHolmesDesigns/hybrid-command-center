@@ -3,10 +3,21 @@
 All notable changes to Hybrid Command Center are recorded here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
-project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). 
 
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
+
+## [5.13.27] - 2026-09-07
+
+### Added
+
+- Added a Tasks page at `/tasks` with a Pomodoro focus timer linked to active Project tasks.
+- Added Tasks to the sidebar directly below Status.
+
+### Breaking changes
+
+None.
 
 ## [5.13.26] - 2026-09-06
 
