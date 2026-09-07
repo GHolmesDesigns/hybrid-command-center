@@ -36,7 +36,8 @@ import {
   updateMcpAgentRegistrationSchema,
 } from '../shared/mcp-agent-registry.ts';
 import { createMcpHttpHandler, McpHttpSessionRegistry } from './mcp/http.ts';
-import { createMcpOAuthRouter } from './mcp/oauth-routes.ts';
+import { createMcpOAuthRouter, MCP_OAUTH_AUTHORIZE_PAGE_STYLE_HASH } from './mcp/oauth-routes.ts';
+import { MCP_OAUTH_ALLOWED_REDIRECT_URIS } from '../shared/mcp-oauth.ts';
 import { setMcpResourceUpdateBridge } from './mcp/resource-notifier.ts';
 import { buildMcpHealthPanel } from './mcp/health-panel.ts';
 import { buildConnectionStatus } from './mcp/connection-status.ts';
@@ -322,7 +323,7 @@ const productionContentSecurityPolicy = {
     // GIS token client and Picker talk to Google from the browser; stored refresh tokens never do.
     connectSrc: ["'self'", 'https://accounts.google.com', 'https://www.googleapis.com'],
     fontSrc: ["'self'", 'https://fonts.gstatic.com'],
-    formAction: ["'self'"],
+    formAction: ["'self'", ...MCP_OAUTH_ALLOWED_REDIRECT_URIS.map((uri) => new URL(uri).origin)],
     frameAncestors: ["'none'"],
     // Google Picker opens in an iframe on docs.google.com / drive.google.com.
     frameSrc: [
@@ -350,7 +351,11 @@ const productionContentSecurityPolicy = {
     // Google Identity Services + Picker loader (C52). Inline script stays forbidden.
     scriptSrc: ["'self'", 'https://apis.google.com', 'https://accounts.google.com'],
     scriptSrcAttr: ["'none'"],
-    styleSrc: ["'self'", 'https://fonts.googleapis.com'],
+    styleSrc: [
+      "'self'",
+      'https://fonts.googleapis.com',
+      `'${MCP_OAUTH_AUTHORIZE_PAGE_STYLE_HASH}'`,
+    ],
     styleSrcAttr: ["'unsafe-inline'"],
     workerSrc: ["'self'"],
     // The production app is intentionally served over loopback HTTP by default.
