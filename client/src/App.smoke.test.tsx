@@ -10,6 +10,8 @@ import {
   App,
   APP_VERSION,
   branding,
+  task,
+  testState,
 } from './App.test-setup';
 
 function LocationProbe() {
@@ -56,6 +58,28 @@ describe('App', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Project Status' })).toBeVisible();
     expect(screen.queryByText(/kanban/i)).toBeNull();
+  });
+
+  it('places Tasks below Status and links the Pomodoro timer to project tasks', async () => {
+    testState.tasksPayload = [
+      task('focus-task', 'Draft the homepage', { projectName: 'Website Refresh' }),
+    ];
+    render(
+      <MemoryRouter initialEntries={['/tasks']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Tasks' })).toBeVisible();
+    expect(screen.getByText('Draft the homepage')).toBeVisible();
+    expect(screen.getByText('Website Refresh')).toBeVisible();
+    const links = within(
+      await screen.findByRole('navigation', { name: 'Primary navigation' }),
+    ).getAllByRole('link');
+    expect(links.findIndex((link) => link.textContent?.trim() === 'Tasks')).toBe(
+      links.findIndex((link) => link.textContent?.trim() === 'Status') + 1,
+    );
+    expect(screen.getByRole('button', { name: /Start/ })).toBeEnabled();
   });
 
   it('redirects /kanban to /status and keeps the query string', async () => {
