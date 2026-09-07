@@ -211,7 +211,8 @@ report's original research pass. It lives at `client/src/components/TasksView.ts
 routed at `/tasks`, and covers task selection plus a 25/5-minute work/break
 clock. The remaining scope is closing the gap between that MVP and the
 persistence/notification behavior originally requested, not building from
-scratch.
+scratch. The task-reassignment fix is under review in a separate change and
+is not treated as landed by this report.
 
 ### What is already in place
 
@@ -247,8 +248,8 @@ scratch.
   reassigns `selectedId` to a different task without calling `reset()`. The
   countdown keeps running and the "Working on X" label silently changes to a
   different task's title mid-session. This is the exact "task completed or
-  reassigned while its timer is active" risk flagged below, and it already
-  reproduces in the shipped code.
+  reassigned while its timer is active" risk flagged below. A separate fix is
+  currently in review; until it lands, this remains a shipped-code defect.
 
 ### Recommended implementation (revised)
 
@@ -257,8 +258,8 @@ Rather than a new feature, treat this as three incremental fixes to
 
 1. Persist a versioned session record (task ID, phase, started-at, target-end
    timestamp, paused state, completed-cycle count) to `localStorage` at
-   minimum; confirm with the requester whether cross-device visibility is
-   needed, since that upgrades this to a server-side time-entry endpoint.
+   minimum. Cross-device visibility is explicitly out of scope, so this does
+   not require a server-side time-entry endpoint.
 2. Replace the decrementing counter with wall-clock derivation from the
    stored target-end timestamp, and reconcile on mount instead of resetting
    to a fresh 25:00.
@@ -266,11 +267,46 @@ Rather than a new feature, treat this as three incremental fixes to
    list, and only then let the operator pick a new task. Add system
    notifications with graceful degradation when permission is denied.
 
+### Approved timer contract
+
+- Timer state is persisted locally on the browser/device; it is not
+  cross-device or server-synchronised.
+- Only one timer may be active per operator within the browser/device. Because
+  state is local-only, the application does not enforce this across devices.
+- Selecting another task while a timer is active requires confirmation and
+  stopping the current timer. Stopping preserves the elapsed state.
+- If the active task becomes unavailable unexpectedly, stop the timer and
+  preserve its elapsed state locally. The operator must restart it manually if
+  the task becomes reachable again.
+- A completed work or break phase advances to the next phase but remains
+  paused.
+- No historical time record is created.
+- One browser tab owns the timer; other tabs are read-only.
+- Remaining time is derived from wall-clock timestamps and reconciled after
+  suspension or resume.
+
+### Notification contract
+
+- A completed phase sends a system notification.
+- Notification settings are available from Settings and include a global
+  enable/disable control, separate completion and unavailable/error controls,
+  and sound configuration.
+- Notifications are not required after the browser is fully closed.
+- An operator-initiated deletion may be silent. An unexpected disappearance
+  or definitive unavailability of the active task sends a notification.
+- Definitive failures are a `404`, an authorization failure, or confirmation
+  that the task no longer exists. An unstable or unreachable task sends an
+  unavailable notification only when the provider confirms a definitive
+  failure.
+- Only one unavailable/error notification is sent per incident; repeats are
+  suppressed until the task recovers.
+- If system notification permission is denied or revoked, show an in-app
+  fallback.
+
 ### Notification boundary
 
-A notification while the page is hidden is straightforward. A notification
-after the browser is fully closed requires a service worker with a supported
-scheduling or push strategy, or a desktop companion. Notification permission
+A notification while the page is hidden is in scope. A notification after the
+browser is fully closed is explicitly out of scope. Notification permission
 denial must degrade gracefully to an in-app indication.
 
 ### Acceptance
@@ -280,13 +316,17 @@ Test:
 - Close and reopen.
 - Refresh.
 - Pause and resume.
-- Expiration while closed.
+- Expiration while the page or browser is closed, reconciled on reopen without
+  a closed-browser notification.
 - Corrupted storage.
-- Multiple tabs.
+- Multiple tabs, including enforcement of one owning tab and read-only peers.
 - Notification permission granted, denied, and revoked.
 - Notification delivery while the page is hidden.
-- The distinction between local persistence and cross-device sync.
-- Starting a timer on a second task while one is already running.
+- Local-only persistence and the absence of cross-device synchronization.
+- Confirmation before starting a timer on a second task while one is already
+  running.
+- Notification settings for completion and unavailable/error incidents,
+  including sound configuration and the one-notification-per-incident rule.
 - The running task is completed, deleted, or reassigned to another
   client/project while its timer is active — confirmed reproducible today;
   must stop the session rather than silently relabeling it.
@@ -313,8 +353,8 @@ Test:
 | Coordination scope | Chat can blur communication, execution, and audit evidence | Keep messages, handoffs, and work sessions separate |
 | Privacy and trust | Agent context, memory, and summaries may contain sensitive data | Use server-resolved identity, bounded scopes, provenance, retention, and review |
 | SQLite workload | High-volume messages or presence signals could stress the single-writer model | Use bounded retention, cursor reads, indexes, and measure volume |
-| Timer reliability | Clock changes, multiple tabs, storage clearing, and permissions can cause false state | Use timestamps, versioned storage, one active interval, and explicit fallbacks |
-| Timer task-scoping | Running timer tied to a task that is completed, deleted, or reassigned mid-session, or a second task started while one is running | Define concurrency rule up front; reconcile or stop timer on task lifecycle changes |
+| Timer reliability | Clock changes, multiple tabs, storage clearing, and permissions can cause false state | Use timestamps, versioned storage, one owning tab, and explicit fallbacks |
+| Timer task-scoping | Running timer tied to a task that is completed, deleted, or reassigned mid-session, or a second task started while one is running | Require confirmation before switching, preserve stopped state, and reconcile definitive task failures |
 
 ## Bottom line
 
