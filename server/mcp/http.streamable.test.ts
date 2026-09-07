@@ -7,6 +7,7 @@ import type { Express } from 'express';
 import { createApp } from '../app.ts';
 import { createDb, type Db } from '../db.ts';
 import { hashPassword } from '../auth/password.ts';
+import { createMcpAgentCredential } from '../auth/mcp-agent-credentials.ts';
 import { setSetting } from '../drive/service.ts';
 import { OPERATOR_PASSWORD_HASH_SETTING_KEY } from '../auth/service.ts';
 import { CSRF_HEADER_NAME } from '../../shared/auth.ts';
@@ -81,6 +82,61 @@ describe('streamable HTTP MCP lifecycle (C133)', () => {
     expect(res.status).toBe(200);
     return res.headers[MCP_SESSION_ID_HEADER] as string;
   }
+
+  it('lets a current connector initialize and discover tools using its negotiated version', async () => {
+    const { rawToken: token } = createMcpAgentCredential(db, {
+      label: 'claude-oauth-fixture',
+      scopes: ['workspace:read'],
+      expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+      sessionSecret: SECRET,
+    });
+    const probe = await request(instance)
+      .post(MCP_HTTP_PATH)
+      .set('Authorization', `Bearer ${token}`)
+      .set(MCP_PROTOCOL_VERSION_HEADER, '2026-07-28')
+      .send({ jsonrpc: '2.0', id: 0, method: 'server/discover' });
+    // This is a handshake-era server. A modern client falls back after this HTTP rejection.
+    expect(probe.status).toBe(400);
+    const initialized = await request(instance)
+      .post(MCP_HTTP_PATH)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2026-07-28',
+          capabilities: {},
+          clientInfo: { name: 'Claude Desktop', version: '1' },
+        },
+      });
+    expect(initialized.status).toBe(200);
+    expect(initialized.body.result.protocolVersion).toBe('2025-11-25');
+    const sessionId = initialized.headers[MCP_SESSION_ID_HEADER] as string;
+    const ready = await request(instance)
+      .post(MCP_HTTP_PATH)
+      .set('Authorization', `Bearer ${token}`)
+      .set(MCP_SESSION_ID_HEADER, sessionId)
+      .set(MCP_PROTOCOL_VERSION_HEADER, '2025-11-25')
+      .send({ jsonrpc: '2.0', method: 'notifications/initialized' });
+    expect(ready.status).toBe(202);
+    const listed = await request(instance)
+      .post(MCP_HTTP_PATH)
+      .set('Authorization', `Bearer ${token}`)
+      .set(MCP_SESSION_ID_HEADER, sessionId)
+      .set(MCP_PROTOCOL_VERSION_HEADER, '2025-11-25')
+      .set('Accept', 'application/json, text/event-stream')
+      .send({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
+    expect(listed.status).toBe(200);
+    expect(listed.text).toContain('system_connection_status');
+    const unsupported = await request(instance)
+      .post(MCP_HTTP_PATH)
+      .set('Authorization', `Bearer ${token}`)
+      .set(MCP_SESSION_ID_HEADER, sessionId)
+      .set(MCP_PROTOCOL_VERSION_HEADER, '2099-01-01')
+      .send({ jsonrpc: '2.0', id: 3, method: 'tools/list' });
+    expect(unsupported.status).toBe(400);
+  });
 
   it('continues a session, opens SSE POST, tips subscribers, and deletes the session', async () => {
     const token = await bearer();

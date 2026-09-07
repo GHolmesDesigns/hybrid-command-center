@@ -33,6 +33,7 @@ import { TASK_CHECKLIST_TEMPLATES } from '../shared/types.ts';
 import { APP_VERSION, DEFAULT_BRANDING } from '../shared/branding.ts';
 import { manualUrlForVersion } from '../shared/manual.ts';
 import { CANONICAL_VIEW_DEFAULTS, type ViewDefaults } from '../shared/view-defaults.ts';
+import { MCP_OAUTH_AUTHORIZE_PAGE_STYLE_HASH } from './mcp/oauth-routes.ts';
 
 let db: Db;
 beforeEach(() => {
@@ -220,7 +221,9 @@ describe('command center API', () => {
     );
     expect(policy).toContain("script-src-attr 'none'");
     expect(policy).toContain("style-src 'self' https://fonts.googleapis.com");
+    expect(policy).toContain(`'${MCP_OAUTH_AUTHORIZE_PAGE_STYLE_HASH}'`);
     expect(policy).toContain("style-src-attr 'unsafe-inline'");
+    expect(policy).toContain("form-action 'self' https://claude.ai https://claude.com");
     // Images and media are the two directives that accept a remote origin, because both are
     // referenced by address: a Settings-set logo, and the media a Signal post already carries,
     // which the publishing preview renders. Neither host can be known when this is written.

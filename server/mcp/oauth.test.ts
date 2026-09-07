@@ -94,6 +94,8 @@ describe('MCP OAuth routes', () => {
         redirect_uris: [redirectUri],
         client_name: 'Claude Chat',
         token_endpoint_auth_method: 'none',
+        grant_types: ['authorization_code', 'refresh_token'],
+        response_types: ['code'],
       })
       .expect(201);
     const verifier = crypto.randomBytes(32).toString('base64url');

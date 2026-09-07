@@ -121,8 +121,10 @@ const registerClientSchema = z.object({
   redirect_uris: z.array(redirectUriSchema).min(1).max(8),
   client_name: z.string().trim().min(1).max(128).optional(),
   token_endpoint_auth_method: z.literal('none').optional(),
-  grant_types: z.array(z.enum(['authorization_code', 'refresh_token'])).optional(),
-  response_types: z.array(z.enum(['code', 'token'])).optional(),
+  grant_types: z
+    .array(z.union([z.literal('authorization_code'), z.literal('refresh_token')]))
+    .optional(),
+  response_types: z.array(z.union([z.literal('code'), z.literal('token')])).optional(),
 });
 
 export type RegisteredMcpOAuthClient = {

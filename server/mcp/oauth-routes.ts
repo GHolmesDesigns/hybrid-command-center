@@ -67,6 +67,21 @@ const MCP_OAUTH_DENY_PATH = `${MCP_OAUTH_AUTHORIZE_PATH}/deny`;
 const APPROVAL_FORM_TOKEN_FIELD = 'approval_token';
 const APPROVAL_FORM_TOKEN_PURPOSE = 'mcp-oauth-approve';
 
+export const MCP_OAUTH_AUTHORIZE_PAGE_STYLE = `
+    body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1rem; line-height: 1.5; }
+    .panel { border: 1px solid #d0d7de; border-radius: 8px; padding: 1.25rem; }
+    label { display: block; margin: 0.75rem 0 0.25rem; font-weight: 600; }
+    input[type=password] { width: 100%; padding: 0.5rem; box-sizing: border-box; }
+    a.primary, button.primary { display: inline-block; background: #111827; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; text-decoration: none; border: 0; cursor: pointer; }
+    a.secondary { color: #374151; }
+    .error { color: #b42318; }
+  `;
+
+export const MCP_OAUTH_AUTHORIZE_PAGE_STYLE_HASH = `sha256-${crypto
+  .createHash('sha256')
+  .update(MCP_OAUTH_AUTHORIZE_PAGE_STYLE)
+  .digest('base64')}`;
+
 /**
  * The token the consent form carries, so an approval cannot be driven from another site.
  *
@@ -115,15 +130,7 @@ function renderAuthorizePage(input: { title: string; body: string; actions?: str
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escapeHtml(input.title)}</title>
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1rem; line-height: 1.5; }
-    .panel { border: 1px solid #d0d7de; border-radius: 8px; padding: 1.25rem; }
-    label { display: block; margin: 0.75rem 0 0.25rem; font-weight: 600; }
-    input[type=password] { width: 100%; padding: 0.5rem; box-sizing: border-box; }
-    a.primary, button.primary { display: inline-block; background: #111827; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; text-decoration: none; border: 0; cursor: pointer; }
-    a.secondary { color: #374151; }
-    .error { color: #b42318; }
-  </style>
+  <style>${MCP_OAUTH_AUTHORIZE_PAGE_STYLE}</style>
 </head>
 <body>
   <div class="panel">

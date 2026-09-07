@@ -23,3 +23,5 @@ coverage/
 *.log
 .DS_Store
 docs/iterations/*.docx
+# Scratch/debug capture files dropped at the repo root during ad-hoc investigation.
+.tmp-*
