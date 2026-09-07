@@ -179,7 +179,11 @@ export async function handleMcpJsonRpc(
         const fromEnv = process.env.MCP_AGENT_LABEL;
         const fromParams = agentLabelFromInitialize(params);
         try {
-          setMcpSessionAgentLabel(session, fromEnv ?? fromParams);
+          // HTTP scoped credentials already bind the principal. Client display metadata is not
+          // an agent identity and must neither replace it nor make authentication fail.
+          if (session.agentIdentityProvenance !== 'VERIFIED') {
+            setMcpSessionAgentLabel(session, fromEnv ?? fromParams);
+          }
         } catch (error) {
           fail(-32602, error instanceof Error ? error.message : 'Invalid agent_label.');
           return;

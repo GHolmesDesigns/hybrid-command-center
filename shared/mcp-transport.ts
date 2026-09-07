@@ -9,9 +9,14 @@ export const MCP_SESSION_ID_HEADER = 'mcp-session-id';
 export const MCP_PROTOCOL_VERSION_HEADER = 'mcp-protocol-version';
 
 /** Default negotiated version when the client omits or sends an unknown value. */
-export const MCP_PROTOCOL_VERSION = '2024-11-05';
+export const MCP_PROTOCOL_VERSION = '2025-11-25';
 
-export const MCP_SUPPORTED_PROTOCOL_VERSIONS = ['2024-11-05', '2025-03-26', '2025-06-18'] as const;
+export const MCP_SUPPORTED_PROTOCOL_VERSIONS = [
+  '2024-11-05',
+  '2025-03-26',
+  '2025-06-18',
+  '2025-11-25',
+] as const;
 
 export type McpSupportedProtocolVersion = (typeof MCP_SUPPORTED_PROTOCOL_VERSIONS)[number];
 

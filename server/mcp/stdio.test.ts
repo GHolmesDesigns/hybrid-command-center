@@ -71,6 +71,31 @@ describe('handleMcpJsonRpc', () => {
     expect(replies[0]).toMatchObject({ result: { capabilities: { prompts: {} } } });
   });
 
+  it.each(['Claude Desktop', 'another-agent'])(
+    'preserves verified identity when clientInfo.name is %s',
+    async (name) => {
+      const session = createMcpSession({
+        agentLabel: 'claude-oauth-fixture',
+        agentIdentityProvenance: 'VERIFIED',
+      });
+      const { replies, write } = capture();
+      await handleMcpJsonRpc(
+        session,
+        {
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: { clientInfo: { name, version: '1' }, _meta: { agent_label: name } },
+        },
+        write,
+        db,
+      );
+      expect(replies[0]).toMatchObject({ result: { capabilities: { tools: {} } } });
+      expect(session.agentLabel).toBe('claude-oauth-fixture');
+      expect(session.agentIdentityProvenance).toBe('VERIFIED');
+    },
+  );
+
   it('lists and gets prompts over the shared JSON-RPC handler', async () => {
     const session = createMcpSession({ agentLabel: 'cursor' });
     const { replies, write } = capture();
