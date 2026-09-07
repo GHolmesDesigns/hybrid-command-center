@@ -20,7 +20,9 @@ test('Tasks page lets an operator select a Project task and start Pomodoro focus
 
   await page.goto('/tasks');
   await expect(page.getByRole('heading', { level: 1, name: 'Tasks' })).toBeVisible();
-  await expect(page.getByRole('button', { name: new RegExp(task.title) })).toBeVisible();
+  const taskButton = page.getByRole('button', { name: new RegExp(task.title) });
+  await expect(taskButton).toBeVisible();
+  await taskButton.click();
   await expect(page.getByText(`Working on ${task.title}`)).toBeVisible();
   await page.getByRole('button', { name: /^Start/ }).click();
   await expect(page.getByRole('button', { name: /^Pause/ })).toBeVisible();
