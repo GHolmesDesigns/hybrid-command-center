@@ -8,6 +8,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.13.28] - 2026-09-07
+
+### Fixed
+
+- The Tasks page's Pomodoro timer no longer silently reassigns a running session to a
+  different task when the timed task leaves the active list (completed, deleted, or moved
+  elsewhere). The session now stops and resets to a fresh work phase instead of continuing
+  the countdown relabeled under whichever task fills in next.
+
+### Breaking changes
+
+None.
+
 ## [5.13.27] - 2026-09-07
 
 ### Added
