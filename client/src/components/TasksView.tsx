@@ -21,8 +21,17 @@ export function TasksView({ tasks }: { tasks: Task[] }) {
   const selected = activeTasks.find((task) => task.id === selectedId) ?? activeTasks[0];
 
   useEffect(() => {
-    if (selected && !activeTasks.some((task) => task.id === selectedId)) setSelectedId(selected.id);
-  }, [activeTasks, selected, selectedId]);
+    if (activeTasks.some((task) => task.id === selectedId)) return;
+    if (selectedId) {
+      // The task being timed left the active list (completed, deleted, or reassigned
+      // elsewhere) — stop the session instead of silently continuing it under whichever
+      // task fills in next.
+      setRunning(false);
+      setMode('work');
+      setSeconds(WORK_SECONDS);
+    }
+    setSelectedId(activeTasks[0]?.id ?? '');
+  }, [activeTasks, selectedId]);
 
   useEffect(() => {
     if (!running) return;
