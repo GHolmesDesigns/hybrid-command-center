@@ -8,6 +8,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.13.30] - 2026-09-07
+
+### Changed
+
+- Bumped `googleapis` from 176.0.0 to 178.0.0.
+
+### Breaking changes
+
+None.
+
 ## [5.13.29] - 2026-09-07
 
 ### Changed
