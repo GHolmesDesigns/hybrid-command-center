@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { CheckCircle2, Pause, Play, RotateCcw, Tag as TagIcon } from 'lucide-react';
 import type { Client, Project, Tag, Task } from '../../../shared/types';
@@ -14,6 +14,8 @@ import {
   reconcileTaskTimer,
   startTaskTimer,
   writeTaskTimer,
+  readTaskTimerSettings,
+  type TaskTimerSettings,
   type TaskTimerSession,
 } from '../../../shared/task-timer';
 
@@ -139,6 +141,44 @@ export function TasksView({
   const mode = activeTimer?.phase ?? 'work';
   const running = Boolean(activeTimer && !activeTimer.paused && selectedId === activeTimer.taskId);
   const selected = filteredTasks.find((task) => task.id === selectedId);
+  const [settings] = useState<TaskTimerSettings>(() => readTaskTimerSettings(window.localStorage));
+  const [owner, setOwner] = useState(true);
+  const ownerId = useRef(crypto.randomUUID());
+  const channel = useRef<BroadcastChannel | null>(null);
+  const lastCycle = useRef(activeTimer?.cycleCount ?? 0);
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const bus = new BroadcastChannel('hcc-task-timer');
+    channel.current = bus;
+    const onMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'claim' && event.data.id !== ownerId.current) setOwner(false);
+      if (event.data?.type === 'release' && event.data.id !== ownerId.current) setOwner(true);
+    };
+    bus.addEventListener('message', onMessage);
+    return () => {
+      bus.postMessage({ type: 'release', id: ownerId.current });
+      bus.close();
+      channel.current = null;
+    };
+  }, []);
+  useEffect(() => {
+    if (activeTimer && !activeTimer.paused && owner)
+      channel.current?.postMessage({ type: 'claim', id: ownerId.current });
+  }, [activeTimer, owner]);
+  const notify = (body: string) => {
+    if (
+      settings.enabled &&
+      settings.completion &&
+      typeof Notification !== 'undefined' &&
+      Notification.permission === 'granted'
+    )
+      new Notification('Pomodoro complete', { body });
+  };
+  useEffect(() => {
+    if (activeTimer && activeTimer.cycleCount > lastCycle.current)
+      notify('Focus session complete. Time for a short break.');
+    lastCycle.current = activeTimer?.cycleCount ?? lastCycle.current;
+  }, [activeTimer]);
 
   useEffect(() => {
     if (timer) writeTaskTimer(window.localStorage, timer);
@@ -266,6 +306,9 @@ export function TasksView({
               type="button"
               onClick={() => {
                 if (!selectedId) return;
+                if (!owner) return;
+                if (typeof Notification !== 'undefined' && Notification.permission === 'default')
+                  void Notification.requestPermission();
                 setTimer((current) =>
                   current && current.taskId === selectedId && !current.paused
                     ? pauseTaskTimer(current)
@@ -372,6 +415,12 @@ export function TasksView({
                   key={task.id}
                   type="button"
                   onClick={() => {
+                    if (
+                      running &&
+                      task.id !== selectedId &&
+                      !window.confirm('Stop the current timer and switch tasks?')
+                    )
+                      return;
                     setSelectedId(task.id);
                     setTimer(newTaskTimerSession(task.id));
                   }}
