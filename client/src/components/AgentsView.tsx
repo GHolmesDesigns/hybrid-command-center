@@ -4,6 +4,7 @@ import { McpConnectionSetupCard } from './McpConnectionSetupCard';
 import { McpHealthPanelCard } from './McpHealthPanelCard';
 import { DriveWriteRequestsCard } from './DriveWriteRequestsCard';
 import { PageHead } from './Shell';
+import { AgentDirectoryCard } from './AgentDirectoryCard';
 
 /**
  * Agents module (C136 / #420): connection setup, health, and handoffs in one place.
@@ -27,6 +28,7 @@ export function AgentsView({
       />
       <div className="agents-layout">
         <McpConnectionSetupCard flash={flash} />
+        <AgentDirectoryCard />
         <McpHealthPanelCard flash={flash} />
         <DriveWriteRequestsCard flash={flash} />
         <AgentHandoffsCard tasks={tasks} flash={flash} />
