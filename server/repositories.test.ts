@@ -380,4 +380,70 @@ describe('scope and ordering', () => {
       }).map((task) => task.id),
     ).toEqual(['match']);
   });
+
+  it('keeps each focus bucket and empty filter safe at the SQL boundary', () => {
+    const today = format(new Date(), 'yyyy-MM-dd');
+    addTask('overdue', 'p1', 'Overdue', { dueDate: past });
+    addTask('today', 'p1', 'Today', { dueDate: today });
+    addTask('week', 'p1', 'This week', { dueDate: day(7) });
+    addTask('none', 'p1', 'No date');
+    addTask('done', 'p1', 'Done', { dueDate: today, status: 'COMPLETE' });
+    addTask('blocked', 'p1', 'Blocked');
+    addTask('blocker', 'p1', 'Blocker', { status: 'TODO' });
+    db.prepare(
+      "INSERT INTO task_dependencies(task_id,dependency_id) VALUES('blocked','blocker')",
+    ).run();
+    db.prepare("UPDATE tasks SET task_type='VIDEO', status='COMPLETE' WHERE id='done'").run();
+
+    expect(
+      listTasksFiltered(db, {
+        clients: [],
+        projects: [],
+        priorities: [],
+        statuses: [],
+        types: ['none'],
+        focus: [],
+        tags: [],
+        search: '',
+      }).map((task) => task.id),
+    ).toContain('none');
+    expect(
+      listTasksFiltered(db, {
+        clients: [],
+        projects: [],
+        priorities: [],
+        statuses: ['COMPLETE'],
+        types: [],
+        focus: [],
+        tags: [],
+        search: '',
+      }).map((task) => task.id),
+    ).toContain('done');
+    for (const focus of ['overdue', 'today', 'week', 'none', 'completed', 'blocked'] as const) {
+      expect(
+        listTasksFiltered(db, {
+          clients: [],
+          projects: [],
+          priorities: [],
+          statuses: [],
+          types: [],
+          focus: [focus],
+          tags: [],
+          search: '',
+        }).length,
+      ).toBeGreaterThan(0);
+    }
+    expect(
+      listTasksFiltered(db, {
+        clients: [],
+        projects: [],
+        priorities: [],
+        statuses: [],
+        types: [],
+        focus: [],
+        tags: [],
+        search: 'no match',
+      }),
+    ).toEqual([]);
+  });
 });
