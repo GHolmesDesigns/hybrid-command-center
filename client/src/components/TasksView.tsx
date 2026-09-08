@@ -18,19 +18,19 @@ export function TasksView({ tasks }: { tasks: Task[] }) {
   const [seconds, setSeconds] = useState(WORK_SECONDS);
   const [mode, setMode] = useState<'work' | 'break'>('work');
   const [running, setRunning] = useState(false);
-  const selected = activeTasks.find((task) => task.id === selectedId) ?? activeTasks[0];
+  const selected = activeTasks.find((task) => task.id === selectedId);
 
   useEffect(() => {
     if (activeTasks.some((task) => task.id === selectedId)) return;
-    if (selectedId) {
-      // The task being timed left the active list (completed, deleted, or reassigned
-      // elsewhere) — stop the session instead of silently continuing it under whichever
-      // task fills in next.
-      setRunning(false);
-      setMode('work');
-      setSeconds(WORK_SECONDS);
+    if (!selectedId) {
+      // Nothing chosen yet — default to the first available task for convenience.
+      setSelectedId(activeTasks[0]?.id ?? '');
+      return;
     }
-    setSelectedId(activeTasks[0]?.id ?? '');
+    // The task being timed left the active list (completed, deleted, or reassigned
+    // elsewhere). Per the approved timer contract, stop the session and preserve its
+    // elapsed state — do not pick a replacement task; the operator restarts manually.
+    setRunning(false);
   }, [activeTasks, selectedId]);
 
   useEffect(() => {

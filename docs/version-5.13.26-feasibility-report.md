@@ -211,8 +211,10 @@ report's original research pass. It lives at `client/src/components/TasksView.ts
 routed at `/tasks`, and covers task selection plus a 25/5-minute work/break
 clock. The remaining scope is closing the gap between that MVP and the
 persistence/notification behavior originally requested, not building from
-scratch. The task-reassignment fix is under review in a separate change and
-is not treated as landed by this report.
+scratch. The task-reassignment fix landed in #548 (merged). A follow-up fix
+aligning that stop behavior with the approved timer contract below — no
+auto-selected replacement task, and elapsed time preserved rather than reset
+— is in review in a separate change.
 
 ### What is already in place
 
@@ -241,15 +243,12 @@ is not treated as landed by this report.
 - **No server-side time record.** Nothing persists which task a session
   belonged to or how long was spent — there is no cross-device or
   audit-visible time log, only a live in-memory "Working on {task}" label.
-- **Confirmed bug — a running timer can silently reassign to a different
-  task.** If the selected task drops out of the active list while a session
-  is running (for example, someone else marks it complete from the Kanban
-  board), the `useEffect` at `client/src/components/TasksView.tsx:23-25`
-  reassigns `selectedId` to a different task without calling `reset()`. The
-  countdown keeps running and the "Working on X" label silently changes to a
-  different task's title mid-session. This is the exact "task completed or
-  reassigned while its timer is active" risk flagged below. A separate fix is
-  currently in review; until it lands, this remains a shipped-code defect.
+- **Fixed — a running timer no longer silently reassigns to a different
+  task.** #548 stopped the session instead of continuing it relabeled under
+  whichever task filled in. A follow-up fix closes the remaining gap against
+  the approved timer contract below: the stop no longer auto-picks a
+  replacement task (the operator must choose one explicitly to resume), and
+  the elapsed clock is preserved rather than reset to a fresh 25:00.
 
 ### Recommended implementation (revised)
 
@@ -328,8 +327,9 @@ Test:
 - Notification settings for completion and unavailable/error incidents,
   including sound configuration and the one-notification-per-incident rule.
 - The running task is completed, deleted, or reassigned to another
-  client/project while its timer is active — confirmed reproducible today;
-  must stop the session rather than silently relabeling it.
+  client/project while its timer is active — must stop the session rather
+  than silently relabeling it (fixed in #548), auto-pick no replacement
+  task, and preserve the elapsed clock rather than resetting it.
 
 ## Recommended delivery sequence
 
