@@ -158,6 +158,15 @@ CREATE TABLE IF NOT EXISTS agent_conversation_messages (
   id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES agent_conversations(id) ON DELETE CASCADE,
   sender_label TEXT NOT NULL, sent_at TEXT NOT NULL, body TEXT NOT NULL CHECK(length(body) BETWEEN 1 AND 4000)
 );
+CREATE TABLE IF NOT EXISTS agent_memory (
+  id TEXT PRIMARY KEY, key TEXT NOT NULL CHECK(length(key) BETWEEN 1 AND 120),
+  value TEXT NOT NULL CHECK(length(value) BETWEEN 1 AND 4000),
+  scope_type TEXT NOT NULL CHECK(scope_type IN ('workspace','client','project','task')),
+  scope_id TEXT, state TEXT NOT NULL CHECK(state IN ('SUGGESTED','APPROVED','ARCHIVED')),
+  source TEXT NOT NULL CHECK(length(source) BETWEEN 1 AND 200), suggested_by TEXT NOT NULL,
+  approved_by TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, expires_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_agent_memory_scope ON agent_memory(scope_type, scope_id, state);
 -- Agent Drive writes are requests, never direct MCP execution. Content is bounded by the Drive
 -- write plan and retained only until the operator decides it.
 CREATE TABLE IF NOT EXISTS drive_write_requests (

@@ -79,6 +79,22 @@ const captureLogs = () => {
     },
   };
 };
+
+describe('agent memory routes', () => {
+  it('supports the operator memory lifecycle through HTTP', async () => {
+    const app = createApp(db);
+    const created = await request(app)
+      .post('/api/agent-memory/suggestions')
+      .send({ key: 'k', value: 'v', scope: { type: 'workspace' }, source: 'test' })
+      .expect(201);
+    const id = created.body.id;
+    await request(app).get('/api/agent-memory').expect(200);
+    await request(app).get(`/api/agent-memory/${id}`).expect(200);
+    await request(app).patch(`/api/agent-memory/${id}`).send({ value: 'approved' }).expect(200);
+    await request(app).post(`/api/agent-memory/${id}/archive`).expect(200);
+    await request(app).delete(`/api/agent-memory/${id}`).expect(200);
+  });
+});
 /** Reads both stamps straight from SQLite, so the API cannot paper over one of them. */
 const stampsOf = (projectId: string) =>
   db
