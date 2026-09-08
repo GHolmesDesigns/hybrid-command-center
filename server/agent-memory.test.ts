@@ -59,6 +59,17 @@ describe('agent memory', () => {
       ),
     ).toThrow(/scope/i);
   });
+  it('accepts existing client, project, and task scopes', () => {
+    const db = createDb(':memory:');
+    const client = db.prepare("INSERT INTO clients (id,name,slug,status) VALUES ('c1','Client','client','LIVE')").run();
+    expect(client.changes).toBe(1);
+    const project = db.prepare("INSERT INTO projects (id,name,slug,status,client_id) VALUES ('p1','Project','project','ACTIVE','c1')").run();
+    expect(project.changes).toBe(1);
+    db.prepare("INSERT INTO tasks (id,project_id,title,status) VALUES ('t1','p1','Task','TODO')").run();
+    for (const scope of [{ type: 'client', id: 'c1' }, { type: 'project', id: 'p1' }, { type: 'task', id: 't1' }] as const) {
+      expect(suggestMemory(db, { key: scope.type, value: 'v', scope, source: 'test' }, 'agent').scope).toEqual(scope);
+    }
+  });
   it('supports operator removal, archive, filtering, and retention expiry', () => {
     const db = createDb(':memory:');
     const old = suggestMemory(
