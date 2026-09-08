@@ -2497,3 +2497,13 @@ reader should not infer one from this release.
 
 - The Signal planner: `signal_posts` is the only store of planned content, read through
   `SignalProvider`, which has no write method by construction.
+## [6.1.1] - 2026-09-08
+
+### Added
+
+- Client assignment in the Signal editor, with project choices constrained to the selected client and stored client/project selections restored when editing.
+- Save-time validation for incompatible client and project assignments while preserving explicit no-client and no-project states.
+
+### Breaking changes
+
+None.
