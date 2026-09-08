@@ -1374,6 +1374,9 @@ describe('planning status and delivery stay apart end to end', () => {
     expect(() => service.markTargetFinished(publication.id, 1)).toThrow(/already marked/);
   });
 
+  // Six sequential requests through a real Express app; comfortably under a second in isolation
+  // but can brush the 5s default under coverage instrumentation plus full-suite worker
+  // contention. The explicit timeout gives it room against wall-clock, not app-logic, slowness.
   it('exposes the automatic gate and the manual finish over HTTP, through the mock alone', async () => {
     const post = add();
     const provider = new MockPublishProvider(targets);
@@ -1411,7 +1414,7 @@ describe('planning status and delivery stay apart end to end', () => {
     await request(app)
       .post(`/api/signal/publications/${submitted.body.id}/targets/404/finish`)
       .expect(404);
-  });
+  }, 15000);
 });
 
 describe('platform and account content variants', () => {
@@ -2218,6 +2221,8 @@ describe('a post the provider is already holding', () => {
 });
 
 describe('the provider reconciliation over HTTP', () => {
+  // Same wall-clock headroom as above: several sequential requests through a real Express app,
+  // which can brush the 5s default under coverage instrumentation plus full-suite contention.
   it('previews, refuses a stale token, and applies an update', async () => {
     const provider = new MockPublishProvider(targets);
     const app = createApp(db, {
@@ -2267,7 +2272,7 @@ describe('the provider reconciliation over HTTP', () => {
     expect(applied.status).toBe(200);
     expect(applied.body.sentCaption).toBe('Rewritten in Signal');
     expect(applied.body.driftFields).toBeUndefined();
-  });
+  }, 15000);
 
   it('refuses an action the boundary does not know', async () => {
     const app = createApp(db, {

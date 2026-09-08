@@ -8,6 +8,24 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [6.0.0] - 2026-09-07
+
+### Changed
+
+- Bumped `vitest` and `@vitest/coverage-v8` from 4.1.11 to 5.0.0. These two packages carry a
+  hard peer dependency on each other's major version, so they land together as one change
+  rather than as the two separate dependency PRs Dependabot opened; merging either alone would
+  leave `npm install` unresolvable.
+- Raised the timeout on two `server/publish/publish.test.ts` end-to-end HTTP tests to 15s. Both
+  do several sequential requests through a real Express app and run in well under a second in
+  isolation, but can brush the previous 5s default under `@vitest/coverage-v8` 5's heavier
+  instrumentation plus full-suite worker contention. No test behavior changed.
+
+### Breaking changes
+
+- None for the application itself. The version reflects the test-tooling major upgrade
+  (`vitest`/`@vitest/coverage-v8` 4 → 5), not an application-facing breaking change.
+
 ## [5.13.31] - 2026-09-07
 
 ### Changed
