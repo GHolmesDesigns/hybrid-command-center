@@ -76,6 +76,23 @@ import {
   type PublishVariantRecord,
 } from '../../shared/publish-variants.ts';
 
+function validateClientProject(
+  db: Db,
+  clientId: string | null | undefined,
+  projectId: string | null,
+) {
+  if (clientId === undefined) return;
+  if (clientId === null && projectId !== null)
+    throw new SignalPostRelationshipError('Choose a project belonging to the selected client.');
+  if (clientId === null) return;
+  if (projectId === null)
+    throw new SignalPostRelationshipError('Choose a project belonging to the selected client.');
+  const project = db.prepare('SELECT client_id FROM projects WHERE id = ?').get(projectId) as
+    { client_id: string } | undefined;
+  if (!project || project.client_id !== clientId)
+    throw new SignalPostRelationshipError('Choose a project belonging to the selected client.');
+}
+
 /**
  * Signal's writes, and the only place they live.
  *
@@ -94,6 +111,7 @@ const now = () => new Date().toISOString();
 
 /** A post that does not exist, answered as a 404 rather than as a silent no-op. */
 export class SignalPostNotFoundError extends Error {}
+export class SignalPostRelationshipError extends Error {}
 
 /**
  * A media list this app will not store: a descriptor that breaks the cross-field rule, the same
@@ -185,6 +203,8 @@ const date = z
   .refine(isSignalDate, 'That date does not exist.');
 
 const postFields = {
+  /** Transient editor choice; the durable relationship remains project_id -> projects.client_id. */
+  clientId: z.string().uuid().nullable().optional(),
   /** Optional workspace project association used by bounded Signal reads. */
   projectId: z.string().trim().min(1).max(200).nullable().default(null),
   text: z.string().trim().min(1, 'A post needs content.').max(20_000),
@@ -546,6 +566,7 @@ export function listQueuePage(
  * no Drive call and stays synchronous, and so that the transaction below contains no `await`.
  */
 function insertPost(db: Db, input: SignalPostInput, media: SignalPostMedia[]): SignalPost {
+  validateClientProject(db, input.clientId, input.projectId);
   const postId = id();
   const timestamp = now();
   // The post, channels, media, and campaigns land together: a post missing part of the requested
@@ -629,6 +650,7 @@ function writePost(
     cta: patch.cta ?? existing.cta,
     deliveryProvenance: patch.deliveryProvenance ?? existing.delivery_provenance,
   };
+  validateClientProject(db, patch.clientId, next.projectId);
   // A post returning to the queue joins the end of it; one leaving keeps a position nothing
   // reads. Position only ever means something for an undated post.
   const position =

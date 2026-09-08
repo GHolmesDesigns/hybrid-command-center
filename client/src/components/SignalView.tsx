@@ -144,6 +144,8 @@ type SignalRange = {
 };
 
 type Draft = {
+  clientId: string;
+  projectId: string;
   text: string;
   channels: SignalChannel[];
   /**
@@ -202,6 +204,8 @@ const dateLabels = (from: string, to: string) => {
 };
 
 const draftFor = (post: SignalPost): Draft => ({
+  clientId: post.client?.id ?? '',
+  projectId: post.projectId ?? '',
   text: post.text,
   channels: post.channels,
   media: post.media,
@@ -221,6 +225,8 @@ const draftFor = (post: SignalPost): Draft => ({
  * pass `null` so the post starts in the unscheduled queue. Nothing is written until Save.
  */
 const blankDraft = (date: string | null): Draft => ({
+  clientId: '',
+  projectId: '',
   text: '',
   channels: [],
   media: [],
@@ -630,6 +636,8 @@ function Editor({
   post,
   createDate = null,
   campaigns,
+  clients,
+  projects,
   close,
   saved,
   opened,
@@ -641,6 +649,8 @@ function Editor({
   createDate?: string | null;
   /** The workspace's campaigns, for the chip input to suggest from. Loaded once by the planner. */
   campaigns: SignalCampaignSummary[];
+  clients: Client[];
+  projects: Project[];
   close: () => void;
   saved: (post: SignalPost) => Promise<void>;
   opened: (post: SignalPost) => Promise<void>;
@@ -709,6 +719,9 @@ function Editor({
     import.meta.env.VITE_PUBLISH_NOW_EVIDENCE === '1';
   const hasTailorablePlatform = post ? previewPlatforms(post).length > 0 : false;
   const warnsAboutXLink = draft.channels.includes('x') && signalTextHasLink(draft.text);
+  const availableProjects = draft.clientId
+    ? projects.filter((project) => project.clientId === draft.clientId)
+    : [];
   /**
    * Channels on this post that no submission reaches, answered from the same capability contract
    * preflight uses rather than by testing for `blog` by name — a format that leaves a channel with
@@ -1145,6 +1158,8 @@ function Editor({
       // server parses and resolves; the metadata beside it here is what the server last said and
       // is never sent back as if it were a fact this form knows.
       media: draft.media.map((item) => ({ source: item.source, url: item.url })),
+      clientId: draft.clientId || null,
+      projectId: draft.projectId || null,
       // Names, so a campaign typed here is resolved or created inside the same transaction as the
       // post. An empty array is *this post belongs to none*, which is why it is always sent.
       campaigns: draft.campaigns.map((campaign) => campaign.name),
@@ -1574,6 +1589,49 @@ function Editor({
             )}
           </fieldset>
           <div className="form-row">
+            <label>
+              Client
+              <select
+                name="clientId"
+                value={draft.clientId}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    clientId: event.target.value,
+                    projectId:
+                      current.projectId &&
+                      projects.some(
+                        (p) => p.id === current.projectId && p.clientId === event.target.value,
+                      )
+                        ? current.projectId
+                        : '',
+                  }))
+                }
+              >
+                <option value="">No client</option>
+                {clients.map((client) => (
+                  <option key={client.id} value={client.id}>
+                    {client.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Project
+              <select
+                name="projectId"
+                value={draft.projectId}
+                onChange={(event) => setDraft({ ...draft, projectId: event.target.value })}
+                disabled={!draft.clientId}
+              >
+                <option value="">No project</option>
+                {availableProjects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label>
               Date
               <input
@@ -2655,6 +2713,8 @@ export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
           post={creating ? null : editing}
           createDate={creating ? creating.date : null}
           campaigns={campaigns}
+          clients={clients}
+          projects={projects}
           close={closeComposer}
           saved={refreshed}
           opened={async (post) => {
