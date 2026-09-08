@@ -333,6 +333,15 @@ import { INTEGRATION_EVENT_PAGE_MAX, INTEGRATION_SOURCES } from '../shared/integ
 import { clientBrandingIssues } from '../shared/branding.ts';
 import { normalizeHex } from '../shared/contrast.ts';
 import { normalizeCategoryName, normalizeTagName } from '../shared/types.ts';
+import {
+  getPresence,
+  listNotifications,
+  listPresence,
+  listSummaries,
+  markNotificationRead,
+  notify,
+  setPresence,
+} from './agent-summaries.ts';
 
 const id = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
@@ -2865,6 +2874,55 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   });
   app.get('/api/agents/directory', (_req, res) => {
     res.json({ agents: listAgentDirectory(db, clock().getTime()) });
+  });
+  app.get('/api/agents/presence', (req, res, next) => {
+    try {
+      res.json(listPresence(db, req.query));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.put('/api/agents/:label/presence', (req, res, next) => {
+    try {
+      res.json(setPresence(db, req.params.label, req.body, clock()));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.get('/api/agents/:label/presence', (req, res, next) => {
+    try {
+      res.json(getPresence(db, req.params.label));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.get('/api/agent-summaries', (req, res, next) => {
+    try {
+      res.json(listSummaries(db, req.query, clock()));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.get('/api/agent-notifications', (req, res, next) => {
+    try {
+      res.json(listNotifications(db, req.query));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/agent-notifications', (req, res, next) => {
+    try {
+      res.status(201).json(notify(db, req.body, clock()));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/agent-notifications/:id/read', (req, res, next) => {
+    try {
+      res.json(markNotificationRead(db, req.params.id, clock()));
+    } catch (error) {
+      next(error);
+    }
   });
   app.get('/api/agent-memory', (req, res, next) => {
     try {
