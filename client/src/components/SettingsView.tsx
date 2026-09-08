@@ -16,7 +16,7 @@ import {
 import { api, send } from '../api';
 import { useServerSeeded } from '../useServerSeeded';
 import { DrivePickerCancelled, pickDriveFolder, type DrivePickerConfig } from '../drivePicker';
-import type { Category, Project, Tag, Task } from '../../../shared/types';
+import type { Category, Client, Project, Tag, Task } from '../../../shared/types';
 import {
   APP_VERSION,
   BRANDING_COLOR_FIELDS,
@@ -79,6 +79,7 @@ export function SettingsView({
   tasks,
   categories,
   projects,
+  clients,
   refresh,
   flash,
 }: {
@@ -88,6 +89,7 @@ export function SettingsView({
   tasks: Task[];
   categories: Category[];
   projects: Project[];
+  clients: Client[];
   refresh: () => Promise<void>;
   flash: (s: string, t?: 'success' | 'error') => void;
 }) {
@@ -415,6 +417,68 @@ export function SettingsView({
                         {TIME_VIEW_LABEL[value]}
                       </option>
                     ))}
+                  </select>
+                </label>
+              </div>
+              <div className="form-row">
+                <label>
+                  Signal default client
+                  <select
+                    aria-label="Signal default client"
+                    value={viewsForm.signal.clientId}
+                    onChange={(e) =>
+                      setViewsForm({
+                        ...viewsForm,
+                        signal: { ...viewsForm.signal, clientId: e.target.value },
+                      })
+                    }
+                  >
+                    <option value="">G.Holmes Designs (saved fallback)</option>
+                    {clients
+                      .filter((client) => client.status === 'ACTIVE')
+                      .map((client) => (
+                        <option key={client.id} value={client.id}>
+                          {client.name}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <label>
+                  Signal clients
+                  <select
+                    aria-label="Signal client visibility default"
+                    value={viewsForm.signal.clientVisibility}
+                    onChange={(e) =>
+                      setViewsForm({
+                        ...viewsForm,
+                        signal: {
+                          ...viewsForm.signal,
+                          clientVisibility: e.target.value as 'active' | 'all',
+                        },
+                      })
+                    }
+                  >
+                    <option value="active">Active only</option>
+                    <option value="all">Show inactive</option>
+                  </select>
+                </label>
+                <label>
+                  Signal projects
+                  <select
+                    aria-label="Signal project visibility default"
+                    value={viewsForm.signal.projectVisibility}
+                    onChange={(e) =>
+                      setViewsForm({
+                        ...viewsForm,
+                        signal: {
+                          ...viewsForm.signal,
+                          projectVisibility: e.target.value as 'active' | 'all',
+                        },
+                      })
+                    }
+                  >
+                    <option value="active">Active only</option>
+                    <option value="all">Show inactive</option>
                   </select>
                 </label>
               </div>

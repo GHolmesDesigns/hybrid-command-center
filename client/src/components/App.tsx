@@ -387,6 +387,7 @@ export function App() {
                   tasks={tasks}
                   categories={categories}
                   projects={projects}
+                  clients={clients}
                   refresh={refresh}
                   flash={flash}
                 />

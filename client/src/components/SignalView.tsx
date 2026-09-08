@@ -638,6 +638,7 @@ function Editor({
   campaigns,
   clients,
   projects,
+  defaultClientId = '',
   close,
   saved,
   opened,
@@ -651,13 +652,17 @@ function Editor({
   campaigns: SignalCampaignSummary[];
   clients: Client[];
   projects: Project[];
+  defaultClientId?: string;
   close: () => void;
   saved: (post: SignalPost) => Promise<void>;
   opened: (post: SignalPost) => Promise<void>;
   removed: (id: string) => Promise<void>;
 }) {
   const creating = post === null;
-  const [draft, setDraft] = useState(() => (post ? draftFor(post) : blankDraft(createDate)));
+  const [draft, setDraft] = useState(() => {
+    if (post) return draftFor(post);
+    return { ...blankDraft(createDate), clientId: defaultClientId };
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [mediaInput, setMediaInput] = useState('');
@@ -2195,6 +2200,23 @@ export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
   /** Clients and projects the filter chips offer. Loaded once — neither depends on the scope. */
   const [clients, setClients] = useState<Client[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const signalDefaultClient = useMemo(
+    () =>
+      viewDefaults.signal.clientId &&
+      clients.some((client) => client.id === viewDefaults.signal.clientId)
+        ? viewDefaults.signal.clientId
+        : (clients.find(
+            (client) =>
+              client.status === 'ACTIVE' && client.name.toLowerCase() === 'g.holmes designs',
+          )?.id ?? ''),
+    [clients, viewDefaults.signal.clientId],
+  );
+  const visibleClients = clients.filter(
+    (client) => viewDefaults.signal.clientVisibility === 'all' || client.status === 'ACTIVE',
+  );
+  const visibleProjects = projects.filter(
+    (project) => viewDefaults.signal.projectVisibility === 'all' || project.status !== 'ARCHIVED',
+  );
   useEffect(() => {
     void api<Client[]>('/clients')
       .then(setClients)
@@ -2479,13 +2501,13 @@ export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
         <div className="filterbar">
           <SearchBox value={searchInput} set={setSearchInput} placeholder="Search post copy…" />
         </div>
-        {clients.length > 0 && (
+        {visibleClients.length > 0 && (
           <div className="tag-filter">
             <span className="tag-filter-label" id="signal-client-filter-label">
               Client
             </span>
             <div role="group" aria-labelledby="signal-client-filter-label">
-              {clients.map((client) => (
+              {visibleClients.map((client) => (
                 <FilterChip
                   key={client.id}
                   label={client.name}
@@ -2503,13 +2525,13 @@ export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
             </div>
           </div>
         )}
-        {projects.length > 0 && (
+        {visibleProjects.length > 0 && (
           <div className="tag-filter">
             <span className="tag-filter-label" id="signal-project-filter-label">
               Project
             </span>
             <div role="group" aria-labelledby="signal-project-filter-label">
-              {projects.map((project) => (
+              {visibleProjects.map((project) => (
                 <FilterChip
                   key={project.id}
                   label={project.name}
@@ -2713,8 +2735,9 @@ export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
           post={creating ? null : editing}
           createDate={creating ? creating.date : null}
           campaigns={campaigns}
-          clients={clients}
-          projects={projects}
+          clients={visibleClients}
+          projects={visibleProjects}
+          defaultClientId={signalDefaultClient}
           close={closeComposer}
           saved={refreshed}
           opened={async (post) => {

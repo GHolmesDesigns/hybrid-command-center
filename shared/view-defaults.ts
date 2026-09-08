@@ -44,7 +44,12 @@ export interface ViewDefaults {
     presentation: ProjectPresentation;
   };
   calendar: { view: CalendarViewMode };
-  signal: { view: CalendarViewMode };
+  signal: {
+    view: CalendarViewMode;
+    clientId?: string;
+    clientVisibility?: 'active' | 'all';
+    projectVisibility?: 'active' | 'all';
+  };
 }
 
 /** Shipped defaults: live/active collections by recency, month agenda on Calendar and Signal. */
@@ -56,7 +61,7 @@ export const CANONICAL_VIEW_DEFAULTS: ViewDefaults = {
     presentation: CANONICAL_PROJECT_PRESENTATION,
   },
   calendar: { view: 'month' },
-  signal: { view: 'month' },
+  signal: { view: 'month', clientId: '', clientVisibility: 'active', projectVisibility: 'active' },
 };
 
 export const VIEW_DEFAULTS_SETTING_KEY = 'view_defaults';
@@ -168,13 +173,24 @@ export function viewDefaultsIssues(value: unknown): ViewDefaultsIssue[] {
     }
     const body = entry as Record<string, unknown>;
     for (const key of Object.keys(body))
-      if (key !== 'view')
+      if (
+        key !== 'view' &&
+        key !== 'clientId' &&
+        key !== 'clientVisibility' &&
+        key !== 'projectVisibility'
+      )
         issues.push({ path: `${page}.${key}`, message: `Unknown ${page} field "${key}".` });
     if (!isOneOf(body.view, CALENDAR_VIEWS))
       issues.push({
         path: `${page}.view`,
         message: `Expected one of ${CALENDAR_VIEWS.join(', ')}.`,
       });
+    if (body.clientId !== undefined && typeof body.clientId !== 'string')
+      issues.push({ path: `${page}.clientId`, message: 'Expected a client id.' });
+    if (page === 'signal')
+      for (const key of ['clientVisibility', 'projectVisibility'] as const)
+        if (body[key] !== undefined && !isOneOf(body[key], ['active', 'all'] as const))
+          issues.push({ path: `${page}.${key}`, message: 'Expected active or all.' });
   }
 
   return issues;
