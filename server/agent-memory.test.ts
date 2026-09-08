@@ -61,11 +61,11 @@ describe('agent memory', () => {
   });
   it('accepts existing client, project, and task scopes', () => {
     const db = createDb(':memory:');
-    const client = db.prepare("INSERT INTO clients (id,name,slug,status) VALUES ('c1','Client','client','LIVE')").run();
+    const client = db.prepare("INSERT INTO clients (id,name,slug,status,created_at,updated_at) VALUES ('c1','Client','client','ACTIVE',?,?)").run('2026-09-08','2026-09-08');
     expect(client.changes).toBe(1);
-    const project = db.prepare("INSERT INTO projects (id,name,slug,status,client_id) VALUES ('p1','Project','project','ACTIVE','c1')").run();
+    const project = db.prepare("INSERT INTO projects (id,name,client_id,created_at,updated_at) VALUES ('p1','Project','c1',?,?)").run('2026-09-08','2026-09-08');
     expect(project.changes).toBe(1);
-    db.prepare("INSERT INTO tasks (id,project_id,title,status) VALUES ('t1','p1','Task','TODO')").run();
+    db.prepare("INSERT INTO tasks (id,project_id,title,created_at,updated_at) VALUES ('t1','p1','Task',?,?)").run('2026-09-08','2026-09-08');
     for (const scope of [{ type: 'client', id: 'c1' }, { type: 'project', id: 'p1' }, { type: 'task', id: 't1' }] as const) {
       expect(suggestMemory(db, { key: scope.type, value: 'v', scope, source: 'test' }, 'agent').scope).toEqual(scope);
     }
