@@ -2,6 +2,7 @@
 import { blockingDependencies } from './domain/dependencies.ts';
 import { isOverdue } from '../shared/deadlines.ts';
 import { TASK_STATUSES, type Category, type Tag, type Task } from '../shared/types.ts';
+import type { TaskFilter } from '../shared/task-filters.ts';
 
 const camel = (row: any) =>
   Object.fromEntries(
@@ -263,6 +264,70 @@ export function listTasks(db: Db, where = '', params: (string | number | null)[]
     )
     .all(...params) as any[];
   return rows.map((row) => hydrateTask(db, row));
+}
+
+/** Build the one SQL vocabulary shared by the filtered API and bounded task reads. */
+export function taskFilterWhere(filters: TaskFilter): { where: string; params: string[] } {
+  const clauses: string[] = [];
+  const params: string[] = [];
+  const addIn = (column: string, values: string[]) => {
+    if (values.length) {
+      clauses.push(`${column} IN (${values.map(() => '?').join(',')})`);
+      params.push(...values);
+    }
+  };
+  addIn('p.client_id', filters.clients);
+  addIn('t.project_id', filters.projects);
+  addIn('t.priority', filters.priorities);
+  addIn('t.status', filters.statuses);
+  if (filters.types.length) {
+    const typed = filters.types.filter((value) => value !== 'none');
+    const typeClauses = [] as string[];
+    if (typed.length) {
+      typeClauses.push(`t.task_type IN (${typed.map(() => '?').join(',')})`);
+      params.push(...typed);
+    }
+    if (filters.types.includes('none')) typeClauses.push('t.task_type IS NULL');
+    clauses.push(`(${typeClauses.join(' OR ')})`);
+  }
+  for (const tagId of filters.tags) {
+    clauses.push('EXISTS (SELECT 1 FROM task_tags tf WHERE tf.task_id=t.id AND tf.tag_id=?)');
+    params.push(tagId);
+  }
+  if (filters.search) {
+    const needle = `%${filters.search.replace(/[\\%_]/g, (value) => `\\${value}`)}%`;
+    clauses.push(`(LOWER(t.title) LIKE LOWER(?) ESCAPE '\\' OR EXISTS (
+      SELECT 1 FROM task_tags ts JOIN tags st ON st.id=ts.tag_id
+      WHERE ts.task_id=t.id AND LOWER(st.name) LIKE LOWER(?) ESCAPE '\\'
+    ))`);
+    params.push(needle, needle);
+  }
+  if (filters.focus.length) {
+    const focus: string[] = [];
+    for (const flag of filters.focus) {
+      if (flag === 'overdue')
+        focus.push("t.status<>'COMPLETE' AND t.due_date < DATE('now','localtime')");
+      if (flag === 'today')
+        focus.push("t.status<>'COMPLETE' AND t.due_date = DATE('now','localtime')");
+      if (flag === 'week')
+        focus.push(
+          "t.status<>'COMPLETE' AND t.due_date BETWEEN DATE('now','localtime') AND DATE('now','localtime','+7 day')",
+        );
+      if (flag === 'none') focus.push('t.due_date IS NULL');
+      if (flag === 'completed') focus.push("t.status='COMPLETE'");
+      if (flag === 'blocked')
+        focus.push(
+          "EXISTS (SELECT 1 FROM task_dependencies bd JOIN tasks bt ON bt.id=bd.dependency_id WHERE bd.task_id=t.id AND bt.status<>'COMPLETE')",
+        );
+    }
+    clauses.push(`(${focus.join(' OR ')})`);
+  }
+  return { where: clauses.length ? `WHERE ${clauses.join(' AND ')}` : '', params };
+}
+
+export function listTasksFiltered(db: Db, filters: TaskFilter) {
+  const built = taskFilterWhere(filters);
+  return listTasks(db, built.where, built.params);
 }
 export function getTask(db: Db, id: string) {
   return listTasks(db, 'WHERE t.id=?', [id])[0];

@@ -11,7 +11,7 @@ import {
 } from '@dnd-kit/core';
 import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { Plus, Tag as TagIcon } from 'lucide-react';
-import { send } from '../api';
+import { api, send } from '../api';
 import type { Client, Project, Tag, Task, TaskStatus } from '../../../shared/types';
 import { TASK_STATUSES, TASK_TYPES } from '../../../shared/types';
 import { isDueNextSevenDays, isDueToday } from '../../../shared/deadlines';
@@ -20,6 +20,7 @@ import { KanbanColumn } from './KanbanCards';
 import { SearchBox } from './Primitives';
 import { STATUS_LABEL, TASK_TYPE_LABEL, tagAccent } from './ui-shared';
 import { PageHead } from './Shell';
+import type { TaskFilter, TaskFilterPreset } from '../../../shared/task-filters';
 
 /**
  * The `type` value that asks for tasks carrying no type at all. Untyped tasks predate the
@@ -114,8 +115,17 @@ export function Kanban({
     selectedPriorities = parseValues(params.get('priority')),
     selectedTaskTypes = parseValues(params.get('type')),
     selectedFlags = parseValues(params.get('filter'));
-  const [query, setQuery] = useState('');
+  const [query, setQueryState] = useState('');
+  const [presets, setPresets] = useState<TaskFilterPreset[]>([]);
+  const setQuery = (value: string) => {
+    setQueryState(value);
+  };
   const selectedTagIds = parseValues(params.get('tags'));
+  useEffect(() => {
+    void api<TaskFilterPreset[]>('/task-presets')
+      .then(setPresets)
+      .catch(() => setPresets([]));
+  }, []);
   const rememberedProject = selectedProjects[0];
   useEffect(() => {
     if (rememberedProject) remember(rememberedProject);
@@ -316,6 +326,53 @@ export function Kanban({
     ['client', 'project', 'priority', 'type', 'filter', 'tags'].forEach((key) => next.delete(key));
     setParams(next);
   };
+  const currentFilter = (): TaskFilter => ({
+    clients: selectedClients,
+    projects: selectedProjects,
+    priorities: selectedPriorities as TaskFilter['priorities'],
+    statuses: [],
+    types: selectedTaskTypes as TaskFilter['types'],
+    focus: selectedFlags as TaskFilter['focus'],
+    tags: selectedTagIds,
+    search: query.trim(),
+  });
+  const applyPreset = (preset: TaskFilterPreset) => {
+    const next = new URLSearchParams(params);
+    const entries: Array<[string, string[]]> = [
+      ['client', preset.filters.clients],
+      ['project', preset.filters.projects],
+      ['priority', preset.filters.priorities],
+      ['type', preset.filters.types],
+      ['filter', preset.filters.focus],
+      ['tags', preset.filters.tags],
+    ];
+    for (const [key, values] of entries) {
+      if (values.length) next.set(key, values.join(','));
+      else next.delete(key);
+    }
+    setQueryState(preset.filters.search);
+    setParams(next);
+  };
+  const savePreset = async () => {
+    const name = window.prompt('Name this task filter preset:');
+    if (!name?.trim()) return;
+    try {
+      const saved = await send<TaskFilterPreset>('/task-presets', 'POST', {
+        name,
+        filters: currentFilter(),
+        scope: 'shared',
+      });
+      setPresets((current) =>
+        [
+          ...current.filter((preset) => preset.name.toLowerCase() !== saved.name.toLowerCase()),
+          saved,
+        ].sort((a, b) => a.name.localeCompare(b.name)),
+      );
+      flash(`Preset “${saved.name}” saved.`);
+    } catch (error) {
+      flash((error as Error).message, 'error');
+    }
+  };
   return (
     <>
       <PageHead
@@ -353,6 +410,29 @@ export function Kanban({
             Clear all
           </button>
         )}
+        <label className="multi-filter">
+          <span>Presets</span>
+          <select
+            aria-label="Task filter preset"
+            defaultValue=""
+            onChange={(event) => {
+              const preset = presets.find((candidate) => candidate.id === event.target.value);
+              if (preset) applyPreset(preset);
+              event.currentTarget.value = '';
+            }}
+          >
+            <option value="">Choose a preset</option>
+            {presets.map((preset) => (
+              <option key={preset.id} value={preset.id}>
+                {preset.name}
+                {preset.scope === 'operator' ? ' · Mine' : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button type="button" className="text-btn" onClick={() => void savePreset()}>
+          Save preset
+        </button>
       </div>
       <SearchBox value={query} set={setQuery} placeholder="Search task titles and tags…" />
       {tags.length > 0 && (

@@ -11,6 +11,7 @@ import {
   listProjects,
   listTags,
   listTasks,
+  listTasksFiltered,
 } from './repositories.ts';
 
 /**
@@ -354,5 +355,95 @@ describe('scope and ordering', () => {
 
   it('returns nothing rather than throwing for an id that is not there', () => {
     expect(getTask(db, 'missing')).toBeUndefined();
+  });
+
+  it('applies combined filter dimensions in SQL, including every selected tag', () => {
+    addTask('match', 'p1', 'Publish the campaign', { dueDate: day(2) });
+    addTask('other', 'p1', 'Publish the campaign elsewhere', { dueDate: day(2) });
+    db.prepare("UPDATE tasks SET priority='HIGH', task_type='SOCIAL_POST' WHERE id='match'").run();
+    db.prepare("UPDATE tasks SET priority='LOW', task_type='SOCIAL_POST' WHERE id='other'").run();
+    db.prepare("INSERT INTO tags(id,name) VALUES('tag-a','Campaign'),('tag-b','Week 1')").run();
+    db.prepare(
+      "INSERT INTO task_tags(task_id,tag_id) VALUES('match','tag-a'),('match','tag-b'),('other','tag-a')",
+    ).run();
+
+    expect(
+      listTasksFiltered(db, {
+        clients: ['c1'],
+        projects: ['p1'],
+        priorities: ['HIGH'],
+        statuses: [],
+        types: ['SOCIAL_POST'],
+        focus: [],
+        tags: ['tag-a', 'tag-b'],
+        search: 'campaign',
+      }).map((task) => task.id),
+    ).toEqual(['match']);
+  });
+
+  it('keeps each focus bucket and empty filter safe at the SQL boundary', () => {
+    const today = format(new Date(), 'yyyy-MM-dd');
+    addTask('overdue', 'p1', 'Overdue', { dueDate: past });
+    addTask('today', 'p1', 'Today', { dueDate: today });
+    addTask('week', 'p1', 'This week', { dueDate: day(7) });
+    addTask('none', 'p1', 'No date');
+    addTask('done', 'p1', 'Done', { dueDate: today, status: 'COMPLETE' });
+    addTask('blocked', 'p1', 'Blocked');
+    addTask('blocker', 'p1', 'Blocker', { status: 'TODO' });
+    db.prepare(
+      "INSERT INTO task_dependencies(task_id,dependency_id) VALUES('blocked','blocker')",
+    ).run();
+    db.prepare("UPDATE tasks SET task_type='VIDEO', status='COMPLETE' WHERE id='done'").run();
+
+    expect(
+      listTasksFiltered(db, {
+        clients: [],
+        projects: [],
+        priorities: [],
+        statuses: [],
+        types: ['none'],
+        focus: [],
+        tags: [],
+        search: '',
+      }).map((task) => task.id),
+    ).toContain('none');
+    expect(
+      listTasksFiltered(db, {
+        clients: [],
+        projects: [],
+        priorities: [],
+        statuses: ['COMPLETE'],
+        types: [],
+        focus: [],
+        tags: [],
+        search: '',
+      }).map((task) => task.id),
+    ).toContain('done');
+    for (const focus of ['overdue', 'today', 'week', 'none', 'completed', 'blocked'] as const) {
+      expect(
+        listTasksFiltered(db, {
+          clients: [],
+          projects: [],
+          priorities: [],
+          statuses: [],
+          types: [],
+          focus: [focus],
+          tags: [],
+          search: '',
+        }).length,
+      ).toBeGreaterThan(0);
+    }
+    expect(
+      listTasksFiltered(db, {
+        clients: [],
+        projects: [],
+        priorities: [],
+        statuses: [],
+        types: [],
+        focus: [],
+        tags: [],
+        search: 'no match',
+      }),
+    ).toEqual([]);
   });
 });
