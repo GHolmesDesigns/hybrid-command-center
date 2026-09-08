@@ -8,6 +8,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [6.1.3] - 2026-09-08
+
+### Added
+
+- Added the Project Status task filters to the Tasks work-session page, with shareable URL state, dependent client/project options, tag and search filtering, and an accurate filtered task count.
+
+### Breaking changes
+
+None.
+
 ## [6.1.2] - 2026-09-08
 
 ### Changed
