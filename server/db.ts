@@ -144,6 +144,20 @@ CREATE TABLE IF NOT EXISTS agent_credentials (
   last_used_at TEXT,
   revoked_at TEXT
 );
+CREATE TABLE IF NOT EXISTS agent_conversations (
+  id TEXT PRIMARY KEY, title TEXT NOT NULL CHECK(length(title) BETWEEN 1 AND 200),
+  scope_type TEXT NOT NULL CHECK(scope_type IN ('client','project','task','freeform')),
+  scope_id TEXT, state TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(state IN ('ACTIVE','ARCHIVED')),
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS agent_conversation_participants (
+  conversation_id TEXT NOT NULL REFERENCES agent_conversations(id) ON DELETE CASCADE,
+  agent_label TEXT NOT NULL, PRIMARY KEY(conversation_id, agent_label)
+);
+CREATE TABLE IF NOT EXISTS agent_conversation_messages (
+  id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES agent_conversations(id) ON DELETE CASCADE,
+  sender_label TEXT NOT NULL, sent_at TEXT NOT NULL, body TEXT NOT NULL CHECK(length(body) BETWEEN 1 AND 4000)
+);
 -- Agent Drive writes are requests, never direct MCP execution. Content is bounded by the Drive
 -- write plan and retained only until the operator decides it.
 CREATE TABLE IF NOT EXISTS drive_write_requests (
@@ -773,6 +787,8 @@ CREATE INDEX IF NOT EXISTS idx_task_filter_presets_lookup ON task_filter_presets
 CREATE INDEX IF NOT EXISTS idx_operator_mcp_bearers_session ON operator_mcp_bearers(session_token_hash);
 CREATE INDEX IF NOT EXISTS idx_agent_credentials_agent ON agent_credentials(agent_id);
 CREATE INDEX IF NOT EXISTS idx_agent_credentials_expiry ON agent_credentials(expires_at);
+CREATE INDEX IF NOT EXISTS idx_agent_conversations_updated ON agent_conversations(updated_at, id);
+CREATE INDEX IF NOT EXISTS idx_agent_conversation_messages_cursor ON agent_conversation_messages(conversation_id, sent_at, id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_drive_write_requests_replay
   ON drive_write_requests(agent_label, client_request_id);
 CREATE INDEX IF NOT EXISTS idx_drive_write_requests_status
