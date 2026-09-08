@@ -245,6 +245,7 @@ import {
   DRIVE_OAUTH_BUDGET,
   DRIVE_SYNC_BUDGET,
   MCP_HEALTH_BUDGET,
+  HEALTH_DASHBOARD_BUDGET,
   MANUAL_BUDGET,
   MCP_OAUTH_BUDGET,
   IMPORT_BUDGET,
@@ -873,6 +874,18 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       standardHeaders: 'draft-7',
       legacyHeaders: false,
       message: { error: MCP_HEALTH_BUDGET.message },
+      keyGenerator: (req) => authKey(req),
+      validate: { xForwardedForHeader: false },
+    }),
+  );
+  app.use(
+    '/api/health/dashboard',
+    rateLimit({
+      windowMs: HEALTH_DASHBOARD_BUDGET.windowMs,
+      limit: HEALTH_DASHBOARD_BUDGET.limit,
+      standardHeaders: 'draft-7',
+      legacyHeaders: false,
+      message: { error: HEALTH_DASHBOARD_BUDGET.message },
       keyGenerator: (req) => authKey(req),
       validate: { xForwardedForHeader: false },
     }),

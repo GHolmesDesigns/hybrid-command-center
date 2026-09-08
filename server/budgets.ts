@@ -133,6 +133,17 @@ export const MCP_HEALTH_BUDGET: Budget = {
   message: 'Too many MCP health requests. Wait a moment and try again.',
 };
 
+/**
+ * Application health dashboard under `/api/health/dashboard`. Uses `express-rate-limit` in
+ * `app.ts` (like auth and MCP health) so CodeQL's missing-rate-limiting query can see the
+ * limiter. Sixty a minute is above a person opening the dashboard and refreshing it by hand.
+ */
+export const HEALTH_DASHBOARD_BUDGET: Budget = {
+  limit: 60,
+  windowMs: 60_000,
+  message: 'Too many health dashboard requests. Wait a moment and try again.',
+};
+
 /** MCP OAuth register/authorize/token — same abuse window as Drive OAuth connect. */
 /** Public manual metadata and delivery. The handlers touch the filesystem, so app.ts mounts
  * express-rate-limit explicitly for CodeQL and to bound repeated reads. */
