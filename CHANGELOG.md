@@ -8,6 +8,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.13.29] - 2026-09-07
+
+### Changed
+
+- Bumped production dependencies: `express-rate-limit` 8.6.2 → 8.7.0, `lucide-react` 1.35.0 →
+  1.41.0, `zod` 4.5.1 → 4.5.4.
+
+### Breaking changes
+
+None.
+
 ## [5.13.28] - 2026-09-07
 
 ### Fixed
