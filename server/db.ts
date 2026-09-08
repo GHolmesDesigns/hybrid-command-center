@@ -120,6 +120,20 @@ CREATE TABLE IF NOT EXISTS agent_registrations (
   last_used_at TEXT,
   last_origin TEXT
 );
+CREATE TABLE IF NOT EXISTS agent_profiles (
+  agent_id TEXT PRIMARY KEY REFERENCES agent_registrations(id) ON DELETE CASCADE,
+  display_name TEXT NOT NULL CHECK(length(display_name) BETWEEN 1 AND 80),
+  bio TEXT CHECK(bio IS NULL OR length(bio) <= 500),
+  trust_level TEXT NOT NULL DEFAULT 'UNVERIFIED' CHECK(trust_level IN ('UNVERIFIED','VERIFIED')),
+  last_verified_at TEXT
+);
+CREATE TABLE IF NOT EXISTS agent_capabilities (
+  id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL REFERENCES agent_registrations(id) ON DELETE CASCADE,
+  name TEXT NOT NULL CHECK(length(name) BETWEEN 1 AND 80),
+  description TEXT CHECK(description IS NULL OR length(description) <= 240),
+  UNIQUE(agent_id, name COLLATE NOCASE)
+);
 CREATE TABLE IF NOT EXISTS agent_credentials (
   id TEXT PRIMARY KEY,
   agent_id TEXT NOT NULL REFERENCES agent_registrations(id) ON DELETE RESTRICT,

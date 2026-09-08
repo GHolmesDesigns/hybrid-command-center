@@ -304,6 +304,7 @@ import {
   postHandoff,
 } from './agent-coordination/service.ts';
 import { reclaimableWorkSessions, reclaimWorkSession } from './agent-coordination/work-sessions.ts';
+import { listAgentDirectory } from './agent-directory.ts';
 import { INTEGRATION_EVENT_PAGE_MAX, INTEGRATION_SOURCES } from '../shared/integration-log.ts';
 import { clientBrandingIssues } from '../shared/branding.ts';
 import { normalizeHex } from '../shared/contrast.ts';
@@ -2815,6 +2816,9 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     } catch (error) {
       next(error);
     }
+  });
+  app.get('/api/agents/directory', (_req, res) => {
+    res.json({ agents: listAgentDirectory(db, clock().getTime()) });
   });
   app.post('/api/agent-handoffs', (req, res, next) => {
     try {
