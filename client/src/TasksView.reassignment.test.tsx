@@ -11,6 +11,7 @@ import {
   task,
 } from './App.test-setup';
 import { TasksView } from './components/TasksView';
+import { MemoryRouter } from 'react-router-dom';
 
 describe('TasksView task reassignment', () => {
   afterEach(() => {
@@ -22,7 +23,11 @@ describe('TasksView task reassignment', () => {
     const running = task('running-task', 'Draft the proposal');
     const other = task('other-task', 'Review contracts');
 
-    const { rerender } = render(<TasksView tasks={[running, other]} />);
+    const { rerender } = render(
+      <MemoryRouter>
+        <TasksView tasks={[running, other]} />
+      </MemoryRouter>,
+    );
 
     fireEvent.click(screen.getByText('Draft the proposal'));
     expect(screen.getByText('Working on Draft the proposal')).toBeVisible();
@@ -36,7 +41,11 @@ describe('TasksView task reassignment', () => {
 
     // The running task is completed elsewhere (or deleted, or reassigned) and drops out of
     // the active list while its session is still running.
-    rerender(<TasksView tasks={[{ ...running, status: 'COMPLETE' }, other]} />);
+    rerender(
+      <MemoryRouter>
+        <TasksView tasks={[{ ...running, status: 'COMPLETE' }, other]} />
+      </MemoryRouter>,
+    );
 
     // The session must stop, preserve the elapsed time, and not auto-continue under a
     // different task — the operator must choose one explicitly to resume.
@@ -55,14 +64,22 @@ describe('TasksView task reassignment', () => {
     const running = task('running-task', 'Draft the proposal');
     const other = task('other-task', 'Review contracts');
 
-    const { rerender } = render(<TasksView tasks={[running, other]} />);
+    const { rerender } = render(
+      <MemoryRouter>
+        <TasksView tasks={[running, other]} />
+      </MemoryRouter>,
+    );
 
     fireEvent.click(screen.getByText('Draft the proposal'));
     fireEvent.click(screen.getByRole('button', { name: /^Start/ }));
     expect(screen.getByRole('button', { name: /^Pause/ })).toBeVisible();
 
     // An unrelated list refresh (e.g. a new task added elsewhere) must not disturb the session.
-    rerender(<TasksView tasks={[running, other, task('new-task', 'Plan kickoff')]} />);
+    rerender(
+      <MemoryRouter>
+        <TasksView tasks={[running, other, task('new-task', 'Plan kickoff')]} />
+      </MemoryRouter>,
+    );
 
     expect(screen.getByRole('button', { name: /^Pause/ })).toBeVisible();
     expect(screen.getByText('Working on Draft the proposal')).toBeVisible();
