@@ -61,6 +61,7 @@ describe('TasksView task reassignment', () => {
   });
 
   it('leaves a running session alone while its task stays in the active list', () => {
+    vi.useFakeTimers();
     const running = task('running-task', 'Draft the proposal');
     const other = task('other-task', 'Review contracts');
 
