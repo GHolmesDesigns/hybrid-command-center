@@ -8,6 +8,18 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [5.13.31] - 2026-09-07
+
+### Changed
+
+- Bumped development dependencies: `@playwright/test` 1.62.1 → 1.63.0, `@types/node` 26.4.0 →
+  26.4.1, `@types/react-dom` 19.2.5 → 19.2.7, `eslint` 10.9.1 → 10.10.0,
+  `eslint-plugin-react-refresh` 0.5.5 → 0.5.6, `typescript-eslint` 8.68.0 → 8.69.0.
+
+### Breaking changes
+
+None.
+
 ## [5.13.30] - 2026-09-07
 
 ### Changed
