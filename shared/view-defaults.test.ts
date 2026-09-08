@@ -160,6 +160,20 @@ describe('viewDefaultsIssues', () => {
     });
   });
 
+  it('validates Signal assignment defaults', () => {
+    const issues = viewDefaultsIssues({
+      ...CANONICAL_VIEW_DEFAULTS,
+      signal: {
+        ...CANONICAL_VIEW_DEFAULTS.signal,
+        clientId: 42 as never,
+        clientVisibility: 'archived' as never,
+        projectVisibility: 'retired' as never,
+      },
+    });
+    expect(issues).toContainEqual({ path: 'signal.clientId', message: 'Expected a client id.' });
+    expect(issues.filter((issue) => issue.path.endsWith('Visibility'))).toHaveLength(2);
+  });
+
   it('reports every missing page at once', () => {
     const issues = viewDefaultsIssues({ clients: { visibility: 'active' } });
     expect(issues.map((issue) => issue.path)).toEqual(
