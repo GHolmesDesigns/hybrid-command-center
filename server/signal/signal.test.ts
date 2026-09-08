@@ -6,6 +6,7 @@ import { LocalSignalProvider, listPostsInRange } from './read.ts';
 import { UnavailableSignalProvider } from './provider.ts';
 import {
   SignalPostNotFoundError,
+  SignalPostRelationshipError,
   SignalSlotConflictError,
   applyPostSlot,
   createPost,
@@ -98,6 +99,35 @@ describe('writing posts', () => {
     });
     expect(unbound.client).toBeUndefined();
     expect(listPostsInRange(db, '2026-09-14', '2026-09-14').posts).toHaveLength(2);
+  });
+
+  it('rejects incompatible client and project choices without writing a post', async () => {
+    const timestamp = new Date().toISOString();
+    const clientOne = '11111111-1111-4111-8111-111111111111';
+    const clientTwo = '22222222-2222-4222-8222-222222222222';
+    db.prepare(
+      `INSERT INTO clients(id,name,slug,branding_color_one,branding_color_two,created_at,updated_at)
+       VALUES(?,?,?,?,?,?,?)`,
+    ).run(clientOne, 'Acme Studio', 'acme-studio', '#18201d', '#ffffff', timestamp, timestamp);
+    db.prepare(
+      `INSERT INTO clients(id,name,slug,branding_color_one,branding_color_two,created_at,updated_at)
+       VALUES(?,?,?,?,?,?,?)`,
+    ).run(clientTwo, 'Bravo Studio', 'bravo-studio', '#18201d', '#ffffff', timestamp, timestamp);
+    db.prepare(
+      `INSERT INTO projects(id,client_id,name,created_at,updated_at)
+       VALUES('project-1',?,?,?,?)`,
+    ).run(clientOne, 'Launch', timestamp, timestamp);
+
+    const incompatible = [
+      { clientId: null, projectId: 'project-1' },
+      { clientId: clientOne, projectId: null },
+      { clientId: clientTwo, projectId: 'project-1' },
+      { clientId: clientOne, projectId: 'missing-project' },
+    ];
+    for (const choices of incompatible) {
+      await expect(add(choices)).rejects.toThrow(SignalPostRelationshipError);
+    }
+    expect(db.prepare('SELECT COUNT(*) n FROM signal_posts').get()).toEqual({ n: 0 });
   });
 
   it('creates an unscheduled post by default and puts it in the queue', async () => {
