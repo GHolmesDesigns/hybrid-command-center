@@ -306,6 +306,15 @@ import {
 import { reclaimableWorkSessions, reclaimWorkSession } from './agent-coordination/work-sessions.ts';
 import { listAgentDirectory } from './agent-directory.ts';
 import {
+  archiveMemory,
+  correctMemory,
+  deleteMemory,
+  getMemory,
+  listMemory,
+  suggestMemory,
+} from './agent-memory.ts';
+import { agentMemoryListSchema } from '../shared/agent-memory.ts';
+import {
   createConversation,
   getConversation,
   listConversations,
@@ -2832,6 +2841,50 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   });
   app.get('/api/agents/directory', (_req, res) => {
     res.json({ agents: listAgentDirectory(db, clock().getTime()) });
+  });
+  app.get('/api/agent-memory', (req, res, next) => {
+    try {
+      res.json(listMemory(db, agentMemoryListSchema.parse(req.query)));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/agent-memory/suggestions', (req, res, next) => {
+    try {
+      const { suggestedBy, ...input } = req.body ?? {};
+      res.status(201).json(suggestMemory(db, input, String(suggestedBy ?? 'agent'), clock()));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.get('/api/agent-memory/:id', (req, res, next) => {
+    try {
+      res.json(getMemory(db, req.params.id));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.patch('/api/agent-memory/:id', (req, res, next) => {
+    try {
+      res.json(correctMemory(db, req.params.id, req.body, 'operator', clock()));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/agent-memory/:id/archive', (req, res, next) => {
+    try {
+      res.json(archiveMemory(db, req.params.id, clock()));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.delete('/api/agent-memory/:id', (req, res, next) => {
+    try {
+      deleteMemory(db, req.params.id);
+      res.json({ ok: true });
+    } catch (error) {
+      next(error);
+    }
   });
   // Conversations are informational metadata. The authenticated MCP/session identity is the
   // sender; clients cannot supply an author and these routes never mutate workspace state.
