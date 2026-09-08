@@ -1,6 +1,39 @@
 export const TASK_TIMER_STORAGE_KEY = 'hcc.task-timer.v1';
 export const WORK_SECONDS = 25 * 60;
 export const BREAK_SECONDS = 5 * 60;
+export const TASK_TIMER_SETTINGS_KEY = 'hcc.task-timer-settings.v1';
+export type TaskTimerSettings = {
+  enabled: boolean;
+  completion: boolean;
+  unavailable: boolean;
+  sound: boolean;
+};
+export const DEFAULT_TASK_TIMER_SETTINGS: TaskTimerSettings = {
+  enabled: true,
+  completion: true,
+  unavailable: true,
+  sound: false,
+};
+export function readTaskTimerSettings(storage: Pick<Storage, 'getItem'>): TaskTimerSettings {
+  try {
+    return {
+      ...DEFAULT_TASK_TIMER_SETTINGS,
+      ...(JSON.parse(storage.getItem(TASK_TIMER_SETTINGS_KEY) || 'null') || {}),
+    };
+  } catch {
+    return DEFAULT_TASK_TIMER_SETTINGS;
+  }
+}
+export function writeTaskTimerSettings(
+  storage: Pick<Storage, 'setItem'>,
+  value: TaskTimerSettings,
+) {
+  try {
+    storage.setItem(TASK_TIMER_SETTINGS_KEY, JSON.stringify(value));
+  } catch {
+    /* optional */
+  }
+}
 
 export type TaskTimerSession = {
   version: 1;

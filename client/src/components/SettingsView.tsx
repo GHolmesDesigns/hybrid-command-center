@@ -50,6 +50,11 @@ import { CategoriesCard } from './CategoriesCard';
 import { SignalCampaignsCard } from './SignalCampaignsCard';
 import { TagsCard } from './TagsCard';
 import { manualUrlForVersion } from '../../../shared/manual';
+import {
+  readTaskTimerSettings,
+  writeTaskTimerSettings,
+  type TaskTimerSettings,
+} from '../../../shared/task-timer';
 
 const COLOR_LABEL: Record<BrandingColorField, string> = {
   background: 'Sidebar background',
@@ -102,6 +107,9 @@ export function SettingsView({
     [viewsBusy, setViewsBusy] = useState(false),
     [pickerBusy, setPickerBusy] = useState(false),
     [driveError, setDriveError] = useState('');
+  const [timerSettings, setTimerSettings] = useState<TaskTimerSettings>(() =>
+    readTaskTimerSettings(window.localStorage),
+  );
   const load = useCallback(async () => {
     const next = await api<DriveSettingsState>('/settings/drive');
     setState(next);
@@ -230,6 +238,81 @@ export function SettingsView({
       */}
       <div className="settings-layout">
         <div className="settings-column">
+          <section className="panel settings-card" aria-labelledby="timer-settings-heading">
+            <div className="section-title">
+              <div>
+                <span className="eyebrow">Tasks</span>
+                <h2 id="timer-settings-heading">Timer notifications</h2>
+              </div>
+            </div>
+            <p>
+              Completion alerts work while the page is hidden. Browser-closed push notifications are
+              not supported.
+            </p>
+            <label>
+              <input
+                type="checkbox"
+                checked={timerSettings.enabled}
+                onChange={(e) => {
+                  const next = { ...timerSettings, enabled: e.target.checked };
+                  setTimerSettings(next);
+                  writeTaskTimerSettings(window.localStorage, next);
+                }}
+              />{' '}
+              Enable timer notifications
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={timerSettings.completion}
+                disabled={!timerSettings.enabled}
+                onChange={(e) => {
+                  const next = { ...timerSettings, completion: e.target.checked };
+                  setTimerSettings(next);
+                  writeTaskTimerSettings(window.localStorage, next);
+                }}
+              />{' '}
+              Session completion
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={timerSettings.unavailable}
+                disabled={!timerSettings.enabled}
+                onChange={(e) => {
+                  const next = { ...timerSettings, unavailable: e.target.checked };
+                  setTimerSettings(next);
+                  writeTaskTimerSettings(window.localStorage, next);
+                }}
+              />{' '}
+              Permission unavailable warnings
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={timerSettings.sound}
+                disabled={!timerSettings.enabled}
+                onChange={(e) => {
+                  const next = { ...timerSettings, sound: e.target.checked };
+                  setTimerSettings(next);
+                  writeTaskTimerSettings(window.localStorage, next);
+                }}
+              />{' '}
+              Sound when supported
+            </label>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => void Notification.requestPermission()}
+              disabled={typeof Notification === 'undefined'}
+            >
+              Allow notifications
+            </button>
+            <p className="field-hint" role="status">
+              Permission:{' '}
+              {typeof Notification === 'undefined' ? 'Unavailable' : Notification.permission}.
+            </p>
+          </section>
           <CategoriesCard
             categories={categories}
             projects={projects}
