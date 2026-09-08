@@ -9,6 +9,7 @@ import {
 } from 'react-router-dom';
 import {
   Bot,
+  HeartPulse,
   BriefcaseBusiness,
   CalendarDays,
   CheckCircle2,
@@ -46,6 +47,7 @@ import { AgentsView } from './AgentsView';
 import { SettingsView } from './SettingsView';
 import { SignalView } from './SignalView';
 import { TasksView } from './TasksView';
+import { HealthView } from './HealthView';
 import { Nav } from './Shell';
 import { brandStyle } from './ui-shared';
 
@@ -216,6 +218,7 @@ export function App() {
           <Nav icon={<FileText />} to="/files" label="Files" collapsed={collapsed} />
           <Nav icon={<CalendarDays />} to="/calendar" label="Calendar" collapsed={collapsed} />
           <Nav icon={<Megaphone />} to="/signal" label="Signal" collapsed={collapsed} />
+          <Nav icon={<HeartPulse />} to="/health" label="Health" collapsed={collapsed} />
           <Nav icon={<Bot />} to="/agents" label="Agents" collapsed={collapsed} />
           <Nav icon={<Settings />} to="/settings" label="Settings" collapsed={collapsed} />
         </nav>
@@ -382,6 +385,7 @@ export function App() {
             <Route path="/calendar" element={<CalendarView viewDefaults={viewDefaults} />} />
             <Route path="/signal" element={<SignalView viewDefaults={viewDefaults} />} />
             <Route path="/agents" element={<AgentsView tasks={tasks} flash={flash} />} />
+            <Route path="/health" element={<HealthView />} />
             <Route
               path="/settings"
               element={

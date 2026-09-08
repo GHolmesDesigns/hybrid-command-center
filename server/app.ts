@@ -42,6 +42,7 @@ import { setMcpResourceUpdateBridge } from './mcp/resource-notifier.ts';
 import { buildMcpHealthPanel } from './mcp/health-panel.ts';
 import { buildConnectionStatus } from './mcp/connection-status.ts';
 import { workspaceDataChecksum } from './mcp/workspace-checksum.ts';
+import { buildAppHealth } from './app-health.ts';
 import { MCP_AGENT_SCOPES } from '../shared/mcp-agent-registry.ts';
 import {
   mcpHealthDiagnosticCredentialSchema,
@@ -1117,6 +1118,16 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         recentCompletions: [],
         auditEventCount: 0,
       });
+    }
+  });
+
+  app.get('/api/health/dashboard', (_req, res) => {
+    try {
+      res.json(buildAppHealth(db, { authRequired, now: new Date(authNowMs()) }));
+    } catch (error) {
+      res
+        .status(500)
+        .json({ error: error instanceof Error ? error.message : 'Health dashboard unavailable.' });
     }
   });
 
