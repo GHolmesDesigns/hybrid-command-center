@@ -86,6 +86,11 @@ CREATE TABLE IF NOT EXISTS project_categories (
   PRIMARY KEY (project_id, category_id)
 );
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS task_filter_presets (
+  id TEXT PRIMARY KEY, name TEXT NOT NULL COLLATE NOCASE, scope TEXT NOT NULL CHECK(scope IN ('shared','operator')),
+  operator_session_hash TEXT, filters_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+  UNIQUE(name, scope, operator_session_hash)
+);
 -- Operator sessions (C51): cookie holds the raw token; this table stores the HMAC hash + CSRF.
 -- Keep in sync with OPERATOR_SESSIONS_TABLE_SQL in server/auth/sessions.ts.
 CREATE TABLE IF NOT EXISTS operator_sessions (
@@ -750,6 +755,7 @@ CREATE INDEX IF NOT EXISTS idx_project_categories_category ON project_categories
 CREATE INDEX IF NOT EXISTS idx_import_receipts_created ON import_receipts(created_at DESC);
 -- Purge walks idle expiry; absolute and revoked rows are filtered in the same DELETE.
 CREATE INDEX IF NOT EXISTS idx_operator_sessions_idle ON operator_sessions(idle_expires_at);
+CREATE INDEX IF NOT EXISTS idx_task_filter_presets_lookup ON task_filter_presets(scope, operator_session_hash, name);
 CREATE INDEX IF NOT EXISTS idx_operator_mcp_bearers_session ON operator_mcp_bearers(session_token_hash);
 CREATE INDEX IF NOT EXISTS idx_agent_credentials_agent ON agent_credentials(agent_id);
 CREATE INDEX IF NOT EXISTS idx_agent_credentials_expiry ON agent_credentials(expires_at);

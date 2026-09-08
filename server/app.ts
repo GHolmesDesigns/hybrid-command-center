@@ -59,8 +59,10 @@ import {
   listClients,
   listProjects,
   listTags,
-  listTasks,
+  listTasksFiltered,
 } from './repositories.ts';
+import { listTaskPresets, saveTaskPreset, deleteTaskPreset } from './task-presets.ts';
+import { taskFiltersFromQuery, taskPresetInputSchema } from '../shared/task-filters.ts';
 import { commitClientMerge, isMergedSource, previewClientMerge } from './client-merge.ts';
 import { ClientMergeError } from './domain/client-merge.ts';
 import { touchProjectActivity, touchProjectRecord } from './domain/activity.ts';
@@ -944,7 +946,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   );
 
   app.get('/api/auth/status', (req, res) => {
-    const session = (req as AuthedRequest).operatorSession;
+    const session = (req as unknown as AuthedRequest).operatorSession;
     res.json(authStatus({ authRequired, session }));
   });
 
@@ -1587,21 +1589,38 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     }
   });
 
-  app.get('/api/tasks', (req, res) => {
-    const clauses: string[] = [];
-    const params: string[] = [];
-    for (const [query, column] of [
-      ['projectId', 't.project_id'],
-      ['clientId', 'p.client_id'],
-      ['status', 't.status'],
-      ['priority', 't.priority'],
-    ] as const) {
-      if (req.query[query]) {
-        clauses.push(`${column}=?`);
-        params.push(String(req.query[query]));
-      }
+  app.get('/api/tasks', (req, res, next) => {
+    try {
+      const filters = taskFiltersFromQuery(req.query as Record<string, unknown>);
+      if (req.query.projectId) filters.projects = [String(req.query.projectId)];
+      if (req.query.clientId) filters.clients = [String(req.query.clientId)];
+      res.json(listTasksFiltered(db, filters));
+    } catch (error) {
+      next(error);
     }
-    res.json(listTasks(db, clauses.length ? `WHERE ${clauses.join(' AND ')}` : '', params));
+  });
+  app.get('/api/task-presets', (req, res) => {
+    const session = (req as unknown as AuthedRequest).operatorSession;
+    res.json(listTaskPresets(db, session?.tokenHash ?? null));
+  });
+  app.post('/api/task-presets', (req, res, next) => {
+    try {
+      const session = (req as unknown as AuthedRequest).operatorSession;
+      const input = taskPresetInputSchema.parse(req.body);
+      res
+        .status(201)
+        .json(
+          saveTaskPreset(db, input, session?.tokenHash ?? null, id(), new Date().toISOString()),
+        );
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.delete('/api/task-presets/:id', (req, res) => {
+    const session = (req as unknown as AuthedRequest).operatorSession;
+    if (!deleteTaskPreset(db, req.params.id, session?.tokenHash ?? null))
+      return res.status(404).json({ error: 'Preset not found.' });
+    res.json({ ok: true });
   });
   app.post('/api/tasks', (req, res, next) => {
     try {

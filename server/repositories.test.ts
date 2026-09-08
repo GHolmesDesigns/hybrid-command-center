@@ -11,6 +11,7 @@ import {
   listProjects,
   listTags,
   listTasks,
+  listTasksFiltered,
 } from './repositories.ts';
 
 /**
@@ -354,5 +355,29 @@ describe('scope and ordering', () => {
 
   it('returns nothing rather than throwing for an id that is not there', () => {
     expect(getTask(db, 'missing')).toBeUndefined();
+  });
+
+  it('applies combined filter dimensions in SQL, including every selected tag', () => {
+    addTask('match', 'p1', 'Publish the campaign', { dueDate: day(2) });
+    addTask('other', 'p1', 'Publish the campaign elsewhere', { dueDate: day(2) });
+    db.prepare("UPDATE tasks SET priority='HIGH', task_type='SOCIAL_POST' WHERE id='match'").run();
+    db.prepare("UPDATE tasks SET priority='LOW', task_type='SOCIAL_POST' WHERE id='other'").run();
+    db.prepare("INSERT INTO tags(id,name) VALUES('tag-a','Campaign'),('tag-b','Week 1')").run();
+    db.prepare(
+      "INSERT INTO task_tags(task_id,tag_id) VALUES('match','tag-a'),('match','tag-b'),('other','tag-a')",
+    ).run();
+
+    expect(
+      listTasksFiltered(db, {
+        clients: ['c1'],
+        projects: ['p1'],
+        priorities: ['HIGH'],
+        statuses: [],
+        types: ['SOCIAL_POST'],
+        focus: [],
+        tags: ['tag-a', 'tag-b'],
+        search: 'campaign',
+      }).map((task) => task.id),
+    ).toEqual(['match']);
   });
 });
