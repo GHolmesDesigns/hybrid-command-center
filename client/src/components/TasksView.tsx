@@ -168,7 +168,9 @@ export function TasksView({
     // elsewhere). Per the approved timer contract, stop the session and preserve its
     // elapsed state — do not pick a replacement task; the operator restarts manually.
     setTimer((current) =>
-      current && current.taskId === selectedId ? pauseTaskTimer(current) : current,
+      current && current.taskId === selectedId && !current.paused
+        ? pauseTaskTimer(current)
+        : current,
     );
   }, [filteredTasks, selectedId]);
 
