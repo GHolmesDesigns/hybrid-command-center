@@ -8,6 +8,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [6.1.0] - 2026-09-08
+
+### Added
+
+- Saved task filter presets with shared and operator-specific scopes, URL-authoritative restoration, and server-side filtering across clients, projects, priorities, task types, focus, tags, deadlines, and search.
+
+### Breaking changes
+
+None.
+
 ## [6.0.1] - 2026-09-07
 
 ### Fixed
