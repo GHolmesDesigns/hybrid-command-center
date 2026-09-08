@@ -16,7 +16,7 @@ import { layoutSettled } from './ready';
  *     pushed down by the other column reads as a larger distance, which is the bug, in pixels.
  *   - Growing and shrinking one column moves that column's later cards by exactly as much, and
  *     moves the neighbouring column by nothing.
- *   - At one column the two stacks meet at the same gap they use internally, so the nine cards
+ *   - At one column the two stacks meet at the same gap they use internally, so the ten cards
  *     read as one stack, in document order.
  *
  * Both Drive states are faked at the HTTP boundary with `page.route`, as they are in
@@ -30,6 +30,7 @@ const GAP = 18;
 
 /** The cards in document order, which is the order they are meant to be read in. */
 const READING_ORDER = [
+  'Timer notifications',
   'Project categories',
   'Task tags',
   'Signal campaigns',
@@ -76,7 +77,7 @@ const cardBoxes = (page: Page): Promise<CardBox[]> =>
 const openSettings = async (page: Page) => {
   await page.goto('/settings');
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
-  await expect(page.locator('.settings-layout .settings-card')).toHaveCount(9);
+  await expect(page.locator('.settings-layout .settings-card')).toHaveCount(10);
   // Every measurement below is taken across two separate renders and compared to the pixel, so the
   // two have to be laid out in the same font. `client/src/styles.css` fetches DM Sans and Manrope
   // with `display=swap`, which means one render can be measured in the fallback face and its
@@ -128,9 +129,9 @@ test('each Settings column stacks on its own at desktop width', async ({ page })
 
   const cards = await cardBoxes(page);
   expect(cards.map((card) => card.heading)).toEqual(READING_ORDER);
-  // Three cards in the left stack and six in the right, and every card in one — a card left as
+  // Four cards in the left stack and six in the right, and every card in one — a card left as
   // the grid's own child would report column -1 and be back in a shared row track.
-  expect(cards.map((card) => card.column)).toEqual([0, 0, 0, 1, 1, 1, 1, 1, 1]);
+  expect(cards.map((card) => card.column)).toEqual([0, 0, 0, 0, 1, 1, 1, 1, 1, 1]);
 
   const [left, right] = [0, 1].map((column) => cards.filter((card) => card.column === column));
 
