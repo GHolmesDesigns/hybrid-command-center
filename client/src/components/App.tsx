@@ -353,7 +353,12 @@ export function App() {
             />
             {/* Bookmarks and older dashboard tiles still use /kanban; keep the query string. */}
             <Route path="/kanban" element={<LegacyKanbanRedirect />} />
-            <Route path="/tasks" element={<TasksView tasks={tasks} />} />
+            <Route
+              path="/tasks"
+              element={
+                <TasksView tasks={tasks} clients={clients} projects={projects} tags={tags} />
+              }
+            />
             <Route
               path="/import"
               element={
