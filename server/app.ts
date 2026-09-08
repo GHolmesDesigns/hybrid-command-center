@@ -112,6 +112,7 @@ import {
 import {
   SignalMediaError,
   SignalPostNotFoundError,
+  SignalPostRelationshipError,
   SignalPostProtectedError,
   SignalPublishTargetError,
   SignalVariantError,
@@ -2997,6 +2998,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         : // Editing or deleting a post that is not there is the caller addressing something
           // that does not exist, not a failure of the write.
           error instanceof SignalPostNotFoundError ||
+            error instanceof SignalPostRelationshipError ||
             // Acknowledging an alert that is not in the summary is the same kind of miss: the
             // summary is derived, so an id with nothing behind it names a fact that has moved on.
             error instanceof QueueAlertNotFoundError ||
