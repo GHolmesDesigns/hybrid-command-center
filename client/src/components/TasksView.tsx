@@ -7,6 +7,15 @@ import { isDueNextSevenDays, isDueToday } from '../../../shared/deadlines';
 import { PageHead } from './Shell';
 import { SearchBox } from './Primitives';
 import { TASK_TYPE_LABEL, tagAccent } from './ui-shared';
+import {
+  newTaskTimerSession,
+  pauseTaskTimer,
+  readTaskTimer,
+  reconcileTaskTimer,
+  startTaskTimer,
+  writeTaskTimer,
+  type TaskTimerSession,
+} from '../../../shared/task-timer';
 
 const NO_TASK_TYPE = 'none';
 type FilterOption = { value: string; label: string };
@@ -57,9 +66,6 @@ function MultiSelectFilter({
     </div>
   );
 }
-
-const WORK_SECONDS = 25 * 60;
-const BREAK_SECONDS = 5 * 60;
 
 function clock(seconds: number) {
   return `${Math.floor(seconds / 60)
@@ -125,10 +131,31 @@ export function TasksView({
     selectedFocus,
   ]);
   const [selectedId, setSelectedId] = useState('');
-  const [seconds, setSeconds] = useState(WORK_SECONDS);
-  const [mode, setMode] = useState<'work' | 'break'>('work');
-  const [running, setRunning] = useState(false);
+  const [timer, setTimer] = useState<TaskTimerSession | null>(() =>
+    readTaskTimer(window.localStorage),
+  );
+  const activeTimer = timer ? reconcileTaskTimer(timer) : null;
+  const seconds = activeTimer?.remainingSeconds ?? 25 * 60;
+  const mode = activeTimer?.phase ?? 'work';
+  const running = Boolean(activeTimer && !activeTimer.paused && selectedId === activeTimer.taskId);
   const selected = filteredTasks.find((task) => task.id === selectedId);
+
+  useEffect(() => {
+    if (timer) writeTaskTimer(window.localStorage, timer);
+  }, [timer]);
+  useEffect(() => {
+    const refresh = () => setTimer((current) => (current ? reconcileTaskTimer(current) : current));
+    const onVisibility = () => refresh();
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', onVisibility);
+    const interval =
+      activeTimer && !activeTimer.paused ? window.setInterval(refresh, 1000) : undefined;
+    return () => {
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', onVisibility);
+      if (interval) window.clearInterval(interval);
+    };
+  }, [activeTimer]);
 
   useEffect(() => {
     if (filteredTasks.some((task) => task.id === selectedId)) return;
@@ -140,7 +167,9 @@ export function TasksView({
     // The task being timed left the active list (completed, deleted, or reassigned
     // elsewhere). Per the approved timer contract, stop the session and preserve its
     // elapsed state — do not pick a replacement task; the operator restarts manually.
-    setRunning(false);
+    setTimer((current) =>
+      current && current.taskId === selectedId ? pauseTaskTimer(current) : current,
+    );
   }, [filteredTasks, selectedId]);
 
   const setValues = (key: string, nextValues: string[]) => {
@@ -211,23 +240,8 @@ export function TasksView({
     },
   ];
 
-  useEffect(() => {
-    if (!running) return;
-    const interval = window.setInterval(() => {
-      setSeconds((remaining) => {
-        if (remaining > 1) return remaining - 1;
-        setRunning(false);
-        setMode((current) => (current === 'work' ? 'break' : 'work'));
-        return mode === 'work' ? BREAK_SECONDS : WORK_SECONDS;
-      });
-    }, 1000);
-    return () => window.clearInterval(interval);
-  }, [mode, running]);
-
   const reset = () => {
-    setRunning(false);
-    setMode('work');
-    setSeconds(WORK_SECONDS);
+    if (selectedId) setTimer(newTaskTimerSession(selectedId));
   };
 
   return (
@@ -250,7 +264,18 @@ export function TasksView({
             <button
               className="primary-btn"
               type="button"
-              onClick={() => setRunning((value) => !value)}
+              onClick={() => {
+                if (!selectedId) return;
+                setTimer((current) =>
+                  current && current.taskId === selectedId && !current.paused
+                    ? pauseTaskTimer(current)
+                    : startTaskTimer(
+                        current && current.taskId === selectedId
+                          ? current
+                          : newTaskTimerSession(selectedId),
+                      ),
+                );
+              }}
               disabled={!selected}
             >
               {running ? <Pause /> : <Play />} {running ? 'Pause' : 'Start'}
@@ -348,7 +373,7 @@ export function TasksView({
                   type="button"
                   onClick={() => {
                     setSelectedId(task.id);
-                    reset();
+                    setTimer(newTaskTimerSession(task.id));
                   }}
                 >
                   <span className="task-picker-icon">
