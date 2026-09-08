@@ -8,6 +8,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [6.0.1] - 2026-09-07
+
+### Fixed
+
+- The Tasks page's timer no longer auto-selects a replacement task, and no longer resets the
+  clock, when the task it was timing leaves the active list (completed, deleted, or reassigned
+  elsewhere). It now stops, preserves the elapsed time, and requires the operator to choose a
+  task explicitly to resume — matching the approved timer contract in
+  `docs/version-5.13.26-feasibility-report.md`. The prior fix (#548) correctly stopped the
+  session but still auto-picked a different task and reset the clock to a fresh 25:00.
+
+### Breaking changes
+
+None.
+
 ## [6.0.0] - 2026-09-07
 
 ### Changed
