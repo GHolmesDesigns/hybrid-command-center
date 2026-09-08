@@ -8,6 +8,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [6.2.0] - 2026-09-08
+
+### Added
+
+- Added an operator-facing agent directory with human-readable profiles, declared capabilities, trust state, and current versus historical availability.
+
+### Breaking changes
+
+None.
+
 ## [6.1.3] - 2026-09-08
 
 ### Added
