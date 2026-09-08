@@ -1,11 +1,11 @@
-# Feasibility Report: Version 5.13.26
+# Feasibility Report: Version 6.0.0
 
-**Prepared:** September 7, 2026  
-**Source:** `Version 5.13.26.pdf` and read-only repository inspection  
-**Status:** Policy draft for item 5 approved  
-**Amended:** September 7, 2026 — the task timer section was revised after
-version 5.13.27 shipped an MVP (`65fd353`) subsequent to the original
-research pass; see that section for the reconciled scope.
+**Prepared:** September 8, 2026
+**Source:** `Version 5.13.26.pdf` and repository inspection
+**Status:** Approved planning baseline; item 5 policy approved
+**Amended:** September 8, 2026 — reconciled to version 6.0.0, the merged
+TaskView fix, completed Dependabot chores, and the approved product decisions
+recorded below.
 
 ## Executive summary
 
@@ -18,15 +18,10 @@ The requested work is feasible, but it falls into two different categories:
   human-readable cross-agent summaries.
 
 The persistent task timer and system notification are also feasible. An MVP
-already shipped in version 5.13.27 (`client/src/components/TasksView.tsx`,
-route `/tasks`) after this report's original research pass, but it is
-client-only, in-memory state: it has no persistence, derives remaining time
-by decrementing a counter rather than from the wall clock, sends no system
-notification, and has a confirmed bug where a running session silently
-reassigns to a different task if the original task leaves the active list
-mid-session. `shared/types.ts` still has no timer or time-logged field on
-`Task`, and no server-side time-entry table exists, so any cross-device
-requirement is still a small data-model addition on top of the shipped UI.
+shipped in version 5.13.27 and the TaskView reassignment bug was fixed and
+merged afterward. The remaining timer work is client-only persistence,
+wall-clock reconciliation, notifications, and multi-tab ownership; no
+server-side time-entry or cross-device history is planned.
 
 ## Feasibility summary
 
@@ -36,8 +31,8 @@ requirement is still a small data-model addition on top of the shipped UI.
 | 2 | Signal defaults and inactive visibility | High | Small–Medium | Settings framework and URL precedence exist |
 | 3 | Task filter set | High | Medium | Existing controls; saved presets and server-side filtering are confirmed in scope |
 | 5 | Multi-agent peer-to-peer interface | Medium | Large | Coordination foundation exists; conversations and memory do not |
-| 6 | Application health dashboard | High | Medium | Health sources and diagnostics exist; aggregate surface is missing |
-| — | Persistent task timer and notification | High | Medium | MVP shipped in 5.13.27 (`TasksView.tsx`); persistence, wall-clock timing, notifications, and a task-reassignment bug remain |
+| 6 | Application health dashboard | High | Medium | Health sources and diagnostics exist; dedicated `/health` surface is missing |
+| — | Persistent task timer and notification | High | Medium | MVP shipped; the reassignment bug is fixed and merged; persistence, wall-clock timing, notifications, and multi-tab ownership remain |
 
 ## Item 1 — Signal modal client selector
 
@@ -66,16 +61,18 @@ settings routes already support stored view defaults and URL precedence.
 
 The confirmed behavior is:
 
-- The default Signal client is a display default.
-- The default Signal client is also an assignment default.
+- URL state has highest precedence.
+- An explicit blank/no-client selection is supported and remains intentional.
+- The saved/default Signal client is G.Holmes Designs.
+- The application fallback is used only when no URL, explicit blank, or saved/default value applies.
 - Inactive records are hidden by default.
 - Each category has an intentional show/hide control.
-- A direct URL state remains authoritative.
 
 If Client, Project, and Campaign filters are saved as named presets, the
 validated settings schema should document this precedence:
 
-> URL override → saved preset/default → application default
+> URL selection → explicit blank/no-client selection → saved/default client
+> (G.Holmes Designs) → application fallback
 
 ## Item 3 — Task filter set
 
@@ -125,6 +122,9 @@ It does not yet have:
 4. Add explicit, provenance-bound memory.
 5. Add deterministic human summaries.
 6. Add notifications and presence.
+
+Deliver these phases as multiple cards as needed for full functionality. Item 5
+is an approved multi-card product program, not a single implementation card.
 
 Conversations should remain separate from handoffs and work sessions. A handoff
 is a structured work request; it is not a chat message.
@@ -197,7 +197,8 @@ The dashboard must not collapse historical activity into current reachability.
 
 ### Recommended implementation
 
-Add an authenticated, read-only aggregate status contract that reports the
+Add a dedicated `/health` page backed by an authenticated, read-only aggregate
+status contract that reports the
 separate signals, freshness, partial failures, and last-tested times. Refresh
 the status at initial login and provide a button for the operator to force a
 re-check. Keep public liveness low-detail and keep detailed MCP diagnostics
@@ -205,16 +206,16 @@ under `/agents`, with a concise summary on `/status` or the dashboard.
 
 ## Additional request — Persistent task timer and notification
 
-**Status update:** an MVP of this feature has already shipped, in version
-5.13.27 (`65fd353`, "feat: add Pomodoro Tasks page", issue #541) — after this
+**Status update:** an MVP of this feature shipped in version 5.13.27
+(`65fd353`, "feat: add Pomodoro Tasks page", issue #541), and the TaskView
+reassignment bug was fixed and merged in a later release — after this
 report's original research pass. It lives at `client/src/components/TasksView.tsx`,
 routed at `/tasks`, and covers task selection plus a 25/5-minute work/break
 clock. The remaining scope is closing the gap between that MVP and the
 persistence/notification behavior originally requested, not building from
-scratch. The task-reassignment fix landed in #548 (merged). A follow-up fix
-aligning that stop behavior with the approved timer contract below — no
-auto-selected replacement task, and elapsed time preserved rather than reset
-— is in review in a separate change.
+scratch. The remaining work is to align the timer with the approved local-only
+contract below, including no auto-selected replacement task and preservation of
+elapsed state.
 
 ### What is already in place
 
@@ -243,12 +244,11 @@ auto-selected replacement task, and elapsed time preserved rather than reset
 - **No server-side time record.** Nothing persists which task a session
   belonged to or how long was spent — there is no cross-device or
   audit-visible time log, only a live in-memory "Working on {task}" label.
-- **Fixed — a running timer no longer silently reassigns to a different
-  task.** #548 stopped the session instead of continuing it relabeled under
-  whichever task filled in. A follow-up fix closes the remaining gap against
-  the approved timer contract below: the stop no longer auto-picks a
-  replacement task (the operator must choose one explicitly to resume), and
-  the elapsed clock is preserved rather than reset to a fresh 25:00.
+- **Fixed and merged — a running timer no longer silently reassigns to a
+  different task.** The merged fix stops the session instead of continuing it
+  relabeled under whichever task fills in. Remaining contract work includes
+  ensuring that no replacement task is auto-selected and that elapsed state is
+  preserved rather than reset.
 
 ### Recommended implementation (revised)
 
@@ -328,21 +328,21 @@ Test:
   including sound configuration and the one-notification-per-incident rule.
 - The running task is completed, deleted, or reassigned to another
   client/project while its timer is active — must stop the session rather
-  than silently relabeling it (fixed in #548), auto-pick no replacement
+  than silently relabeling it (fixed and merged), auto-pick no replacement
   task, and preserve the elapsed clock rather than resetting it.
 
 ## Recommended delivery sequence
 
-1. Task filters: current controls, saved presets, and server-side filtering.
+1. Task filters: current controls, shared/operator presets, and server-side filtering.
 2. Signal assignment: dependent Client → Project controls.
 3. Signal defaults: display/assignment defaults and inactive visibility.
 4. Task timer: close the persistence, wall-clock-timing, notification, and
    task-reassignment gaps in the shipped `/tasks` MVP.
-5. Health dashboard: separate status signals, login refresh, and forced
-   re-check.
-6. Agent directory: profiles, abilities, trust, and availability.
-7. Conversations and memory: messages, explicit memory, summaries, and
-   notifications as separate increments.
+5. Health dashboard: a dedicated `/health` page with separate status signals,
+   login refresh, and forced re-check.
+6. Item 5 program, delivered across multiple cards: agent directory, profiles,
+   abilities, trust, availability, conversations, memory, summaries, and
+   notifications.
 
 ## Cross-cutting risks and controls
 
