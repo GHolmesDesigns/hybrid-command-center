@@ -51,6 +51,7 @@ export const WORKSPACE_WRITE_TOOLS = [
   'signal_set_slot',
   'signal_update_variants',
   'signal_update_publish_targets',
+  'signal_assign_posts',
   'signal_duplicate_post',
   'signal_ack_alert',
   'settings_update_branding',

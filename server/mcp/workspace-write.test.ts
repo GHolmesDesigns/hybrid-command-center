@@ -149,6 +149,77 @@ describe('workspace MCP writes', () => {
     expect(cleared.data).toMatchObject({ after: { projectId: null } });
   });
 
+  it('bulk assigns Signal posts with dry-run, atomic refusal, and idempotent commit', async () => {
+    const clientId = seedClient();
+    const projectId = '33333333-3333-4333-8333-333333333333';
+    seedProject(projectId, clientId);
+    const first = await callWorkspaceWriteTool(db, session(), 'signal_create_post', {
+      clientRequestId: 'bulk-source-1',
+      text: 'Bulk one',
+    });
+    const second = await callWorkspaceWriteTool(db, session(), 'signal_create_post', {
+      clientRequestId: 'bulk-source-2',
+      text: 'Bulk two',
+    });
+    const firstId = (first.data as { after: { id: string } }).after.id;
+    const secondId = (second.data as { after: { id: string } }).after.id;
+    const missingId = '55555555-5555-4555-8555-555555555555';
+
+    const dryRun = await callWorkspaceWriteTool(db, session(), 'signal_assign_posts', {
+      clientRequestId: 'bulk-dry-run',
+      clientId,
+      projectId,
+      postIds: [firstId, secondId],
+      dryRun: true,
+    });
+    expect(dryRun.outcome).toBe('SUCCESS');
+    expect(dryRun.data).toMatchObject({
+      dryRun: true,
+      results: [
+        { postId: firstId, outcome: 'ASSIGNED' },
+        { postId: secondId, outcome: 'ASSIGNED' },
+      ],
+    });
+    expect(db.prepare('SELECT project_id FROM signal_posts WHERE id=?').get(firstId)).toEqual({
+      project_id: null,
+    });
+
+    const partial = await callWorkspaceWriteTool(db, session(), 'signal_assign_posts', {
+      clientRequestId: 'bulk-partial',
+      clientId,
+      projectId,
+      postIds: [firstId, missingId],
+    });
+    expect(partial.outcome).toBe('REFUSED');
+    expect(partial.data).toMatchObject({
+      results: [
+        { postId: firstId, outcome: 'ASSIGNED' },
+        { postId: missingId, outcome: 'REFUSED', reason: 'Signal post not found.' },
+      ],
+    });
+    expect(db.prepare('SELECT project_id FROM signal_posts WHERE id=?').get(firstId)).toEqual({
+      project_id: null,
+    });
+
+    const committed = await callWorkspaceWriteTool(db, session(), 'signal_assign_posts', {
+      clientRequestId: 'bulk-commit',
+      clientId,
+      projectId,
+      postIds: [firstId, secondId],
+    });
+    expect(committed.outcome).toBe('SUCCESS');
+    expect(db.prepare('SELECT project_id FROM signal_posts WHERE id=?').get(firstId)).toEqual({
+      project_id: projectId,
+    });
+    const replay = await callWorkspaceWriteTool(db, session(), 'signal_assign_posts', {
+      clientRequestId: 'bulk-commit',
+      clientId,
+      projectId,
+      postIds: [firstId, secondId],
+    });
+    expect(replay.data).toEqual(committed.data);
+  });
+
   it('refuses a stale Signal revision with WORKSPACE_REVISION_CONFLICT', async () => {
     const created = await callWorkspaceWriteTool(db, session(), 'signal_create_post', {
       clientRequestId: 'sig-2',

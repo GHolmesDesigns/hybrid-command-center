@@ -4,6 +4,7 @@ import { advanceRevision, requireRevision } from '../domain/revisions.ts';
 import {
   SIGNAL_CHANNELS,
   SIGNAL_CHANNEL_LABEL,
+  SIGNAL_ASSIGN_POSTS_MAX,
   SIGNAL_CLIENT_UNBOUND,
   SIGNAL_CTAS,
   SIGNAL_DATE_PATTERN,
@@ -114,6 +115,23 @@ const now = () => new Date().toISOString();
 /** A post that does not exist, answered as a 404 rather than as a silent no-op. */
 export class SignalPostNotFoundError extends Error {}
 export class SignalPostRelationshipError extends Error {}
+
+export type SignalPostAssignmentResult = {
+  postId: string;
+  outcome: 'ASSIGNED' | 'UNCHANGED' | 'REFUSED';
+  projectId: string | null;
+  reason?: string;
+};
+
+export class SignalPostAssignmentError extends Error {
+  readonly results: SignalPostAssignmentResult[];
+
+  constructor(message: string, results: SignalPostAssignmentResult[]) {
+    super(message);
+    this.name = 'SignalPostAssignmentError';
+    this.results = results;
+  }
+}
 
 /**
  * A media list this app will not store: a descriptor that breaks the cross-field rule, the same
@@ -261,6 +279,26 @@ const postFields = {
 };
 
 export const signalPostInput = z.object(postFields);
+
+export const signalAssignPostsInput = z.object({
+  clientId: z.string().uuid(),
+  projectId: z.string().uuid(),
+  postIds: z
+    .array(z.string().uuid())
+    .min(1, 'Choose at least one Signal post.')
+    .max(
+      SIGNAL_ASSIGN_POSTS_MAX,
+      `A batch cannot contain more than ${SIGNAL_ASSIGN_POSTS_MAX} posts.`,
+    )
+    .superRefine((postIds, context) => {
+      if (new Set(postIds).size !== postIds.length)
+        context.addIssue({
+          code: 'custom',
+          message: 'A batch cannot contain the same post twice.',
+        });
+    }),
+});
+export type SignalAssignPostsInput = z.output<typeof signalAssignPostsInput>;
 
 /**
  * A patch changes only what it names — and the defaults have to come off for that to be true.
@@ -501,6 +539,83 @@ export function getPost(db: Db, postId: string): SignalPost | undefined {
     mediaByPost(db, [postId]).get(postId) ?? [],
     campaignsByPost(db, [postId]).get(postId) ?? [],
   );
+}
+
+function assignmentPlan(db: Db, input: SignalAssignPostsInput): SignalPostAssignmentResult[] {
+  validateClientProject(db, input.clientId, input.projectId);
+  return input.postIds.map((postId) => {
+    const row = db.prepare('SELECT project_id FROM signal_posts WHERE id=?').get(postId) as
+      { project_id: string | null } | undefined;
+    if (!row) {
+      return {
+        postId,
+        outcome: 'REFUSED',
+        projectId: null,
+        reason: 'Signal post not found.',
+      };
+    }
+    return {
+      postId,
+      outcome: row.project_id === input.projectId ? 'UNCHANGED' : 'ASSIGNED',
+      projectId: row.project_id,
+    };
+  });
+}
+
+/** Plans the complete batch without opening a write transaction. */
+export function planSignalPostAssignments(
+  db: Db,
+  input: SignalAssignPostsInput,
+): SignalPostAssignmentResult[] {
+  return assignmentPlan(db, input);
+}
+
+/**
+ * Assigns every post in one transaction. Any missing post or invalid target refuses the whole
+ * batch, with one result per requested id so an operator can repair the input without guessing.
+ */
+export function assignSignalPosts(
+  db: Db,
+  input: SignalAssignPostsInput,
+  timestamp = new Date().toISOString(),
+): SignalPostAssignmentResult[] {
+  const results = assignmentPlan(db, input);
+  const refused = results.filter((result) => result.outcome === 'REFUSED');
+  if (refused.length) {
+    throw new SignalPostAssignmentError(
+      `Cannot assign ${refused.length} Signal post${refused.length === 1 ? '' : 's'} in this batch.`,
+      results,
+    );
+  }
+
+  db.exec('BEGIN');
+  try {
+    for (const result of results) {
+      if (result.outcome === 'UNCHANGED') continue;
+      const current = db
+        .prepare('SELECT revision FROM signal_posts WHERE id=?')
+        .get(result.postId) as { revision: number } | undefined;
+      if (!current) throw new SignalPostNotFoundError(`No Signal post ${result.postId}.`);
+      db.prepare('UPDATE signal_posts SET project_id=?, updated_at=? WHERE id=?').run(
+        input.projectId,
+        timestamp,
+        result.postId,
+      );
+      advanceRevision(
+        db,
+        'signal_post',
+        result.postId,
+        current.revision,
+        ['projectId', 'clientId'],
+        timestamp,
+      );
+    }
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+  return results.map((result) => ({ ...result, projectId: input.projectId }));
 }
 
 /**

@@ -147,6 +147,7 @@ export function mcpToolCallErrorPayload(result: McpToolCallResult): Record<strin
   return {
     outcome: result.outcome,
     error: result.error,
+    ...(result.data !== undefined ? { data: redactToolResult(result.data) } : {}),
     ...(result.errorDetail?.code ? { code: result.errorDetail.code } : {}),
     ...(result.errorDetail?.retryable !== undefined
       ? { retryable: result.errorDetail.retryable }

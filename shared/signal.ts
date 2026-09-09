@@ -38,6 +38,9 @@ import type { ClientBranding } from './branding.ts';
 export const SIGNAL_CHANNELS = ['blog', 'bsky', 'fb', 'ig', 'li', 'th', 'tt', 'x', 'yt'] as const;
 export type SignalChannel = (typeof SIGNAL_CHANNELS)[number];
 
+/** Maximum number of existing posts one MCP assignment can validate and update at once. */
+export const SIGNAL_ASSIGN_POSTS_MAX = 100;
+
 /** Media kind inferred from a public URL's extension. No network request is made. */
 export const SIGNAL_MEDIA_KINDS = ['image', 'video', 'pdf', 'unknown'] as const;
 export type SignalMediaKind = (typeof SIGNAL_MEDIA_KINDS)[number];

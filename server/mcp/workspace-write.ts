@@ -23,20 +23,24 @@ import { revisionPrecondition, RevisionConflictError } from '../domain/revisions
 import { DisconnectedDriveMediaProvider } from '../drive/media.ts';
 import {
   SignalPostNotFoundError,
+  SignalPostAssignmentError,
   SignalPostRelationshipError,
   SignalPublishTargetError,
   SignalSlotConflictError,
   SignalVariantError,
   SignalMediaError,
   applyPostSlotWithRevision,
+  assignSignalPosts,
   createPost,
   duplicatePost,
   getPost,
   getPostPublishTargets,
   getPostVariants,
+  planSignalPostAssignments,
   replacePostPublishTargets,
   replacePostVariants,
   signalPostInput,
+  signalAssignPostsInput,
   signalPostPatch,
   signalPublishTargetsInput,
   signalSlotInput,
@@ -140,6 +144,12 @@ function defaultConnectedAccounts(db: Db) {
 }
 
 function mapDomainError(error: unknown): McpToolCallResult {
+  if (error instanceof SignalPostAssignmentError) {
+    return {
+      ...refused(error.message, mcpCoordinationInvalidArguments()),
+      data: { results: error.results },
+    };
+  }
   if (error instanceof RevisionConflictError) {
     return refused(
       error.message,
@@ -732,6 +742,61 @@ export async function callWorkspaceWriteTool(
           clientRequestId,
           persistIdempotency: true,
         });
+      }
+      case 'signal_assign_posts': {
+        const args = signalAssignPostsInput
+          .extend({ ...clientRequestIdField, dryRun: z.boolean().optional() })
+          .strict()
+          .parse(rawArgs ?? {});
+        const planned = planSignalPostAssignments(db, args);
+        const refusedResults = planned.filter((result) => result.outcome === 'REFUSED');
+        if (refusedResults.length) {
+          return finish(
+            db,
+            session,
+            tool,
+            {
+              ...refused(
+                `Cannot assign ${refusedResults.length} Signal post${refusedResults.length === 1 ? '' : 's'} in this batch.`,
+                mcpCoordinationInvalidArguments(),
+              ),
+              data: { dryRun: args.dryRun === true, results: planned },
+            },
+            { summary: 'Refused bulk Signal assignment.' },
+          );
+        }
+        if (args.dryRun) {
+          return finish(
+            db,
+            session,
+            tool,
+            success({
+              dryRun: true,
+              clientId: args.clientId,
+              projectId: args.projectId,
+              results: planned,
+            }),
+            { summary: `Dry-run assignment for ${args.postIds.length} Signal posts.` },
+          );
+        }
+        const results = assignSignalPosts(db, args, now.toISOString());
+        return finish(
+          db,
+          session,
+          tool,
+          success({
+            clientId: args.clientId,
+            projectId: args.projectId,
+            results,
+          }),
+          {
+            entityType: 'signal_post_batch',
+            entityId: args.projectId,
+            summary: `Assigned ${args.postIds.length} Signal posts.`,
+            clientRequestId,
+            persistIdempotency: true,
+          },
+        );
       }
       case 'signal_duplicate_post': {
         const args = z
