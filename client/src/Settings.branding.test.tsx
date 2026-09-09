@@ -159,6 +159,23 @@ describe('branding settings form', () => {
     expect(brandingPuts()).toEqual([]);
   });
 
+  it('edits the mark, title, subtitle, tagline, and a colour picker directly', async () => {
+    await renderSettings();
+
+    type('Mark', 'GD');
+    type('Title', 'Growth Dashboard');
+    type('Subtitle', 'Ops at a glance');
+    type('Tagline', 'Ship steady');
+    fireEvent.change(screen.getByLabelText('Sidebar background'), {
+      target: { value: '#123456' },
+    });
+    expect(screen.getByLabelText('Mark')).toHaveValue('GD');
+    expect(screen.getByLabelText('Title')).toHaveValue('Growth Dashboard');
+    expect(screen.getByLabelText('Subtitle')).toHaveValue('Ops at a glance');
+    expect(screen.getByLabelText('Tagline')).toHaveValue('Ship steady');
+    expect(screen.getByLabelText('Sidebar background')).toHaveValue('#123456');
+  });
+
   it('restores every field to the defaults', async () => {
     await renderSettings();
 
