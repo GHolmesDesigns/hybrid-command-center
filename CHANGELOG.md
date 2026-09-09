@@ -8,6 +8,51 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [6.4.7] - 2026-09-09
+
+### Changed
+
+- Removed a stale changelog fragment left over from an earlier release; its content was already recorded under 5.13.12.
+
+### Breaking changes
+
+None.
+
+## [6.4.6] - 2026-09-09
+
+### Fixed
+
+- Merge modal field choices now keep each radio control aligned with the value it selects, including blank and wrapped values at narrow widths.
+
+### Breaking changes
+
+None.
+
+## [6.4.5] - 2026-09-09
+
+### Added
+
+- MCP connection diagnostics now show the endpoint base URL and the SQLite store ID used by the connection. A disconnected Drive Files result includes the same evidence, so operators can reconnect Drive on the store the agent actually consulted.
+
+### Breaking changes
+
+None.
+
+## [6.4.4] - 2026-09-09
+
+### Added
+
+- Added a connection and efficiency guide for Cursor IDE and Cloud agents, covering store identity before coordination writes, HTTPS prod as the authoritative inbox, shell and localhost API bypass risks, separate labels per surface, and the same resource and prompt patterns as the Claude chat guide.
+
+### Changed
+
+- Updated the Cursor skill wrapper to point at the new guide and to route setup through Cursor Settings rather than tracked stdio configuration.
+- Updated the MCP workflow skill packages table to list both Cursor and Claude chat surface guides.
+
+### Breaking changes
+
+None.
+
 ## [6.4.3] - 2026-09-09
 
 ### Changed
