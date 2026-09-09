@@ -142,9 +142,6 @@ export function planSignalAssignmentBackfill(
         });
         continue;
       }
-      if (!decision?.project) {
-        throw new SignalAssignmentBackfillError(`Post ${post.id} has no assigned project.`);
-      }
       const target = mapping.targets.find((candidate) => candidate.project === decision.project);
       if (!target) {
         throw new SignalAssignmentBackfillError(
@@ -161,8 +158,7 @@ export function planSignalAssignmentBackfill(
       continue;
     }
 
-    const target = campaignTargets[0];
-    if (!target) throw new SignalAssignmentBackfillError(`No target for post ${post.id}.`);
+    const target = campaignTargets[0] as NonNullable<(typeof campaignTargets)[number]>;
     const current = assignments.get(target.project) ?? {
       project: target.project,
       postIds: [],
