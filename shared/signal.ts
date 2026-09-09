@@ -558,6 +558,8 @@ export interface SignalPost {
   id: string;
   /** The workspace project this post belongs to, or null when it is unassigned. */
   projectId?: string | null;
+  /** The workspace project name, or null when the post is unassigned. */
+  projectName?: string | null;
   /** The client reached through `projectId`; absent for an unbound post. */
   client?: SignalPostClient;
   /** What is being posted. The copy itself, not a title. */

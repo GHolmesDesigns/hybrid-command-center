@@ -168,7 +168,7 @@ describe('callWorkspaceReadTool', () => {
     expect(data.truncated).toBe(true);
   });
 
-  it('narrows Signal posts by project, campaign, both, or neither', async () => {
+  it('returns assignment identity and narrows Signal posts by client, project, campaign, or neither', async () => {
     addProject('p2', 'c1', 'Second project');
     seedSignalPost(db, {
       id: 'project-campaign',
@@ -191,6 +191,22 @@ describe('callWorkspaceReadTool', () => {
     expect(
       (byProject.data as { posts: Array<{ id: string }> }).posts.map((post) => post.id),
     ).toEqual(['project-campaign']);
+    const identity = (byProject.data as { posts: Array<Record<string, unknown>> }).posts[0];
+    expect(identity).toMatchObject({
+      projectId: 'p1',
+      projectName: 'Identity System',
+      clientId: 'c1',
+      clientName: 'Acme Studio',
+    });
+
+    const byClient = await callWorkspaceReadTool(db, 'signal_list_posts', {
+      from: '2027-08-01',
+      to: '2027-08-31',
+      clientId: 'c1',
+    });
+    expect(
+      (byClient.data as { posts: Array<{ id: string }> }).posts.map((post) => post.id),
+    ).toEqual(['other-project', 'project-campaign']);
 
     const byCampaign = await callWorkspaceReadTool(db, 'signal_list_posts', {
       from: '2027-08-01',
@@ -218,13 +234,21 @@ describe('callWorkspaceReadTool', () => {
     expect(
       (unfiltered.data as { posts: Array<{ id: string }> }).posts.map((post) => post.id),
     ).toEqual(['other-project', 'project-campaign', 'unassigned']);
+    expect(
+      (unfiltered.data as { posts: Array<Record<string, unknown>> }).posts.at(-1),
+    ).toMatchObject({
+      projectId: null,
+      projectName: null,
+      clientId: null,
+      clientName: null,
+    });
   });
 
   it('returns queue snapshot with capped unscheduled and upcoming posts', async () => {
     for (let index = 0; index < MCP_QUEUE_UNSCHEDULED_LIMIT + 3; index += 1) {
       seedSignalPost(db, { id: `queue-${index}`, date: null, position: index });
     }
-    seedSignalPost(db, { id: 'dated', date: '2026-08-15' });
+    seedSignalPost(db, { id: 'dated', projectId: 'p1', date: '2026-08-15' });
     const result = await callWorkspaceReadTool(db, 'signal_queue_snapshot', {}, { now: NOW });
     expect(result.outcome).toBe('SUCCESS');
     const data = result.data as {
@@ -235,6 +259,12 @@ describe('callWorkspaceReadTool', () => {
     expect(data.unscheduled.length).toBe(MCP_QUEUE_UNSCHEDULED_LIMIT);
     expect(data.truncated.unscheduled).toBe(true);
     expect(data.upcoming.some((post) => (post as { id?: string }).id === 'dated')).toBe(true);
+    expect(data.upcoming.find((post) => (post as { id?: string }).id === 'dated')).toMatchObject({
+      projectId: 'p1',
+      projectName: 'Identity System',
+      clientId: 'c1',
+      clientName: 'Acme Studio',
+    });
   });
 
   it('returns queue health from the existing service', async () => {
