@@ -23,6 +23,14 @@ const seedClient = () => {
   return clientId;
 };
 
+const seedProject = (projectId: string, clientId: string, name = 'Launch') => {
+  const stamp = '2026-08-29T12:00:00.000Z';
+  db.prepare(
+    `INSERT INTO projects(id,client_id,name,created_at,updated_at)
+     VALUES(?,?,?,?,?)`,
+  ).run(projectId, clientId, name, stamp, stamp);
+};
+
 const session = () => createMcpSession({ agentLabel: 'codex' });
 
 describe('workspace MCP writes', () => {
@@ -63,6 +71,82 @@ describe('workspace MCP writes', () => {
     expect(db.prepare('SELECT COUNT(*) AS n FROM signal_posts').get()).toEqual({ n: 1 });
     expect(db.prepare('SELECT COUNT(*) AS n FROM integration_events').get()).toEqual({ n: 0 });
     expect(listMcpAgentEvents(db, { tool: 'signal_create_post' }).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('assigns Signal posts atomically, rejects cross-client projects, and supports null clears', async () => {
+    const clientId = seedClient();
+    const otherClientId = '22222222-2222-4222-8222-222222222222';
+    db.prepare(
+      `INSERT INTO clients(id,name,slug,status,drive_status,created_at,updated_at)
+       VALUES(?,?,?,'ACTIVE','DISCONNECTED',?,?)`,
+    ).run(
+      otherClientId,
+      'Other Studio',
+      'other-studio',
+      '2026-08-29T12:00:00.000Z',
+      '2026-08-29T12:00:00.000Z',
+    );
+    const projectId = '33333333-3333-4333-8333-333333333333';
+    const otherProjectId = '44444444-4444-4444-8444-444444444444';
+    seedProject(projectId, clientId);
+    seedProject(otherProjectId, otherClientId, 'Other launch');
+
+    const created = await callWorkspaceWriteTool(db, session(), 'signal_create_post', {
+      clientRequestId: 'sig-assignment-1',
+      clientId,
+      projectId,
+      text: 'Assigned caption',
+    });
+    expect(created.outcome).toBe('SUCCESS');
+    expect(created.data).toMatchObject({
+      after: { projectId, client: { id: clientId } },
+    });
+
+    const replay = await callWorkspaceWriteTool(db, session(), 'signal_create_post', {
+      clientRequestId: 'sig-assignment-1',
+      clientId: otherClientId,
+      projectId: otherProjectId,
+      text: 'Must not replace the first write',
+    });
+    expect(replay.data).toEqual(created.data);
+    const postId = (created.data as { after: { id: string; revision: number } }).after.id;
+    const revision = (created.data as { after: { revision: number } }).after.revision;
+
+    const refused = await callWorkspaceWriteTool(db, session(), 'signal_update_post', {
+      clientRequestId: 'sig-assignment-2',
+      postId,
+      revision,
+      clientId,
+      projectId: otherProjectId,
+    });
+    expect(refused.outcome).toBe('REFUSED');
+    expect(refused.errorDetail?.code).toBe('COORDINATION_INVALID_ARGUMENTS');
+    expect(
+      (
+        await callWorkspaceWriteTool(db, session(), 'signal_update_post', {
+          clientRequestId: 'sig-assignment-3',
+          postId,
+          revision,
+          clientId: null,
+        })
+      ).data,
+    ).toMatchObject({ after: { projectId: null } });
+
+    const rebound = await callWorkspaceWriteTool(db, session(), 'signal_update_post', {
+      clientRequestId: 'sig-assignment-4',
+      postId,
+      revision: 2,
+      clientId,
+      projectId,
+    });
+    expect(rebound.outcome).toBe('SUCCESS');
+    const cleared = await callWorkspaceWriteTool(db, session(), 'signal_update_post', {
+      clientRequestId: 'sig-assignment-5',
+      postId,
+      revision: 3,
+      projectId: null,
+    });
+    expect(cleared.data).toMatchObject({ after: { projectId: null } });
   });
 
   it('refuses a stale Signal revision with WORKSPACE_REVISION_CONFLICT', async () => {
