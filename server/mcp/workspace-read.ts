@@ -54,6 +54,19 @@ const failed = (error: string, errorDetail: McpCoordinationErrorDetail): McpTool
   errorDetail,
 });
 
+/** Flatten assignment identity on the MCP boundary while keeping the shared Signal shape intact. */
+const mcpSignalPosts = <
+  T extends { client?: { id: string; name: string }; projectName?: string | null },
+>(
+  posts: T[],
+) =>
+  posts.map((post) => ({
+    ...post,
+    clientId: post.client?.id ?? null,
+    clientName: post.client?.name ?? null,
+    projectName: post.projectName ?? null,
+  }));
+
 function listActiveTasksForMcp(
   db: Db,
   args: z.infer<typeof mcpTaskListArgsSchema>,
@@ -118,12 +131,12 @@ export async function callWorkspaceReadTool(
         if (args.from > args.to) {
           return failed('The range ends before it starts.', mcpCoordinationInvalidArguments());
         }
-        return success(
-          listPostsInRange(db, args.from, args.to, args.lifecycle ?? 'active', {
-            projectIds: args.projectId ? [args.projectId] : undefined,
-            campaignName: args.campaign,
-          }),
-        );
+        const range = listPostsInRange(db, args.from, args.to, args.lifecycle ?? 'active', {
+          projectIds: args.projectId ? [args.projectId] : undefined,
+          clientIds: args.clientId ? [args.clientId] : undefined,
+          campaignName: args.campaign,
+        });
+        return success({ ...range, posts: mcpSignalPosts(range.posts) });
       }
       case 'signal_queue_health':
         return success(readQueueHealth(db, now));
@@ -140,8 +153,8 @@ export async function callWorkspaceReadTool(
         return success({
           from,
           to,
-          unscheduled: unscheduledPage.posts,
-          upcoming: upcoming.posts,
+          unscheduled: mcpSignalPosts(unscheduledPage.posts),
+          upcoming: mcpSignalPosts(upcoming.posts),
           truncated: {
             unscheduled: unscheduledPage.truncated,
             upcoming: upcoming.truncated,

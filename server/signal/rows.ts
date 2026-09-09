@@ -34,6 +34,7 @@ import {
 export interface SignalPostRow {
   id: string;
   project_id: string | null;
+  project_name: string | null;
   text: string;
   date: string | null;
   time: string;
@@ -62,7 +63,7 @@ export interface SignalPostRow {
 
 /** One read shape for Signal posts, with the sole project-to-client binding resolved. */
 export const signalPostSelect = `
-  SELECT p.*, c.id AS client_id, c.name AS client_name,
+  SELECT p.*, pr.name AS project_name, c.id AS client_id, c.name AS client_name,
          c.branding_logo_url, c.branding_color_one, c.branding_color_two
     FROM signal_posts p
     LEFT JOIN projects pr ON pr.id = p.project_id
@@ -304,6 +305,7 @@ export function toSignalPost(
   return {
     id: row.id,
     projectId: row.project_id,
+    projectName: row.project_name,
     ...(client ? { client } : {}),
     text: row.text,
     // Empty rather than absent, so every consumer can read `post.channels.length`.
