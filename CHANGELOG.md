@@ -8,6 +8,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [6.3.2] - 2026-09-09
+
+### Added
+
+- Added deterministic agent summaries with generation timestamps and evidence references, explicit presence state, and bounded deduplicated operator notifications.
+
+### Breaking changes
+
+None.
+
 ## [6.3.1] - 2026-09-08
 
 ### Added
