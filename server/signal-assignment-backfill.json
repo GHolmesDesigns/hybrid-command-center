@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "client": "G.Holmes Designs",
+  "from": "2026-08-01",
+  "to": "2026-10-31",
+  "targets": [
+    {
+      "campaigns": ["Clarity Campaign — Wk5"],
+      "project": "Six Weeks of Clarity — Week 5: The Philosophy"
+    },
+    {
+      "campaigns": ["Clarity Campaign — Wk6"],
+      "project": "Six Weeks of Clarity — Week 6: The Proof + Ask"
+    },
+    {
+      "campaigns": ["Clarity Campaign — Wk2"],
+      "project": "Six Weeks of Clarity — Week 2: The Cause"
+    },
+    {
+      "campaigns": ["Clarity Campaign — Wk1"],
+      "project": "Six Weeks of Clarity — Week 1",
+      "createIfMissing": true
+    },
+    {
+      "campaigns": ["AdDrive - InMotion Wk 1", "AdDrive - InMotion Wk 3"],
+      "project": "AdDrive In Motion"
+    },
+    {
+      "campaigns": ["Clarity Campaign — Wk4"],
+      "project": "Six Weeks of Clarity — Week 4: The Solution"
+    },
+    {
+      "campaigns": [
+        "Explain It Clearly — Wk3: Action",
+        "Explain It Clearly — Wk3: Action (Transformation)"
+      ],
+      "project": "Six Weeks of Clarity — Week 3: The Expert's Curse"
+    }
+  ],
+  "untagged": [
+    {
+      "date": "2026-08-24",
+      "textStartsWith": "The Cost of Confusing Marketing",
+      "decision": "SKIP",
+      "reason": "No operator project decision recorded; date adjacency is not an assignment rule."
+    },
+    {
+      "date": "2026-08-28",
+      "textStartsWith": "Marketing confusion is an operational cost",
+      "decision": "SKIP",
+      "reason": "No operator project decision recorded; date adjacency is not an assignment rule."
+    },
+    {
+      "date": "2026-08-31",
+      "textStartsWith": "AI Can Write Your Content. It Can't Clarify Your Thinking.",
+      "decision": "SKIP",
+      "reason": "No operator project decision recorded; date adjacency is not an assignment rule."
+    },
+    {
+      "date": "2026-09-02",
+      "textStartsWith": "AI didn't remove the hard part of marketing",
+      "decision": "SKIP",
+      "reason": "No operator project decision recorded; date adjacency is not an assignment rule."
+    },
+    {
+      "date": "2026-09-07",
+      "textStartsWith": "Polish makes confusion harder to spot",
+      "decision": "SKIP",
+      "reason": "No operator project decision recorded; date adjacency is not an assignment rule."
+    },
+    {
+      "date": "2026-09-16",
+      "textStartsWith": "You're not answering a new question",
+      "decision": "SKIP",
+      "reason": "No operator project decision recorded; date adjacency is not an assignment rule."
+    },
+    {
+      "date": "2026-09-18",
+      "textStartsWith": "The Explanation That Never Became an Asset",
+      "decision": "SKIP",
+      "reason": "No operator project decision recorded; date adjacency is not an assignment rule."
+    }
+  ]
+}
