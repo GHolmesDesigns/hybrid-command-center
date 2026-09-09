@@ -8,6 +8,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [6.4.3] - 2026-09-09
+
+### Changed
+
+- Removed a stale changelog fragment left over from an earlier release; its content was already recorded under 6.3.0.
+
+### Breaking changes
+
+None.
+
 ## [6.4.2] - 2026-09-09
 
 ### Added
