@@ -31,6 +31,7 @@
     "eval:mcp-smoke": "node --experimental-strip-types scripts/eval-mcp-smoke.ts",
     "test:eval-mcp": "vitest run --project server server/mcp/agent-evaluation.test.ts",
     "signal:import": "node --experimental-strip-types server/scripts/import-signal-archive.ts",
+    "signal:backfill": "node --experimental-strip-types server/scripts/backfill-signal-assignment.ts",
     "mcp": "node --experimental-strip-types server/scripts/mcp.ts",
     "db:backup": "node --experimental-strip-types server/scripts/backup.ts",
     "db:restore": "node --experimental-strip-types server/scripts/restore.ts",
