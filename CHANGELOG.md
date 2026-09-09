@@ -8,6 +8,36 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [6.4.2] - 2026-09-09
+
+### Added
+
+- Added an authenticated Application Health dashboard with separate process, database, historical agent activity, and active remote-agent verification signals, including freshness and a manual re-check.
+
+### Breaking changes
+
+None.
+
+## [6.4.1] - 2026-09-09
+
+### Added
+
+- Added permission-aware task timer notifications, configurable notification settings, and single-tab timer ownership with confirmation before switching tasks.
+
+### Breaking changes
+
+None.
+
+## [6.4.0] - 2026-09-09
+
+### Added
+
+- Persist the selected task's local Pomodoro session across refreshes and background suspension, deriving remaining time from the wall clock.
+
+### Breaking changes
+
+None.
+
 ## [6.3.2] - 2026-09-09
 
 ### Added
