@@ -49,7 +49,7 @@ describe('the Settings layout', () => {
     // A card left as a direct child of the grid is a card back in a shared row track, taking
     // its starting edge from whatever sits beside it. There is no such card.
     expect(document.querySelectorAll('.settings-layout > .settings-card')).toHaveLength(0);
-    expect(document.querySelectorAll('.settings-layout .settings-card')).toHaveLength(9);
+    expect(document.querySelectorAll('.settings-layout .settings-card')).toHaveLength(10);
   });
 
   it('keeps labels in the left stack and settings modules in the right stack', async () => {
@@ -57,6 +57,7 @@ describe('the Settings layout', () => {
 
     const [connections, appearance] = columns();
     expect(headingsIn(connections)).toEqual([
+      'Timer notifications',
       'Project categories',
       'Task tags',
       'Signal campaigns',
@@ -72,9 +73,10 @@ describe('the Settings layout', () => {
 
     // One reading order, and it is the document's. Nothing reorders these in CSS, so this is
     // also the order the cards appear in at both widths, and the order the keyboard walks:
-    // below 1100px the two stacks sit one under the other and the nine cards read straight
+    // below 1100px the two stacks sit one under the other and the ten cards read straight
     // through. `e2e/settings-column-independence.spec.ts` measures that they really do.
     expect(headingsIn(document.querySelector('.settings-layout')!)).toEqual([
+      'Timer notifications',
       'Project categories',
       'Task tags',
       'Signal campaigns',
