@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { CheckCircle2, Pause, Play, RotateCcw, Tag as TagIcon } from 'lucide-react';
 import type { Client, Project, Tag, Task } from '../../../shared/types';
@@ -149,14 +149,15 @@ export function TasksView({
   useEffect(() => {
     if (typeof BroadcastChannel === 'undefined') return;
     const bus = new BroadcastChannel('hcc-task-timer');
+    const ownerToken = ownerId.current;
     channel.current = bus;
     const onMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'claim' && event.data.id !== ownerId.current) setOwner(false);
-      if (event.data?.type === 'release' && event.data.id !== ownerId.current) setOwner(true);
+      if (event.data?.type === 'claim' && event.data.id !== ownerToken) setOwner(false);
+      if (event.data?.type === 'release' && event.data.id !== ownerToken) setOwner(true);
     };
     bus.addEventListener('message', onMessage);
     return () => {
-      bus.postMessage({ type: 'release', id: ownerId.current });
+      bus.postMessage({ type: 'release', id: ownerToken });
       bus.close();
       channel.current = null;
     };
@@ -165,20 +166,23 @@ export function TasksView({
     if (activeTimer && !activeTimer.paused && owner)
       channel.current?.postMessage({ type: 'claim', id: ownerId.current });
   }, [activeTimer, owner]);
-  const notify = (body: string) => {
-    if (
-      settings.enabled &&
-      settings.completion &&
-      typeof Notification !== 'undefined' &&
-      Notification.permission === 'granted'
-    )
-      new Notification('Pomodoro complete', { body });
-  };
+  const notify = useCallback(
+    (body: string) => {
+      if (
+        settings.enabled &&
+        settings.completion &&
+        typeof Notification !== 'undefined' &&
+        Notification.permission === 'granted'
+      )
+        new Notification('Pomodoro complete', { body });
+    },
+    [settings.completion, settings.enabled],
+  );
   useEffect(() => {
     if (activeTimer && activeTimer.cycleCount > lastCycle.current)
       notify('Focus session complete. Time for a short break.');
     lastCycle.current = activeTimer?.cycleCount ?? lastCycle.current;
-  }, [activeTimer]);
+  }, [activeTimer, notify]);
 
   useEffect(() => {
     if (timer) writeTaskTimer(window.localStorage, timer);
