@@ -9,11 +9,7 @@ import {
   notify,
   setPresence,
 } from '../agent-summaries.ts';
-import {
-  notificationListSchema,
-  presenceInputSchema,
-  summaryListSchema,
-} from '../../shared/agent-summaries.ts';
+import { notificationListSchema, summaryListSchema } from '../../shared/agent-summaries.ts';
 import type { McpSession } from './session.ts';
 import type { McpToolCallResult } from './coordination.ts';
 import { redactToolResult } from './redact.ts';
