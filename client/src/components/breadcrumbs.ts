@@ -84,6 +84,7 @@ export const BREADCRUMB_ROUTES: readonly BreadcrumbRoute[] = [
   { path: '/calendar', label: 'Calendar' },
   { path: '/signal', label: 'Signal' },
   { path: '/agents', label: 'Agents' },
+  { path: '/health', label: 'Health' },
   { path: '/settings', label: 'Settings' },
 ];
 

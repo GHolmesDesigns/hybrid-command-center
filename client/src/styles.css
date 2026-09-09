@@ -1157,6 +1157,32 @@ button svg,
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
 }
+.health-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.health-card {
+  border-top: 4px solid var(--green);
+}
+.health-card.health-degraded {
+  border-top-color: var(--amber);
+}
+.health-card.health-unavailable {
+  border-top-color: var(--red);
+}
+.health-card-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.health-card-heading svg {
+  color: var(--green);
+}
+.health-degraded .health-card-heading svg {
+  color: var(--amber);
+}
+.health-unavailable .health-card-heading svg {
+  color: var(--red);
+}
 .entity-card,
 .project-cards > article {
   background: #fff;

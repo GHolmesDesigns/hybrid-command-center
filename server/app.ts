@@ -42,6 +42,7 @@ import { setMcpResourceUpdateBridge } from './mcp/resource-notifier.ts';
 import { buildMcpHealthPanel } from './mcp/health-panel.ts';
 import { buildConnectionStatus } from './mcp/connection-status.ts';
 import { workspaceDataChecksum } from './mcp/workspace-checksum.ts';
+import { buildAppHealth } from './app-health.ts';
 import { MCP_AGENT_SCOPES } from '../shared/mcp-agent-registry.ts';
 import {
   mcpHealthDiagnosticCredentialSchema,
@@ -244,6 +245,7 @@ import {
   DRIVE_OAUTH_BUDGET,
   DRIVE_SYNC_BUDGET,
   MCP_HEALTH_BUDGET,
+  HEALTH_DASHBOARD_BUDGET,
   MANUAL_BUDGET,
   MCP_OAUTH_BUDGET,
   IMPORT_BUDGET,
@@ -898,6 +900,18 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       validate: { xForwardedForHeader: false },
     }),
   );
+  app.use(
+    '/api/health/dashboard',
+    rateLimit({
+      windowMs: HEALTH_DASHBOARD_BUDGET.windowMs,
+      limit: HEALTH_DASHBOARD_BUDGET.limit,
+      standardHeaders: 'draft-7',
+      legacyHeaders: false,
+      message: { error: HEALTH_DASHBOARD_BUDGET.message },
+      keyGenerator: (req) => authKey(req),
+      validate: { xForwardedForHeader: false },
+    }),
+  );
   const mcpOAuthLimiter = rateLimit({
     windowMs: MCP_OAUTH_BUDGET.windowMs,
     limit: MCP_OAUTH_BUDGET.limit,
@@ -1139,6 +1153,16 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         recentCompletions: [],
         auditEventCount: 0,
       });
+    }
+  });
+
+  app.get('/api/health/dashboard', (_req, res) => {
+    try {
+      res.json(buildAppHealth(db, { authRequired, now: new Date(authNowMs()) }));
+    } catch (error) {
+      res
+        .status(500)
+        .json({ error: error instanceof Error ? error.message : 'Health dashboard unavailable.' });
     }
   });
 
