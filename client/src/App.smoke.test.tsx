@@ -2,6 +2,7 @@ import { useLocation } from 'react-router-dom';
 import {
   render,
   screen,
+  waitFor,
   within,
   MemoryRouter,
   describe,
@@ -79,7 +80,7 @@ describe('App', () => {
     expect(links.findIndex((link) => link.textContent?.trim() === 'Tasks')).toBe(
       links.findIndex((link) => link.textContent?.trim() === 'Status') + 1,
     );
-    expect(screen.getByRole('button', { name: /Start/ })).toBeEnabled();
+    await waitFor(() => expect(screen.getByRole('button', { name: /Start/ })).toBeEnabled());
   });
 
   it('redirects /kanban to /status and keeps the query string', async () => {
