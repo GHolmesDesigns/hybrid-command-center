@@ -21,7 +21,7 @@ import {
   type McpToolClass,
   type WorkspaceContextFilters,
 } from '../../shared/mcp-workspace-context.ts';
-import { SIGNAL_LIFECYCLE_FILTERS } from '../../shared/signal.ts';
+import { SIGNAL_ASSIGN_POSTS_MAX, SIGNAL_LIFECYCLE_FILTERS } from '../../shared/signal.ts';
 import { TASK_PRIORITIES, TASK_STATUSES } from '../../shared/types.ts';
 import { MCP_TASK_LIST_MAX_LIMIT } from '../../shared/mcp-read-tools.ts';
 
@@ -893,6 +893,32 @@ const workspaceWriteTools: McpToolRegistryEntry[] = [
         targets: { type: 'array' },
       },
       required: ['clientRequestId', 'postId', 'revision', 'targets'],
+      additionalProperties: false,
+    },
+    class: 'L',
+    requiredScope: 'workspace:write',
+    owner: 'server/signal/service.ts',
+    handler: 'workspace_write',
+  },
+  {
+    name: 'signal_assign_posts',
+    description:
+      'Assign a bounded set of existing Signal posts to one client and project. Supports dryRun and refuses the whole batch when any post is incompatible or missing.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        clientRequestId: { type: 'string' },
+        clientId: { type: 'string', format: 'uuid' },
+        projectId: { type: 'string', format: 'uuid' },
+        postIds: {
+          type: 'array',
+          minItems: 1,
+          maxItems: SIGNAL_ASSIGN_POSTS_MAX,
+          items: { type: 'string', format: 'uuid' },
+        },
+        dryRun: { type: 'boolean' },
+      },
+      required: ['clientRequestId', 'clientId', 'projectId', 'postIds'],
       additionalProperties: false,
     },
     class: 'L',
