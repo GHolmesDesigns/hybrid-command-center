@@ -3243,7 +3243,13 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
                 error instanceof McpAgentLabelTakenError ||
                 error?.code === 'SQLITE_CONSTRAINT_UNIQUE'
               ? 409
-              : 500;
+              : // Simple "this id does not exist" refusals across the app throw a plain Error
+                // tagged with `status` (agent conversations, agent memory, agent summaries)
+                // rather than a dedicated class each. Read that tag as a last resort, after
+                // every specific class above has had a chance to claim the error.
+                typeof error?.status === 'number' && error.status >= 400 && error.status < 500
+                ? error.status
+                : 500;
     /**
      * A 500 is the one status whose message has no reader who benefits: it is whatever SQLite
      * or googleapis said, which means table names, absolute paths, and provider detail going
