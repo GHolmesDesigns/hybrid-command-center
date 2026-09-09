@@ -167,6 +167,16 @@ CREATE TABLE IF NOT EXISTS agent_memory (
   approved_by TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, expires_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_agent_memory_scope ON agent_memory(scope_type, scope_id, state);
+CREATE TABLE IF NOT EXISTS agent_presence (
+  agent_label TEXT PRIMARY KEY, state TEXT NOT NULL CHECK(state IN ('AVAILABLE','BUSY','AWAY','OFFLINE')),
+  availability TEXT, verified_at TEXT NOT NULL, last_activity_at TEXT
+);
+CREATE TABLE IF NOT EXISTS agent_notifications (
+  id TEXT PRIMARY KEY, incident_key TEXT NOT NULL UNIQUE, kind TEXT NOT NULL,
+  agent_label TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL,
+  created_at TEXT NOT NULL, read_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_agent_notifications_unread ON agent_notifications(read_at, created_at);
 -- Agent Drive writes are requests, never direct MCP execution. Content is bounded by the Drive
 -- write plan and retained only until the operator decides it.
 CREATE TABLE IF NOT EXISTS drive_write_requests (
