@@ -119,7 +119,6 @@ describe('writing posts', () => {
     ).run(clientOne, 'Launch', timestamp, timestamp);
 
     const incompatible = [
-      { clientId: null, projectId: 'project-1' },
       { clientId: clientOne, projectId: null },
       { clientId: clientTwo, projectId: 'project-1' },
       { clientId: clientOne, projectId: 'missing-project' },
@@ -128,6 +127,29 @@ describe('writing posts', () => {
       await expect(add(choices)).rejects.toThrow(SignalPostRelationshipError);
     }
     expect(db.prepare('SELECT COUNT(*) n FROM signal_posts').get()).toEqual({ n: 0 });
+  });
+
+  it('clears the durable assignment when either editor choice is explicitly null', async () => {
+    const timestamp = new Date().toISOString();
+    const clientId = '11111111-1111-4111-8111-111111111111';
+    db.prepare(
+      `INSERT INTO clients(id,name,slug,created_at,updated_at)
+       VALUES(?,?,?,?,?)`,
+    ).run(clientId, 'Acme Studio', 'acme-studio', timestamp, timestamp);
+    db.prepare(
+      `INSERT INTO projects(id,client_id,name,created_at,updated_at)
+       VALUES('project-1',?,?,?,?)`,
+    ).run(clientId, 'Launch', timestamp, timestamp);
+
+    const created = await add({ clientId, projectId: 'project-1' });
+    const clearedByClient = await updatePost(db, created.id, { clientId: null });
+    expect(clearedByClient.projectId).toBeNull();
+    expect(clearedByClient.client).toBeUndefined();
+
+    const rebound = await updatePost(db, created.id, { clientId, projectId: 'project-1' });
+    const clearedByProject = await updatePost(db, rebound.id, { projectId: null });
+    expect(clearedByProject.projectId).toBeNull();
+    expect(clearedByProject.client).toBeUndefined();
   });
 
   it('creates an unscheduled post by default and puts it in the queue', async () => {

@@ -788,6 +788,8 @@ const workspaceWriteTools: McpToolRegistryEntry[] = [
       type: 'object',
       properties: {
         clientRequestId: { type: 'string' },
+        clientId: { type: ['string', 'null'], format: 'uuid' },
+        projectId: { type: ['string', 'null'] },
         text: { type: 'string' },
         channels: { type: 'array', items: { type: 'string' } },
         mediaUrls: { type: 'array', items: { type: 'string' } },
@@ -815,6 +817,8 @@ const workspaceWriteTools: McpToolRegistryEntry[] = [
         clientRequestId: { type: 'string' },
         postId: { type: 'string' },
         revision: { type: 'number' },
+        clientId: { type: ['string', 'null'], format: 'uuid' },
+        projectId: { type: ['string', 'null'] },
         text: { type: 'string' },
         channels: { type: 'array', items: { type: 'string' } },
         mediaUrls: { type: 'array', items: { type: 'string' } },

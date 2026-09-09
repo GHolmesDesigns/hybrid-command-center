@@ -80,17 +80,19 @@ function validateClientProject(
   db: Db,
   clientId: string | null | undefined,
   projectId: string | null,
-) {
-  if (clientId === undefined) return;
-  if (clientId === null && projectId !== null)
-    throw new SignalPostRelationshipError('Choose a project belonging to the selected client.');
-  if (clientId === null) return;
+): string | null {
+  // A client is derived from the project's durable relationship. Clearing either side therefore
+  // clears the assignment rather than leaving a client with no project or a project with a stale
+  // transient client choice.
+  if (clientId === null || (clientId === undefined && projectId === null)) return null;
+  if (clientId === undefined) return projectId;
   if (projectId === null)
     throw new SignalPostRelationshipError('Choose a project belonging to the selected client.');
   const project = db.prepare('SELECT client_id FROM projects WHERE id = ?').get(projectId) as
     { client_id: string } | undefined;
   if (!project || project.client_id !== clientId)
     throw new SignalPostRelationshipError('Choose a project belonging to the selected client.');
+  return projectId;
 }
 
 /**
@@ -566,7 +568,7 @@ export function listQueuePage(
  * no Drive call and stays synchronous, and so that the transaction below contains no `await`.
  */
 function insertPost(db: Db, input: SignalPostInput, media: SignalPostMedia[]): SignalPost {
-  validateClientProject(db, input.clientId, input.projectId);
+  const projectId = validateClientProject(db, input.clientId, input.projectId);
   const postId = id();
   const timestamp = now();
   // The post, channels, media, and campaigns land together: a post missing part of the requested
@@ -583,7 +585,7 @@ function insertPost(db: Db, input: SignalPostInput, media: SignalPostMedia[]): S
        VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
     ).run(
       postId,
-      input.projectId,
+      projectId,
       input.text,
       input.date,
       input.time,
@@ -650,7 +652,7 @@ function writePost(
     cta: patch.cta ?? existing.cta,
     deliveryProvenance: patch.deliveryProvenance ?? existing.delivery_provenance,
   };
-  validateClientProject(db, patch.clientId, next.projectId);
+  next.projectId = validateClientProject(db, patch.clientId, next.projectId);
   // A post returning to the queue joins the end of it; one leaving keeps a position nothing
   // reads. Position only ever means something for an undated post.
   const position =

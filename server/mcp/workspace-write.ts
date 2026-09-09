@@ -23,6 +23,7 @@ import { revisionPrecondition, RevisionConflictError } from '../domain/revisions
 import { DisconnectedDriveMediaProvider } from '../drive/media.ts';
 import {
   SignalPostNotFoundError,
+  SignalPostRelationshipError,
   SignalPublishTargetError,
   SignalSlotConflictError,
   SignalVariantError,
@@ -153,6 +154,7 @@ function mapDomainError(error: unknown): McpToolCallResult {
   }
   if (
     error instanceof WorkspaceValidationError ||
+    error instanceof SignalPostRelationshipError ||
     error instanceof SignalVariantError ||
     error instanceof SignalPublishTargetError ||
     error instanceof SignalMediaError ||
