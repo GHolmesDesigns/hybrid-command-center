@@ -36,6 +36,10 @@ labels for IDE and Cloud Agent (`cursor-ide`, `cursor-cloud`, …) when both act
 
 ## MCP prompts
 
+Operational reads and writes are exposed as `agent_health_dashboard`, `agent_get_presence`,
+`agent_set_presence`, `agent_list_presence`, `agent_list_summaries`, `agent_list_notifications`,
+`agent_create_notification`, and `agent_mark_notification_read`.
+
 After connecting, fetch workflow prompts with `prompts/list` and `prompts/get`. Start with
 `start_claimed_work` when you have a handoff ID, and `verify_before_complete` before finishing.
 

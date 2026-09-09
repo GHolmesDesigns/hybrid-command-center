@@ -18,6 +18,54 @@ beforeEach(() => {
 });
 
 describe('callMcpTool', () => {
+  it('routes agent health, session presence, summaries, and notifications through existing services', async () => {
+    const session = createMcpSession({ agentLabel: 'cursor' });
+    const options = {
+      grantedScopes: ['workspace:read', 'workspace:write'] as const,
+      now: NOW,
+      authRequired: false,
+    };
+    expect((await callMcpTool(db, session, 'agent_health_dashboard', {}, options)).outcome).toBe(
+      'SUCCESS',
+    );
+    expect(
+      (await callMcpTool(db, session, 'agent_set_presence', { state: 'BUSY' }, options)).outcome,
+    ).toBe('SUCCESS');
+    expect((await callMcpTool(db, session, 'agent_get_presence', {}, options)).data).toMatchObject({
+      agentLabel: 'cursor',
+      state: 'BUSY',
+    });
+    expect(
+      (await callMcpTool(db, session, 'agent_list_presence', { limit: 1 }, options)).outcome,
+    ).toBe('SUCCESS');
+    expect(
+      (await callMcpTool(db, session, 'agent_list_summaries', { agentLabel: 'cursor' }, options))
+        .outcome,
+    ).toBe('SUCCESS');
+    const created = await callMcpTool(
+      db,
+      session,
+      'agent_create_notification',
+      {
+        incidentKey: 'test-577',
+        kind: 'test',
+        agentLabel: 'cursor',
+        title: 'Test',
+        body: 'Check in',
+      },
+      options,
+    );
+    expect(created.outcome).toBe('SUCCESS');
+    const id = (created.data as { id: string }).id;
+    expect(
+      (await callMcpTool(db, session, 'agent_list_notifications', { unreadOnly: true }, options))
+        .outcome,
+    ).toBe('SUCCESS');
+    expect(
+      (await callMcpTool(db, session, 'agent_mark_notification_read', { id }, options)).outcome,
+    ).toBe('SUCCESS');
+  });
+
   it('lists thirteen coordination and workspace read tools plus system_capabilities', () => {
     const names = mcpToolsListPayload().map((tool) => tool.name);
     expect(names).toHaveLength(MCP_TOOL_REGISTRY.length);

@@ -26,6 +26,7 @@ import { callIntegrationTool, type McpIntegrationToolDeps } from './integration-
 import { redactToolResult } from './redact.ts';
 import type { McpSession } from './session.ts';
 import { buildConnectionStatus } from './connection-status.ts';
+import { callAgentTool } from './agent-tools.ts';
 
 export type McpToolDispatchOptions = {
   grantedScopes: readonly McpAgentScope[];
@@ -36,6 +37,7 @@ export type McpToolDispatchOptions = {
   transport?: 'stdio' | 'http';
   authenticated?: boolean;
   baseUrl?: string | null;
+  authRequired?: boolean;
 };
 
 const refused = (
@@ -128,5 +130,17 @@ export async function callMcpTool(
       });
       return { outcome: 'SUCCESS', data: redactToolResult(payload) };
     }
+    case 'agent_tools':
+      try {
+        return callAgentTool(db, session, tool, rawArgs, {
+          authRequired: options.authRequired ?? true,
+          now,
+        });
+      } catch (error) {
+        return {
+          outcome: 'FAILURE',
+          error: error instanceof Error ? error.message : 'Agent tool failed.',
+        };
+      }
   }
 }

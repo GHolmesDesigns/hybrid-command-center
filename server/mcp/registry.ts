@@ -40,7 +40,8 @@ export type McpToolRegistryEntry = {
     | 'workspace_read'
     | 'workspace_write'
     | 'integration_read'
-    | 'integration_write';
+    | 'integration_write'
+    | 'agent_tools';
 };
 
 const coordinationScope = (name: CoordinationTool): McpAgentScope =>
@@ -309,6 +310,78 @@ const systemCapabilitiesTool: McpToolRegistryEntry = {
   owner: 'server/mcp/workspace-context.ts',
   handler: 'system_capabilities',
 };
+
+const agentTool = (
+  name: string,
+  description: string,
+  properties: Record<string, unknown>,
+  write = false,
+): McpToolRegistryEntry => ({
+  name,
+  description,
+  inputSchema: { type: 'object', properties, additionalProperties: false },
+  class: write ? 'L' : 'R',
+  requiredScope: write ? 'workspace:write' : 'workspace:read',
+  owner: 'server/agent-summaries.ts',
+  handler: 'agent_tools',
+});
+
+const agentTools: McpToolRegistryEntry[] = [
+  ['agent_health_dashboard', 'Read application health signals and their freshness.', {}, 'R'],
+  ['agent_get_presence', 'Read the authenticated agent session presence.', {}, 'R'],
+  [
+    'agent_set_presence',
+    'Set the authenticated agent session presence.',
+    {
+      state: { type: 'string', enum: ['AVAILABLE', 'BUSY', 'AWAY', 'OFFLINE'] },
+      availability: { type: 'string' },
+    },
+    'L',
+  ],
+  [
+    'agent_list_presence',
+    'List bounded presence signals for registered agents.',
+    { agentLabel: { type: 'string' }, limit: { type: 'integer', minimum: 1, maximum: 100 } },
+    'R',
+  ],
+  [
+    'agent_list_summaries',
+    'List bounded summaries for registered agents.',
+    { agentLabel: { type: 'string' }, limit: { type: 'integer', minimum: 1, maximum: 100 } },
+    'R',
+  ],
+  [
+    'agent_list_notifications',
+    'List bounded agent notifications, optionally unread only.',
+    { unreadOnly: { type: 'boolean' }, limit: { type: 'integer', minimum: 1, maximum: 100 } },
+    'R',
+  ],
+  [
+    'agent_create_notification',
+    'Create an agent notification using the existing notification service.',
+    {
+      incidentKey: { type: 'string' },
+      kind: { type: 'string' },
+      agentLabel: { type: 'string' },
+      title: { type: 'string' },
+      body: { type: 'string' },
+    },
+    'L',
+  ],
+  [
+    'agent_mark_notification_read',
+    'Mark one agent notification read.',
+    { id: { type: 'string' } },
+    'L',
+  ],
+].map(([name, description, properties, access]) =>
+  agentTool(
+    name as string,
+    description as string,
+    properties as Record<string, unknown>,
+    access === 'L',
+  ),
+);
 
 const workspaceReadTools: McpToolRegistryEntry[] = [
   {
@@ -1205,6 +1278,7 @@ export const MCP_TOOL_REGISTRY: readonly McpToolRegistryEntry[] = [
   ...workspaceReadTools,
   ...workspaceWriteTools,
   ...integrationTools,
+  ...agentTools,
   systemCapabilitiesTool,
   systemConnectionStatusTool,
 ];

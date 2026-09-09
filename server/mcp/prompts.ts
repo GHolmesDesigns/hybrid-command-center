@@ -87,11 +87,15 @@ const BLUEPRINTS: readonly PromptBlueprint[] = [
     arguments: [
       { name: 'projectId', description: 'Optional project ID used to narrow the task read.' },
     ],
-    requiredTools: ['workspace_dashboard_summary', 'workspace_list_tasks'],
+    requiredTools: [
+      'workspace_dashboard_summary',
+      'workspace_list_tasks',
+      'agent_health_dashboard',
+    ],
     messages: (tools, args) => {
       const projectId = supplied(args, 'projectId');
       return [
-        `1. Call ${toolName(tools, 'workspace_dashboard_summary')} for the bounded workspace overview.`,
+        `1. Call ${toolName(tools, 'workspace_dashboard_summary')} for the bounded workspace overview and ${toolName(tools, 'agent_health_dashboard')} for application health signals.`,
         `2. Call ${toolName(tools, 'workspace_list_tasks')}${projectId ? ` with projectId ${projectId}` : ' only when task detail is needed'}. Use the smallest useful limit and paginate deliberately; do not turn a status review into an unbounded export.`,
         '3. Separate observed rows from inference, identify blockers and stale facts, and report the bounds used.',
         'This workflow is read-only. An agent_label is required if a later, separately authorized coordination write is attempted.',
