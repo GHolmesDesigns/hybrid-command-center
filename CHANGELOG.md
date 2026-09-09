@@ -8,6 +8,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [6.4.12] - 2026-09-09
+
+### Added
+
+- Added a reviewed, repeatable Signal client and project assignment backfill with a default dry run, explicit untagged-post decisions, and guarded commit mode.
+
+### Breaking changes
+
+None.
+
 ## [6.4.11] - 2026-09-09
 
 ### Added
