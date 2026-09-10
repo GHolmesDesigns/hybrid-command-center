@@ -26,10 +26,18 @@ export const messageSchema = z.string().trim().min(1).max(4000);
 export const conversationListSchema = z
   .object({
     state: z.enum(CONVERSATION_STATES).optional(),
+    scopeType: z.enum(CONVERSATION_SCOPE_TYPES).optional(),
+    scopeId: z.string().trim().min(1).max(200).optional(),
     limit: z.number().int().min(1).max(100).optional(),
     cursor: z.string().max(500).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    if (!!value.scopeType !== !!value.scopeId)
+      ctx.addIssue({ code: 'custom', message: 'scopeType and scopeId must be supplied together.' });
+    if (value.scopeType === 'freeform')
+      ctx.addIssue({ code: 'custom', message: 'A detail discussion must have a workspace scope.' });
+  });
 export const messageListSchema = z
   .object({
     limit: z.number().int().min(1).max(100).optional(),

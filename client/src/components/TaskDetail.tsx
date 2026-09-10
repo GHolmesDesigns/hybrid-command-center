@@ -9,6 +9,7 @@ import { TagChipInput } from './FormControls';
 import { PriorityBadge, TaskTypeBadge } from './Primitives';
 import { TaskChecklist, TaskDependencies } from './TaskDetailSections';
 import { STATUS_LABEL, syncTaskTags } from './ui-shared';
+import { DiscussionPanel } from './DiscussionPanel';
 
 export function TaskDetail({
   task,
@@ -349,6 +350,12 @@ export function TaskDetail({
         />
       </section>
       <TaskDependencies task={task} tasks={tasks} dep={dep} setDep={setDep} mutate={mutate} />
+      <DiscussionPanel
+        scopeType="task"
+        scopeId={task.id}
+        subjectLabel={task.title}
+        subjectPath={`/tasks/${task.id}`}
+      />
       <footer>
         <button className="secondary danger-outline" onClick={remove}>
           <Trash2 /> Delete task

@@ -3007,7 +3007,6 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
           conversationListSchema.parse({
             ...req.query,
             limit: req.query.limit ? Number(req.query.limit) : undefined,
-            direction: req.query.direction === 'before' ? 'before' : 'forward',
           }),
         ),
       );

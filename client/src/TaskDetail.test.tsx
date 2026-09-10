@@ -84,6 +84,7 @@ describe('Task detail inline editing', () => {
       'Notes',
       'Tags',
       'Dependencies',
+      ' Threads',
     ]);
   });
 

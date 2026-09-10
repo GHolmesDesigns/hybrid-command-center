@@ -35,6 +35,7 @@ import { TagChip } from './FormControls';
 import { Due, Empty, PriorityBadge, StatusDot } from './Primitives';
 import { STATUS_LABEL } from './ui-shared';
 import { PageHead } from './Shell';
+import { DiscussionPanel } from './DiscussionPanel';
 
 export function ProjectDetail({
   projects,
@@ -224,6 +225,12 @@ export function ProjectDetail({
           and every file in it are left exactly as they are.
         </p>
       </div>
+      <DiscussionPanel
+        scopeType="project"
+        scopeId={p.id}
+        subjectLabel={p.name}
+        subjectPath={`/projects/${p.id}`}
+      />
       <section className="panel">
         <div className="section-title">
           <div>

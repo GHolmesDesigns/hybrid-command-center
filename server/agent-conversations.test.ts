@@ -77,4 +77,21 @@ describe('agent conversations', () => {
     expect(listConversations(db, 'cursor', { state: 'ACTIVE' }).items).toHaveLength(0);
     expect(listMessages(db, conversation.id, 'cursor').items[0].body).toBe('Retained');
   });
+
+  it('filters detail discussions in SQL scope before cursor pagination', () => {
+    const db = createDb(':memory:');
+    createConversation(
+      db,
+      { title: 'Project one', scope: { type: 'project', id: 'p1' }, participantLabels: [] },
+      'cursor',
+    );
+    createConversation(
+      db,
+      { title: 'Project two', scope: { type: 'project', id: 'p2' }, participantLabels: [] },
+      'cursor',
+    );
+    const page = listConversations(db, 'cursor', { scopeType: 'project', scopeId: 'p1', limit: 1 });
+    expect(page.items.map((item) => item.title)).toEqual(['Project one']);
+    expect(page.hasMore).toBe(false);
+  });
 });

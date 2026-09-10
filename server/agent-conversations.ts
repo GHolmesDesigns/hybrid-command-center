@@ -99,18 +99,33 @@ export function listConversations(
   actor: string | null,
   raw: unknown = {},
 ): CursorPage<AgentConversation> {
-  const input = raw as { state?: ConversationState; limit?: number; cursor?: string };
+  const input = raw as {
+    state?: ConversationState;
+    scopeType?: string;
+    scopeId?: string;
+    limit?: number;
+    cursor?: string;
+  };
   const limit = Math.min(input.limit ?? 50, 100),
     c = decode(input.cursor);
+  const where = ['1=1'];
+  const params: string[] = [];
+  if (input.scopeType && input.scopeId) {
+    where.push('c.scope_type=? AND c.scope_id=?');
+    params.push(input.scopeType, input.scopeId);
+  }
+  if (input.state) {
+    where.push('c.state=?');
+    params.push(input.state);
+  }
   const rows = db
     .prepare(
-      'SELECT c.*, COUNT(m.id) message_count FROM agent_conversations c JOIN agent_conversation_participants p ON p.conversation_id=c.id LEFT JOIN agent_conversation_messages m ON m.conversation_id=c.id GROUP BY c.id ORDER BY c.updated_at DESC,c.id DESC',
+      `SELECT c.*, COUNT(m.id) message_count FROM agent_conversations c JOIN agent_conversation_participants p ON p.conversation_id=c.id LEFT JOIN agent_conversation_messages m ON m.conversation_id=c.id WHERE ${where.join(' AND ')} GROUP BY c.id ORDER BY c.updated_at DESC,c.id DESC`,
     )
-    .all() as unknown as ConversationRow[];
+    .all(...params) as unknown as ConversationRow[];
   const visibleRows = rows.filter(
     (r) =>
       (actor === null || visible(db, r.id, actor)) &&
-      (!input.state || r.state === input.state) &&
       (!c || r.updated_at < c.at || (r.updated_at === c.at && r.id < c.id)),
   );
   const page = visibleRows.slice(0, limit + 1);
