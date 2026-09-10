@@ -78,7 +78,11 @@ export function AgentDirectoryCard() {
     void load();
   }, []);
   return (
-    <section className="panel settings-card" aria-labelledby="agent-directory-heading">
+    <section
+      className="panel settings-card"
+      id="agent-directory"
+      aria-labelledby="agent-directory-heading"
+    >
       <div className="section-title">
         <div>
           <span className="eyebrow">Identity</span>

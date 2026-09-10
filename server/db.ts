@@ -175,7 +175,7 @@ CREATE TABLE IF NOT EXISTS agent_presence (
 CREATE TABLE IF NOT EXISTS agent_notifications (
   id TEXT PRIMARY KEY, incident_key TEXT NOT NULL UNIQUE, kind TEXT NOT NULL,
   agent_label TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL,
-  created_at TEXT NOT NULL, read_at TEXT
+  destination_json TEXT, created_at TEXT NOT NULL, read_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_agent_notifications_unread ON agent_notifications(read_at, created_at);
 -- Agent Drive writes are requests, never direct MCP execution. Content is bounded by the Drive

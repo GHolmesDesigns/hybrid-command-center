@@ -404,6 +404,7 @@ const agentTools: McpToolRegistryEntry[] = [
       agentLabel: { type: 'string' },
       title: { type: 'string' },
       body: { type: 'string' },
+      destination: { type: 'object' },
     },
     'L',
   ],

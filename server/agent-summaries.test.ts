@@ -9,6 +9,7 @@ import {
   listPresence,
   listSummaries,
   markNotificationRead,
+  markAllNotificationsRead,
   notify,
   setPresence,
 } from './agent-summaries.ts';
@@ -155,6 +156,7 @@ describe('agent notifications', () => {
       new Date('2026-09-08T12:00:00.000Z'),
     );
     expect(created.readAt).toBeNull();
+    expect(listNotifications(db).unreadCount).toBe(1);
     expect(listNotifications(db).notifications).toEqual([created]);
     expect(listNotifications(db, { unreadOnly: true }).notifications).toEqual([created]);
 
@@ -162,6 +164,7 @@ describe('agent notifications', () => {
     expect(read.readAt).toBe('2026-09-08T12:05:00.000Z');
     expect(listNotifications(db, { unreadOnly: true }).notifications).toEqual([]);
     expect(listNotifications(db).notifications).toEqual([read]);
+    expect(markAllNotificationsRead(db).marked).toBe(0);
     db.close();
   });
 
@@ -193,6 +196,42 @@ describe('agent notifications', () => {
     });
     markNotificationRead(db, created.id);
     expect(() => markNotificationRead(db, created.id)).toThrow('Notification not found.');
+    db.close();
+  });
+
+  it('reports exact unread counts, paginates, and validates destinations', () => {
+    const db = createDb(':memory:');
+    for (let i = 0; i < 3; i++)
+      notify(
+        db,
+        {
+          incidentKey: `incident-${i}`,
+          kind: 'test',
+          agentLabel: 'reviewer',
+          title: `Title ${i}`,
+          body: 'Body',
+        },
+        new Date(2026, 0, 1, 0, i),
+      );
+    const first = listNotifications(db, { limit: 2 });
+    expect(first.notifications).toHaveLength(2);
+    expect(first.unreadCount).toBe(3);
+    expect(first.nextCursor).toBeTruthy();
+    expect(
+      listNotifications(db, { limit: 2, cursor: first.nextCursor! }).notifications,
+    ).toHaveLength(1);
+    expect(markAllNotificationsRead(db).marked).toBe(3);
+    expect(markAllNotificationsRead(db).marked).toBe(0);
+    expect(() =>
+      notify(db, {
+        incidentKey: 'bad-destination',
+        kind: 'test',
+        agentLabel: 'reviewer',
+        title: 'Bad',
+        body: 'Bad',
+        destination: { type: 'conversation', id: 'missing' },
+      }),
+    ).toThrow('does not exist');
     db.close();
   });
 });

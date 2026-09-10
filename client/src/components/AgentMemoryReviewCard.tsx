@@ -35,7 +35,11 @@ export function AgentMemoryReviewCard({
     }
   };
   return (
-    <section className="panel settings-card" aria-labelledby="agent-memory-heading">
+    <section
+      className="panel settings-card"
+      id="agent-memory"
+      aria-labelledby="agent-memory-heading"
+    >
       <div className="section-heading">
         <div>
           <p className="eyebrow">Agent context</p>
