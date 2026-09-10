@@ -13,6 +13,19 @@ import { notificationListSchema, summaryListSchema } from '../../shared/agent-su
 import type { McpSession } from './session.ts';
 import type { McpToolCallResult } from './coordination.ts';
 import { redactToolResult } from './redact.ts';
+import {
+  createConversation,
+  getConversation,
+  listConversations,
+  listMessages,
+  postMessage,
+  setConversationState,
+} from '../agent-conversations.ts';
+import {
+  conversationListSchema,
+  createConversationSchema,
+  messageListSchema,
+} from '../../shared/agent-conversations.ts';
 
 const success = (data: unknown): McpToolCallResult => ({
   outcome: 'SUCCESS',
@@ -31,6 +44,60 @@ export function callAgentTool(
   }
   const args = rawArgs && typeof rawArgs === 'object' ? rawArgs : {};
   switch (tool) {
+    case 'conversation_list':
+      return success(
+        listConversations(db, session.agentLabel ?? null, conversationListSchema.parse(args)),
+      );
+    case 'conversation_create':
+      if (!session.agentLabel)
+        return { outcome: 'REFUSED', error: 'This tool requires an authenticated agent label.' };
+      return success(
+        createConversation(
+          db,
+          createConversationSchema.parse(args),
+          session.agentLabel,
+          options.now,
+        ),
+      );
+    case 'conversation_get':
+      return success(getConversation(db, (args as { id: string }).id, session.agentLabel ?? null));
+    case 'conversation_list_messages':
+      return success(
+        listMessages(
+          db,
+          (args as { id: string }).id,
+          session.agentLabel ?? null,
+          messageListSchema.parse({
+            limit: (args as { limit?: number }).limit,
+            cursor: (args as { cursor?: string }).cursor,
+            direction: (args as { direction?: 'forward' | 'before' }).direction,
+          }),
+        ),
+      );
+    case 'conversation_post_message':
+      if (!session.agentLabel)
+        return { outcome: 'REFUSED', error: 'This tool requires an authenticated agent label.' };
+      return success(
+        postMessage(
+          db,
+          (args as { id: string }).id,
+          session.agentLabel,
+          (args as { body: string }).body,
+          options.now,
+        ),
+      );
+    case 'conversation_archive':
+      if (!session.agentLabel)
+        return { outcome: 'REFUSED', error: 'This tool requires an authenticated agent label.' };
+      return success(
+        setConversationState(
+          db,
+          (args as { id: string }).id,
+          session.agentLabel,
+          'ARCHIVED',
+          options.now,
+        ),
+      );
     case 'agent_health_dashboard':
       return success(buildAppHealth(db, { authRequired: options.authRequired, now: options.now }));
     case 'agent_get_presence':

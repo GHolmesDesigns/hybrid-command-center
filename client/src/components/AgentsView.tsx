@@ -5,6 +5,7 @@ import { McpHealthPanelCard } from './McpHealthPanelCard';
 import { DriveWriteRequestsCard } from './DriveWriteRequestsCard';
 import { PageHead } from './Shell';
 import { AgentDirectoryCard } from './AgentDirectoryCard';
+import { Link } from 'react-router-dom';
 
 /**
  * Agents module (C136 / #420): connection setup, health, and handoffs in one place.
@@ -26,6 +27,11 @@ export function AgentsView({
         title="Agents"
         body="Connect Cursor, Claude, or Codex to this Command Center over hosted HTTPS, confirm the connection, and review agent handoffs. Issue and rotate credentials here — you should not need a terminal or a text editor."
       />
+      <p>
+        <Link className="primary-btn" to="/agents/conversations">
+          Open Conversations
+        </Link>
+      </p>
       <div className="agents-layout">
         <McpConnectionSetupCard flash={flash} />
         <AgentDirectoryCard />

@@ -327,6 +327,45 @@ const agentTool = (
 });
 
 const agentTools: McpToolRegistryEntry[] = [
+  [
+    'conversation_list',
+    'List visible agent conversations.',
+    {
+      state: { type: 'string', enum: ['ACTIVE', 'ARCHIVED'] },
+      limit: { type: 'integer', minimum: 1, maximum: 100 },
+      cursor: { type: 'string' },
+    },
+    'R',
+  ],
+  [
+    'conversation_create',
+    'Create a conversation visible to its participants.',
+    {
+      title: { type: 'string' },
+      scope: { type: 'object' },
+      participantLabels: { type: 'array', items: { type: 'string' } },
+    },
+    'L',
+  ],
+  ['conversation_get', 'Get one visible conversation.', { id: { type: 'string' } }, 'R'],
+  [
+    'conversation_list_messages',
+    'List conversation messages forward or before a cursor.',
+    {
+      id: { type: 'string' },
+      limit: { type: 'integer', minimum: 1, maximum: 100 },
+      cursor: { type: 'string' },
+      direction: { type: 'string', enum: ['forward', 'before'] },
+    },
+    'R',
+  ],
+  [
+    'conversation_post_message',
+    'Post a message as the authenticated agent.',
+    { id: { type: 'string' }, body: { type: 'string', maxLength: 4000 } },
+    'L',
+  ],
+  ['conversation_archive', 'Archive a visible conversation.', { id: { type: 'string' } }, 'L'],
   ['agent_health_dashboard', 'Read application health signals and their freshness.', {}, 'R'],
   ['agent_get_presence', 'Read the authenticated agent session presence.', {}, 'R'],
   [

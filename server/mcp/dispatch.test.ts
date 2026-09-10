@@ -18,6 +18,46 @@ beforeEach(() => {
 });
 
 describe('callMcpTool', () => {
+  it('provides conversation parity for an authenticated agent', async () => {
+    const session = createMcpSession({ agentLabel: 'cursor' });
+    const options = { grantedScopes: ['workspace:read', 'workspace:write'] as const, now: NOW };
+    const created = await callMcpTool(
+      db,
+      session,
+      'conversation_create',
+      {
+        title: 'Parity',
+        scope: { type: 'freeform' },
+      },
+      options,
+    );
+    expect(created.outcome).toBe('SUCCESS');
+    const id = (created.data as { id: string }).id;
+    expect(
+      (await callMcpTool(db, session, 'conversation_post_message', { id, body: 'Hello' }, options))
+        .outcome,
+    ).toBe('SUCCESS');
+    expect(
+      (await callMcpTool(db, session, 'conversation_get', { id }, options)).data,
+    ).toMatchObject({ id, messageCount: 1 });
+    expect((await callMcpTool(db, session, 'conversation_list', {}, options)).outcome).toBe(
+      'SUCCESS',
+    );
+    expect(
+      (
+        await callMcpTool(
+          db,
+          session,
+          'conversation_list_messages',
+          { id, direction: 'before' },
+          options,
+        )
+      ).data,
+    ).toMatchObject({ items: [{ body: 'Hello', provenance: 'ASSERTED' }] });
+    expect((await callMcpTool(db, session, 'conversation_archive', { id }, options)).outcome).toBe(
+      'SUCCESS',
+    );
+  });
   it('routes agent health, session presence, summaries, and notifications through existing services', async () => {
     const session = createMcpSession({ agentLabel: 'cursor' });
     const options = {

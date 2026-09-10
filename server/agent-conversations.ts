@@ -2,6 +2,8 @@ import crypto from 'node:crypto';
 import type { Db } from './db.ts';
 import { transaction } from './db.ts';
 import { redactSecrets } from './integration-log.ts';
+import { listAgentDirectory } from './agent-directory.ts';
+import type { AgentIdentityProvenance } from '../shared/agent-coordination.ts';
 import {
   createConversationSchema,
   messageSchema,
@@ -143,16 +145,23 @@ export function postMessage(
 ): AgentConversationMessage {
   requireVisible(db, id, actor);
   const body = redactSecrets(messageSchema.parse(raw));
+  const provenance: AgentIdentityProvenance =
+    actor === 'operator'
+      ? 'VERIFIED'
+      : listAgentDirectory(db).find((agent) => agent.label === actor)?.trustLevel === 'VERIFIED'
+        ? 'VERIFIED'
+        : 'ASSERTED';
   const message = {
     id: crypto.randomUUID(),
     conversationId: id,
     senderLabel: actor,
     sentAt: now.toISOString(),
     body,
+    provenance,
   };
   db.prepare(
-    'INSERT INTO agent_conversation_messages(id,conversation_id,sender_label,sent_at,body) VALUES(?,?,?,?,?)',
-  ).run(message.id, id, actor, message.sentAt, message.body);
+    'INSERT INTO agent_conversation_messages(id,conversation_id,sender_label,sent_at,body,sender_provenance) VALUES(?,?,?,?,?,?)',
+  ).run(message.id, id, actor, message.sentAt, message.body, message.provenance);
   db.prepare('UPDATE agent_conversations SET updated_at=? WHERE id=?').run(message.sentAt, id);
   return message;
 }
@@ -163,19 +172,26 @@ export function listMessages(
   raw: unknown = {},
 ): CursorPage<AgentConversationMessage> {
   requireVisible(db, id, actor);
-  const input = raw as { limit?: number; cursor?: string };
+  const input = raw as { limit?: number; cursor?: string; direction?: 'forward' | 'before' };
   const limit = Math.min(input.limit ?? 50, 100),
     c = decode(input.cursor);
-  const rows = db
-    .prepare(
-      `SELECT * FROM agent_conversation_messages WHERE conversation_id=? AND (? IS NULL OR sent_at>? OR (sent_at=? AND id>?)) ORDER BY sent_at ASC,id ASC LIMIT ?`,
-    )
-    .all(id, c?.at ?? null, c?.at ?? '', c?.at ?? '', c?.id ?? '', limit + 1) as {
+  const before = input.direction === 'before';
+  const statement = db.prepare(
+    before
+      ? `SELECT * FROM agent_conversation_messages WHERE conversation_id=? AND (? IS NULL OR sent_at<? OR (sent_at=? AND id<?)) ORDER BY sent_at DESC,id DESC LIMIT ?`
+      : `SELECT * FROM agent_conversation_messages WHERE conversation_id=? AND (? IS NULL OR sent_at>? OR (sent_at=? AND id>?)) ORDER BY sent_at ASC,id ASC LIMIT ?`,
+  );
+  const rows = (
+    before
+      ? statement.all(id, c?.at ?? null, c?.at ?? '', c?.at ?? '', c?.id ?? '', limit + 1)
+      : statement.all(id, c?.at ?? null, c?.at ?? '', c?.at ?? '', c?.id ?? '', limit + 1)
+  ) as {
     id: string;
     conversation_id: string;
     sender_label: string;
     sent_at: string;
     body: string;
+    sender_provenance: AgentIdentityProvenance;
   }[];
   const items = rows.slice(0, limit).map((r) => ({
     id: r.id,
@@ -183,8 +199,10 @@ export function listMessages(
     senderLabel: r.sender_label,
     sentAt: r.sent_at,
     body: r.body,
+    provenance: r.sender_provenance,
   }));
-  const last = items.at(-1);
+  if (before) items.reverse();
+  const last = before ? items[0] : items.at(-1);
   return {
     items,
     nextCursor: rows.length > limit && last ? encode(last.sentAt, last.id) : null,
