@@ -714,6 +714,7 @@ CREATE TABLE IF NOT EXISTS agent_work_sessions (
   subject_id TEXT,
   agent_label TEXT NOT NULL,
   state TEXT NOT NULL CHECK(state IN ('PLANNED','CLAIMED','IN_PROGRESS','NEEDS_INPUT','BLOCKED','COMPLETED','ABANDONED')),
+  waiting_since TEXT,
   lease_expires_at TEXT,
   last_heartbeat_at TEXT,
   base_revision TEXT NOT NULL,

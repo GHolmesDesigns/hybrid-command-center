@@ -9,6 +9,7 @@ import {
   heartbeatWorkSession,
   checkpointWorkSession,
   reclaimableWorkSessions,
+  liveWaitingWorkSessions,
   reclaimWorkSession,
   transitionWorkSession,
   releaseWorkSession,
@@ -234,6 +235,83 @@ describe('leased work sessions', () => {
     expect(() =>
       canMutate({ agentLabel: 'a', state: 'COMPLETED' }, 'a', ['IN_PROGRESS']),
     ).toThrow();
+  });
+
+  it('projects only live waiting sessions and keeps the waiting clock stable', () => {
+    const db = createDb(':memory:');
+    const start = new Date('2026-08-28T00:00:00.000Z');
+    const h = postHandoff(
+      db,
+      {
+        fromAgentLabel: 'a',
+        toAgentLabel: null,
+        subjectType: 'freeform',
+        subjectId: null,
+        message: 'x',
+      },
+      start,
+    );
+    claimHandoff(db, h.id, 'a', start);
+    const s = startWorkSession(
+      db,
+      { handoffId: h.id, agentLabel: 'a', leaseSeconds: 600, baseRevision: 'r' },
+      start,
+    );
+    const waiting = transitionWorkSession(
+      db,
+      s.id,
+      'a',
+      'NEEDS_INPUT',
+      'ask',
+      new Date('2026-08-28T00:01:00.000Z'),
+    );
+    expect(waiting.waitingSince).toBe('2026-08-28T00:01:00.000Z');
+    expect(
+      heartbeatWorkSession(db, s.id, 'a', 600, new Date('2026-08-28T00:02:00.000Z')).waitingSince,
+    ).toBe(waiting.waitingSince);
+    expect(
+      checkpointWorkSession(
+        db,
+        s.id,
+        'a',
+        { currentStep: 'wait' },
+        new Date('2026-08-28T00:03:00.000Z'),
+      ).waitingSince,
+    ).toBe(waiting.waitingSince);
+    expect(
+      transitionWorkSession(
+        db,
+        s.id,
+        'a',
+        'BLOCKED',
+        'blocked',
+        new Date('2026-08-28T00:04:00.000Z'),
+      ).waitingSince,
+    ).toBe('2026-08-28T00:04:00.000Z');
+    expect(
+      liveWaitingWorkSessions(db, { state: 'BLOCKED' }, new Date('2026-08-28T00:05:00.000Z')).map(
+        (row) => row.id,
+      ),
+    ).toEqual([s.id]);
+    expect(
+      liveWaitingWorkSessions(
+        db,
+        { state: 'NEEDS_INPUT' },
+        new Date('2026-08-28T00:05:00.000Z'),
+      ).map((row) => row.id),
+    ).toEqual([]);
+    expect(reclaimableWorkSessions(db, new Date('2026-08-28T00:05:00.000Z'))).toEqual([]);
+    expect(
+      transitionWorkSession(
+        db,
+        s.id,
+        'a',
+        'COMPLETED',
+        undefined,
+        new Date('2026-08-28T00:06:00.000Z'),
+      ).waitingSince,
+    ).toBeNull();
+    db.close();
   });
 
   it('covers start refusal before a claim and for a missing handoff', () => {

@@ -306,6 +306,11 @@ import {
   postHandoff,
 } from './agent-coordination/service.ts';
 import { reclaimableWorkSessions, reclaimWorkSession } from './agent-coordination/work-sessions.ts';
+import { liveWaitingWorkSessions } from './agent-coordination/work-sessions.ts';
+import {
+  AGENT_WORK_SESSION_LIST_MAX_LIMIT,
+  AGENT_WORK_SESSION_WAITING_STATES,
+} from '../shared/agent-work-sessions.ts';
 import { listAgentDirectory } from './agent-directory.ts';
 import {
   archiveMemory,
@@ -3078,6 +3083,19 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   app.get('/api/agent-work-sessions', (req, res, next) => {
     try {
       res.json(reclaimableWorkSessions(db, clock()));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.get('/api/agent-work-sessions/live', (req, res, next) => {
+    try {
+      const query = z
+        .object({
+          state: z.enum(AGENT_WORK_SESSION_WAITING_STATES).optional(),
+          limit: z.coerce.number().int().min(1).max(AGENT_WORK_SESSION_LIST_MAX_LIMIT).optional(),
+        })
+        .parse(req.query);
+      res.json(liveWaitingWorkSessions(db, query, clock()));
     } catch (error) {
       next(error);
     }

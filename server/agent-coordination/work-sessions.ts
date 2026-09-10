@@ -2,7 +2,13 @@ import crypto from 'node:crypto';
 import type { Db } from '../db.ts';
 import { transaction } from '../db.ts';
 import { AgentWorkSessionError, canMutate } from '../domain/agent-work-sessions.ts';
-import type { AgentWorkSession } from '../../shared/agent-work-sessions.ts';
+import {
+  AGENT_WORK_SESSION_LIST_DEFAULT_LIMIT,
+  AGENT_WORK_SESSION_LIST_MAX_LIMIT,
+  AGENT_WORK_SESSION_WAITING_STATES,
+  type AgentWorkSession,
+  type AgentWorkSessionWaitingState,
+} from '../../shared/agent-work-sessions.ts';
 const id = () => crypto.randomUUID();
 type Row = Record<string, any>;
 function out(r: Row): AgentWorkSession {
@@ -13,6 +19,7 @@ function out(r: Row): AgentWorkSession {
     subjectId: r.subject_id as string | null,
     agentLabel: r.agent_label as string,
     state: r.state as AgentWorkSession['state'],
+    waitingSince: r.waiting_since as string | null,
     leaseExpiresAt: r.lease_expires_at as string | null,
     lastHeartbeatAt: r.last_heartbeat_at as string | null,
     baseRevision: r.base_revision as string,
@@ -66,7 +73,7 @@ export function startWorkSession(
       t = now.toISOString(),
       lease = new Date(now.getTime() + input.leaseSeconds * 1000).toISOString();
     db.prepare(
-      'INSERT INTO agent_work_sessions(id,handoff_id,subject_type,subject_id,agent_label,state,lease_expires_at,last_heartbeat_at,base_revision,branch,worktree,current_step,checkpoints_json,evidence_json,validations_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+      'INSERT INTO agent_work_sessions(id,handoff_id,subject_type,subject_id,agent_label,state,lease_expires_at,last_heartbeat_at,base_revision,branch,worktree,current_step,checkpoints_json,evidence_json,validations_json,created_at,updated_at,waiting_since) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
     ).run(
       sid,
       input.handoffId,
@@ -85,6 +92,7 @@ export function startWorkSession(
       '[]',
       t,
       t,
+      null,
     );
     return get(db, sid);
   });
@@ -153,9 +161,16 @@ export function transitionWorkSession(
         : ['IN_PROGRESS', 'NEEDS_INPUT', 'BLOCKED'],
     );
     const t = now.toISOString();
+    const waitingSince = AGENT_WORK_SESSION_WAITING_STATES.includes(
+      state as AgentWorkSessionWaitingState,
+    )
+      ? s.state === state && s.waitingSince
+        ? s.waitingSince
+        : t
+      : null;
     db.prepare(
-      'UPDATE agent_work_sessions SET state=?,abandoned_at=?,abandon_reason=?,updated_at=? WHERE id=?',
-    ).run(state, state === 'ABANDONED' ? t : null, reason ?? null, t, sid);
+      'UPDATE agent_work_sessions SET state=?,waiting_since=?,abandoned_at=?,abandon_reason=?,updated_at=? WHERE id=?',
+    ).run(state, waitingSince, state === 'ABANDONED' ? t : null, reason ?? null, t, sid);
     return get(db, sid);
   });
 }
@@ -175,6 +190,26 @@ export function reclaimableWorkSessions(db: Db, now = new Date()): AgentWorkSess
         "SELECT * FROM agent_work_sessions WHERE state IN ('CLAIMED','IN_PROGRESS','NEEDS_INPUT','BLOCKED') AND lease_expires_at <= ? ORDER BY updated_at ASC",
       )
       .all(now.toISOString()) as Row[]
+  ).map(out);
+}
+export function liveWaitingWorkSessions(
+  db: Db,
+  filter: { state?: AgentWorkSessionWaitingState; limit?: number } = {},
+  now = new Date(),
+): AgentWorkSession[] {
+  const limit = Math.min(
+    filter.limit ?? AGENT_WORK_SESSION_LIST_DEFAULT_LIMIT,
+    AGENT_WORK_SESSION_LIST_MAX_LIMIT,
+  );
+  return (
+    db
+      .prepare(
+        `SELECT * FROM agent_work_sessions
+     WHERE state IN ('NEEDS_INPUT','BLOCKED') AND lease_expires_at > ?
+       AND (? IS NULL OR state = ?)
+     ORDER BY waiting_since ASC, id ASC LIMIT ?`,
+      )
+      .all(now.toISOString(), filter.state ?? null, filter.state ?? null, limit) as Row[]
   ).map(out);
 }
 export function reclaimWorkSession(
