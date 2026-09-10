@@ -59,4 +59,43 @@ describe('DiscussionPanel', () => {
       ),
     );
   });
+
+  it('offers the empty-state start flow with the locked workspace scope', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(page([]))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: 'c2',
+            title: 'New thread',
+            messageCount: 0,
+            updatedAt: '2026-09-10T12:00:00Z',
+            state: 'ACTIVE',
+          }),
+          { status: 201 },
+        ),
+      )
+      .mockResolvedValueOnce(page([]))
+      .mockResolvedValueOnce(page([]));
+    render(
+      <MemoryRouter>
+        <DiscussionPanel
+          scopeType="task"
+          scopeId="t1"
+          subjectLabel="Task One"
+          subjectPath="/tasks/t1"
+        />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText(/No discussion yet/)).toBeVisible();
+    fireEvent.change(screen.getByLabelText('Thread title'), { target: { value: 'New thread' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Start thread' }));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/agent-conversations',
+        expect.objectContaining({ method: 'POST' }),
+      ),
+    );
+  });
 });
