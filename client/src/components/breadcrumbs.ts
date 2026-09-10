@@ -3,9 +3,9 @@
  * labeled segment; the trail is the matching prefixes of the current path plus a
  * stable Command Center root. Adding a page is a table row — not a per-page crumb.
  *
- * Task detail is a modal, not a route, so it never appears here (issue #68, option a).
+ * Task detail is a durable route so links can survive reloads and bind to discussion.
  */
-import type { Client, Project } from '../../../shared/types';
+import type { Client, Project, Task } from '../../../shared/types';
 
 export type BreadcrumbEntity = { id: string; name: string };
 export type BreadcrumbClient = Pick<Client, 'id' | 'name' | 'status' | 'mergedInto'>;
@@ -14,6 +14,7 @@ export type BreadcrumbProject = Pick<Project, 'id' | 'name' | 'clientId' | 'clie
 export type BreadcrumbData = {
   clients: readonly BreadcrumbClient[];
   projects: readonly BreadcrumbProject[];
+  tasks?: readonly Pick<Task, 'id' | 'title' | 'projectId' | 'clientId'>[];
 };
 
 export type BreadcrumbSegment = {
@@ -30,6 +31,7 @@ export type BreadcrumbRoute = {
   contextualAncestors?: (
     searchParams: URLSearchParams,
     data: BreadcrumbData,
+    pathParams?: Record<string, string>,
   ) => BreadcrumbAncestor[];
   preserveSearch?: boolean;
 };
@@ -61,6 +63,28 @@ const statusProjectAncestors = (
   ];
 };
 
+const taskAncestors = (
+  _searchParams: URLSearchParams,
+  data: BreadcrumbData,
+  pathParams: Record<string, string> = {},
+): BreadcrumbAncestor[] => {
+  const task = data.tasks?.find((candidate) => candidate.id === pathParams.taskId);
+  const project = task && data.projects.find((candidate) => candidate.id === task.projectId);
+  if (!task || !project) return [];
+  const client = data.clients.find((candidate) => candidate.id === project.clientId);
+  return [
+    ...(client && client.status !== 'ARCHIVED' && !client.mergedInto
+      ? [
+          { label: 'Clients', href: '/clients' },
+          { label: client.name, href: `/clients/${encodeURIComponent(client.id)}` },
+        ]
+      : []),
+    { label: 'Projects', href: '/projects' },
+    { label: project.name, href: `/projects/${encodeURIComponent(project.id)}` },
+    { label: 'Tasks', href: '/tasks' },
+  ];
+};
+
 export const BREADCRUMB_ROUTES: readonly BreadcrumbRoute[] = [
   { path: '/', label: 'Dashboard' },
   { path: '/clients', label: 'Clients' },
@@ -80,6 +104,12 @@ export const BREADCRUMB_ROUTES: readonly BreadcrumbRoute[] = [
     label: 'Status',
     contextualAncestors: statusProjectAncestors,
     preserveSearch: true,
+  },
+  { path: '/tasks', label: 'Tasks' },
+  {
+    path: '/tasks/:taskId',
+    label: (params, data) => data.tasks?.find((task) => task.id === params.taskId)?.title ?? 'Task',
+    contextualAncestors: taskAncestors,
   },
   { path: '/calendar', label: 'Calendar' },
   { path: '/signal', label: 'Signal' },
@@ -136,7 +166,8 @@ export function breadcrumbsFor(
     const route = routes.find((candidate) => matchRoute(prefix, candidate) !== null);
     if (!route) continue;
     const params = matchRoute(prefix, route) ?? {};
-    if (route.contextualAncestors) matched.push(...route.contextualAncestors(searchParams, data));
+    if (route.contextualAncestors)
+      matched.push(...route.contextualAncestors(searchParams, data, params));
     matched.push({
       href: `${prefix}${route.preserveSearch ? search : ''}`,
       label: resolveLabel(route, params, data),

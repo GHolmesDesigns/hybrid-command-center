@@ -59,7 +59,7 @@ test('operator can list a seeded handoff, follow its subject link, and cancel it
   await expect(row).toContainText('claude');
   await expect(row.getByRole('link', { name: new RegExp(`Task: ${task.id}`) })).toHaveAttribute(
     'href',
-    `/status?project=${project.id}`,
+    `/tasks/${task.id}`,
   );
 
   await row.click();

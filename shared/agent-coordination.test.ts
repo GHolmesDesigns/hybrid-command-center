@@ -129,7 +129,7 @@ describe('operator inbox helpers', () => {
     );
     expect(
       handoffSubjectPath({ subjectType: 'task', subjectId: 't1' }, [{ id: 't1', projectId: 'p9' }]),
-    ).toBe('/status?project=p9');
+    ).toBe('/tasks/t1');
     expect(handoffSubjectPath({ subjectType: 'task', subjectId: 'missing' }, [])).toBeNull();
     expect(handoffSubjectPath({ subjectType: 'freeform', subjectId: 'x' })).toBeNull();
     expect(handoffMessageExcerpt('short')).toBe('short');

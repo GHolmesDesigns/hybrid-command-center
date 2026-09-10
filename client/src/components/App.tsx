@@ -5,6 +5,7 @@ import {
   Routes,
   useLocation,
   useNavigate,
+  useParams,
   useSearchParams,
 } from 'react-router-dom';
 import {
@@ -50,6 +51,8 @@ import { SignalView } from './SignalView';
 import { TasksView } from './TasksView';
 import { HealthView } from './HealthView';
 import { ConversationsView } from './ConversationsView';
+import { TaskDetail } from './TaskDetail';
+import { PageHead } from './Shell';
 import { Nav } from './Shell';
 import { brandStyle } from './ui-shared';
 
@@ -81,8 +84,8 @@ function LegacyKanbanRedirect() {
  * only the top-bar entry point.
  */
 function TopbarAddPost() {
-  const navigate = useNavigate();
   const location = useLocation();
+  const navigate = useNavigate();
   const [params] = useSearchParams();
   const open = () => {
     if (location.pathname === '/signal') {
@@ -98,6 +101,79 @@ function TopbarAddPost() {
     <button className="top-action" type="button" onClick={open}>
       <Plus /> Add post
     </button>
+  );
+}
+
+function TaskDetailRoute({
+  tasks,
+  projects,
+  clients,
+  tags,
+  refresh,
+  flash,
+  edit,
+}: {
+  tasks: Task[];
+  projects: Project[];
+  clients: Client[];
+  tags: Tag[];
+  refresh: () => Promise<void>;
+  flash: (text: string, tone?: 'success' | 'error') => void;
+  edit: (task: Task) => void;
+}) {
+  const { taskId } = useParams();
+  const navigate = useNavigate();
+  const task = tasks.find((candidate) => candidate.id === taskId);
+  if (!task)
+    return (
+      <>
+        <div className="backline">
+          <button className="link-button" onClick={() => navigate('/tasks')}>
+            ← All tasks
+          </button>
+        </div>
+        <PageHead
+          focusOnMount
+          eyebrow="Task"
+          title="Task not found"
+          body="This task may have been deleted or is no longer available in Command Center."
+        />
+      </>
+    );
+  const activeProjectIds = new Set(
+    projects
+      .filter(
+        (project) =>
+          project.status !== 'ARCHIVED' &&
+          !clients.some((client) => client.id === project.clientId && client.status === 'ARCHIVED'),
+      )
+      .map((project) => project.id),
+  );
+  const visibleTasks = tasks.filter(
+    (candidate) =>
+      activeProjectIds.has(candidate.projectId) ||
+      candidate.id === task.id ||
+      task.dependencyIds.includes(candidate.id),
+  );
+  return (
+    <>
+      <div className="backline">
+        <button className="link-button" onClick={() => navigate('/tasks')}>
+          ← All tasks
+        </button>
+      </div>
+      <TaskDetail
+        task={task}
+        tasks={visibleTasks}
+        tags={tags}
+        close={() => navigate('/tasks')}
+        edit={() => edit(task)}
+        refresh={refresh}
+        flash={flash}
+        projectExists={projects.some((project) => project.id === task.projectId)}
+        clientExists={clients.some((client) => client.id === task.clientId)}
+      />
+    </>
   );
 }
 
@@ -184,6 +260,7 @@ export function App() {
     await refresh();
     flash(text);
   };
+  const open = (next: Modal) => setModal(next);
   const toggleCollapse = () => setCollapsed((v) => !v);
   // The remembered project is only a default, and only while TaskForm() still offers it.
   const defaultProject = projects.some((p) => p.id === lastProjectId && p.status !== 'ARCHIVED')
@@ -279,7 +356,7 @@ export function App() {
           >
             <Menu />
           </button>
-          <BreadcrumbTrail clients={clients} projects={projects} />
+          <BreadcrumbTrail clients={clients} projects={projects} tasks={tasks} />
           <div className="top-actions">
             <TopbarAddPost />
             <button
@@ -300,7 +377,7 @@ export function App() {
                   refreshedAt={dashboardRefreshedAt}
                   refreshError={dashboardRefreshError}
                   refreshing={refreshing}
-                  open={setModal}
+                  open={open}
                   defaultProject={defaultProject}
                   refresh={refresh}
                   flash={flash}
@@ -314,7 +391,7 @@ export function App() {
                   clients={clients}
                   projects={projects}
                   viewDefaults={viewDefaults}
-                  open={setModal}
+                  open={open}
                   refresh={refresh}
                   flash={flash}
                 />
@@ -326,7 +403,7 @@ export function App() {
                 <ClientDetail
                   clients={clients}
                   projects={projects}
-                  open={setModal}
+                  open={open}
                   refresh={refresh}
                   flash={flash}
                 />
@@ -342,7 +419,7 @@ export function App() {
                   categories={categories}
                   tasks={tasks}
                   viewDefaults={viewDefaults}
-                  open={setModal}
+                  open={open}
                   refresh={refresh}
                   flash={flash}
                 />
@@ -355,7 +432,7 @@ export function App() {
                   projects={projects}
                   tasks={tasks}
                   updateTasks={setTasks}
-                  open={setModal}
+                  open={open}
                   remember={setLastProjectId}
                   refresh={refresh}
                   flash={flash}
@@ -371,7 +448,7 @@ export function App() {
                   clients={clients}
                   projects={projects}
                   tags={tags}
-                  open={setModal}
+                  open={open}
                   remember={setLastProjectId}
                   refresh={refresh}
                   flash={flash}
@@ -384,6 +461,20 @@ export function App() {
               path="/tasks"
               element={
                 <TasksView tasks={tasks} clients={clients} projects={projects} tags={tags} />
+              }
+            />
+            <Route
+              path="/tasks/:taskId"
+              element={
+                <TaskDetailRoute
+                  tasks={tasks}
+                  projects={projects}
+                  clients={clients}
+                  tags={tags}
+                  refresh={refresh}
+                  flash={flash}
+                  edit={(task) => setModal({ type: 'task', value: task })}
+                />
               }
             />
             <Route
