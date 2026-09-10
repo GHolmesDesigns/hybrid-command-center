@@ -1,5 +1,15 @@
 # Changelog
 
+## [6.6.0] - 2026-09-10
+
+### Added
+
+- Live work-session reads now expose valid-lease operator waits and record when a session entered its waiting state.
+
+### Breaking changes
+
+None.
+
 All notable changes to Hybrid Command Center are recorded here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this

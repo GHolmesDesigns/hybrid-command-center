@@ -9,6 +9,10 @@ export const AGENT_WORK_SESSION_STATES = [
   'COMPLETED',
   'ABANDONED',
 ] as const;
+export const AGENT_WORK_SESSION_LIST_DEFAULT_LIMIT = 50;
+export const AGENT_WORK_SESSION_LIST_MAX_LIMIT = 100;
+export const AGENT_WORK_SESSION_WAITING_STATES = ['NEEDS_INPUT', 'BLOCKED'] as const;
+export type AgentWorkSessionWaitingState = (typeof AGENT_WORK_SESSION_WAITING_STATES)[number];
 export type AgentWorkSessionState = (typeof AGENT_WORK_SESSION_STATES)[number];
 export const workSessionIdSchema = z.string().trim().min(1).max(200);
 export const workSessionStepSchema = z.string().trim().min(1).max(500);
@@ -49,6 +53,7 @@ export type AgentWorkSession = {
   subjectId: string | null;
   agentLabel: string;
   state: AgentWorkSessionState;
+  waitingSince: string | null;
   leaseExpiresAt: string | null;
   lastHeartbeatAt: string | null;
   baseRevision: string;
