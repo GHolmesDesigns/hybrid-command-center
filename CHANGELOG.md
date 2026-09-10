@@ -1,5 +1,15 @@
 # Changelog
 
+## [6.6.3] - 2026-09-10
+
+### Added
+
+- Added reload-stable task detail pages at `/tasks/:id`, with contextual breadcrumbs and a readable missing-task state.
+
+### Breaking changes
+
+None.
+
 ## [6.6.2] - 2026-09-10
 
 ### Added
