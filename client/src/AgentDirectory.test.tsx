@@ -131,4 +131,43 @@ describe('Agent directory', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Re-check presence' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(6));
   });
+
+  it('fails closed to unknown for malformed activity timestamps', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('/agents/directory')) {
+          return response({
+            agents: [
+              {
+                id: 'a1',
+                label: 'broken',
+                displayName: 'Broken Agent',
+                trustLevel: 'VERIFIED',
+                availability: 'CURRENT',
+                capabilities: [],
+              },
+            ],
+          });
+        }
+        if (url.includes('/agents/presence')) {
+          return response({
+            presence: [
+              {
+                agentLabel: 'broken',
+                state: 'AVAILABLE',
+                availability: null,
+                verifiedAt: 'not-a-date',
+                lastActivityAt: 'not-a-date',
+              },
+            ],
+          });
+        }
+        return response({ summaries: [] });
+      }),
+    );
+    render(<AgentDirectoryCard />);
+    expect(await screen.findByText('Live presence: Unknown')).toBeVisible();
+  });
 });
