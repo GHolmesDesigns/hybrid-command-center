@@ -101,7 +101,11 @@ export function AgentHandoffsCard({
   const canCancel = detail && (detail.state === 'OPEN' || detail.state === 'CLAIMED');
 
   return (
-    <section className="panel settings-card" aria-labelledby="agent-handoffs-heading">
+    <section
+      className="panel settings-card"
+      id="agent-handoffs"
+      aria-labelledby="agent-handoffs-heading"
+    >
       <div className="settings-icon neutral">
         <Handshake />
       </div>

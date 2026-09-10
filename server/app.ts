@@ -341,6 +341,7 @@ import {
   listSummaries,
   markNotificationRead,
   notify,
+  markAllNotificationsRead,
   setPresence,
 } from './agent-summaries.ts';
 
@@ -2921,6 +2922,13 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   app.post('/api/agent-notifications/:id/read', (req, res, next) => {
     try {
       res.json(markNotificationRead(db, req.params.id, clock()));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/agent-notifications/mark-all-read', (req, res, next) => {
+    try {
+      res.json(markAllNotificationsRead(db, clock()));
     } catch (error) {
       next(error);
     }

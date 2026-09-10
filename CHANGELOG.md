@@ -2745,3 +2745,12 @@ reader should not infer one from this release.
 ### Breaking changes
 
 None.
+## [6.5.2] - 2026-09-10
+
+### Added
+
+- In-app agent notifications with exact unread counts, mark-all read, paging, and typed destination links.
+
+### Breaking changes
+
+None.

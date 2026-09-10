@@ -7,6 +7,8 @@ import {
   type AgentPresence,
   type AgentSummary,
   type AgentNotification,
+  notificationInputSchema,
+  type NotificationDestination,
 } from '../shared/agent-summaries.ts';
 
 const presence = (r: any): AgentPresence => ({
@@ -23,6 +25,7 @@ const notification = (r: any): AgentNotification => ({
   agentLabel: r.agent_label,
   title: r.title,
   body: r.body,
+  destination: r.destination_json ? JSON.parse(r.destination_json) : null,
   createdAt: r.created_at,
   readAt: r.read_at,
 });
@@ -92,35 +95,86 @@ export function listSummaries(db: Db, raw: unknown = {}, now = new Date()) {
       ).map((x) => x.label);
   return { summaries: labels.map((x) => buildSummary(db, x, now)) };
 }
-export function notify(
-  db: Db,
-  input: { incidentKey: string; kind: string; agentLabel: string; title: string; body: string },
-  now = new Date(),
-) {
+export function notify(db: Db, input: unknown, now = new Date()) {
+  const parsed = notificationInputSchema.parse(input);
+  if (parsed.destination) validateDestination(db, parsed.destination);
   const id = crypto.randomUUID();
   db.prepare(
-    'INSERT OR IGNORE INTO agent_notifications(id,incident_key,kind,agent_label,title,body,created_at) VALUES(?,?,?,?,?,?,?)',
+    'INSERT OR IGNORE INTO agent_notifications(id,incident_key,kind,agent_label,title,body,destination_json,created_at) VALUES(?,?,?,?,?,?,?,?)',
   ).run(
     id,
-    input.incidentKey,
-    input.kind,
-    input.agentLabel,
-    input.title,
-    input.body,
+    parsed.incidentKey,
+    parsed.kind,
+    parsed.agentLabel,
+    parsed.title,
+    parsed.body,
+    parsed.destination ? JSON.stringify(parsed.destination) : null,
     now.toISOString(),
   );
   return notification(
-    db.prepare('SELECT * FROM agent_notifications WHERE incident_key=?').get(input.incidentKey),
+    db.prepare('SELECT * FROM agent_notifications WHERE incident_key=?').get(parsed.incidentKey),
   );
 }
 export function listNotifications(db: Db, raw: unknown = {}) {
   const q = notificationListSchema.parse(raw);
+  const cursor = decodeNotificationCursor(q.cursor);
+  const where = ['(?=0 OR read_at IS NULL)'];
+  const args: (string | number)[] = [q.unreadOnly ? 1 : 0];
+  if (cursor) {
+    where.push('(created_at < ? OR (created_at = ? AND id < ?))');
+    args.push(cursor.at, cursor.at, cursor.id);
+  }
   const rows = db
     .prepare(
-      'SELECT * FROM agent_notifications WHERE (?=0 OR read_at IS NULL) ORDER BY created_at DESC,id DESC LIMIT ?',
+      `SELECT * FROM agent_notifications WHERE ${where.join(' AND ')} ORDER BY created_at DESC,id DESC LIMIT ?`,
     )
-    .all(q.unreadOnly ? 1 : 0, q.limit ?? 100);
-  return { notifications: (rows as any[]).map(notification) };
+    .all(...args, (q.limit ?? 100) + 1) as any[];
+  const page = rows.slice(0, q.limit ?? 100).map(notification);
+  const last = page.at(-1);
+  const unreadCount = (
+    db.prepare('SELECT COUNT(*) count FROM agent_notifications WHERE read_at IS NULL').get() as any
+  ).count;
+  return {
+    notifications: page,
+    unreadCount,
+    nextCursor:
+      rows.length > (q.limit ?? 100) && last
+        ? encodeNotificationCursor(last.createdAt, last.id)
+        : null,
+  };
+}
+const encodeNotificationCursor = (at: string, id: string) =>
+  Buffer.from(JSON.stringify({ at, id }), 'utf8').toString('base64url');
+const decodeNotificationCursor = (cursor?: string): { at: string; id: string } | null => {
+  if (!cursor) return null;
+  try {
+    const x = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+    if (typeof x.at !== 'string' || typeof x.id !== 'string') throw new Error();
+    return x;
+  } catch {
+    throw new Error('Invalid notification cursor.');
+  }
+};
+const validateDestination = (db: Db, destination: NotificationDestination) => {
+  const exists =
+    destination.type === 'agents'
+      ? db.prepare('SELECT 1 FROM agent_registrations WHERE display_label=?').get(destination.id)
+      : destination.type === 'conversation'
+        ? db.prepare('SELECT 1 FROM agent_conversations WHERE id=?').get(destination.id)
+        : destination.type === 'handoff'
+          ? db.prepare('SELECT 1 FROM agent_handoffs WHERE id=?').get(destination.id)
+          : db.prepare('SELECT 1 FROM agent_memory WHERE id=?').get(destination.id);
+  if (!exists)
+    throw Object.assign(new Error('Notification destination does not exist.'), { status: 404 });
+};
+export function markAllNotificationsRead(db: Db, now = new Date()) {
+  return {
+    marked: (
+      db
+        .prepare('UPDATE agent_notifications SET read_at=? WHERE read_at IS NULL')
+        .run(now.toISOString()) as any
+    ).changes,
+  };
 }
 export function markNotificationRead(db: Db, id: string, now = new Date()) {
   const result = db

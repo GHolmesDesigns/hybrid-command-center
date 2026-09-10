@@ -9,6 +9,7 @@ import {
 } from 'react-router-dom';
 import {
   Bot,
+  Bell,
   HeartPulse,
   BriefcaseBusiness,
   CalendarDays,
@@ -119,6 +120,7 @@ export function App() {
     () => localStorage.getItem(LAST_PROJECT_KEY) || '',
   );
   const [branding, setBranding] = useState<Branding>(DEFAULT_BRANDING);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [viewDefaults, setViewDefaults] = useState<ViewDefaults>(CANONICAL_VIEW_DEFAULTS);
   // When the last import wrote its receipt. The Import page reloads its receipts on it, so a
   // modal that finished in front of the page does not leave a stale list behind it.
@@ -159,6 +161,11 @@ export function App() {
   useEffect(() => {
     refresh();
   }, [refresh]);
+  useEffect(() => {
+    api<{ unreadCount?: number }>('/agent-notifications?unreadOnly=true&limit=1')
+      .then((result) => setUnreadNotifications(result.unreadCount ?? 0))
+      .catch(() => undefined);
+  }, [location.pathname]);
   useEffect(() => {
     setNavOpen(false);
   }, [location.pathname]);
@@ -220,7 +227,23 @@ export function App() {
           <Nav icon={<CalendarDays />} to="/calendar" label="Calendar" collapsed={collapsed} />
           <Nav icon={<Megaphone />} to="/signal" label="Signal" collapsed={collapsed} />
           <Nav icon={<HeartPulse />} to="/health" label="Health" collapsed={collapsed} />
-          <Nav icon={<Bot />} to="/agents" label="Agents" collapsed={collapsed} />
+          <Nav
+            icon={
+              <>
+                <Bot />
+                <Bell
+                  aria-label={
+                    unreadNotifications
+                      ? `${unreadNotifications} unread notifications`
+                      : 'Notifications'
+                  }
+                />
+              </>
+            }
+            to="/agents"
+            label="Agents"
+            collapsed={collapsed}
+          />
           <Nav icon={<Settings />} to="/settings" label="Settings" collapsed={collapsed} />
         </nav>
         <div className="sidebar-foot">

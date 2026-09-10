@@ -7,6 +7,7 @@ import { PageHead } from './Shell';
 import { AgentDirectoryCard } from './AgentDirectoryCard';
 import { Link } from 'react-router-dom';
 import { AgentMemoryReviewCard } from './AgentMemoryReviewCard';
+import { AgentNotificationsCard } from './AgentNotificationsCard';
 
 /**
  * Agents module (C136 / #420): connection setup, health, and handoffs in one place.
@@ -40,6 +41,7 @@ export function AgentsView({
         <DriveWriteRequestsCard flash={flash} />
         <AgentMemoryReviewCard flash={flash} />
         <AgentHandoffsCard tasks={tasks} flash={flash} />
+        <AgentNotificationsCard flash={flash} />
       </div>
     </div>
   );

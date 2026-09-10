@@ -26,8 +26,26 @@ export const notificationListSchema = z
   .object({
     unreadOnly: z.coerce.boolean().optional(),
     limit: z.coerce.number().int().min(1).max(100).optional(),
+    cursor: z.string().max(500).optional(),
   })
   .strict();
+export const notificationDestinationSchema = z
+  .object({
+    type: z.enum(['conversation', 'handoff', 'agents', 'memory']),
+    id: z.string().trim().min(1).max(200),
+  })
+  .strict();
+export const notificationInputSchema = z
+  .object({
+    incidentKey: z.string().trim().min(1).max(200),
+    kind: z.string().trim().min(1).max(100),
+    agentLabel: z.string().trim().min(1).max(200),
+    title: z.string().trim().min(1).max(200),
+    body: z.string().trim().min(1).max(4000),
+    destination: notificationDestinationSchema.optional(),
+  })
+  .strict();
+export type NotificationDestination = z.infer<typeof notificationDestinationSchema>;
 export type AgentPresence = {
   agentLabel: string;
   state: PresenceState;
@@ -49,6 +67,7 @@ export type AgentNotification = {
   agentLabel: string;
   title: string;
   body: string;
+  destination: NotificationDestination | null;
   createdAt: string;
   readAt: string | null;
 };
