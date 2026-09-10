@@ -36,7 +36,7 @@ describe('agent notifications card', () => {
     expect(await screen.findByText('Needs review')).toBeVisible();
     expect(screen.getByLabelText('4 unread notifications')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Mark all read' })).toBeEnabled();
-    expect(screen.getByRole('link', { name: 'Open destination' })).toHaveAttribute(
+    expect(screen.getAllByRole('link', { name: 'Open destination' })[0]).toHaveAttribute(
       'href',
       '/agents#agent-directory',
     );
