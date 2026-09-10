@@ -105,4 +105,73 @@ describe('agent notifications card', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Load more' }));
     expect(await screen.findByText('Older')).toBeVisible();
   });
+
+  it('links every supported destination and omits links when absent', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          notifications: [
+            {
+              id: 'conversation',
+              incidentKey: 'i',
+              kind: 'test',
+              agentLabel: 'a',
+              title: 'Conversation',
+              body: 'b',
+              createdAt: '2026-09-10T12:00:00.000Z',
+              readAt: 'now',
+              destination: { type: 'conversation', id: 'c' },
+            },
+            {
+              id: 'memory',
+              incidentKey: 'i',
+              kind: 'test',
+              agentLabel: 'a',
+              title: 'Memory',
+              body: 'b',
+              createdAt: '2026-09-10T12:00:00.000Z',
+              readAt: 'now',
+              destination: { type: 'memory', id: 'm' },
+            },
+            {
+              id: 'handoff',
+              incidentKey: 'i',
+              kind: 'test',
+              agentLabel: 'a',
+              title: 'Handoff',
+              body: 'b',
+              createdAt: '2026-09-10T12:00:00.000Z',
+              readAt: 'now',
+              destination: { type: 'handoff', id: 'h' },
+            },
+            {
+              id: 'none',
+              incidentKey: 'i',
+              kind: 'test',
+              agentLabel: 'a',
+              title: 'No destination',
+              body: 'b',
+              createdAt: '2026-09-10T12:00:00.000Z',
+              readAt: 'now',
+              destination: null,
+            },
+          ],
+          unreadCount: 0,
+          nextCursor: null,
+        }),
+        { status: 200 },
+      ),
+    );
+    render(
+      <MemoryRouter>
+        <AgentNotificationsCard flash={vi.fn()} />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText('Conversation')).toBeVisible();
+    expect(screen.getAllByRole('link', { name: 'Open destination' })).toHaveLength(3);
+    expect(screen.getByRole('link', { name: 'Open destination' })).toHaveAttribute(
+      'href',
+      '/agents/conversations',
+    );
+  });
 });
