@@ -17,6 +17,14 @@ export type AgentWorkSessionState = (typeof AGENT_WORK_SESSION_STATES)[number];
 export const workSessionIdSchema = z.string().trim().min(1).max(200);
 export const workSessionStepSchema = z.string().trim().min(1).max(500);
 export const workSessionTextSchema = z.string().trim().min(1).max(2000);
+export const workSessionResponseSchema = z
+  .object({
+    sessionId: workSessionIdSchema,
+    message: workSessionTextSchema,
+    clientRequestId: z.string().trim().min(1).max(64),
+    confirmationHash: z.string().length(64),
+  })
+  .strict();
 export const workSessionJsonSchema = z.record(z.string(), z.unknown());
 export const workSessionStartSchema = z
   .object({

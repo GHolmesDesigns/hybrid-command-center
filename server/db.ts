@@ -729,6 +729,18 @@ CREATE TABLE IF NOT EXISTS agent_work_sessions (
   abandoned_at TEXT,
   abandon_reason TEXT
 );
+-- Operator responses to live waiting sessions (C207). Append-only and idempotent per request.
+CREATE TABLE IF NOT EXISTS agent_work_session_responses (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL REFERENCES agent_work_sessions(id) ON DELETE CASCADE,
+  message TEXT NOT NULL CHECK(length(message) BETWEEN 1 AND 2000),
+  responded_at TEXT NOT NULL,
+  responded_by TEXT NOT NULL CHECK(responded_by = 'operator'),
+  client_request_id TEXT NOT NULL UNIQUE,
+  confirmation_hash TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_agent_work_session_responses_session
+  ON agent_work_session_responses(session_id, responded_at, id);
 -- MCP mutation idempotency for note, complete, and cancel (C117). One row per
 -- (agent_label, client_request_id, tool); retention in server/agent-coordination/mutations.ts.
 CREATE TABLE IF NOT EXISTS agent_handoff_mutations (

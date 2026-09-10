@@ -306,7 +306,10 @@ import {
   postHandoff,
 } from './agent-coordination/service.ts';
 import { reclaimableWorkSessions, reclaimWorkSession } from './agent-coordination/work-sessions.ts';
-import { liveWaitingWorkSessions } from './agent-coordination/work-sessions.ts';
+import {
+  liveWaitingWorkSessions,
+  respondToWorkSession,
+} from './agent-coordination/work-sessions.ts';
 import {
   AGENT_WORK_SESSION_LIST_MAX_LIMIT,
   AGENT_WORK_SESSION_WAITING_STATES,
@@ -3096,6 +3099,23 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         })
         .parse(req.query);
       res.json(liveWaitingWorkSessions(db, query, clock()));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/agent-work-sessions/:id/responses', (req, res, next) => {
+    try {
+      const body = z
+        .object({
+          message: z.string().trim().min(1).max(2000),
+          clientRequestId: z.string().trim().min(1).max(64),
+          confirmationHash: z.string().length(64),
+        })
+        .strict()
+        .parse(req.body);
+      res
+        .status(201)
+        .json(respondToWorkSession(db, { sessionId: req.params.id, ...body }, clock()));
     } catch (error) {
       next(error);
     }

@@ -14,9 +14,70 @@ import {
   transitionWorkSession,
   releaseWorkSession,
   resumeWorkSession,
+  respondToWorkSession,
+  workSessionResponseConfirmationHash,
 } from './work-sessions.ts';
 
 describe('leased work sessions', () => {
+  it('stores one operator response, exposes it on resume, and changes no session or handoff state', () => {
+    const db = createDb(':memory:');
+    const now = new Date('2026-08-28T00:00:00.000Z');
+    const handoff = postHandoff(
+      db,
+      {
+        fromAgentLabel: 'a',
+        toAgentLabel: null,
+        subjectType: 'freeform',
+        subjectId: null,
+        message: 'x',
+      },
+      now,
+    );
+    claimHandoff(db, handoff.id, 'a', now);
+    const session = startWorkSession(
+      db,
+      { handoffId: handoff.id, agentLabel: 'a', leaseSeconds: 600, baseRevision: 'r' },
+      now,
+    );
+    const waiting = transitionWorkSession(
+      db,
+      session.id,
+      'a',
+      'NEEDS_INPUT',
+      'need',
+      new Date(now.getTime() + 1000),
+    );
+    const beforeSession = db
+      .prepare('SELECT state, lease_expires_at, updated_at FROM agent_work_sessions WHERE id=?')
+      .get(session.id);
+    const beforeHandoff = db
+      .prepare('SELECT state, claimed_by FROM agent_handoffs WHERE id=?')
+      .get(handoff.id);
+    const message = 'Use the approved copy.';
+    const input = {
+      sessionId: session.id,
+      message,
+      clientRequestId: 'operator-1',
+      confirmationHash: workSessionResponseConfirmationHash(waiting, message),
+    };
+    const first = respondToWorkSession(db, input, new Date(now.getTime() + 2000));
+    const replay = respondToWorkSession(db, input, new Date(now.getTime() + 3000));
+    expect(first).toMatchObject({ sessionId: session.id, message, respondedBy: 'operator' });
+    expect(replay).toEqual(expect.objectContaining({ id: (first as { id: string }).id }));
+    expect(db.prepare('SELECT count(*) AS count FROM agent_work_session_responses').get()).toEqual({
+      count: 1,
+    });
+    expect(resumeWorkSession(db, session.id).responses).toHaveLength(1);
+    expect(
+      db
+        .prepare('SELECT state, lease_expires_at, updated_at FROM agent_work_sessions WHERE id=?')
+        .get(session.id),
+    ).toEqual(beforeSession);
+    expect(
+      db.prepare('SELECT state, claimed_by FROM agent_handoffs WHERE id=?').get(handoff.id),
+    ).toEqual(beforeHandoff);
+    db.close();
+  });
   it('records resumable progress and explicitly reopens an expired handoff on reclaim', () => {
     const db = createDb(':memory:');
     const t = new Date('2026-08-28T00:00:00.000Z');

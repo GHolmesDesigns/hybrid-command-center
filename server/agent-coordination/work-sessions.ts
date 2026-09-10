@@ -10,6 +10,22 @@ import {
   type AgentWorkSessionWaitingState,
 } from '../../shared/agent-work-sessions.ts';
 const id = () => crypto.randomUUID();
+export function workSessionResponseConfirmationHash(
+  session: AgentWorkSession,
+  message: string,
+): string {
+  return crypto
+    .createHash('sha256')
+    .update(
+      JSON.stringify({
+        sessionId: session.id,
+        state: session.state,
+        updatedAt: session.updatedAt,
+        message,
+      }),
+    )
+    .digest('hex');
+}
 type Row = Record<string, any>;
 function out(r: Row): AgentWorkSession {
   return {
@@ -237,5 +253,51 @@ export function reclaimWorkSession(
   });
 }
 export function resumeWorkSession(db: Db, sid: string) {
-  return get(db, sid);
+  const session = get(db, sid);
+  const responses = db
+    .prepare(
+      `SELECT id, message, responded_at AS respondedAt, responded_by AS respondedBy
+     FROM agent_work_session_responses WHERE session_id=? ORDER BY responded_at ASC, id ASC LIMIT 50`,
+    )
+    .all(sid);
+  return { ...session, responses };
+}
+
+export function respondToWorkSession(
+  db: Db,
+  input: { sessionId: string; message: string; clientRequestId: string; confirmationHash: string },
+  now = new Date(),
+) {
+  return transaction(db, () => {
+    const session = get(db, input.sessionId);
+    if (
+      !AGENT_WORK_SESSION_WAITING_STATES.includes(session.state as AgentWorkSessionWaitingState) ||
+      !session.leaseExpiresAt ||
+      Date.parse(session.leaseExpiresAt) <= now.getTime()
+    )
+      throw new AgentWorkSessionError('Only a live waiting work session accepts responses.', 409);
+    if (workSessionResponseConfirmationHash(session, input.message) !== input.confirmationHash)
+      throw new AgentWorkSessionError('The response confirmation is stale or invalid.', 409);
+    const existing = db
+      .prepare('SELECT * FROM agent_work_session_responses WHERE client_request_id=?')
+      .get(input.clientRequestId) as Row | undefined;
+    if (existing) return existing;
+    const at = now.toISOString();
+    db.prepare(
+      `INSERT INTO agent_work_session_responses (id, session_id, message, responded_at, responded_by, client_request_id, confirmation_hash) VALUES(?,?,?,?,?,?,?)`,
+    ).run(
+      id(),
+      input.sessionId,
+      input.message,
+      at,
+      'operator',
+      input.clientRequestId,
+      input.confirmationHash,
+    );
+    return db
+      .prepare(
+        `SELECT id, session_id AS sessionId, message, responded_at AS respondedAt, responded_by AS respondedBy, client_request_id AS clientRequestId FROM agent_work_session_responses WHERE client_request_id=?`,
+      )
+      .get(input.clientRequestId);
+  });
 }
