@@ -8,6 +8,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [6.4.14] - 2026-09-10
+
+### Added
+
+- Added an operator Conversations page with active and archived filters, reverse paging, replies, archive controls, and frozen message provenance badges.
+- Added conversation MCP tools for listing, creating, reading, paging, posting, and archiving threads.
+
+### Breaking changes
+
+None.
+
 ## [6.4.13] - 2026-09-10
 
 ### Added
