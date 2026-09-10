@@ -3,6 +3,11 @@ import { agentLabelSchema } from './agent-coordination.ts';
 
 export const PRESENCE_STATES = ['AVAILABLE', 'BUSY', 'AWAY', 'OFFLINE'] as const;
 export type PresenceState = (typeof PRESENCE_STATES)[number];
+/** Presence and MCP activity share one 15-minute stale boundary. */
+export const AGENT_PRESENCE_STALE_MS = 15 * 60 * 1000;
+export function isAgentActivityStale(lastActivityAt: string | null, now = new Date()): boolean {
+  return !lastActivityAt || now.getTime() - Date.parse(lastActivityAt) > AGENT_PRESENCE_STALE_MS;
+}
 export const presenceInputSchema = z
   .object({
     state: z.enum(PRESENCE_STATES),

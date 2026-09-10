@@ -165,6 +165,7 @@ export function McpHealthPanelCard({
                       : 'Never recorded'}
                     {agent.lastOrigin ? ` from ${agent.lastOrigin}` : ''}
                   </small>
+                  {agent.isStale && <small>Activity is stale (15-minute boundary).</small>}
                   <small>
                     Last success:{' '}
                     {agent.lastSuccessAt
