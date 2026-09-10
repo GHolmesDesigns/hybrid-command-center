@@ -169,7 +169,7 @@ describe('agent notifications card', () => {
     );
     expect(await screen.findByText('Conversation')).toBeVisible();
     expect(screen.getAllByRole('link', { name: 'Open destination' })).toHaveLength(3);
-    expect(screen.getByRole('link', { name: 'Open destination' })).toHaveAttribute(
+    expect(screen.getAllByRole('link', { name: 'Open destination' })[0]).toHaveAttribute(
       'href',
       '/agents/conversations',
     );
