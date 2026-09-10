@@ -65,4 +65,44 @@ describe('agent notifications card', () => {
     fireEvent.change(screen.getByLabelText('Notification filter'), { target: { value: 'false' } });
     expect(await screen.findByText('No notifications match this filter.')).toBeVisible();
   });
+
+  it('marks one notification read and loads the next page', async () => {
+    const fetch = vi.spyOn(globalThis, 'fetch');
+    const row = {
+      id: 'n2',
+      incidentKey: 'i2',
+      kind: 'test',
+      agentLabel: 'reviewer',
+      title: 'Read me',
+      body: 'Body',
+      createdAt: '2026-09-10T12:00:00.000Z',
+      readAt: null,
+      destination: null,
+    };
+    fetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ notifications: [row], unreadCount: 1, nextCursor: 'cursor' }), {
+        status: 200,
+      }),
+    );
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify(row), { status: 200 }));
+    fetch.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          notifications: [{ ...row, id: 'n3', title: 'Older' }],
+          unreadCount: 0,
+          nextCursor: null,
+        }),
+        { status: 200 },
+      ),
+    );
+    render(
+      <MemoryRouter>
+        <AgentNotificationsCard flash={vi.fn()} />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText('Read me')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Mark read' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Load more' }));
+    expect(await screen.findByText('Older')).toBeVisible();
+  });
 });
