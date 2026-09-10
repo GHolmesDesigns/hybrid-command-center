@@ -1,10 +1,4 @@
-export const WAITING_INBOX_KINDS = [
-  'WORK_SESSION',
-  'HANDOFF',
-  'DRIVE_WRITE',
-  'AGENT_ACTIVITY',
-] as const;
-export type WaitingInboxKind = (typeof WAITING_INBOX_KINDS)[number];
+export type WaitingInboxKind = 'WORK_SESSION' | 'HANDOFF' | 'DRIVE_WRITE' | 'AGENT_ACTIVITY';
 export type WaitingInboxItem = {
   id: string;
   kind: WaitingInboxKind;

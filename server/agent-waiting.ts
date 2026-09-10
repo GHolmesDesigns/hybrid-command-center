@@ -7,6 +7,25 @@ export function buildWaitingInbox(db: Db, now = new Date()): WaitingInboxRespons
   const items: WaitingInboxItem[] = [];
   const warnings: string[] = [];
   try {
+    const rows = db
+      .prepare(
+        "SELECT id,key,value,suggested_by,updated_at FROM agent_memory WHERE state='SUGGESTED' ORDER BY updated_at ASC, id ASC",
+      )
+      .all() as any[];
+    for (const row of rows)
+      items.push({
+        id: row.id,
+        kind: 'AGENT_ACTIVITY',
+        agent: row.suggested_by,
+        waitingSince: row.updated_at,
+        destination: 'Suggested memory',
+        resolutionPath: '/agents#agent-memory',
+        detail: `${row.key}: ${row.value}`,
+      });
+  } catch {
+    warnings.push('Suggested memory is unavailable.');
+  }
+  try {
     for (const session of liveWaitingWorkSessions(db, {}, now))
       items.push({
         id: session.id,
