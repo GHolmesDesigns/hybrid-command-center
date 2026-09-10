@@ -1,5 +1,15 @@
 # Changelog
 
+## [6.6.2] - 2026-09-10
+
+### Added
+
+- Operators can see a cross-source “Waiting on you” inbox on Agents and Dashboard.
+
+### Breaking changes
+
+None.
+
 ## [6.6.1] - 2026-09-10
 
 ### Added
