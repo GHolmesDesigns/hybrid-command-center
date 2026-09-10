@@ -87,6 +87,8 @@ export function correctMemory(
 ) {
   const patch = agentMemoryPatchSchema.parse(raw);
   const current = getMemory(db, id);
+  if (current.state !== 'SUGGESTED')
+    throw Object.assign(new Error('Only suggested memory can be corrected.'), { status: 409 });
   const next = {
     key: patch.key ?? current.key,
     value: patch.value ?? current.value,
@@ -99,6 +101,17 @@ export function correctMemory(
   db.prepare(
     "UPDATE agent_memory SET key=?,value=?,scope_type=?,scope_id=?,state='APPROVED',approved_by=?,updated_at=?,expires_at=? WHERE id=?",
   ).run(next.key, next.value, next.scope.type, next.scope.id ?? null, operator, at, expires, id);
+  return getMemory(db, id);
+}
+export function approveMemory(db: Db, id: string, operator = 'operator', now = new Date()) {
+  const current = getMemory(db, id);
+  if (current.state !== 'SUGGESTED')
+    throw Object.assign(new Error('Only suggested memory can be approved.'), { status: 409 });
+  db.prepare("UPDATE agent_memory SET state='APPROVED',approved_by=?,updated_at=? WHERE id=?").run(
+    operator,
+    now.toISOString(),
+    id,
+  );
   return getMemory(db, id);
 }
 export function archiveMemory(db: Db, id: string, now = new Date()) {

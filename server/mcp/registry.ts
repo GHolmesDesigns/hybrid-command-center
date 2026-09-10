@@ -413,6 +413,45 @@ const agentTools: McpToolRegistryEntry[] = [
     { id: { type: 'string' } },
     'L',
   ],
+  [
+    'memory_suggest',
+    'Suggest a memory for operator review.',
+    {
+      key: { type: 'string' },
+      value: { type: 'string' },
+      scope: { type: 'object' },
+      source: { type: 'string' },
+      retentionDays: { type: 'integer' },
+    },
+    'L',
+  ],
+  [
+    'memory_list',
+    'List bounded agent memories.',
+    {
+      scope: { type: 'string' },
+      scopeId: { type: 'string' },
+      state: { type: 'string' },
+      limit: { type: 'integer' },
+    },
+    'R',
+  ],
+  ['memory_get', 'Get one memory record.', { id: { type: 'string' } }, 'R'],
+  ['memory_approve', 'Approve an unchanged suggested memory.', { id: { type: 'string' } }, 'L'],
+  [
+    'memory_correct',
+    'Correct and approve a suggested memory.',
+    {
+      id: { type: 'string' },
+      key: { type: 'string' },
+      value: { type: 'string' },
+      scope: { type: 'object' },
+      retentionDays: { type: 'integer' },
+    },
+    'L',
+  ],
+  ['memory_archive', 'Archive a memory record.', { id: { type: 'string' } }, 'L'],
+  ['memory_delete', 'Delete a memory record.', { id: { type: 'string' } }, 'L'],
 ].map(([name, description, properties, access]) =>
   agentTool(
     name as string,

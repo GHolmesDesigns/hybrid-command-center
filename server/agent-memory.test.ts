@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createDb } from './db.ts';
 import {
   archiveMemory,
+  approveMemory,
   correctMemory,
   deleteMemory,
   listMemory,
@@ -113,5 +114,23 @@ describe('agent memory', () => {
     deleteMemory(db, current.id);
     expect(listMemory(db).memories).toHaveLength(0);
     expect(old.id).toBeTruthy();
+  });
+  it('approves unchanged suggestions and refuses repeat decisions', () => {
+    const db = createDb(':memory:');
+    const memory = suggestMemory(
+      db,
+      { key: 'k', value: 'v', scope: { type: 'workspace' }, source: 'test' },
+      'agent',
+      new Date('2026-09-08T00:00:00Z'),
+    );
+    const approved = approveMemory(db, memory.id, 'operator', new Date('2026-09-08T01:00:00Z'));
+    expect(approved).toMatchObject({
+      state: 'APPROVED',
+      key: 'k',
+      value: 'v',
+      approvedBy: 'operator',
+    });
+    expect(() => approveMemory(db, memory.id)).toThrow(/suggested/i);
+    expect(() => correctMemory(db, memory.id, { value: 'changed' })).toThrow(/suggested/i);
   });
 });

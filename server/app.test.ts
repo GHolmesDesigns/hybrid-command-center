@@ -94,6 +94,23 @@ describe('agent memory routes', () => {
     await request(app).post(`/api/agent-memory/${id}/archive`).expect(200);
     await request(app).delete(`/api/agent-memory/${id}`).expect(200);
   });
+  it('supports unchanged approval and refuses correction after approval', async () => {
+    const app = createApp(db);
+    const created = await request(app)
+      .post('/api/agent-memory/suggestions')
+      .send({ key: 'approval', value: 'keep', scope: { type: 'workspace' }, source: 'test' })
+      .expect(201);
+    const id = created.body.id;
+    const approved = await request(app).post(`/api/agent-memory/${id}/approve`).expect(200);
+    expect(approved.body).toMatchObject({
+      state: 'APPROVED',
+      key: 'approval',
+      value: 'keep',
+      approvedBy: 'operator',
+    });
+    await request(app).post(`/api/agent-memory/${id}/approve`).expect(409);
+    await request(app).patch(`/api/agent-memory/${id}`).send({ value: 'changed' }).expect(409);
+  });
 });
 /** Reads both stamps straight from SQLite, so the API cannot paper over one of them. */
 const stampsOf = (projectId: string) =>

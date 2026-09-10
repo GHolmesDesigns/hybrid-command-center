@@ -6,6 +6,7 @@ import { DriveWriteRequestsCard } from './DriveWriteRequestsCard';
 import { PageHead } from './Shell';
 import { AgentDirectoryCard } from './AgentDirectoryCard';
 import { Link } from 'react-router-dom';
+import { AgentMemoryReviewCard } from './AgentMemoryReviewCard';
 
 /**
  * Agents module (C136 / #420): connection setup, health, and handoffs in one place.
@@ -37,6 +38,7 @@ export function AgentsView({
         <AgentDirectoryCard />
         <McpHealthPanelCard flash={flash} />
         <DriveWriteRequestsCard flash={flash} />
+        <AgentMemoryReviewCard flash={flash} />
         <AgentHandoffsCard tasks={tasks} flash={flash} />
       </div>
     </div>

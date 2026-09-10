@@ -309,6 +309,7 @@ import { reclaimableWorkSessions, reclaimWorkSession } from './agent-coordinatio
 import { listAgentDirectory } from './agent-directory.ts';
 import {
   archiveMemory,
+  approveMemory,
   correctMemory,
   deleteMemory,
   getMemory,
@@ -2949,6 +2950,13 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   app.patch('/api/agent-memory/:id', (req, res, next) => {
     try {
       res.json(correctMemory(db, req.params.id, req.body, 'operator', clock()));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/agent-memory/:id/approve', (req, res, next) => {
+    try {
+      res.json(approveMemory(db, req.params.id, 'operator', clock()));
     } catch (error) {
       next(error);
     }
