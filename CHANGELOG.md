@@ -1,5 +1,15 @@
 # Changelog
 
+## [6.6.1] - 2026-09-10
+
+### Added
+
+- Operators can send confirmed, idempotent responses to live agent work sessions waiting for input or blocked.
+
+### Breaking changes
+
+None.
+
 ## [6.6.0] - 2026-09-10
 
 ### Added
