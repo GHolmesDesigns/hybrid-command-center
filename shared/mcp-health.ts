@@ -10,6 +10,7 @@ import {
   type McpCoordinationErrorCode,
 } from './mcp-coordination-errors.ts';
 import type { McpAgentEventOutcome } from './mcp-agent-events.ts';
+import { isAgentActivityStale } from './agent-summaries.ts';
 
 export const MCP_HEALTH_PANEL_STATES = [
   'never_connected',
@@ -88,9 +89,12 @@ export const mcpHealthAgentStatsSchema = z.object({
   refusalCount: z.number(),
   failureCount: z.number(),
   rateLimitCount: z.number(),
+  isStale: z.boolean(),
 });
 
 export type McpHealthAgentStats = z.infer<typeof mcpHealthAgentStatsSchema>;
+
+export { isAgentActivityStale };
 
 export const mcpHealthErrorSummarySchema = z.object({
   code: z.enum(MCP_COORDINATION_ERROR_CODES),

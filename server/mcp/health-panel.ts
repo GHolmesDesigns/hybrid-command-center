@@ -25,6 +25,7 @@ import {
 } from '../../shared/agent-coordination.ts';
 import { MCP_AGENT_EVENT_LIMIT } from '../../shared/mcp-agent-events.ts';
 import { listMcpAgentEvents } from './events.ts';
+import { isAgentActivityStale } from '../../shared/agent-summaries.ts';
 
 type EventRow = {
   agentLabel: string | null;
@@ -112,6 +113,7 @@ function aggregateAgentStats(
       refusalCount: 0,
       failureCount: 0,
       rateLimitCount: 0,
+      isStale: isAgentActivityStale(credential.lastUsedAt),
     });
   }
 
@@ -128,7 +130,9 @@ function aggregateAgentStats(
       refusalCount: 0,
       failureCount: 0,
       rateLimitCount: 0,
+      isStale: true,
     };
+    current.isStale = isAgentActivityStale(event.at);
     current.requestCount += 1;
     if (event.outcome === 'REFUSED') current.refusalCount += 1;
     if (event.outcome === 'FAILURE') current.failureCount += 1;
