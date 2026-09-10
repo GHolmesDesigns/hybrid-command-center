@@ -18,6 +18,58 @@ beforeEach(() => {
 });
 
 describe('callMcpTool', () => {
+  it('provides memory suggest, review, approval, correction, archive, and delete parity', async () => {
+    const session = createMcpSession({ agentLabel: 'memory-agent' });
+    const options = { grantedScopes: ['workspace:read', 'workspace:write'] as const, now: NOW };
+    const suggested = await callMcpTool(
+      db,
+      session,
+      'memory_suggest',
+      {
+        key: 'release-process',
+        value: 'Run gates.',
+        scope: { type: 'workspace' },
+        source: 'test',
+      },
+      options,
+    );
+    expect(suggested.outcome).toBe('SUCCESS');
+    const id = (suggested.data as { id: string }).id;
+    expect(
+      (await callMcpTool(db, session, 'memory_list', { state: 'SUGGESTED' }, options)).data,
+    ).toMatchObject({ memories: [{ id }] });
+    expect((await callMcpTool(db, session, 'memory_get', { id }, options)).data).toMatchObject({
+      id,
+      state: 'SUGGESTED',
+    });
+    expect((await callMcpTool(db, session, 'memory_approve', { id }, options)).data).toMatchObject({
+      id,
+      state: 'APPROVED',
+    });
+    const corrected = await callMcpTool(
+      db,
+      session,
+      'memory_suggest',
+      {
+        key: 'correct',
+        value: 'old',
+        scope: { type: 'workspace' },
+        source: 'test',
+      },
+      options,
+    );
+    const secondId = (corrected.data as { id: string }).id;
+    expect(
+      (await callMcpTool(db, session, 'memory_correct', { id: secondId, value: 'new' }, options))
+        .data,
+    ).toMatchObject({ id: secondId, value: 'new', state: 'APPROVED' });
+    expect(
+      (await callMcpTool(db, session, 'memory_archive', { id: secondId }, options)).data,
+    ).toMatchObject({ state: 'ARCHIVED' });
+    expect(
+      (await callMcpTool(db, session, 'memory_delete', { id: secondId }, options)).data,
+    ).toEqual({ ok: true });
+  });
   it('provides conversation parity for an authenticated agent', async () => {
     const session = createMcpSession({ agentLabel: 'cursor' });
     const options = { grantedScopes: ['workspace:read', 'workspace:write'] as const, now: NOW };

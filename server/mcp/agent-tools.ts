@@ -26,6 +26,16 @@ import {
   createConversationSchema,
   messageListSchema,
 } from '../../shared/agent-conversations.ts';
+import {
+  approveMemory,
+  archiveMemory,
+  correctMemory,
+  deleteMemory,
+  getMemory,
+  listMemory,
+  suggestMemory,
+} from '../agent-memory.ts';
+import { agentMemoryListSchema } from '../../shared/agent-memory.ts';
 
 const success = (data: unknown): McpToolCallResult => ({
   outcome: 'SUCCESS',
@@ -126,6 +136,32 @@ export function callAgentTool(
       );
     case 'agent_mark_notification_read':
       return success(markNotificationRead(db, (args as { id: string }).id, options.now));
+    case 'memory_suggest':
+      if (!session.agentLabel)
+        return { outcome: 'REFUSED', error: 'This tool requires an authenticated agent label.' };
+      return success(suggestMemory(db, args, session.agentLabel, options.now));
+    case 'memory_list':
+      return success(listMemory(db, agentMemoryListSchema.parse(args)));
+    case 'memory_get':
+      return success(getMemory(db, (args as { id: string }).id));
+    case 'memory_approve':
+      return success(
+        approveMemory(
+          db,
+          (args as { id: string }).id,
+          session.agentLabel ?? 'operator',
+          options.now,
+        ),
+      );
+    case 'memory_correct': {
+      const { id, ...patch } = args as { id: string; [key: string]: unknown };
+      return success(correctMemory(db, id, patch, session.agentLabel ?? 'operator', options.now));
+    }
+    case 'memory_archive':
+      return success(archiveMemory(db, (args as { id: string }).id, options.now));
+    case 'memory_delete':
+      deleteMemory(db, (args as { id: string }).id);
+      return success({ ok: true });
     default:
       throw new Error(`Unknown agent tool: ${tool}.`);
   }
