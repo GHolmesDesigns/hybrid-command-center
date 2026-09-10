@@ -8,6 +8,7 @@ import { AgentDirectoryCard } from './AgentDirectoryCard';
 import { Link } from 'react-router-dom';
 import { AgentMemoryReviewCard } from './AgentMemoryReviewCard';
 import { AgentNotificationsCard } from './AgentNotificationsCard';
+import { WaitingInboxCard } from './WaitingInboxCard';
 
 /**
  * Agents module (C136 / #420): connection setup, health, and handoffs in one place.
@@ -42,6 +43,7 @@ export function AgentsView({
         <AgentMemoryReviewCard flash={flash} />
         <AgentHandoffsCard tasks={tasks} flash={flash} />
         <AgentNotificationsCard flash={flash} />
+        <WaitingInboxCard />
       </div>
     </div>
   );

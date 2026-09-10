@@ -68,6 +68,7 @@ import { commitClientMerge, isMergedSource, previewClientMerge } from './client-
 import { ClientMergeError } from './domain/client-merge.ts';
 import { touchProjectActivity, touchProjectRecord } from './domain/activity.ts';
 import { buildDashboardSummary } from './domain/dashboard.ts';
+import { buildWaitingInbox } from './agent-waiting.ts';
 import { buildClientSlug } from './domain/client-slugs.ts';
 import {
   advanceRevision,
@@ -2881,6 +2882,9 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     } catch (error) {
       next(error);
     }
+  });
+  app.get('/api/agent-waiting', (_req, res) => {
+    res.json(buildWaitingInbox(db, clock()));
   });
   app.get('/api/agents/directory', (_req, res) => {
     res.json({ agents: listAgentDirectory(db, clock().getTime()) });

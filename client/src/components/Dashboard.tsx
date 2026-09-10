@@ -20,6 +20,7 @@ import { type Modal } from './App';
 import { formatDataAge, formatDate, initials } from './formatting';
 import { Due, Empty, StatusDot } from './Primitives';
 import { PageHead } from './Shell';
+import { WaitingInboxCard } from './WaitingInboxCard';
 
 type DeadlineBucket = 'overdue' | 'today' | 'week';
 
@@ -310,6 +311,7 @@ export function Dashboard({
           </button>
         </div>
       </section>
+      <WaitingInboxCard compact />
     </>
   );
 }
