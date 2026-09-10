@@ -67,7 +67,7 @@ describe('Agents Agent handoffs card', () => {
       .getByRole('heading', { level: 2, name: 'Agent handoffs' })
       .closest('.settings-card') as HTMLElement;
     expect(card).toHaveTextContent('Please finish the caption review.');
-    expect(card.querySelector('a')?.getAttribute('href')).toBe('/status?project=p1');
+    expect(card.querySelector('a')?.getAttribute('href')).toBe('/tasks/t1');
 
     fireEvent.click(screen.getByRole('button', { name: /cursor/i }));
     expect(await screen.findByRole('region', { name: 'Handoff detail' })).toBeVisible();

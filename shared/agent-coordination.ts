@@ -378,7 +378,7 @@ export function handoffSubjectPath(
       return `/signal?post=${encodeURIComponent(id)}`;
     case 'task': {
       const task = tasks.find((candidate) => candidate.id === id);
-      return task ? `/status?project=${encodeURIComponent(task.projectId)}` : null;
+      return task ? `/tasks/${encodeURIComponent(task.id)}` : null;
     }
     case 'freeform':
       return null;

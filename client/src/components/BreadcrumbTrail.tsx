@@ -2,9 +2,9 @@ import { ChevronRight } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { breadcrumbsFor, type BreadcrumbData } from './breadcrumbs';
 
-export function BreadcrumbTrail({ clients, projects }: BreadcrumbData) {
+export function BreadcrumbTrail({ clients, projects, tasks }: BreadcrumbData) {
   const { pathname, search } = useLocation();
-  const segments = breadcrumbsFor(pathname, { clients, projects }, undefined, search);
+  const segments = breadcrumbsFor(pathname, { clients, projects, tasks }, undefined, search);
   return (
     <nav className="crumb" aria-label="Breadcrumb">
       <ol>
