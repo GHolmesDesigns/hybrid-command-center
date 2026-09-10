@@ -8,6 +8,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Releases before 3.0.0 were not recorded in this file; `git log` is authoritative for them.
 The version a card ships as is decided at merge time — see the bump rule in `AGENTS.md`.
 
+## [6.5.0] - 2026-09-10
+
+### Added
+
+- Added the Agents memory review queue with suggested-by-default filtering, scope/state filters, provenance, unchanged approval, correction, archive, and confirmed deletion.
+- Added the unchanged approval HTTP route and full memory MCP lifecycle tools.
+
+### Breaking changes
+
+None.
+
 ## [6.4.14] - 2026-09-10
 
 ### Added
