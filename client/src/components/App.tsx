@@ -48,6 +48,7 @@ import { SettingsView } from './SettingsView';
 import { SignalView } from './SignalView';
 import { TasksView } from './TasksView';
 import { HealthView } from './HealthView';
+import { ConversationsView } from './ConversationsView';
 import { Nav } from './Shell';
 import { brandStyle } from './ui-shared';
 
@@ -385,6 +386,7 @@ export function App() {
             <Route path="/calendar" element={<CalendarView viewDefaults={viewDefaults} />} />
             <Route path="/signal" element={<SignalView viewDefaults={viewDefaults} />} />
             <Route path="/agents" element={<AgentsView tasks={tasks} flash={flash} />} />
+            <Route path="/agents/conversations" element={<ConversationsView flash={flash} />} />
             <Route path="/health" element={<HealthView />} />
             <Route
               path="/settings"

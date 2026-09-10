@@ -32,6 +32,7 @@ describe('agent conversations', () => {
       new Date('2026-09-08T12:02:00.000Z'),
     );
     expect(first.senderLabel).toBe('cursor');
+    expect(first.provenance).toBe('ASSERTED');
     expect(listMessages(db, conversation.id, 'claude', { limit: 1 }).items).toHaveLength(1);
     const page = listMessages(db, conversation.id, 'claude', { limit: 1 });
     expect(page.nextCursor).toBeTruthy();
@@ -40,6 +41,28 @@ describe('agent conversations', () => {
         .senderLabel,
     ).toBe('claude');
     expect(() => listMessages(db, conversation.id, 'other')).toThrow(/not found/i);
+  });
+
+  it('keeps frozen provenance and pages older messages without duplicates', () => {
+    const db = createDb(':memory:');
+    const conversation = createConversation(
+      db,
+      { title: 'Reverse', scope: { type: 'freeform' }, participantLabels: [] },
+      'cursor',
+    );
+    postMessage(db, conversation.id, 'cursor', 'One', new Date('2026-09-08T12:01:00.000Z'));
+    postMessage(db, conversation.id, 'cursor', 'Two', new Date('2026-09-08T12:02:00.000Z'));
+    postMessage(db, conversation.id, 'cursor', 'Three', new Date('2026-09-08T12:03:00.000Z'));
+    const newest = listMessages(db, conversation.id, 'cursor', { direction: 'before', limit: 2 });
+    expect(newest.items.map((message) => message.body)).toEqual(['Two', 'Three']);
+    expect(newest.nextCursor).toBeTruthy();
+    const older = listMessages(db, conversation.id, 'cursor', {
+      direction: 'before',
+      limit: 2,
+      cursor: newest.nextCursor!,
+    });
+    expect(older.items.map((message) => message.body)).toEqual(['One']);
+    expect(new Set([...newest.items, ...older.items].map((message) => message.id)).size).toBe(3);
   });
 
   it('archives without deleting messages and excludes archived rows when filtered', () => {

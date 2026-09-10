@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { agentLabelSchema } from './agent-coordination.ts';
+import { agentLabelSchema, type AgentIdentityProvenance } from './agent-coordination.ts';
 
 export const CONVERSATION_SCOPE_TYPES = ['client', 'project', 'task', 'freeform'] as const;
 export type ConversationScopeType = (typeof CONVERSATION_SCOPE_TYPES)[number];
@@ -34,6 +34,7 @@ export const messageListSchema = z
   .object({
     limit: z.number().int().min(1).max(100).optional(),
     cursor: z.string().max(500).optional(),
+    direction: z.enum(['forward', 'before']).default('forward'),
   })
   .strict();
 export type CreateConversationInput = z.infer<typeof createConversationSchema>;
@@ -53,5 +54,6 @@ export type AgentConversationMessage = {
   senderLabel: string;
   sentAt: string;
   body: string;
+  provenance: AgentIdentityProvenance;
 };
 export type CursorPage<T> = { items: T[]; nextCursor: string | null; hasMore: boolean };
