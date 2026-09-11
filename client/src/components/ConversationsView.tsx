@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import type { AgentHubTipPayload } from '../../../shared/agent-hub-sse';
-import { useAgentHubTipsSubscribe } from './App';
+import { useAgentHubTipsSubscribe } from './AgentHubTipsContext';
 import { useDebouncedAgentHubTip } from '../useAgentHubTips';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Archive, ArrowDown, CheckCircle2, MessageSquare, Send } from 'lucide-react';
@@ -149,7 +149,9 @@ export function ConversationsView({
     setOlder(page.nextCursor);
   }, []);
   const selectedRef = useRef<Conversation | null>(null);
-  selectedRef.current = selected;
+  useEffect(() => {
+    selectedRef.current = selected;
+  }, [selected]);
   const subscribeAgentHubTips = useAgentHubTipsSubscribe();
   const handleConversationTip = useCallback(
     (tip: AgentHubTipPayload) => {

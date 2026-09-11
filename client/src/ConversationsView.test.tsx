@@ -1,5 +1,5 @@
 import { act } from '@testing-library/react';
-import { AgentHubTipsContext } from './components/App';
+import { AgentHubTipsContext } from './components/AgentHubTipsContext';
 import { ConversationsView } from './components/ConversationsView';
 import type { AgentHubTipPayload } from '../../shared/agent-hub-sse';
 import {

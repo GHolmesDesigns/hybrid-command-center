@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Navigate,
   Route,
@@ -38,11 +38,8 @@ import {
   DEFAULT_AGENT_HUB_LIVE_TIPS_SETTINGS,
   type AgentHubLiveTipsSettings,
 } from '../../../shared/agent-hub-sse';
-import {
-  useAgentHubTips,
-  useDebouncedAgentHubTip,
-  type AgentHubTipListener,
-} from '../useAgentHubTips';
+import { useAgentHubTips, useDebouncedAgentHubTip } from '../useAgentHubTips';
+import { AgentHubTipsContext } from './AgentHubTipsContext';
 import { BreadcrumbTrail } from './BreadcrumbTrail';
 import { ClientDetail, Clients } from './Clients';
 import { Dashboard } from './Dashboard';
@@ -80,14 +77,6 @@ const SIDEBAR_KEY = 'hcc-sidebar-collapsed';
 const COMMAND_AI_KEY = 'hcc-command-ai-open';
 
 const LAST_PROJECT_KEY = 'hcc-last-project';
-
-export const AgentHubTipsContext = createContext<
-  ((listener: AgentHubTipListener) => () => void) | null
->(null);
-
-export function useAgentHubTipsSubscribe() {
-  return useContext(AgentHubTipsContext);
-}
 
 /** Old Status URL. Preserves filters so `/kanban?filter=today` still opens today's board. */
 function LegacyKanbanRedirect() {

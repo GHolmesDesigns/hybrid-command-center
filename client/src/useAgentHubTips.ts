@@ -68,7 +68,9 @@ export function useDebouncedAgentHubTip(
   delayMs = 300,
 ) {
   const callbackRef = useRef(callback);
-  callbackRef.current = callback;
+  useEffect(() => {
+    callbackRef.current = callback;
+  }, [callback]);
 
   useEffect(() => {
     if (!subscribe) return;
