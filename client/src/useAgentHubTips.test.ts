@@ -72,7 +72,9 @@ describe('useAgentHubTips', () => {
 
     const { result } = renderHook(() => Probe({ enabled: true }));
     act(() => {
-      instances[0]?.onmessage?.({ data: JSON.stringify({ feeds: ['notifications'] }) } as MessageEvent);
+      instances[0]?.onmessage?.({
+        data: JSON.stringify({ feeds: ['notifications'] }),
+      } as MessageEvent);
       instances[0]?.onmessage?.({ data: '{not-json' } as MessageEvent);
     });
     expect(result.current).toEqual({ feeds: ['notifications'] });

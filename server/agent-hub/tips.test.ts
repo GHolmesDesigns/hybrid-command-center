@@ -26,9 +26,9 @@ describe('AgentHubTipRegistry', () => {
     tipAgentHubConversation('thread-1');
     tipAgentHubFeeds([]);
 
-    expect(good.some((tip) => JSON.stringify(tip) === JSON.stringify({ feeds: ['notifications'] }))).toBe(
-      true,
-    );
+    expect(
+      good.some((tip) => JSON.stringify(tip) === JSON.stringify({ feeds: ['notifications'] })),
+    ).toBe(true);
     expect(
       good.some(
         (tip) =>

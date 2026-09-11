@@ -257,7 +257,9 @@ describe('ConversationsView', () => {
           }),
         );
       }
-      return new Response(JSON.stringify({ items: [conversation], nextCursor: null, hasMore: false }));
+      return new Response(
+        JSON.stringify({ items: [conversation], nextCursor: null, hasMore: false }),
+      );
     });
 
     render(
