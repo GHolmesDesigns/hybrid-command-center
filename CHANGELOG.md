@@ -1,5 +1,15 @@
 # Changelog
 
+## [6.8.6] - 2026-09-11
+
+### Added
+
+- In-app notification when an @mention handoff is confirmed.
+
+### Breaking changes
+
+None.
+
 ## [6.8.5] - 2026-09-11
 
 ### Added
