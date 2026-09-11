@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { Empty } from './Primitives';
 import { isAgentActivityStale } from '../../../shared/agent-summaries';
+import { AGENT_PROFILE_CHARTER_MAX } from '../../../shared/agent-directory';
 
 type Capability = { name: string; description: string | null };
 type Agent = {
@@ -9,6 +10,7 @@ type Agent = {
   label: string;
   displayName: string;
   bio: string | null;
+  charter: string | null;
   trustLevel: string;
   availability: string;
   lastVerifiedAt: string | null;
@@ -31,6 +33,9 @@ export function AgentDirectoryCard() {
   >({});
   const [filter, setFilter] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [charterDrafts, setCharterDrafts] = useState<Record<string, string>>({});
+  const [savingCharter, setSavingCharter] = useState<string | null>(null);
+  const [charterStatus, setCharterStatus] = useState<Record<string, string>>({});
   const load = async () => {
     setRefreshing(true);
     try {
@@ -46,19 +51,23 @@ export function AgentDirectoryCard() {
           }>;
         }>('/agent-summaries'),
       ]);
-      setAgents(
-        Array.isArray(directory.agents)
-          ? directory.agents.filter(Boolean).map((agent) => ({
-              ...agent,
-              id: agent.id ?? agent.label,
-              label: agent.label ?? 'Unknown agent',
-              displayName: agent.displayName ?? agent.label ?? 'Unknown agent',
-              availability: agent.availability ?? 'UNKNOWN',
-              trustLevel: agent.trustLevel ?? 'UNVERIFIED',
-              capabilities: Array.isArray(agent.capabilities) ? agent.capabilities : [],
-            }))
-          : [],
+      const nextAgents = Array.isArray(directory.agents)
+        ? directory.agents.filter(Boolean).map((agent) => ({
+            ...agent,
+            id: agent.id ?? agent.label,
+            label: agent.label ?? 'Unknown agent',
+            displayName: agent.displayName ?? agent.label ?? 'Unknown agent',
+            availability: agent.availability ?? 'UNKNOWN',
+            trustLevel: agent.trustLevel ?? 'UNVERIFIED',
+            charter: agent.charter ?? null,
+            capabilities: Array.isArray(agent.capabilities) ? agent.capabilities : [],
+          }))
+        : [];
+      setAgents(nextAgents);
+      setCharterDrafts(
+        Object.fromEntries(nextAgents.map((agent) => [agent.id, agent.charter ?? ''])),
       );
+      setCharterStatus({});
       setPresence(
         Object.fromEntries((live.presence ?? []).map((row) => [row.agentLabel.toLowerCase(), row])),
       );
@@ -72,6 +81,27 @@ export function AgentDirectoryCard() {
       setError((problem as Error).message);
     } finally {
       setRefreshing(false);
+    }
+  };
+  const saveCharter = async (agent: Agent) => {
+    const charter = charterDrafts[agent.id] ?? '';
+    setSavingCharter(agent.id);
+    setCharterStatus({});
+    try {
+      const result = await api<{ agent?: Agent }>(`/agents/${agent.id}/profile`, {
+        method: 'PATCH',
+        body: JSON.stringify({ charter }),
+      });
+      const updated = result.agent;
+      if (updated) {
+        setAgents((current) => current.map((entry) => (entry.id === updated.id ? updated : entry)));
+        setCharterDrafts((current) => ({ ...current, [agent.id]: updated.charter ?? '' }));
+      }
+      setCharterStatus({ [agent.id]: 'Charter saved.' });
+    } catch (problem) {
+      setCharterStatus({ [agent.id]: (problem as Error).message });
+    } finally {
+      setSavingCharter(null);
     }
   };
   useEffect(() => {
@@ -152,6 +182,41 @@ export function AgentDirectoryCard() {
                     {agent.trustLevel === 'VERIFIED' ? 'Trusted profile' : 'Unverified profile'}
                   </p>
                   {agent.bio && <p>{agent.bio}</p>}
+                  <div className="agent-charter">
+                    <label htmlFor={`agent-charter-${agent.id}`}>
+                      Charter for {agent.displayName}
+                    </label>
+                    <textarea
+                      id={`agent-charter-${agent.id}`}
+                      value={charterDrafts[agent.id] ?? agent.charter ?? ''}
+                      onChange={(event) =>
+                        setCharterDrafts((current) => ({
+                          ...current,
+                          [agent.id]: event.target.value,
+                        }))
+                      }
+                      maxLength={AGENT_PROFILE_CHARTER_MAX}
+                      rows={4}
+                      placeholder="Describe this agent's standing responsibility."
+                    />
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => void saveCharter(agent)}
+                      disabled={savingCharter === agent.id}
+                    >
+                      {savingCharter === agent.id ? 'Saving…' : 'Save charter'}
+                    </button>
+                    {charterStatus[agent.id] && (
+                      <small role="status">{charterStatus[agent.id]}</small>
+                    )}
+                  </div>
+                  {agent.charter && (
+                    <details open={agent.charter.length <= 500}>
+                      <summary>Published charter</summary>
+                      <p>{agent.charter}</p>
+                    </details>
+                  )}
                   {agent.capabilities.length > 0 && (
                     <ul>
                       {agent.capabilities.map((cap) => (

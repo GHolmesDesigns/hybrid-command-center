@@ -35,6 +35,7 @@ import {
   createMcpAgentCredentialSchema,
   updateMcpAgentRegistrationSchema,
 } from '../shared/mcp-agent-registry.ts';
+import { updateAgentCharterSchema } from '../shared/agent-directory.ts';
 import { createMcpHttpHandler, McpHttpSessionRegistry } from './mcp/http.ts';
 import { createMcpOAuthRouter, MCP_OAUTH_AUTHORIZE_PAGE_STYLE_HASH } from './mcp/oauth-routes.ts';
 import { MCP_OAUTH_ALLOWED_REDIRECT_URIS } from '../shared/mcp-oauth.ts';
@@ -314,7 +315,7 @@ import {
   AGENT_WORK_SESSION_LIST_MAX_LIMIT,
   AGENT_WORK_SESSION_WAITING_STATES,
 } from '../shared/agent-work-sessions.ts';
-import { listAgentDirectory } from './agent-directory.ts';
+import { listAgentDirectory, updateAgentCharter } from './agent-directory.ts';
 import {
   archiveMemory,
   approveMemory,
@@ -2885,6 +2886,21 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   });
   app.get('/api/agents/directory', (_req, res) => {
     res.json({ agents: listAgentDirectory(db, clock().getTime()) });
+  });
+  app.patch('/api/agents/:agentId/profile', (req, res, next) => {
+    try {
+      const input = updateAgentCharterSchema.parse(req.body);
+      if (!updateAgentCharter(db, req.params.agentId, input.charter)) {
+        res.status(404).json({ error: 'Agent registration not found.' });
+        return;
+      }
+      const agent = listAgentDirectory(db, clock().getTime()).find(
+        (entry) => entry.id === req.params.agentId,
+      );
+      res.json({ ok: true, agent });
+    } catch (error) {
+      next(error);
+    }
   });
   app.get('/api/agents/presence', (req, res, next) => {
     try {

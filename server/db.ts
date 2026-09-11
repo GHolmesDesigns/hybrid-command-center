@@ -124,6 +124,7 @@ CREATE TABLE IF NOT EXISTS agent_profiles (
   agent_id TEXT PRIMARY KEY REFERENCES agent_registrations(id) ON DELETE CASCADE,
   display_name TEXT NOT NULL CHECK(length(display_name) BETWEEN 1 AND 80),
   bio TEXT CHECK(bio IS NULL OR length(bio) <= 500),
+  charter TEXT CHECK(charter IS NULL OR length(charter) <= 4000),
   trust_level TEXT NOT NULL DEFAULT 'UNVERIFIED' CHECK(trust_level IN ('UNVERIFIED','VERIFIED')),
   last_verified_at TEXT
 );
