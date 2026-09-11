@@ -1,5 +1,15 @@
 # Changelog
 
+## [6.8.2] - 2026-09-11
+
+### Fixed
+
+- Corrected the hosted manual's release version stamps to match the application release.
+
+### Breaking changes
+
+None.
+
 ## [6.8.1] - 2026-09-11
 
 ### Added
