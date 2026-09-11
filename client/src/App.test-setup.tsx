@@ -255,6 +255,8 @@ export const testState = {
   agentHandoffDetailPayload: null as
     import('../../shared/agent-coordination').AgentHandoffDetail | null,
   agentHandoffDetailError: null as string | null,
+  agentSchedulesPayload: [] as import('../../shared/agent-schedules').AgentSchedule[],
+  agentSchedulesError: null as string | null,
   mcpAgentRegistryPayload: {
     enabled: false,
     credentials: [],
@@ -1386,6 +1388,45 @@ const respondTo = (url: string, init?: RequestInit) => {
           offset: 0,
           truncated: false,
         };
+  if (url.endsWith('/api/agent-schedules') && method === 'GET')
+    return testState.agentSchedulesError
+      ? reply(503, { error: testState.agentSchedulesError })
+      : { schedules: testState.agentSchedulesPayload };
+  const agentSchedulePause = url.match(/\/api\/agent-schedules\/([^/?]+)$/);
+  if (agentSchedulePause && method === 'PATCH') {
+    const target = testState.agentSchedulesPayload.find((row) => row.id === agentSchedulePause[1]);
+    if (!target) return reply(404, { error: 'Schedule not found.' });
+    const updated = { ...target, paused: Boolean(body?.paused) };
+    testState.agentSchedulesPayload = testState.agentSchedulesPayload.map((row) =>
+      row.id === updated.id ? updated : row,
+    );
+    return updated;
+  }
+  const agentScheduleRunNow = url.match(/\/api\/agent-schedules\/([^/?]+)\/run-now$/);
+  if (agentScheduleRunNow && method === 'POST') {
+    const target = testState.agentSchedulesPayload.find((row) => row.id === agentScheduleRunNow[1]);
+    if (!target) return reply(404, { error: 'Schedule not found.' });
+    const updated = {
+      ...target,
+      lastRunStatus: 'SUCCEEDED' as const,
+      lastRunAt: '2026-09-11T12:00:00.000Z',
+      lastHandoffId: 'scheduled-handoff',
+      lastError: null,
+    };
+    testState.agentSchedulesPayload = testState.agentSchedulesPayload.map((row) =>
+      row.id === updated.id ? updated : row,
+    );
+    return updated;
+  }
+  if (url.endsWith('/api/agent-schedules/run-due') && method === 'POST') {
+    const due = testState.agentSchedulesPayload.filter((row) => !row.paused && row.nextRunAt);
+    testState.agentSchedulesPayload = testState.agentSchedulesPayload.map((row) =>
+      due.some((candidate) => candidate.id === row.id)
+        ? { ...row, lastRunStatus: 'SUCCEEDED' as const, lastHandoffId: 'scheduled-handoff' }
+        : row,
+    );
+    return { runs: due.map((row) => ({ scheduleId: row.id, status: 'SUCCEEDED' })) };
+  }
   const agentHandoffCancel = url.match(/\/api\/agent-handoffs\/([^/?]+)\/cancel$/);
   if (agentHandoffCancel && method === 'POST') {
     const target = testState.agentHandoffsPayload.find((row) => row.id === agentHandoffCancel[1]);
@@ -1865,6 +1906,8 @@ beforeEach(() => {
   testState.agentHandoffsError = null;
   testState.agentHandoffDetailPayload = null;
   testState.agentHandoffDetailError = null;
+  testState.agentSchedulesPayload = [];
+  testState.agentSchedulesError = null;
   testState.mcpAgentRegistryPayload = { enabled: false, credentials: [] };
   testState.driveWriteRequestsPayload = [];
   testState.driveWriteQueueSummary = {

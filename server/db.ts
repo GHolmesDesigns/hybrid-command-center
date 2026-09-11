@@ -777,6 +777,42 @@ CREATE TABLE IF NOT EXISTS agent_work_session_responses (
 );
 CREATE INDEX IF NOT EXISTS idx_agent_work_session_responses_session
   ON agent_work_session_responses(session_id, responded_at, id);
+-- Scheduled agent runs (C215). A schedule is a recipe for an ordinary OPEN handoff; it never
+-- owns a claim or an execution lease. next_run_at is the materialized UTC due instant, while a
+-- cron expression (when present) calculates the next instant after a successful run.
+CREATE TABLE IF NOT EXISTS agent_schedules (
+  id TEXT PRIMARY KEY,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  owner_agent_label TEXT NOT NULL,
+  cron_expression TEXT,
+  next_run_at TEXT,
+  to_agent_label TEXT,
+  subject_type TEXT NOT NULL CHECK(subject_type IN ('task','signal_post','project','client','freeform')),
+  subject_id TEXT,
+  message_template TEXT NOT NULL CHECK(length(message_template) BETWEEN 1 AND 2000),
+  dedupe_key TEXT NOT NULL CHECK(length(dedupe_key) BETWEEN 1 AND 30),
+  paused INTEGER NOT NULL DEFAULT 0 CHECK(paused IN (0,1)),
+  failure_policy TEXT NOT NULL DEFAULT 'RETRY' CHECK(failure_policy IN ('RETRY','PAUSE')),
+  last_run_status TEXT CHECK(last_run_status IS NULL OR last_run_status IN ('SUCCEEDED','FAILED')),
+  last_run_at TEXT,
+  last_run_window TEXT,
+  last_handoff_id TEXT REFERENCES agent_handoffs(id) ON DELETE SET NULL,
+  last_error TEXT
+);
+-- One row per attempted schedule window. The unique pair is the durable dedupe boundary: a
+-- repeated tick can never create a second handoff for the same schedule window.
+CREATE TABLE IF NOT EXISTS agent_schedule_runs (
+  id TEXT PRIMARY KEY,
+  schedule_id TEXT NOT NULL REFERENCES agent_schedules(id) ON DELETE CASCADE,
+  run_window TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('RUNNING','SUCCEEDED','FAILED')),
+  handoff_id TEXT REFERENCES agent_handoffs(id) ON DELETE SET NULL,
+  error TEXT,
+  started_at TEXT NOT NULL,
+  finished_at TEXT,
+  UNIQUE(schedule_id, run_window)
+);
 -- MCP mutation idempotency for note, complete, and cancel (C117). One row per
 -- (agent_label, client_request_id, tool); retention in server/agent-coordination/mutations.ts.
 CREATE TABLE IF NOT EXISTS agent_handoff_mutations (
@@ -937,6 +973,8 @@ CREATE INDEX IF NOT EXISTS idx_agent_handoff_notes_handoff
   ON agent_handoff_notes(handoff_id, at);
 CREATE INDEX IF NOT EXISTS idx_agent_work_sessions_handoff ON agent_work_sessions(handoff_id, state);
 CREATE INDEX IF NOT EXISTS idx_agent_work_sessions_lease ON agent_work_sessions(state, lease_expires_at);
+CREATE INDEX IF NOT EXISTS idx_agent_schedules_due ON agent_schedules(paused, next_run_at);
+CREATE INDEX IF NOT EXISTS idx_agent_schedule_runs_schedule ON agent_schedule_runs(schedule_id, started_at DESC);
 -- Mutation replay: duplicate (agent_label, client_request_id, tool) returns the stored outcome.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_handoff_mutations_replay
   ON agent_handoff_mutations(agent_label, client_request_id, tool);
