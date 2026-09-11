@@ -1,6 +1,6 @@
 {
   "name": "hybrid-command-center",
-  "version": "6.8.3",
+  "version": "6.8.4",
   "private": true,
   "type": "module",
   "engines": {
