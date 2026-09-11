@@ -249,10 +249,10 @@ export function FilesView({
       />
 
       <div className="board-filters">
-        <label>
+        <label htmlFor="files-project">
           <span>Project</span>
           <select
-            aria-label="Project"
+            id="files-project"
             value={selected}
             onChange={(event) => choose('project', event.target.value)}
           >
@@ -263,10 +263,10 @@ export function FilesView({
             ))}
           </select>
         </label>
-        <label>
+        <label htmlFor="files-folder">
           <span>Folder</span>
           <select
-            aria-label="Folder"
+            id="files-folder"
             value={folderId}
             disabled={scopes.length === 0}
             onChange={(event) => choose('folder', event.target.value)}
