@@ -1,5 +1,16 @@
 # Changelog
 
+## [6.8.0] - 2026-09-11
+
+### Added
+
+- Added an operator confirmation queue for agent-initiated Signal publishing, with preview hashes,
+  stale-request refusal, expiry, approval/denial audit events, and agent attribution.
+
+### Breaking changes
+
+None.
+
 ## [6.7.1] - 2026-09-11
 
 ### Added

@@ -3,6 +3,7 @@ import { AgentHandoffsCard } from './AgentHandoffsCard';
 import { McpConnectionSetupCard } from './McpConnectionSetupCard';
 import { McpHealthPanelCard } from './McpHealthPanelCard';
 import { DriveWriteRequestsCard } from './DriveWriteRequestsCard';
+import { PublishConfirmationRequestsCard } from './PublishConfirmationRequestsCard';
 import { PageHead } from './Shell';
 import { AgentDirectoryCard } from './AgentDirectoryCard';
 import { Link } from 'react-router-dom';
@@ -40,6 +41,7 @@ export function AgentsView({
         <AgentDirectoryCard />
         <McpHealthPanelCard flash={flash} />
         <DriveWriteRequestsCard flash={flash} />
+        <PublishConfirmationRequestsCard flash={flash} />
         <AgentMemoryReviewCard flash={flash} />
         <AgentHandoffsCard tasks={tasks} flash={flash} />
         <AgentNotificationsCard flash={flash} />

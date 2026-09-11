@@ -211,6 +211,24 @@ CREATE TABLE IF NOT EXISTS drive_write_requests (
   decided_at TEXT,
   error TEXT
 );
+-- Agent-initiated Signal publishing is a request until an operator approves it. The preview is
+-- retained as evidence of what the person was asked to approve; provider submission remains in
+-- server/publish/service.ts and is unreachable from the request route itself.
+CREATE TABLE IF NOT EXISTS signal_publish_confirmation_requests (
+  id TEXT PRIMARY KEY,
+  post_id TEXT NOT NULL,
+  agent_label TEXT NOT NULL,
+  client_request_id TEXT NOT NULL,
+  timing TEXT NOT NULL CHECK(timing IN ('scheduled','now')),
+  preview_json TEXT NOT NULL,
+  plan_hash TEXT NOT NULL,
+  confirmation TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('PENDING','EXECUTING','APPROVED','DENIED','FAILED','EXPIRED','PROVIDER_UNCERTAIN')),
+  created_at TEXT NOT NULL,
+  executing_at TEXT,
+  decided_at TEXT,
+  error TEXT
+);
 -- Drive OAuth pending states (C52): one row per connect attempt, bound to a session when auth is on.
 -- Keep in sync with OAUTH_PENDING_STATES_TABLE_SQL in server/drive/oauth.ts.
 CREATE TABLE IF NOT EXISTS oauth_pending_states (
@@ -845,6 +863,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_drive_write_requests_replay
   ON drive_write_requests(agent_label, client_request_id);
 CREATE INDEX IF NOT EXISTS idx_drive_write_requests_status
   ON drive_write_requests(status, created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_signal_publish_confirmation_replay
+  ON signal_publish_confirmation_requests(agent_label, client_request_id);
+CREATE INDEX IF NOT EXISTS idx_signal_publish_confirmation_status
+  ON signal_publish_confirmation_requests(status, created_at);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_registrations_label
   ON agent_registrations(display_label COLLATE NOCASE);
 -- Expired OAuth pending rows are deleted by expires_at on begin/consume and on a periodic purge.
