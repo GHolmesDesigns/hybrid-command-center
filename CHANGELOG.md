@@ -1,5 +1,15 @@
 # Changelog
 
+## [6.8.5] - 2026-09-11
+
+### Added
+
+- Provider-reported agent usage snapshots on the Agents page, with manual refresh, provenance disclaimer, and append-only storage of the provider’s own figures.
+
+### Breaking changes
+
+None.
+
 ## [6.8.4] - 2026-09-11
 
 ### Changed

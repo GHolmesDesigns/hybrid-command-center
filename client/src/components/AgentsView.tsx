@@ -11,6 +11,7 @@ import { AgentMemoryReviewCard } from './AgentMemoryReviewCard';
 import { AgentNotificationsCard } from './AgentNotificationsCard';
 import { WaitingInboxCard } from './WaitingInboxCard';
 import { AgentSchedulesCard } from './AgentSchedulesCard';
+import { AgentCostSnapshotsCard } from './AgentCostSnapshotsCard';
 
 /**
  * Agents module (C136 / #420): connection setup, health, and handoffs in one place.
@@ -41,6 +42,7 @@ export function AgentsView({
         <McpConnectionSetupCard flash={flash} />
         <AgentDirectoryCard />
         <McpHealthPanelCard flash={flash} />
+        <AgentCostSnapshotsCard flash={flash} />
         <DriveWriteRequestsCard flash={flash} />
         <PublishConfirmationRequestsCard flash={flash} />
         <AgentMemoryReviewCard flash={flash} />

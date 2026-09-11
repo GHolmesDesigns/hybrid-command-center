@@ -2190,6 +2190,70 @@ button.tag-chip.toggle.active {
   flex-direction: column;
   gap: 18px;
 }
+.agent-cost-card .card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.agent-cost-note,
+.agent-cost-meta,
+.agent-cost-reason,
+.agent-cost-unavailable {
+  color: var(--muted);
+}
+.agent-cost-rows {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.agent-cost-row {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+}
+.agent-cost-row-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  margin: 0 0 8px;
+}
+.agent-cost-model {
+  color: var(--muted);
+}
+.agent-cost-totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+.agent-cost-total dt {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.agent-cost-total dd {
+  margin: 0;
+  font-weight: 600;
+}
+.agent-cost-provenance,
+.agent-cost-attribution {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+.agent-cost-attribution-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.agent-cost-attribution-detail {
+  display: block;
+  margin-top: 4px;
+}
 .mcp-guide-steps {
   margin: 12px 0 0;
   padding-left: 1.25rem;

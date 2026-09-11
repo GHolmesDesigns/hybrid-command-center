@@ -813,6 +813,22 @@ CREATE TABLE IF NOT EXISTS agent_schedule_runs (
   finished_at TEXT,
   UNIQUE(schedule_id, run_window)
 );
+-- Provider-reported agent usage snapshots (C217). Append-only: one INSERT per refresh row;
+-- retention prunes the oldest rows in server/agent-cost/cost.ts.
+CREATE TABLE IF NOT EXISTS agent_cost_snapshots (
+  id TEXT PRIMARY KEY,
+  provider TEXT NOT NULL CHECK(length(provider) BETWEEN 1 AND 40),
+  model TEXT NOT NULL CHECK(length(model) BETWEEN 1 AND 120),
+  quantity REAL NOT NULL CHECK(quantity >= 0),
+  unit TEXT NOT NULL CHECK(unit IN ('tokens','requests','usd')),
+  currency TEXT NOT NULL CHECK(length(currency) BETWEEN 1 AND 8),
+  window_start TEXT NOT NULL,
+  window_end TEXT NOT NULL,
+  attribution_confidence TEXT CHECK(attribution_confidence IS NULL OR length(attribution_confidence) BETWEEN 1 AND 40),
+  agent_label TEXT CHECK(agent_label IS NULL OR length(agent_label) BETWEEN 1 AND 64),
+  snapshot_at TEXT NOT NULL,
+  refresh_id TEXT NOT NULL CHECK(length(refresh_id) BETWEEN 1 AND 64)
+);
 -- MCP mutation idempotency for note, complete, and cancel (C117). One row per
 -- (agent_label, client_request_id, tool); retention in server/agent-coordination/mutations.ts.
 CREATE TABLE IF NOT EXISTS agent_handoff_mutations (
@@ -975,6 +991,8 @@ CREATE INDEX IF NOT EXISTS idx_agent_work_sessions_handoff ON agent_work_session
 CREATE INDEX IF NOT EXISTS idx_agent_work_sessions_lease ON agent_work_sessions(state, lease_expires_at);
 CREATE INDEX IF NOT EXISTS idx_agent_schedules_due ON agent_schedules(paused, next_run_at);
 CREATE INDEX IF NOT EXISTS idx_agent_schedule_runs_schedule ON agent_schedule_runs(schedule_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_cost_snapshots_agent ON agent_cost_snapshots(agent_label, snapshot_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_cost_snapshots_refresh ON agent_cost_snapshots(refresh_id);
 -- Mutation replay: duplicate (agent_label, client_request_id, tool) returns the stored outcome.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_handoff_mutations_replay
   ON agent_handoff_mutations(agent_label, client_request_id, tool);

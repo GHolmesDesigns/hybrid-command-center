@@ -9,7 +9,13 @@ import type { DestinationStream } from 'pino';
 import { z } from 'zod';
 import type { Db } from './db.ts';
 import { getDb, getStoreId, transaction } from './db.ts';
-import { config, publishConfigured, bufferConfigured, authenticationConfigured } from './config.ts';
+import {
+  config,
+  publishConfigured,
+  bufferConfigured,
+  agentCostConfigured,
+  authenticationConfigured,
+} from './config.ts';
 import { createAuthMiddleware, type AuthedRequest } from './auth/middleware.ts';
 import {
   authStatus,
@@ -197,6 +203,12 @@ import {
   UnavailableProviderInventoryProvider,
   type ProviderInventoryProvider,
 } from './publish/inventory-provider.ts';
+import { AgentCostService } from './agent-cost/cost.ts';
+import {
+  UnavailableAgentCostProvider,
+  type AgentCostProvider,
+} from './agent-cost/cost-provider.ts';
+import { CursorCostProvider } from './agent-cost/cursor-cost.ts';
 import { PublishRequestError, PublishService } from './publish/service.ts';
 import { BufferAccountsService } from './publish/buffer-accounts.ts';
 import { BufferReadClient } from './publish/buffer/client.ts';
@@ -533,6 +545,8 @@ export type AppOptions = {
    * these options sets it, and the sentence a fixture window carries says it is a fixture.
    */
   analyticsWindows?: readonly AnalyticsWindow[];
+  /** Test-only agent cost provider. Separate because it can only list usage figures. */
+  agentCost?: AgentCostProvider;
   /** Fixed configured zone for publishing tests and deployments. */
   publishTimezone?: string;
   /**
@@ -799,6 +813,17 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         : new UnavailableAnalyticsWindowProvider()),
     clock,
     ...(options.analyticsWindows ? [options.analyticsWindows] : []),
+  );
+  const agentCost = new AgentCostService(
+    db,
+    options.agentCost ??
+      (agentCostConfigured()
+        ? new CursorCostProvider({
+            apiKey: config.agentCost.apiKey,
+            ...(config.agentCost.baseUrl ? { baseUrl: config.agentCost.baseUrl } : {}),
+          })
+        : new UnavailableAgentCostProvider()),
+    clock,
   );
   app.use(
     helmet({
@@ -2988,6 +3013,26 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   });
   app.get('/api/agents/directory', (_req, res) => {
     res.json({ agents: listAgentDirectory(db, clock().getTime()) });
+  });
+  /** Stored provider-reported agent usage snapshots. No provider call on any path. */
+  app.get('/api/agents/cost', (_req, res, next) => {
+    try {
+      res.json(agentCost.read());
+    } catch (error) {
+      next(error);
+    }
+  });
+  /**
+   * One person-pressed agent cost refresh. A failed read is not a `4xx`: it answers with the stored
+   * snapshots and the reason, because a panel showing nothing where it should show the last known
+   * good values would hide the failure rather than report it.
+   */
+  app.post('/api/agents/cost/refresh', async (_req, res, next) => {
+    try {
+      res.json(await agentCost.refresh());
+    } catch (error) {
+      next(error);
+    }
   });
   app.patch('/api/agents/:agentId/profile', (req, res, next) => {
     try {

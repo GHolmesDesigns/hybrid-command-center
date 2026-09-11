@@ -257,6 +257,11 @@ export const testState = {
   agentHandoffDetailError: null as string | null,
   agentSchedulesPayload: [] as import('../../shared/agent-schedules').AgentSchedule[],
   agentSchedulesError: null as string | null,
+  agentCostPayload: {
+    available: true,
+    snapshots: [],
+  } as import('../../shared/agent-cost').AgentCostSummary,
+  agentCostRefreshReason: null as string | null,
   mcpAgentRegistryPayload: {
     enabled: false,
     credentials: [],
@@ -1388,6 +1393,16 @@ const respondTo = (url: string, init?: RequestInit) => {
           offset: 0,
           truncated: false,
         };
+  if (url.endsWith('/api/agents/cost') && method === 'GET') return testState.agentCostPayload;
+  if (url.endsWith('/api/agents/cost/refresh') && method === 'POST') {
+    if (testState.agentCostRefreshReason) {
+      testState.agentCostPayload = {
+        ...testState.agentCostPayload,
+        reason: testState.agentCostRefreshReason,
+      };
+    }
+    return testState.agentCostPayload;
+  }
   if (url.endsWith('/api/agent-schedules') && method === 'GET')
     return testState.agentSchedulesError
       ? reply(503, { error: testState.agentSchedulesError })
