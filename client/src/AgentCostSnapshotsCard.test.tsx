@@ -45,6 +45,62 @@ describe('agent cost snapshots card', () => {
     );
   });
 
+  it('formats usd quantities and unknown attribution tokens readably', async () => {
+    testState.agentCostPayload = {
+      available: true,
+      lastRefreshAt: snapshot.snapshotAt,
+      snapshots: [
+        {
+          ...snapshot,
+          id: 'cost-2',
+          unit: 'usd',
+          quantity: 12.5,
+          attributionConfidence: 'probable_match',
+          agentLabel: undefined,
+        },
+      ],
+    };
+    render(<AgentCostSnapshotsCard flash={() => undefined} />);
+    expect(await screen.findByText('Unassigned usage')).toBeVisible();
+    expect(screen.getByText(/Provider value: probable_match/)).toBeVisible();
+    expect(screen.getByText(/\$12\.50/)).toBeVisible();
+  });
+
+  it('flashes a success message after a clean refresh', async () => {
+    testState.agentCostPayload = { available: true, snapshots: [snapshot] };
+    testState.agentCostRefreshReason = null;
+    const flashes: Array<{ message: string; type?: string }> = [];
+    render(
+      <AgentCostSnapshotsCard
+        flash={(message, type) => flashes.push({ message, type })}
+      />,
+    );
+    await screen.findByText('queue-agent');
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh usage' }));
+    await waitFor(() =>
+      expect(flashes.some((entry) => entry.message.includes('Agent usage refreshed'))).toBe(true),
+    );
+  });
+
+  it('flashes provider reasons from refresh as errors', async () => {
+    testState.agentCostPayload = { available: true, snapshots: [snapshot] };
+    testState.agentCostRefreshReason =
+      'The provider returned no usage rows, so nothing was stored.';
+    const flashes: Array<{ message: string; type?: string }> = [];
+    render(
+      <AgentCostSnapshotsCard
+        flash={(message, type) => flashes.push({ message, type })}
+      />,
+    );
+    await screen.findByText('queue-agent');
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh usage' }));
+    await waitFor(() =>
+      expect(flashes.some((entry) => entry.type === 'error' && entry.message.includes('no usage rows'))).toBe(
+        true,
+      ),
+    );
+  });
+
   it('names unavailable configuration and empty storage honestly', async () => {
     testState.agentCostPayload = { available: false, snapshots: [] };
     render(<AgentCostSnapshotsCard flash={() => undefined} />);

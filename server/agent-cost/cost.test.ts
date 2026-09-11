@@ -4,7 +4,14 @@ import { createDb, type Db } from '../db.ts';
 import { createApp } from '../app.ts';
 import { listIntegrationEvents } from '../integration-log.ts';
 import { MockAgentCostProvider } from './mock-cost-provider.ts';
-import { AgentCostService, readAgentCostSnapshots, readAgentCostSync } from './cost.ts';
+import {
+  AgentCostService,
+  latestAgentCostSnapshots,
+  readAgentCostSnapshots,
+  readAgentCostSync,
+  AGENT_COST_SYNC_KEY,
+} from './cost.ts';
+import { setSetting } from '../drive/service.ts';
 import { UnavailableAgentCostProvider } from './cost-provider.ts';
 import { normalizeCursorUsage } from './cursor-cost.ts';
 
@@ -94,6 +101,22 @@ describe('AgentCostService', () => {
     expect(readAgentCostSnapshots(db)).toHaveLength(0);
   });
 
+  it('keeps one unassigned snapshot bucket when agent labels are missing', async () => {
+    const provider = new MockAgentCostProvider();
+    provider.records = [{ ...sampleRecord, agentLabel: undefined }, sampleRecord];
+    const service = new AgentCostService(db, provider, clock);
+    await service.refresh();
+    const summary = service.read();
+    expect(summary.snapshots).toHaveLength(2);
+    expect(summary.snapshots.some((row) => row.agentLabel === 'queue-agent')).toBe(true);
+    expect(summary.snapshots.some((row) => row.agentLabel === undefined)).toBe(true);
+  });
+
+  it('ignores corrupt sync settings when reading stored state', () => {
+    setSetting(db, AGENT_COST_SYNC_KEY, '{not-json');
+    expect(readAgentCostSync(db)).toEqual({});
+  });
+
   it('refuses to write when the provider returns no valid rows', async () => {
     const provider = new MockAgentCostProvider();
     provider.records = [{ ...sampleRecord, quantity: -1 }];
@@ -113,6 +136,43 @@ describe('agent cost routes', () => {
     expect(read.body.snapshots).toEqual([]);
     const refreshed = await request(app).post('/api/agents/cost/refresh').expect(200);
     expect(refreshed.body.snapshots[0]?.agentLabel).toBe('queue-agent');
+  });
+});
+
+describe('latestAgentCostSnapshots', () => {
+  it('keeps the newest row per agent label', () => {
+    const rows = latestAgentCostSnapshots([
+      {
+        id: '1',
+        provider: 'cursor',
+        model: 'gpt-4.1',
+        quantity: 100,
+        unit: 'tokens',
+        currency: 'USD',
+        window_start: '2026-09-01T00:00:00.000Z',
+        window_end: '2026-09-11T23:59:59.999Z',
+        attribution_confidence: null,
+        agent_label: 'queue-agent',
+        snapshot_at: '2026-09-11T10:00:00.000Z',
+        refresh_id: 'a',
+      },
+      {
+        id: '2',
+        provider: 'cursor',
+        model: 'gpt-4.1',
+        quantity: 200,
+        unit: 'tokens',
+        currency: 'USD',
+        window_start: '2026-09-01T00:00:00.000Z',
+        window_end: '2026-09-11T23:59:59.999Z',
+        attribution_confidence: null,
+        agent_label: 'queue-agent',
+        snapshot_at: '2026-09-11T11:00:00.000Z',
+        refresh_id: 'b',
+      },
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.quantity).toBe(200);
   });
 });
 
