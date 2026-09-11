@@ -1,5 +1,15 @@
 # Changelog
 
+## [6.6.5] - 2026-09-10
+
+### Added
+
+- Confirmed @mention handoffs from conversation threads: recognized agent labels offer a per-recipient confirmation before post, then create linked handoffs, participant access, and bidirectional thread navigation in one transaction.
+
+### Breaking changes
+
+None.
+
 ## [6.6.4] - 2026-09-10
 
 ### Added
