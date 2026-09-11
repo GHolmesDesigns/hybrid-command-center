@@ -294,9 +294,8 @@ import {
   WorkspaceValidationError,
 } from './workspace/writes.ts';
 import {
-  AGENT_HANDOFF_LIST_MAX_LIMIT,
-  AGENT_HANDOFF_STATES,
   agentHandoffCancelInputSchema,
+  agentHandoffListFilterSchema,
   agentHandoffPostInputSchema,
 } from '../shared/agent-coordination.ts';
 import { AgentCoordinationError } from './domain/agent-coordination.ts';
@@ -2871,13 +2870,11 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
    */
   app.get('/api/agent-handoffs', (req, res, next) => {
     try {
-      const query = z
-        .object({
-          state: z.enum(AGENT_HANDOFF_STATES).optional(),
-          limit: z.coerce.number().int().min(1).max(AGENT_HANDOFF_LIST_MAX_LIMIT).optional(),
-          offset: z.coerce.number().int().min(0).optional(),
-        })
-        .parse(req.query);
+      const query = agentHandoffListFilterSchema.parse({
+        ...req.query,
+        limit: req.query.limit === undefined ? undefined : Number(req.query.limit),
+        offset: req.query.offset === undefined ? undefined : Number(req.query.offset),
+      });
       res.json(listHandoffs(db, query));
     } catch (error) {
       next(error);

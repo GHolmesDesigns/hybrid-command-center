@@ -249,10 +249,9 @@ export function FilesView({
       />
 
       <div className="board-filters">
-        <div>
+        <label>
           <span>Project</span>
           <select
-            id="files-project"
             aria-label="Project"
             value={selected}
             onChange={(event) => choose('project', event.target.value)}
@@ -263,11 +262,10 @@ export function FilesView({
               </option>
             ))}
           </select>
-        </div>
-        <div>
+        </label>
+        <label>
           <span>Folder</span>
           <select
-            id="files-folder"
             aria-label="Folder"
             value={folderId}
             disabled={scopes.length === 0}
@@ -283,7 +281,7 @@ export function FilesView({
               ))
             )}
           </select>
-        </div>
+        </label>
       </div>
 
       {ready && listing?.folder && (

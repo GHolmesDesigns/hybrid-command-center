@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Archive, ArrowDown, MessageSquare, Send } from 'lucide-react';
 import { api, send } from '../api';
 import { PageHead } from './Shell';
@@ -7,7 +8,7 @@ type Conversation = {
   id: string;
   title: string;
   state: 'ACTIVE' | 'ARCHIVED';
-  scope: { type: string; id: string | null };
+  scope: { type: 'client' | 'project' | 'task' | 'freeform'; id: string | null };
   participants: string[];
   messageCount: number;
   updatedAt: string;
@@ -21,11 +22,34 @@ type Message = {
 };
 type Page<T> = { items: T[]; nextCursor: string | null; hasMore: boolean };
 
+const SCOPE_LABEL = {
+  client: 'Client',
+  project: 'Project',
+  task: 'Task',
+  freeform: 'Freeform',
+} as const;
+
+const scopePath = (scope: Conversation['scope']): string | null => {
+  if (!scope.id || scope.type === 'freeform') return null;
+  return `/${scope.type === 'task' ? 'tasks' : `${scope.type}s`}/${encodeURIComponent(scope.id)}`;
+};
+
 export function ConversationsView({
   flash,
 }: {
   flash: (message: string, type?: 'success' | 'error') => void;
 }) {
+  const [searchParams] = useSearchParams();
+  const requestedScopeType = searchParams.get('scopeType');
+  const scopeType =
+    requestedScopeType === 'client' ||
+    requestedScopeType === 'project' ||
+    requestedScopeType === 'task'
+      ? requestedScopeType
+      : null;
+  const scopeId = scopeType ? searchParams.get('scopeId')?.trim() || null : null;
+  const scopeQuery =
+    scopeType && scopeId ? `&scopeType=${scopeType}&scopeId=${encodeURIComponent(scopeId)}` : '';
   const [state, setState] = useState<'ACTIVE' | 'ARCHIVED'>('ACTIVE');
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selected, setSelected] = useState<Conversation | null>(null);
@@ -34,13 +58,19 @@ export function ConversationsView({
   const [body, setBody] = useState('');
   const load = useCallback(async () => {
     try {
-      setConversations(
-        (await api<Page<Conversation>>(`/agent-conversations?state=${state}`)).items,
+      const page = await api<Page<Conversation>>(
+        `/agent-conversations?state=${state}${scopeQuery}`,
+      );
+      setConversations(page.items);
+      setSelected((current) =>
+        current && page.items.some((conversation) => conversation.id === current.id)
+          ? current
+          : null,
       );
     } catch (error) {
       flash((error as Error).message, 'error');
     }
-  }, [flash, state]);
+  }, [flash, scopeQuery, state]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -83,6 +113,12 @@ export function ConversationsView({
         title="Conversations"
         body="Review and respond to agent threads with frozen message provenance."
       />
+      {scopeType && scopeId && (
+        <p className="field-hint">
+          Showing {scopeType} discussion for <code>{scopeId}</code>.{' '}
+          <Link to="/agents/conversations">Show every conversation</Link>
+        </p>
+      )}
       <div className="split-layout">
         <section className="card" aria-label="Conversation list">
           <div className="card-head">
@@ -99,19 +135,32 @@ export function ConversationsView({
             </select>
           </div>
           {conversations.length === 0 && <p className="empty">No conversations.</p>}
-          {conversations.map((conversation) => (
-            <button
-              className={`list-row ${selected?.id === conversation.id ? 'selected' : ''}`}
-              key={conversation.id}
-              onClick={() => void open(conversation)}
-            >
-              <strong>{conversation.title}</strong>
-              <span>
-                {conversation.scope.type} · {conversation.messageCount} messages
-              </span>
-              <small>{conversation.participants.join(', ')}</small>
-            </button>
-          ))}
+          {conversations.map((conversation) => {
+            const subjectPath = scopePath(conversation.scope);
+            return (
+              <div
+                className={`list-row conversation-row ${selected?.id === conversation.id ? 'selected' : ''}`}
+                key={conversation.id}
+              >
+                <button
+                  type="button"
+                  className="conversation-open"
+                  onClick={() => void open(conversation)}
+                >
+                  <strong>{conversation.title}</strong>
+                  <span>
+                    {conversation.scope.type} · {conversation.messageCount} messages
+                  </span>
+                  <small>{conversation.participants.join(', ')}</small>
+                </button>
+                {subjectPath && (
+                  <Link className="conversation-subject-link" to={subjectPath}>
+                    {SCOPE_LABEL[conversation.scope.type]}: {conversation.scope.id}
+                  </Link>
+                )}
+              </div>
+            );
+          })}
         </section>
         {selected && (
           <section className="card" aria-label="Conversation detail">
@@ -119,7 +168,14 @@ export function ConversationsView({
               <div>
                 <h2>{selected.title}</h2>
                 <p>
-                  {selected.scope.type} · {selected.participants.join(', ')}
+                  {scopePath(selected.scope) ? (
+                    <Link to={scopePath(selected.scope)!}>
+                      {SCOPE_LABEL[selected.scope.type]}: {selected.scope.id}
+                    </Link>
+                  ) : (
+                    selected.scope.type
+                  )}{' '}
+                  · {selected.participants.join(', ')}
                 </p>
               </div>
               {selected.state === 'ACTIVE' && (

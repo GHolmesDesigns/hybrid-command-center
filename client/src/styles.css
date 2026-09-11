@@ -6175,3 +6175,147 @@ button.tag-chip.toggle.active {
     padding: 20px;
   }
 }
+
+.discussion-panel,
+.discussion-start,
+.discussion-detail,
+.discussion-handoffs {
+  display: grid;
+  gap: 14px;
+}
+.discussion-panel .section-title {
+  margin-bottom: 0;
+}
+.discussion-thread-list {
+  display: grid;
+  gap: 8px;
+}
+.discussion-thread-list .list-row {
+  display: grid;
+  width: 100%;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-alt);
+  color: var(--ink);
+  text-align: left;
+}
+.discussion-thread-list .list-row span,
+.discussion-handoff-list small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.discussion-thread-list .list-row:hover,
+.discussion-thread-list .list-row:focus-visible,
+.discussion-thread-list .list-row.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.discussion-start label,
+.discussion-detail .conversation-compose label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.discussion-start input,
+.discussion-detail textarea {
+  width: 100%;
+}
+.discussion-detail .text-btn {
+  justify-self: start;
+}
+.discussion-detail .conversation-message {
+  padding: 12px;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 10px 10px 0;
+  background: var(--surface-alt);
+}
+.discussion-detail .conversation-message time {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.discussion-detail .conversation-message p,
+.discussion-handoff-list p {
+  margin-bottom: 0;
+}
+.discussion-handoffs {
+  margin-top: 4px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.discussion-handoffs .card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+.discussion-handoffs .card-head h3 {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+}
+.discussion-handoffs .card-head svg {
+  width: 18px;
+}
+.discussion-handoff-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.discussion-handoff-list li {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--surface-alt);
+}
+.discussion-handoff-list .handoff-state {
+  justify-self: start;
+}
+.conversation-row {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-alt);
+}
+.conversation-row.selected,
+.conversation-row:focus-within {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.conversation-open {
+  display: grid;
+  width: 100%;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+.conversation-open span,
+.conversation-open small {
+  color: var(--muted);
+}
+.conversation-subject-link {
+  justify-self: start;
+  font-size: 12px;
+}
+
+@media (max-width: 600px) {
+  .discussion-panel .section-title,
+  .discussion-handoffs .card-head {
+    align-items: start;
+    flex-direction: column;
+  }
+}
