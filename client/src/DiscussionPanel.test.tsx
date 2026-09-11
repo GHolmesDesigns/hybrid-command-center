@@ -42,6 +42,7 @@ describe('DiscussionPanel', () => {
     let replyBody: unknown;
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url = String(input);
+      if (url.includes('/agents/directory')) return json({ agents: [] });
       if (url.includes('/agent-handoffs?')) return json(handoffPage([handoff]));
       if (url.includes('/agent-conversations/c1/messages') && init?.method === 'POST') {
         replyBody = JSON.parse(String(init.body));
@@ -92,7 +93,7 @@ describe('DiscussionPanel', () => {
     fireEvent.change(screen.getByLabelText('Reply'), { target: { value: 'Reply' } });
     fireEvent.click(screen.getByRole('button', { name: 'Reply' }));
     await waitFor(() => expect(screen.getByText('Reply', { selector: 'p' })).toBeVisible());
-    await waitFor(() => expect(replyBody).toEqual({ body: 'Reply' }));
+    await waitFor(() => expect(replyBody).toMatchObject({ body: 'Reply', confirmHandoffs: [] }));
     fireEvent.click(screen.getByRole('button', { name: 'Back to threads' }));
     expect(screen.getByLabelText('Thread title')).toBeVisible();
   });
@@ -101,6 +102,7 @@ describe('DiscussionPanel', () => {
     let createBody: unknown;
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url = String(input);
+      if (url.includes('/agents/directory')) return json({ agents: [] });
       if (url.includes('/agent-handoffs?')) return json(handoffPage([]));
       if (url.endsWith('/api/agent-conversations') && init?.method === 'POST') {
         createBody = JSON.parse(String(init.body));
@@ -140,6 +142,7 @@ describe('DiscussionPanel', () => {
   it('reports a failed discussion read instead of claiming the scope is empty', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = String(input);
+      if (url.includes('/agents/directory')) return json({ agents: [] });
       if (url.includes('/agent-handoffs?')) return json(handoffPage([]));
       return json({ error: 'Conversation store unavailable.' }, 503);
     });

@@ -159,6 +159,19 @@ CREATE TABLE IF NOT EXISTS agent_conversation_messages (
   sender_label TEXT NOT NULL, sent_at TEXT NOT NULL, body TEXT NOT NULL CHECK(length(body) BETWEEN 1 AND 4000),
   sender_provenance TEXT NOT NULL DEFAULT 'UNKNOWN' CHECK(sender_provenance IN ('UNKNOWN','ASSERTED','VERIFIED'))
 );
+CREATE TABLE IF NOT EXISTS agent_conversation_post_requests (
+  conversation_id TEXT NOT NULL REFERENCES agent_conversations(id) ON DELETE CASCADE,
+  client_request_id TEXT NOT NULL CHECK(length(client_request_id) BETWEEN 1 AND 120),
+  message_id TEXT NOT NULL REFERENCES agent_conversation_messages(id) ON DELETE CASCADE,
+  PRIMARY KEY(conversation_id, client_request_id)
+);
+CREATE TABLE IF NOT EXISTS agent_conversation_message_handoffs (
+  message_id TEXT NOT NULL REFERENCES agent_conversation_messages(id) ON DELETE CASCADE,
+  handoff_id TEXT NOT NULL REFERENCES agent_handoffs(id) ON DELETE CASCADE,
+  to_agent_label TEXT NOT NULL,
+  PRIMARY KEY(message_id, to_agent_label),
+  UNIQUE(handoff_id)
+);
 CREATE TABLE IF NOT EXISTS agent_memory (
   id TEXT PRIMARY KEY, key TEXT NOT NULL CHECK(length(key) BETWEEN 1 AND 120),
   value TEXT NOT NULL CHECK(length(value) BETWEEN 1 AND 4000),

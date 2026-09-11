@@ -92,7 +92,11 @@ export function callAgentTool(
           db,
           (args as { id: string }).id,
           session.agentLabel,
-          (args as { body: string }).body,
+          {
+            body: (args as { body: string }).body,
+            confirmHandoffs: (args as { confirmHandoffs?: string[] }).confirmHandoffs,
+            clientRequestId: (args as { clientRequestId?: string }).clientRequestId,
+          },
           options.now,
         ),
       );

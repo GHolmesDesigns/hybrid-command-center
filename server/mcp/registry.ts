@@ -365,8 +365,13 @@ const agentTools: McpToolRegistryEntry[] = [
   ],
   [
     'conversation_post_message',
-    'Post a message as the authenticated agent.',
-    { id: { type: 'string' }, body: { type: 'string', maxLength: 4000 } },
+    'Post a message as the authenticated agent. Confirmed @mentions open linked handoffs atomically.',
+    {
+      id: { type: 'string' },
+      body: { type: 'string', maxLength: 4000 },
+      confirmHandoffs: { type: 'array', items: { type: 'string' } },
+      clientRequestId: { type: 'string' },
+    },
     'L',
   ],
   ['conversation_archive', 'Archive a visible conversation.', { id: { type: 'string' } }, 'L'],

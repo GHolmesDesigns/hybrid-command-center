@@ -47,6 +47,7 @@ import {
   type AgentHandoffMutationTool,
 } from './mutations.ts';
 import { recordChangeFeedEvent } from '../change-feeds.ts';
+import { applyHandoffSources } from '../agent-conversation-handoffs.ts';
 
 const id = () => crypto.randomUUID();
 
@@ -197,7 +198,8 @@ const replayNoteOutcome = (
 
 export function getHandoff(db: Db, handoffId: string): AgentHandoffDetail {
   const handoff = requireHandoff(db, handoffId);
-  return { ...handoff, notes: notesFor(db, handoffId) };
+  const [withSource] = applyHandoffSources(db, [handoff]);
+  return { ...withSource!, notes: notesFor(db, handoffId) };
 }
 
 export function listHandoffs(db: Db, rawFilter: unknown = {}): AgentHandoffPage {
@@ -223,7 +225,7 @@ export function listHandoffs(db: Db, rawFilter: unknown = {}): AgentHandoffPage 
     )
     .all(...params) as unknown as HandoffRow[];
   return {
-    handoffs: rows.slice(0, limit).map(toHandoff),
+    handoffs: applyHandoffSources(db, rows.slice(0, limit).map(toHandoff)),
     limit,
     offset,
     truncated: rows.length > limit,
@@ -240,6 +242,50 @@ export function countHandoffs(db: Db, state: AgentHandoffState): number {
 }
 
 /**
+ * Inserts an OPEN handoff when the caller already holds a database transaction.
+ * Returns the existing row when `(from_agent_label, client_request_id)` already exists.
+ */
+export function insertHandoff(db: Db, raw: AgentHandoffPostInput, instant: string): AgentHandoff {
+  const input = agentHandoffPostInputSchema.parse(raw);
+  const message = redactSecrets(input.message);
+  const toAgentLabel = input.toAgentLabel ?? null;
+  const subjectId = input.subjectId ?? null;
+  const clientRequestId = input.clientRequestId ?? null;
+
+  if (clientRequestId) {
+    const existing = db
+      .prepare(
+        `SELECT * FROM agent_handoffs
+         WHERE from_agent_label = ? AND client_request_id = ?`,
+      )
+      .get(input.fromAgentLabel, clientRequestId) as HandoffRow | undefined;
+    if (existing) return toHandoff(existing);
+  }
+
+  const handoffId = id();
+  db.prepare(
+    `INSERT INTO agent_handoffs(
+       id, created_at, updated_at, from_agent_label, from_agent_provenance, to_agent_label,
+       subject_type, subject_id, message, state,
+       claimed_by, claimed_at, completed_at, cancelled_at, cancel_reason, client_request_id
+     ) VALUES(?,?,?,?,?,?,?,?,?, 'OPEN', NULL, NULL, NULL, NULL, NULL, ?)`,
+  ).run(
+    handoffId,
+    instant,
+    instant,
+    input.fromAgentLabel,
+    input.fromAgentProvenance ?? 'UNKNOWN',
+    toAgentLabel,
+    input.subjectType,
+    subjectId,
+    message,
+    clientRequestId,
+  );
+  recordCoordinationChange(db, 'handoff.posted', handoffId, 'Handoff posted.', instant);
+  return requireHandoff(db, handoffId);
+}
+
+/**
  * Creates an OPEN handoff, or returns the existing row when `(from_agent_label, client_request_id)`
  * already exists. Never claims and never mutates workspace rows.
  */
@@ -248,46 +294,8 @@ export function postHandoff(
   raw: AgentHandoffPostInput,
   now: Date = new Date(),
 ): AgentHandoff {
-  const input = agentHandoffPostInputSchema.parse(raw);
   const instant = now.toISOString();
-  const message = redactSecrets(input.message);
-  const toAgentLabel = input.toAgentLabel ?? null;
-  const subjectId = input.subjectId ?? null;
-  const clientRequestId = input.clientRequestId ?? null;
-
-  return transaction(db, () => {
-    if (clientRequestId) {
-      const existing = db
-        .prepare(
-          `SELECT * FROM agent_handoffs
-           WHERE from_agent_label = ? AND client_request_id = ?`,
-        )
-        .get(input.fromAgentLabel, clientRequestId) as HandoffRow | undefined;
-      if (existing) return toHandoff(existing);
-    }
-
-    const handoffId = id();
-    db.prepare(
-      `INSERT INTO agent_handoffs(
-         id, created_at, updated_at, from_agent_label, from_agent_provenance, to_agent_label,
-         subject_type, subject_id, message, state,
-         claimed_by, claimed_at, completed_at, cancelled_at, cancel_reason, client_request_id
-       ) VALUES(?,?,?,?,?,?,?,?,?, 'OPEN', NULL, NULL, NULL, NULL, NULL, ?)`,
-    ).run(
-      handoffId,
-      instant,
-      instant,
-      input.fromAgentLabel,
-      input.fromAgentProvenance ?? 'UNKNOWN',
-      toAgentLabel,
-      input.subjectType,
-      subjectId,
-      message,
-      clientRequestId,
-    );
-    recordCoordinationChange(db, 'handoff.posted', handoffId, 'Handoff posted.', instant);
-    return requireHandoff(db, handoffId);
-  });
+  return transaction(db, () => insertHandoff(db, raw, instant));
 }
 
 /** Atomic claim: directed label match or open-pool first writer. */

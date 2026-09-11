@@ -3,8 +3,11 @@ import { Link } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, Handshake, MessageSquare, Send } from 'lucide-react';
 import type { AgentHandoff, AgentHandoffPage } from '../../../shared/agent-coordination';
 import { AGENT_HANDOFF_SUBJECT_TYPE_LABEL } from '../../../shared/agent-coordination';
+import type { MessageLinkedHandoff } from '../../../shared/agent-conversations';
 import { api, send } from '../api';
 import { formatDateTime } from './formatting';
+import { MentionHandoffPreview, MessageLinkedHandoffs } from './MentionHandoffCompose';
+import { useMentionHandoffCompose } from './useMentionHandoffCompose';
 
 type ScopeType = 'client' | 'project' | 'task';
 type Conversation = {
@@ -14,7 +17,14 @@ type Conversation = {
   updatedAt: string;
   state: 'ACTIVE' | 'ARCHIVED';
 };
-type Message = { id: string; senderLabel: string; sentAt: string; body: string };
+type Message = {
+  id: string;
+  senderLabel: string;
+  sentAt: string;
+  body: string;
+  linkedHandoffs?: MessageLinkedHandoff[];
+};
+type AgentDirectoryEntry = { label: string };
 type Page<T> = { items: T[]; nextCursor: string | null };
 
 const RELATED_HANDOFF_LIMIT = 20;
@@ -45,6 +55,8 @@ export function DiscussionPanel({
   const [handoffError, setHandoffError] = useState('');
   const [actionError, setActionError] = useState('');
   const [busy, setBusy] = useState<'start' | 'reply' | null>(null);
+  const [registeredLabels, setRegisteredLabels] = useState<string[]>([]);
+  const { offered, confirmed, toggle } = useMentionHandoffCompose(body, registeredLabels);
 
   const load = useCallback(async () => {
     const sequence = ++loadSequence.current;
@@ -85,6 +97,9 @@ export function DiscussionPanel({
     setHandoffError('');
     setActionError('');
     void load();
+    void api<{ agents: AgentDirectoryEntry[] }>('/agents/directory')
+      .then((page) => setRegisteredLabels((page.agents ?? []).map((entry) => entry.label)))
+      .catch(() => setRegisteredLabels([]));
     return () => {
       loadSequence.current += 1;
     };
@@ -132,6 +147,8 @@ export function DiscussionPanel({
     try {
       const message = await send<Message>(`/agent-conversations/${selected.id}/messages`, 'POST', {
         body: trimmedBody,
+        confirmHandoffs: confirmed,
+        clientRequestId: crypto.randomUUID(),
       });
       setMessages((current) => [...current, message]);
       setBody('');
@@ -239,6 +256,7 @@ export function DiscussionPanel({
               <strong>{message.senderLabel}</strong>
               <time>{formatDateTime(message.sentAt)}</time>
               <p>{message.body}</p>
+              <MessageLinkedHandoffs handoffs={message.linkedHandoffs ?? []} />
             </article>
           ))}
           <form
@@ -253,11 +271,12 @@ export function DiscussionPanel({
               <textarea
                 value={body}
                 onChange={(event) => setBody(event.target.value)}
-                placeholder="Write a reply"
+                placeholder="Write a reply (@agent to open a handoff)"
                 maxLength={4000}
                 required
               />
             </label>
+            <MentionHandoffPreview offered={offered} confirmed={confirmed} onToggle={toggle} />
             <button type="submit" disabled={busy !== null || !body.trim()}>
               <Send /> {busy === 'reply' ? 'Replying…' : 'Reply'}
             </button>
@@ -306,6 +325,17 @@ export function DiscussionPanel({
                 <small>
                   {handoff.fromAgentLabel} → {handoff.toAgentLabel ?? 'any agent'} ·{' '}
                   {formatDateTime(handoff.updatedAt)}
+                  {handoff.sourceConversationId && (
+                    <>
+                      {' '}
+                      ·{' '}
+                      <Link
+                        to={`/agents/conversations?open=${encodeURIComponent(handoff.sourceConversationId)}`}
+                      >
+                        From thread
+                      </Link>
+                    </>
+                  )}
                 </small>
               </li>
             ))}

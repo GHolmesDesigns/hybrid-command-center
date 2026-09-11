@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Archive, ArrowDown, MessageSquare, Send } from 'lucide-react';
+import type { MessageLinkedHandoff } from '../../../shared/agent-conversations';
 import { api, send } from '../api';
 import { PageHead } from './Shell';
+import { MentionHandoffPreview, MessageLinkedHandoffs } from './MentionHandoffCompose';
+import { useMentionHandoffCompose } from './useMentionHandoffCompose';
 
 type Conversation = {
   id: string;
@@ -19,7 +22,9 @@ type Message = {
   sentAt: string;
   body: string;
   provenance: 'UNKNOWN' | 'ASSERTED' | 'VERIFIED';
+  linkedHandoffs?: MessageLinkedHandoff[];
 };
+type AgentDirectoryEntry = { label: string };
 type Page<T> = { items: T[]; nextCursor: string | null; hasMore: boolean };
 
 const SCOPE_LABEL = {
@@ -48,6 +53,7 @@ export function ConversationsView({
       ? requestedScopeType
       : null;
   const scopeId = scopeType ? searchParams.get('scopeId')?.trim() || null : null;
+  const openConversationId = searchParams.get('open')?.trim() || null;
   const scopeQuery =
     scopeType && scopeId ? `&scopeType=${scopeType}&scopeId=${encodeURIComponent(scopeId)}` : '';
   const [state, setState] = useState<'ACTIVE' | 'ARCHIVED'>('ACTIVE');
@@ -56,6 +62,8 @@ export function ConversationsView({
   const [messages, setMessages] = useState<Message[]>([]);
   const [older, setOlder] = useState<string | null>(null);
   const [body, setBody] = useState('');
+  const [registeredLabels, setRegisteredLabels] = useState<string[]>([]);
+  const { offered, confirmed, toggle } = useMentionHandoffCompose(body, registeredLabels);
   const load = useCallback(async () => {
     try {
       const page = await api<Page<Conversation>>(
@@ -74,18 +82,35 @@ export function ConversationsView({
   useEffect(() => {
     void load();
   }, [load]);
-  const open = async (conversation: Conversation) => {
+  useEffect(() => {
+    void api<{ agents: AgentDirectoryEntry[] }>('/agents/directory')
+      .then((page) => setRegisteredLabels((page.agents ?? []).map((entry) => entry.label)))
+      .catch(() => setRegisteredLabels([]));
+  }, []);
+  const openedConversationRef = useRef<string | null>(null);
+  const open = useCallback(async (conversation: Conversation) => {
     setSelected(conversation);
     const page = await api<Page<Message>>(
       `/agent-conversations/${conversation.id}/messages?limit=50&direction=before`,
     );
     setMessages(page.items);
     setOlder(page.nextCursor);
-  };
+  }, []);
+  useEffect(() => {
+    if (!openConversationId || conversations.length === 0) return;
+    if (openedConversationRef.current === openConversationId) return;
+    const conversation = conversations.find((entry) => entry.id === openConversationId);
+    if (conversation) {
+      openedConversationRef.current = openConversationId;
+      void open(conversation);
+    }
+  }, [openConversationId, conversations, open]);
   const post = async () => {
     if (!selected || !body.trim()) return;
     const message = await send<Message>(`/agent-conversations/${selected.id}/messages`, 'POST', {
       body,
+      confirmHandoffs: confirmed,
+      clientRequestId: crypto.randomUUID(),
     });
     setMessages((current) => [...current, message]);
     setBody('');
@@ -200,6 +225,7 @@ export function ConversationsView({
                     <time>{new Date(message.sentAt).toLocaleString()}</time>
                   </div>
                   <p>{message.body}</p>
+                  <MessageLinkedHandoffs handoffs={message.linkedHandoffs ?? []} />
                 </article>
               ))}
             </div>
@@ -215,9 +241,10 @@ export function ConversationsView({
                   value={body}
                   onChange={(event) => setBody(event.target.value)}
                   maxLength={4000}
-                  placeholder="Write an operator reply"
+                  placeholder="Write an operator reply (@agent to open a handoff)"
                   aria-label="Message"
                 />
+                <MentionHandoffPreview offered={offered} confirmed={confirmed} onToggle={toggle} />
                 <button className="primary-btn" type="submit">
                   <Send /> Send
                 </button>

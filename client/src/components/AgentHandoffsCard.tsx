@@ -189,6 +189,16 @@ export function AgentHandoffsCard({
               )}
               <p className="handoff-message">{detail.message}</p>
               <SubjectLine handoff={detail} tasks={tasks} />
+              {detail.sourceConversationId && (
+                <p>
+                  Originating thread:{' '}
+                  <Link
+                    to={`/agents/conversations?open=${encodeURIComponent(detail.sourceConversationId)}`}
+                  >
+                    Open conversation
+                  </Link>
+                </p>
+              )}
               <dl className="handoff-meta">
                 <div>
                   <dt>Created</dt>

@@ -71,3 +71,33 @@ test('project discussions isolate threads and handoffs and stay in sync with Con
   await expect(otherDiscussion.getByText(newTitle)).toBeHidden();
   await expect(otherDiscussion.getByText(handoffMessage)).toBeHidden();
 });
+
+test('project thread @mention confirms a handoff and shows it on the message', async ({ page }) => {
+  const run = Date.now();
+  const client = await (
+    await page.request.post('/api/clients', { data: { name: `Mention Client ${run}` } })
+  ).json();
+  const project = await (
+    await page.request.post('/api/projects', {
+      data: { clientId: client.id, name: `Mention Project ${run}`, priority: 'HIGH' },
+    })
+  ).json();
+  const title = `Mention thread ${run}`;
+  const mentionBody = `@operator-session please review mention ${run}`;
+  await page.request.post('/api/agent-conversations', {
+    data: { title, scope: { type: 'project', id: project.id } },
+  });
+
+  await page.goto(`/projects/${project.id}`);
+  const discussion = page.getByRole('region', { name: 'Threads' });
+  await discussion.getByText(title).click();
+  await discussion.getByLabel('Reply').fill(mentionBody);
+  const handoffConfirm = discussion.getByRole('checkbox', {
+    name: 'Open handoff to @operator-session',
+  });
+  await expect(handoffConfirm).toBeVisible();
+  await expect(handoffConfirm).toBeChecked();
+  await discussion.getByRole('button', { name: 'Reply' }).click();
+  await expect(discussion.getByText(mentionBody)).toBeVisible();
+  await expect(discussion.getByText('Handoff to @operator-session · OPEN')).toBeVisible();
+});

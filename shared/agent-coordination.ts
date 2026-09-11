@@ -254,6 +254,8 @@ export interface AgentHandoff {
   subjectType: AgentHandoffSubjectType;
   subjectId: string | null;
   message: string;
+  sourceConversationId?: string | null;
+  sourceMessageId?: string | null;
   state: AgentHandoffState;
   claimedBy: string | null;
   claimedByProvenance: AgentIdentityProvenance | null;
