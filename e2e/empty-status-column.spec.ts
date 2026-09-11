@@ -32,8 +32,9 @@ test('drops a task into an empty status column and persists the status', async (
 
   await page.mouse.down();
   await page.mouse.move(source.x + source.width / 2 + 20, source.y + source.height / 2, {
-    steps: 5,
+    steps: 10,
   });
+  await page.waitForTimeout(100);
   await expect(card).toHaveClass(/dragging/);
   await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 20 });
   await page.mouse.up();

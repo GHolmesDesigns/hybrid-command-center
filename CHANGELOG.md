@@ -1,5 +1,15 @@
 # Changelog
 
+## [6.8.3] - 2026-09-11
+
+### Added
+
+- Scheduled agent runs that create deduplicated handoffs, with pause, run-now, failure policy, and last-outcome visibility on Agents.
+
+### Breaking changes
+
+None.
+
 ## [6.8.2] - 2026-09-11
 
 ### Fixed
