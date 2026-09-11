@@ -1255,6 +1255,26 @@ tailored by a request reported as having failed. A preview is refused while a la
 the same reason it is refused while the post is: a preview of unsaved content is a preview of
 something that is not going out.
 
+### 11.1 Agent publish requests
+
+An agent that wants the operator to publish a post uses the separate confirmation queue:
+
+1. `POST /api/signal/posts/:id/publish-confirmation/preview` accepts an `agentLabel`, a unique
+   `clientRequestId`, and the requested timing. It creates a `PENDING` request containing the exact
+   preview and plan hash, but it does not call a provider write method.
+2. The operator opens **Agents → Publish confirmations** and chooses **Approve** or **Deny**.
+   Approval re-reads the provider targets and re-plans the post. A changed post, target list, or
+   refusal expires the request with a `409` before `PublishService.submit` can run. Denial leaves
+   the Signal post and provider untouched.
+3. Approval is the only queue path that calls the existing publisher. The request becomes
+   `APPROVED`, `FAILED`, or `PROVIDER_UNCERTAIN` from the resulting publication, and the request
+   and provider attempt are retained in the integration activity log.
+
+Requests expire after 24 hours and the pending queue is bounded at 20 records. The ordinary UI
+**Show preview → Confirm and submit** flow remains an operator-owned confirmation and does not
+create an agent queue row. MCP still exposes `signal_publish_preview` as a read; it has no provider
+publish tool, so there is no unattended MCP publish path to enable.
+
 ---
 
 ## 12. Credentials and secrets

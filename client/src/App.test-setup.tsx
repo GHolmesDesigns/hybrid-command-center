@@ -284,6 +284,22 @@ export const testState = {
       executionLeaseMs: 60 * 60 * 1000,
     },
   } as DriveWriteQueueSummary,
+  publishConfirmationRequestsPayload: [] as {
+    id: string;
+    agentLabel: string;
+    confirmation: string;
+    status: string;
+    createdAt: string;
+    error: string | null;
+  }[],
+  publishConfirmationQueueSummary: {
+    pendingCount: 0,
+    oldestPendingAt: null as string | null,
+    oldestPendingAgeMs: null as number | null,
+    expiredCount: 0,
+    providerUncertainCount: 0,
+    limits: { pendingCount: 20, pendingAgeMs: 24 * 60 * 60 * 1000 },
+  },
   mcpHealthPanelPayload: {
     enabled: true,
     state: 'never_connected',
@@ -805,6 +821,11 @@ const payloadFor = (url: string) => {
       requests: testState.driveWriteRequestsPayload,
       summary: testState.driveWriteQueueSummary,
     };
+  if (url.endsWith('/api/signal/publish-confirmations'))
+    return {
+      requests: testState.publishConfirmationRequestsPayload,
+      summary: testState.publishConfirmationQueueSummary,
+    };
   if (url.endsWith('/api/mcp/health')) return testState.mcpHealthPanelPayload;
   if (url.endsWith('/api/projects')) return testState.projectsPayload;
   if (url.endsWith('/api/clients')) return testState.clientsPayload;
@@ -905,6 +926,21 @@ const respondTo = (url: string, init?: RequestInit) => {
     testState.driveWriteRequestsPayload = testState.driveWriteRequestsPayload.filter(
       (candidate) => candidate.id !== request.id,
     );
+    return request;
+  }
+  const publishConfirmationDecision = url.match(
+    /\/api\/signal\/publish-confirmations\/([^/]+)\/(approve|deny)$/,
+  );
+  if (publishConfirmationDecision && method === 'POST') {
+    const request = testState.publishConfirmationRequestsPayload.find(
+      (candidate) => candidate.id === publishConfirmationDecision[1],
+    );
+    if (!request) return reply(404, { error: 'Publish confirmation not found.' });
+    request.status = publishConfirmationDecision[2] === 'approve' ? 'APPROVED' : 'DENIED';
+    testState.publishConfirmationRequestsPayload =
+      testState.publishConfirmationRequestsPayload.filter(
+        (candidate) => candidate.id !== request.id,
+      );
     return request;
   }
   const revokeMcpCredential = url.match(/\/api\/auth\/mcp-credentials\/([^/?]+)\/revoke$/);
@@ -1844,6 +1880,15 @@ beforeEach(() => {
       pendingAgeMs: 24 * 60 * 60 * 1000,
       executionLeaseMs: 60 * 60 * 1000,
     },
+  };
+  testState.publishConfirmationRequestsPayload = [];
+  testState.publishConfirmationQueueSummary = {
+    pendingCount: 0,
+    oldestPendingAt: null,
+    oldestPendingAgeMs: null,
+    expiredCount: 0,
+    providerUncertainCount: 0,
+    limits: { pendingCount: 20, pendingAgeMs: 24 * 60 * 60 * 1000 },
   };
   testState.mcpCredentialVerificationPayload = {
     credentialId: 'credential-issued',

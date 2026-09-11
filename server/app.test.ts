@@ -34,6 +34,8 @@ import { APP_VERSION, DEFAULT_BRANDING } from '../shared/branding.ts';
 import { manualUrlForVersion } from '../shared/manual.ts';
 import { CANONICAL_VIEW_DEFAULTS, type ViewDefaults } from '../shared/view-defaults.ts';
 import { MCP_OAUTH_AUTHORIZE_PAGE_STYLE_HASH } from './mcp/oauth-routes.ts';
+import { seedSignalPost } from './signal/test-fixture.ts';
+import { MockPublishProvider } from './publish/mock-provider.ts';
 
 let db: Db;
 beforeEach(() => {
@@ -120,6 +122,85 @@ const stampsOf = (projectId: string) =>
     )
     .get(projectId) as { updatedAt: string; lastActivityAt: string };
 describe('command center API', () => {
+  it('holds agent publishing behind a preview hash and operator decision', async () => {
+    const post = seedSignalPost(db, {
+      id: 'confirmation-post',
+      text: 'Approval-required launch',
+      channels: ['li'],
+      date: '2027-08-14',
+      time: '09:00',
+    });
+    const provider = new MockPublishProvider([
+      { id: 1, platform: 'linkedin', handle: '@studio', name: 'Studio' },
+    ]);
+    const app = createApp(db, {
+      publish: provider,
+      publishTimezone: 'America/New_York',
+      now: () => new Date('2026-09-11T12:00:00.000Z'),
+    });
+
+    const created = await request(app)
+      .post(`/api/signal/posts/${post.id}/publish-confirmation/preview`)
+      .send({ agentLabel: 'content-agent', clientRequestId: 'publish-1', timing: 'scheduled' })
+      .expect(201);
+    expect(created.body).toMatchObject({
+      postId: post.id,
+      agentLabel: 'content-agent',
+      status: 'PENDING',
+      planHash: expect.stringMatching(/^[0-9a-f]{64}$/),
+    });
+    const requestId = created.body.id as string;
+    expect(provider.submissions).toHaveLength(0);
+
+    await request(app)
+      .get('/api/signal/publish-confirmations?status=PENDING')
+      .expect(200)
+      .expect(({ body }) => expect(body.requests[0]).toMatchObject({ id: requestId }));
+    const approved = await request(app)
+      .post(`/api/signal/publish-confirmations/${requestId}/approve`)
+      .expect(200);
+    expect(approved.body.status).toBe('APPROVED');
+    expect(provider.submissions).toHaveLength(1);
+    expect(
+      db.prepare('SELECT COUNT(*) AS count FROM signal_publications WHERE post_id=?').get(post.id),
+    ).toEqual({ count: 1 });
+  });
+
+  it('refuses a stale publish confirmation before a provider write', async () => {
+    const post = seedSignalPost(db, {
+      id: 'stale-confirmation-post',
+      channels: ['li'],
+      date: '2027-08-14',
+      time: '09:00',
+    });
+    const provider = new MockPublishProvider([
+      { id: 1, platform: 'linkedin', handle: '@studio', name: 'Studio' },
+    ]);
+    const app = createApp(db, {
+      publish: provider,
+      publishTimezone: 'America/New_York',
+      now: () => new Date('2026-09-11T12:00:00.000Z'),
+    });
+    const created = await request(app)
+      .post(`/api/signal/posts/${post.id}/publish-confirmation/preview`)
+      .send({ agentLabel: 'content-agent', clientRequestId: 'publish-stale', timing: 'scheduled' })
+      .expect(201);
+    db.prepare('UPDATE signal_posts SET text=?, revision=revision+1 WHERE id=?').run(
+      'Changed after preview',
+      post.id,
+    );
+
+    await request(app)
+      .post(`/api/signal/publish-confirmations/${created.body.id}/approve`)
+      .expect(409);
+    expect(provider.submissions).toHaveLength(0);
+    expect(
+      db
+        .prepare('SELECT status FROM signal_publish_confirmation_requests WHERE id=?')
+        .get(created.body.id),
+    ).toEqual({ status: 'EXPIRED' });
+  });
+
   it('lists and decides agent Drive requests through the operator boundary', async () => {
     const { p } = await setup();
     db.prepare('UPDATE projects SET drive_folder_id=?, drive_folder_url=? WHERE id=?').run(
