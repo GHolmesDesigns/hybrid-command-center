@@ -209,7 +209,17 @@ import {
   type BufferReadProvider,
 } from './publish/buffer/read-provider.ts';
 import { resolvePublishingTargets } from './publish/targets.ts';
-import { PROVIDER_ACTIONS } from '../shared/publish.ts';
+import { publishPreviewRefusals, PROVIDER_ACTIONS } from '../shared/publish.ts';
+import {
+  createPublishConfirmation,
+  decidePublishConfirmation,
+  getPublishConfirmation,
+  listPublishConfirmations,
+  publishConfirmationInput,
+  PublishConfirmationError,
+  summarizePublishConfirmations,
+} from './publish/confirmations.ts';
+import { PUBLISH_CONFIRMATION_STATUSES } from '../shared/publish-confirmation.ts';
 import {
   OAuthStateError,
   beginAuthorization,
@@ -1544,6 +1554,84 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         next(error);
       }
     })();
+  });
+
+  /**
+   * Agent-initiated Signal publishing requests. The preview route only reads local/provider
+   * planning data and persists a request; the approval route below is the sole path from this
+   * queue into PublishService.submit/submitNow. The ordinary UI publish routes remain the
+   * operator-owned confirmation path and intentionally do not create agent queue rows.
+   */
+  app.get('/api/signal/publish-confirmations', (req, res, next) => {
+    try {
+      const status = z.enum(PUBLISH_CONFIRMATION_STATUSES).optional().parse(req.query.status);
+      res.json({
+        requests: listPublishConfirmations(db, status, clock()),
+        summary: summarizePublishConfirmations(db, clock()),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/signal/posts/:id/publish-confirmation/preview', async (req, res, next) => {
+    try {
+      const input = publishConfirmationInput.parse(req.body);
+      const listed = await resolvePublishingTargets(db, publishProvider, bufferAccounts, clock);
+      const preview =
+        input.timing === 'now'
+          ? await publisher.previewNow(req.params.id, listed)
+          : await publisher.preview(req.params.id, listed);
+      res.status(201).json(createPublishConfirmation(db, input, preview, clock()));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/signal/publish-confirmations/:id/approve', async (req, res, next) => {
+    try {
+      getPublishConfirmation(db, req.params.id, clock());
+      const listed = await resolvePublishingTargets(db, publishProvider, bufferAccounts, clock);
+      const approved = await decidePublishConfirmation(
+        db,
+        req.params.id,
+        'approve',
+        async (request) => {
+          const current =
+            request.timing === 'now'
+              ? await publisher.previewNow(request.postId, listed)
+              : await publisher.preview(request.postId, listed);
+          if (current.planHash !== request.planHash || publishPreviewRefusals(current).length > 0)
+            throw new PublishConfirmationError(
+              'This publish confirmation is stale. Preview it again before approving.',
+              409,
+              'STALE',
+            );
+          return request.timing === 'now'
+            ? publisher.submitNow(request.postId, request.planHash, listed)
+            : publisher.submit(request.postId, request.planHash, listed);
+        },
+        clock(),
+      );
+      res.json(approved);
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/signal/publish-confirmations/:id/deny', async (req, res, next) => {
+    try {
+      res.json(
+        await decidePublishConfirmation(
+          db,
+          req.params.id,
+          'deny',
+          async () => {
+            throw new Error('Denied publish confirmation must not execute.');
+          },
+          clock(),
+        ),
+      );
+    } catch (error) {
+      next(error);
+    }
   });
 
   /**
@@ -3324,6 +3412,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
             // workspace moved out from under — and each case carries its own status. A slot
             // that is no longer free is the same kind of refusal.
             error instanceof PublishRequestError ||
+              error instanceof PublishConfirmationError ||
               error instanceof ClientMergeError ||
               error instanceof AgentCoordinationError ||
               error instanceof RevisionConflictError ||
