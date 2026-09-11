@@ -32,9 +32,12 @@ export const createConversationSchema = z
   })
   .strict();
 export const messageSchema = z.string().trim().min(1).max(4000);
+export const thoughtSummarySchema = z.string().trim().min(1).max(4000);
+
 export const postMessageInputSchema = z
   .object({
     body: messageSchema,
+    thoughtSummary: thoughtSummarySchema.optional(),
     confirmHandoffs: z.array(agentLabelSchema).max(50).default([]),
     clientRequestId: agentHandoffClientRequestIdSchema.optional(),
   })
@@ -92,6 +95,7 @@ export type AgentConversationMessage = {
   senderLabel: string;
   sentAt: string;
   body: string;
+  thoughtSummary: string | null;
   provenance: AgentIdentityProvenance;
   linkedHandoffs: MessageLinkedHandoff[];
 };

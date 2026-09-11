@@ -67,6 +67,40 @@ describe('agent conversations', () => {
     expect(new Set([...newest.items, ...older.items].map((message) => message.id)).size).toBe(3);
   });
 
+  it('stores agent thought summaries and refuses them on operator posts', () => {
+    const db = createDb(':memory:');
+    const conversation = createConversation(
+      db,
+      { title: 'Thoughts', scope: { type: 'freeform' }, participantLabels: ['reviewer'] },
+      'operator',
+    );
+    const agent = postMessage(
+      db,
+      conversation.id,
+      'reviewer',
+      {
+        body: 'Here is the answer.',
+        thoughtSummary: 'I checked the queue health rules first.',
+      },
+      new Date('2026-09-08T12:01:00.000Z'),
+    );
+    const operator = postMessage(
+      db,
+      conversation.id,
+      'operator',
+      {
+        body: 'Thanks.',
+        thoughtSummary: 'Should be ignored.',
+      },
+      new Date('2026-09-08T12:02:00.000Z'),
+    );
+    expect(agent.thoughtSummary).toBe('I checked the queue health rules first.');
+    expect(operator.thoughtSummary).toBeNull();
+    expect(
+      listMessages(db, conversation.id, 'reviewer').items.map((m) => m.thoughtSummary),
+    ).toEqual(['I checked the queue health rules first.', null]);
+  });
+
   it('archives without deleting messages and excludes archived rows when filtered', () => {
     const db = createDb(':memory:');
     const conversation = createConversation(

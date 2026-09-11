@@ -111,37 +111,30 @@ const linkedHandoffsForMessages = (
   return byMessage;
 };
 
-const toMessage = (
-  row: {
-    id: string;
-    conversation_id: string;
-    sender_label: string;
-    sent_at: string;
-    body: string;
-    sender_provenance: AgentIdentityProvenance;
-  },
-  linked: MessageLinkedHandoff[],
-): AgentConversationMessage => ({
+type MessageRow = {
+  id: string;
+  conversation_id: string;
+  sender_label: string;
+  sent_at: string;
+  body: string;
+  sender_provenance: AgentIdentityProvenance;
+  thought_summary?: string | null;
+};
+
+const toMessage = (row: MessageRow, linked: MessageLinkedHandoff[]): AgentConversationMessage => ({
   id: row.id,
   conversationId: row.conversation_id,
   senderLabel: row.sender_label,
   sentAt: row.sent_at,
   body: row.body,
+  thoughtSummary: row.thought_summary ?? null,
   provenance: row.sender_provenance,
   linkedHandoffs: linked,
 });
 
 const loadMessageById = (db: Db, messageId: string): AgentConversationMessage => {
   const row = db.prepare('SELECT * FROM agent_conversation_messages WHERE id=?').get(messageId) as
-    | {
-        id: string;
-        conversation_id: string;
-        sender_label: string;
-        sent_at: string;
-        body: string;
-        sender_provenance: AgentIdentityProvenance;
-      }
-    | undefined;
+    MessageRow | undefined;
   if (!row) throw Object.assign(new Error('Message not found.'), { status: 404 });
   const linked = linkedHandoffsForMessages(db, [row.id]).get(row.id) ?? [];
   return toMessage(row, linked);
@@ -284,9 +277,11 @@ export function postMessage(
     }
 
     const messageId = crypto.randomUUID();
+    const thoughtSummary =
+      actor === 'operator' ? null : (input.thoughtSummary?.trim() ?? null) || null;
     db.prepare(
-      'INSERT INTO agent_conversation_messages(id,conversation_id,sender_label,sent_at,body,sender_provenance) VALUES(?,?,?,?,?,?)',
-    ).run(messageId, id, actor, instant, body, provenance);
+      'INSERT INTO agent_conversation_messages(id,conversation_id,sender_label,sent_at,body,sender_provenance,thought_summary) VALUES(?,?,?,?,?,?,?)',
+    ).run(messageId, id, actor, instant, body, provenance, thoughtSummary);
     if (input.clientRequestId) {
       db.prepare(
         'INSERT INTO agent_conversation_post_requests(conversation_id,client_request_id,message_id) VALUES(?,?,?)',
@@ -332,6 +327,7 @@ export function postMessage(
         sent_at: instant,
         body,
         sender_provenance: provenance,
+        thought_summary: thoughtSummary,
       },
       linked,
     );
@@ -357,14 +353,7 @@ export function listMessages(
     before
       ? statement.all(id, c?.at ?? null, c?.at ?? '', c?.at ?? '', c?.id ?? '', limit + 1)
       : statement.all(id, c?.at ?? null, c?.at ?? '', c?.at ?? '', c?.id ?? '', limit + 1)
-  ) as {
-    id: string;
-    conversation_id: string;
-    sender_label: string;
-    sent_at: string;
-    body: string;
-    sender_provenance: AgentIdentityProvenance;
-  }[];
+  ) as MessageRow[];
   const linkedByMessage = linkedHandoffsForMessages(
     db,
     rows.slice(0, limit).map((row) => row.id),

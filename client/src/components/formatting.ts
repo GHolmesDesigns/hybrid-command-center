@@ -38,3 +38,5 @@ export const initials = (name: string) =>
     .slice(0, 2)
     .join('')
     .toUpperCase();
+
+export const shortConversationId = (id: string) => id.replace(/-/g, '').slice(-8);

@@ -51,6 +51,7 @@ import { SignalView } from './SignalView';
 import { TasksView } from './TasksView';
 import { HealthView } from './HealthView';
 import { ConversationsView } from './ConversationsView';
+import { CommandAiFab, CommandAiPanel, CommandAiTopbarToggle } from './CommandAiPanel';
 import { TaskDetail } from './TaskDetail';
 import { PageHead } from './Shell';
 import { Nav } from './Shell';
@@ -67,6 +68,7 @@ export type Modal =
   | null;
 
 const SIDEBAR_KEY = 'hcc-sidebar-collapsed';
+const COMMAND_AI_KEY = 'hcc-command-ai-open';
 
 const LAST_PROJECT_KEY = 'hcc-last-project';
 
@@ -192,6 +194,9 @@ export function App() {
   const [notice, setNotice] = useState<{ tone: 'success' | 'error'; text: string } | null>(null),
     [navOpen, setNavOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === '1');
+  const [commandAiOpen, setCommandAiOpen] = useState(
+    () => localStorage.getItem(COMMAND_AI_KEY) === '1',
+  );
   const [lastProjectId, setLastProjectId] = useState(
     () => localStorage.getItem(LAST_PROJECT_KEY) || '',
   );
@@ -249,6 +254,9 @@ export function App() {
     localStorage.setItem(SIDEBAR_KEY, collapsed ? '1' : '0');
   }, [collapsed]);
   useEffect(() => {
+    localStorage.setItem(COMMAND_AI_KEY, commandAiOpen ? '1' : '0');
+  }, [commandAiOpen]);
+  useEffect(() => {
     localStorage.setItem(LAST_PROJECT_KEY, lastProjectId);
   }, [lastProjectId]);
   const flash = (text: string, tone: 'success' | 'error' = 'success') => {
@@ -274,7 +282,9 @@ export function App() {
       </div>
     );
   return (
-    <div className={`app-shell ${collapsed ? 'sidebar-collapsed' : ''}`}>
+    <div
+      className={`app-shell ${collapsed ? 'sidebar-collapsed' : ''} ${commandAiOpen ? 'command-ai-open' : ''}`}
+    >
       <aside
         className={`sidebar ${navOpen ? 'open' : ''} ${collapsed ? 'collapsed' : ''}`}
         style={brandStyle(branding)}
@@ -358,6 +368,10 @@ export function App() {
           </button>
           <BreadcrumbTrail clients={clients} projects={projects} tasks={tasks} />
           <div className="top-actions">
+            <CommandAiTopbarToggle
+              open={commandAiOpen}
+              onClick={() => setCommandAiOpen((value) => !value)}
+            />
             <TopbarAddPost />
             <button
               className="top-action"
@@ -537,6 +551,8 @@ export function App() {
           flash={flash}
         />
       )}
+      <CommandAiPanel open={commandAiOpen} onClose={() => setCommandAiOpen(false)} />
+      <CommandAiFab open={commandAiOpen} onClick={() => setCommandAiOpen(true)} />
       {notice && (
         <div className={`toast ${notice.tone}`} role="status">
           {notice.tone === 'success' ? <CheckCircle2 /> : <CircleAlert />}
