@@ -326,7 +326,8 @@ const agentTool = (
   inputSchema: { type: 'object', properties, additionalProperties: false },
   class: write ? 'L' : 'R',
   requiredScope: write ? 'workspace:write' : 'workspace:read',
-  owner: 'server/agent-summaries.ts',
+  owner:
+    name === 'agent_list_directory' ? 'server/agent-directory.ts' : 'server/agent-summaries.ts',
   handler: 'agent_tools',
 });
 
@@ -390,6 +391,12 @@ const agentTools: McpToolRegistryEntry[] = [
     'agent_list_presence',
     'List bounded presence signals for registered agents.',
     { agentLabel: { type: 'string' }, limit: { type: 'integer', minimum: 1, maximum: 100 } },
+    'R',
+  ],
+  [
+    'agent_list_directory',
+    'List registered agent profiles, trust, capabilities, and charters.',
+    {},
     'R',
   ],
   [

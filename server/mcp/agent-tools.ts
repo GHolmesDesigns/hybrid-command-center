@@ -36,6 +36,7 @@ import {
   suggestMemory,
 } from '../agent-memory.ts';
 import { agentMemoryListSchema } from '../../shared/agent-memory.ts';
+import { listAgentDirectory } from '../agent-directory.ts';
 
 const success = (data: unknown): McpToolCallResult => ({
   outcome: 'SUCCESS',
@@ -120,6 +121,8 @@ export function callAgentTool(
       return success(setPresence(db, session.agentLabel!, args, options.now));
     case 'agent_list_presence':
       return success(listPresence(db, args));
+    case 'agent_list_directory':
+      return success({ agents: listAgentDirectory(db, options.now.getTime()) });
     case 'agent_list_summaries':
       return success(listSummaries(db, summaryListSchema.parse(args), options.now));
     case 'agent_list_notifications':

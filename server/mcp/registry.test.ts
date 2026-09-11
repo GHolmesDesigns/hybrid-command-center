@@ -24,10 +24,11 @@ describe('mcp tool registry', () => {
     expect(names).toContain('files_browse_project');
     expect(names).toContain('agent_health_dashboard');
     expect(names).toContain('agent_set_presence');
+    expect(names).toContain('agent_list_directory');
     expect(names).toContain('agent_list_notifications');
     expect(
       names.filter((name) => name !== 'system_capabilities' && name !== 'system_connection_status'),
-    ).toHaveLength(82);
+    ).toHaveLength(83);
     expect(names).toContain('system_connection_status');
     expect(isRegisteredMcpTool('system_capabilities')).toBe(true);
     expect(isRegisteredMcpTool('not_a_tool')).toBe(false);

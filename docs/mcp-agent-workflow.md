@@ -61,6 +61,7 @@ Use MCP prompts rather than improvising the loop:
 Agent operational tools are available over MCP with the same scopes as their underlying
 endpoints: `agent_health_dashboard`, `agent_get_presence`, `agent_set_presence`,
 `agent_list_presence`, `agent_list_summaries`, `agent_list_notifications`,
+`agent_list_directory`,
 `agent_create_notification`, and `agent_mark_notification_read`. The get/set presence tools are
 bound to the authenticated session's `agent_label`; list and notification calls remain bounded by
 their input limits. `review_project_status` includes the application health dashboard signal.

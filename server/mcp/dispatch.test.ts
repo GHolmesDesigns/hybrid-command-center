@@ -171,6 +171,34 @@ describe('callMcpTool', () => {
     expect(names).toContain('signal_publish_preview');
   });
 
+  it('reads the registered directory, including the descriptive charter', async () => {
+    db.prepare(
+      'INSERT INTO agent_registrations(id,display_label,created_at,last_used_at,last_origin) VALUES(?,?,?,?,?)',
+    ).run('directory-agent', 'directory-agent', NOW.toISOString(), null, null);
+    db.prepare(
+      `INSERT INTO agent_profiles(agent_id,display_name,bio,charter,trust_level,last_verified_at)
+       VALUES(?,?,?,?,?,?)`,
+    ).run(
+      'directory-agent',
+      'Directory Agent',
+      null,
+      'Owns the queue.',
+      'VERIFIED',
+      NOW.toISOString(),
+    );
+    const result = await callMcpTool(
+      db,
+      createMcpSession({ agentLabel: 'reader' }),
+      'agent_list_directory',
+      {},
+      { grantedScopes: ['workspace:read'], now: NOW },
+    );
+    expect(result.outcome).toBe('SUCCESS');
+    expect((result.data as { agents: Array<Record<string, unknown>> }).agents).toContainEqual(
+      expect.objectContaining({ label: 'directory-agent', charter: 'Owns the queue.' }),
+    );
+  });
+
   it('refuses workspace reads without workspace:read scope', async () => {
     const session = createMcpSession({ agentLabel: 'cursor' });
     const result = await callMcpTool(

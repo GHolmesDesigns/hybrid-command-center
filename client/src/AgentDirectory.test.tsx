@@ -17,6 +17,7 @@ describe('Agent directory', () => {
               label: 'reviewer',
               displayName: 'Review Agent',
               bio: 'Reviews changes.',
+              charter: 'Owns queue health.',
               trustLevel: 'VERIFIED',
               availability: 'CURRENT',
               capabilities: [{ name: 'code-review', description: 'Reviews code.' }],
@@ -26,6 +27,7 @@ describe('Agent directory', () => {
               label: 'offline',
               displayName: 'Offline Agent',
               bio: null,
+              charter: null,
               trustLevel: 'UNVERIFIED',
               availability: 'HISTORICAL',
               capabilities: [],
@@ -39,6 +41,7 @@ describe('Agent directory', () => {
     expect(screen.getByText('Verified recently')).toBeVisible();
     expect(screen.getByText('Historical availability')).toBeVisible();
     expect(screen.getByText('code-review')).toBeVisible();
+    expect(screen.getAllByText('Owns queue health.').length).toBeGreaterThan(0);
     expect(screen.queryByText(/token/i)).toBeNull();
   });
 
@@ -70,6 +73,7 @@ describe('Agent directory', () => {
               displayName: 'Review Agent',
               trustLevel: 'VERIFIED',
               availability: 'CURRENT',
+              charter: null,
               capabilities: [],
             },
             {
@@ -78,6 +82,7 @@ describe('Agent directory', () => {
               displayName: 'Quiet Agent',
               trustLevel: 'UNVERIFIED',
               availability: 'CURRENT',
+              charter: null,
               capabilities: [],
             },
           ],
@@ -146,6 +151,7 @@ describe('Agent directory', () => {
                 displayName: 'Broken Agent',
                 trustLevel: 'VERIFIED',
                 availability: 'CURRENT',
+                charter: null,
                 capabilities: [],
               },
             ],
@@ -169,5 +175,53 @@ describe('Agent directory', () => {
     );
     render(<AgentDirectoryCard />);
     expect(await screen.findByText('Live presence: Unknown')).toBeVisible();
+  });
+
+  it('saves an operator charter and shows confirmation', async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/agents/directory') && init?.method !== 'PATCH') {
+        return response({
+          agents: [
+            {
+              id: 'a1',
+              label: 'reviewer',
+              displayName: 'Review Agent',
+              bio: null,
+              charter: null,
+              trustLevel: 'VERIFIED',
+              availability: 'CURRENT',
+              capabilities: [],
+            },
+          ],
+        });
+      }
+      if (url.includes('/agents/presence')) return response({ presence: [] });
+      if (url.includes('/agent-summaries')) return response({ summaries: [] });
+      return response({
+        ok: true,
+        agent: {
+          id: 'a1',
+          label: 'reviewer',
+          displayName: 'Review Agent',
+          bio: null,
+          charter: 'Owns queue health.',
+          trustLevel: 'VERIFIED',
+          availability: 'CURRENT',
+          capabilities: [],
+        },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<AgentDirectoryCard />);
+    const charter = await screen.findByLabelText('Charter for Review Agent');
+    fireEvent.change(charter, { target: { value: 'Owns queue health.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save charter' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('Charter saved.');
+    const patchRequest = fetchMock.mock.calls.find(
+      ([input, init]) => String(input).includes('/agents/a1/profile') && init?.method === 'PATCH',
+    );
+    expect(JSON.parse(String(patchRequest?.[1]?.body))).toEqual({ charter: 'Owns queue health.' });
+    expect(screen.getByText('Published charter')).toBeVisible();
   });
 });
