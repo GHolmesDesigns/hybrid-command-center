@@ -1,4 +1,5 @@
 import { useLocation } from 'react-router-dom';
+import { act } from '@testing-library/react';
 import {
   render,
   screen,
@@ -13,6 +14,7 @@ import {
   branding,
   task,
   testState,
+  requests,
 } from './App.test-setup';
 
 function LocationProbe() {
@@ -21,6 +23,41 @@ function LocationProbe() {
 }
 
 describe('App', () => {
+  it('opens the Agent Hub tip stream when live tips are enabled', async () => {
+    testState.liveTipsPayload = { enabled: true };
+    const opened: string[] = [];
+    let onmessage: ((event: MessageEvent) => void) | null = null;
+    class MockEventSource {
+      close() {}
+      onerror = null;
+      constructor(url: string) {
+        opened.push(url);
+      }
+      set onmessage(fn: ((event: MessageEvent) => void) | null) {
+        onmessage = fn;
+      }
+    }
+    const original = globalThis.EventSource;
+    globalThis.EventSource = MockEventSource as unknown as typeof EventSource;
+    const notificationReads = () =>
+      requests.filter((request) => request.url.includes('/api/agent-notifications'));
+
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText(branding.title)).toBeInTheDocument();
+    expect(opened).toContain('/api/agent-hub/tips');
+    const initialReads = notificationReads().length;
+    act(() => {
+      onmessage?.({ data: JSON.stringify({ feeds: ['notifications'] }) } as MessageEvent);
+    });
+    await waitFor(() => expect(notificationReads().length).toBeGreaterThan(initialReads));
+    globalThis.EventSource = original;
+  });
+
   it('renders the sidebar with fetched branding once loading resolves', async () => {
     render(
       <MemoryRouter>

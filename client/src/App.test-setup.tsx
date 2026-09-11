@@ -6,6 +6,10 @@ import { addDays, format } from 'date-fns';
 import { App } from './App';
 import { APP_VERSION, DEFAULT_BRANDING, type Branding } from '../../shared/branding';
 import { CANONICAL_VIEW_DEFAULTS, type ViewDefaults } from '../../shared/view-defaults';
+import {
+  DEFAULT_AGENT_HUB_LIVE_TIPS_SETTINGS,
+  type AgentHubLiveTipsSettings,
+} from '../../shared/agent-hub-sse';
 import type { Category, Client, DashboardData, Project, Tag, Task } from '../../shared/types';
 import { sameTagName } from '../../shared/types';
 import {
@@ -222,6 +226,7 @@ export const testState = {
   dashboardPayload: emptyDashboard as DashboardData,
   brandingPayload: null as Branding | null,
   viewDefaultsPayload: null as ViewDefaults | null,
+  liveTipsPayload: null as AgentHubLiveTipsSettings | null,
   manualPayload: null as { version: string; available: boolean; url: string | null } | null,
   taskPatchError: null as string | null,
   taskReorderError: null as string | null,
@@ -805,6 +810,8 @@ const payloadFor = (url: string) => {
     return { branding: testState.brandingPayload ?? branding };
   if (url.endsWith('/api/settings/view-defaults'))
     return { viewDefaults: testState.viewDefaultsPayload ?? CANONICAL_VIEW_DEFAULTS };
+  if (url.endsWith('/api/settings/agent-hub-live-tips'))
+    return { liveTips: testState.liveTipsPayload ?? DEFAULT_AGENT_HUB_LIVE_TIPS_SETTINGS };
   if (url.endsWith('/api/settings/manual'))
     return (
       testState.manualPayload ?? {
@@ -1744,6 +1751,10 @@ const respondTo = (url: string, init?: RequestInit) => {
     testState.viewDefaultsPayload = body as ViewDefaults;
     return { viewDefaults: testState.viewDefaultsPayload };
   }
+  if (url.endsWith('/api/settings/agent-hub-live-tips') && method === 'PUT') {
+    testState.liveTipsPayload = body as AgentHubLiveTipsSettings;
+    return { liveTips: testState.liveTipsPayload };
+  }
   if (url.endsWith('/api/settings/branding') && method === 'PUT') {
     testState.brandingPayload = body as Branding;
     return { branding: testState.brandingPayload };
@@ -1904,6 +1915,7 @@ beforeEach(() => {
   testState.dashboardPayload = emptyDashboard;
   testState.brandingPayload = null;
   testState.viewDefaultsPayload = null;
+  testState.liveTipsPayload = null;
   testState.manualPayload = null;
   testState.taskPatchError = null;
   testState.taskReorderError = null;

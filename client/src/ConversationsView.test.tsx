@@ -1,4 +1,7 @@
+import { act } from '@testing-library/react';
+import { AgentHubTipsContext } from './components/App';
 import { ConversationsView } from './components/ConversationsView';
+import type { AgentHubTipPayload } from '../../shared/agent-hub-sse';
 import {
   afterEach,
   describe,
@@ -204,5 +207,80 @@ describe('ConversationsView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Clear decision mark' }));
     expect(await screen.findByRole('button', { name: 'Mark as decision' })).toBeVisible();
     expect(screen.queryByText('Decision: Ship the revised plan.')).not.toBeInTheDocument();
+  });
+
+  it('rereads the open thread when a matching live tip arrives', async () => {
+    const conversation = {
+      id: 'live-thread',
+      title: 'Live thread',
+      state: 'ACTIVE',
+      scope: { type: 'freeform', id: null },
+      participants: ['cursor'],
+      messageCount: 1,
+      updatedAt: '2026-09-10T12:00:00Z',
+      isDecision: false,
+      decisionOutcome: null,
+      decidedAt: null,
+    };
+    const firstMessage = {
+      id: 'm1',
+      senderLabel: 'cursor',
+      sentAt: '2026-09-10T12:00:00Z',
+      body: 'First',
+      provenance: 'ASSERTED',
+    };
+    const secondMessage = {
+      ...firstMessage,
+      id: 'm2',
+      body: 'Second',
+    };
+    let messageReads = 0;
+    let emitTip: ((tip: AgentHubTipPayload) => void) | null = null;
+    const subscribe = (listener: (tip: AgentHubTipPayload) => void) => {
+      emitTip = listener;
+      return () => {
+        emitTip = null;
+      };
+    };
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/agents/directory')) return new Response(JSON.stringify({ agents: [] }));
+      if (url.includes('/agents/presence')) return new Response(JSON.stringify({ presence: [] }));
+      if (url.includes('/agent-summaries')) return new Response(JSON.stringify({ summaries: [] }));
+      if (url.includes('/messages')) {
+        messageReads += 1;
+        return new Response(
+          JSON.stringify({
+            items: [messageReads > 1 ? secondMessage : firstMessage],
+            nextCursor: null,
+            hasMore: false,
+          }),
+        );
+      }
+      return new Response(JSON.stringify({ items: [conversation], nextCursor: null, hasMore: false }));
+    });
+
+    render(
+      <MemoryRouter>
+        <AgentHubTipsContext.Provider value={subscribe}>
+          <ConversationsView flash={vi.fn()} liveTipsEnabled />
+        </AgentHubTipsContext.Provider>
+      </MemoryRouter>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: /Live thread/ }));
+    expect(await screen.findByText('First')).toBeVisible();
+
+    act(() => {
+      emitTip?.({ feeds: ['conversations'], conversationId: 'other-thread' });
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    });
+    expect(screen.getByText('First')).toBeVisible();
+
+    act(() => {
+      emitTip?.({ feeds: ['conversations'], conversationId: 'live-thread' });
+    });
+    expect(await screen.findByText('Second', {}, { timeout: 2000 })).toBeVisible();
   });
 });

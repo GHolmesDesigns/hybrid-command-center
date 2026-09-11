@@ -55,6 +55,7 @@ import {
   writeTaskTimerSettings,
   type TaskTimerSettings,
 } from '../../../shared/task-timer';
+import type { AgentHubLiveTipsSettings } from '../../../shared/agent-hub-sse';
 
 const COLOR_LABEL: Record<BrandingColorField, string> = {
   background: 'Sidebar background',
@@ -80,6 +81,8 @@ type ManualState = {
 export function SettingsView({
   branding,
   viewDefaults,
+  liveTips,
+  onLiveTipsSaved,
   tags,
   tasks,
   categories,
@@ -90,6 +93,8 @@ export function SettingsView({
 }: {
   branding: Branding;
   viewDefaults: ViewDefaults;
+  liveTips: AgentHubLiveTipsSettings;
+  onLiveTipsSaved: (value: AgentHubLiveTipsSettings) => void;
   tags: Tag[];
   tasks: Task[];
   categories: Category[];
@@ -110,6 +115,9 @@ export function SettingsView({
   const [timerSettings, setTimerSettings] = useState<TaskTimerSettings>(() =>
     readTaskTimerSettings(window.localStorage),
   );
+  const [liveTipsForm, setLiveTipsForm, markLiveTipsSaved] =
+    useServerSeeded<AgentHubLiveTipsSettings>(liveTips);
+  const [liveTipsBusy, setLiveTipsBusy] = useState(false);
   const load = useCallback(async () => {
     const next = await api<DriveSettingsState>('/settings/drive');
     setState(next);
@@ -238,6 +246,71 @@ export function SettingsView({
       */}
       <div className="settings-layout">
         <div className="settings-column">
+          <section className="panel settings-card" aria-labelledby="agent-hub-live-tips-heading">
+            <div className="section-title">
+              <div>
+                <span className="eyebrow">Agents</span>
+                <h2 id="agent-hub-live-tips-heading">Live update tips</h2>
+              </div>
+            </div>
+            <p>
+              When enabled, the shell listens for lightweight Server-Sent Events that name which
+              feeds changed — conversations or notifications — and rereads HTTP state. Tips never
+              carry message bodies or counts. If the stream disconnects, navigation and manual
+              refresh still work.
+            </p>
+            <form
+              onSubmit={async (event) => {
+                event.preventDefault();
+                setLiveTipsBusy(true);
+                try {
+                  const saved = await send<{ liveTips: AgentHubLiveTipsSettings }>(
+                    '/settings/agent-hub-live-tips',
+                    'PUT',
+                    liveTipsForm,
+                  );
+                  onLiveTipsSaved(saved.liveTips);
+                  setLiveTipsForm(saved.liveTips);
+                  markLiveTipsSaved();
+                  flash('Live update tips saved.');
+                } catch (error) {
+                  flash((error as Error).message, 'error');
+                } finally {
+                  setLiveTipsBusy(false);
+                }
+              }}
+            >
+              <label>
+                <input
+                  type="checkbox"
+                  checked={liveTipsForm.enabled}
+                  onChange={(event) =>
+                    setLiveTipsForm({ ...liveTipsForm, enabled: event.target.checked })
+                  }
+                />{' '}
+                Enable live update tips
+              </label>
+              <div className="brand-actions">
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setLiveTipsForm({ enabled: false })}
+                  disabled={liveTipsBusy}
+                >
+                  <RotateCcw /> Turn off
+                </button>
+                <button className="submit" disabled={liveTipsBusy}>
+                  {liveTipsBusy ? (
+                    <>
+                      <RefreshCw className="spin" /> Saving…
+                    </>
+                  ) : (
+                    'Save live tips'
+                  )}
+                </button>
+              </div>
+            </form>
+          </section>
           <section className="panel settings-card" aria-labelledby="timer-settings-heading">
             <div className="section-title">
               <div>
