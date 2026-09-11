@@ -1,14 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  Clock3,
-  Lightbulb,
-  MessageSquare,
-  PlusSquare,
-  Send,
-  Sparkles,
-  X,
-} from 'lucide-react';
+import { Clock3, Lightbulb, MessageSquare, PlusSquare, Send, Sparkles, X } from 'lucide-react';
 import { api, send } from '../api';
 import type { MessageLinkedHandoff } from '../../../shared/agent-conversations';
 import { ConversationTurn } from './ConversationTurn';
@@ -60,13 +52,7 @@ export function CommandAiFab({ onClick, open }: { onClick: () => void; open: boo
   );
 }
 
-export function CommandAiPanel({
-  open,
-  onClose,
-}: {
-  open: boolean;
-  onClose: () => void;
-}) {
+export function CommandAiPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [view, setView] = useState<PanelView>('home');
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selected, setSelected] = useState<Conversation | null>(null);
@@ -87,9 +73,9 @@ export function CommandAiPanel({
         api<{ agents?: Array<{ label: string; displayName: string; trustLevel: string }> }>(
           '/agents/directory',
         ),
-        api<{ presence?: Array<{ agentLabel: string; state: string; lastActivityAt: string | null }> }>(
-          '/agents/presence',
-        ),
+        api<{
+          presence?: Array<{ agentLabel: string; state: string; lastActivityAt: string | null }>;
+        }>('/agents/presence'),
         api<{ summaries?: Array<{ agentLabel: string; text: string }> }>('/agent-summaries'),
       ]);
       const profiles: Record<string, AgentBadgeProfile> = {};
@@ -196,11 +182,15 @@ export function CommandAiPanel({
         setSelected(conversation);
         setView('thread');
       }
-      const message = await send<Message>(`/agent-conversations/${conversation.id}/messages`, 'POST', {
-        body: trimmed,
-        confirmHandoffs: confirmed,
-        clientRequestId: crypto.randomUUID(),
-      });
+      const message = await send<Message>(
+        `/agent-conversations/${conversation.id}/messages`,
+        'POST',
+        {
+          body: trimmed,
+          confirmHandoffs: confirmed,
+          clientRequestId: crypto.randomUUID(),
+        },
+      );
       setMessages((current) => [...current, message]);
       setCompose('');
       await loadConversations();
@@ -235,7 +225,12 @@ export function CommandAiPanel({
           <button type="button" className="command-ai-action" onClick={() => startNew()}>
             <PlusSquare aria-hidden="true" /> New
           </button>
-          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close Command AI">
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={onClose}
+            aria-label="Close Command AI"
+          >
             <X />
           </button>
         </div>
@@ -251,7 +246,9 @@ export function CommandAiPanel({
         {view === 'history' && (
           <section className="command-ai-history" aria-label="Chat history">
             <h3>Chat history</h3>
-            <p className="field-hint">Linked threads show a short conversation id beside the timestamp.</p>
+            <p className="field-hint">
+              Linked threads show a short conversation id beside the timestamp.
+            </p>
             {history.length === 0 && <p className="empty">No Command AI threads yet.</p>}
             <ul className="command-ai-history-list">
               {history.map((conversation) => (
@@ -259,7 +256,8 @@ export function CommandAiPanel({
                   <button type="button" onClick={() => void openThread(conversation)}>
                     <strong>{conversation.title}</strong>
                     <span>
-                      {formatDateTime(conversation.updatedAt)} · {shortConversationId(conversation.id)}
+                      {formatDateTime(conversation.updatedAt)} ·{' '}
+                      {shortConversationId(conversation.id)}
                     </span>
                   </button>
                 </li>
@@ -284,7 +282,8 @@ export function CommandAiPanel({
                       <button type="button" onClick={() => void openThread(conversation)}>
                         <strong>{conversation.title}</strong>
                         <span>
-                          {formatDateTime(conversation.updatedAt)} · {shortConversationId(conversation.id)}
+                          {formatDateTime(conversation.updatedAt)} ·{' '}
+                          {shortConversationId(conversation.id)}
                         </span>
                       </button>
                     </li>

@@ -96,10 +96,9 @@ describe('agent conversations', () => {
     );
     expect(agent.thoughtSummary).toBe('I checked the queue health rules first.');
     expect(operator.thoughtSummary).toBeNull();
-    expect(listMessages(db, conversation.id, 'reviewer').items.map((m) => m.thoughtSummary)).toEqual([
-      'I checked the queue health rules first.',
-      null,
-    ]);
+    expect(
+      listMessages(db, conversation.id, 'reviewer').items.map((m) => m.thoughtSummary),
+    ).toEqual(['I checked the queue health rules first.', null]);
   });
 
   it('archives without deleting messages and excludes archived rows when filtered', () => {

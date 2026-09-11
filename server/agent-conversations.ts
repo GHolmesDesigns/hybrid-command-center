@@ -134,8 +134,7 @@ const toMessage = (row: MessageRow, linked: MessageLinkedHandoff[]): AgentConver
 
 const loadMessageById = (db: Db, messageId: string): AgentConversationMessage => {
   const row = db.prepare('SELECT * FROM agent_conversation_messages WHERE id=?').get(messageId) as
-    | MessageRow
-    | undefined;
+    MessageRow | undefined;
   if (!row) throw Object.assign(new Error('Message not found.'), { status: 404 });
   const linked = linkedHandoffsForMessages(db, [row.id]).get(row.id) ?? [];
   return toMessage(row, linked);

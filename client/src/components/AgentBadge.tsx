@@ -54,8 +54,7 @@ export function AgentBadge({
   const state = stale || !presence ? 'unknown' : presence.state;
   const stateLabel =
     state === 'unknown' ? 'Presence unknown' : (PRESENCE_LABEL[String(state)] ?? String(state));
-  const trustLabel =
-    profile?.trustLevel === 'VERIFIED' ? 'Verified agent' : 'Unverified agent';
+  const trustLabel = profile?.trustLevel === 'VERIFIED' ? 'Verified agent' : 'Unverified agent';
   const provenanceLabel = provenance ? AGENT_IDENTITY_PROVENANCE_LABEL[provenance] : null;
 
   return (

@@ -94,9 +94,9 @@ export function ConversationsView({
   useEffect(() => {
     void Promise.all([
       api<{ agents: AgentDirectoryEntry[] }>('/agents/directory'),
-      api<{ presence?: Array<{ agentLabel: string; state: string; lastActivityAt: string | null }> }>(
-        '/agents/presence',
-      ),
+      api<{
+        presence?: Array<{ agentLabel: string; state: string; lastActivityAt: string | null }>;
+      }>('/agents/presence'),
       api<{ summaries?: Array<{ agentLabel: string; text: string }> }>('/agent-summaries'),
     ])
       .then(([directory, live, summaries]) => {

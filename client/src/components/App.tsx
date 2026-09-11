@@ -51,11 +51,7 @@ import { SignalView } from './SignalView';
 import { TasksView } from './TasksView';
 import { HealthView } from './HealthView';
 import { ConversationsView } from './ConversationsView';
-import {
-  CommandAiFab,
-  CommandAiPanel,
-  CommandAiTopbarToggle,
-} from './CommandAiPanel';
+import { CommandAiFab, CommandAiPanel, CommandAiTopbarToggle } from './CommandAiPanel';
 import { TaskDetail } from './TaskDetail';
 import { PageHead } from './Shell';
 import { Nav } from './Shell';

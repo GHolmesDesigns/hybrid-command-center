@@ -42,7 +42,13 @@ export function ConversationTurn({
     >
       <AgentBadge
         operator={operator}
-        profile={profile ?? { label: message.senderLabel, displayName: message.senderLabel, trustLevel: 'UNVERIFIED' }}
+        profile={
+          profile ?? {
+            label: message.senderLabel,
+            displayName: message.senderLabel,
+            trustLevel: 'UNVERIFIED',
+          }
+        }
         presence={presence}
         provenance={message.provenance}
       />
@@ -63,7 +69,9 @@ export function ConversationTurn({
       <div className="conversation-turn-body">
         <p>{message.body}</p>
         {message.provenance && !operator && (
-          <span className={`provenance ${message.provenance.toLowerCase()}`}>{message.provenance}</span>
+          <span className={`provenance ${message.provenance.toLowerCase()}`}>
+            {message.provenance}
+          </span>
         )}
         <time dateTime={message.sentAt}>{formatDateTime(message.sentAt)}</time>
       </div>
