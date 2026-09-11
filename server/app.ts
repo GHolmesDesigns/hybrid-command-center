@@ -325,6 +325,17 @@ import {
   AGENT_WORK_SESSION_LIST_MAX_LIMIT,
   AGENT_WORK_SESSION_WAITING_STATES,
 } from '../shared/agent-work-sessions.ts';
+import { agentScheduleInputSchema } from '../shared/agent-schedules.ts';
+import {
+  AgentScheduleError,
+  createSchedule,
+  getSchedule,
+  listScheduleRuns,
+  listSchedules,
+  runDueSchedules,
+  runScheduleNow,
+  setSchedulePaused,
+} from './agent-schedules/service.ts';
 import { listAgentDirectory, updateAgentCharter } from './agent-directory.ts';
 import {
   archiveMemory,
@@ -3212,6 +3223,52 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       next(error);
     }
   });
+  /**
+   * Scheduled agent runs (C215): schedules only enqueue ordinary handoffs. The due endpoint is
+   * intentionally behind the operator API middleware, so a deployment may invoke it from an
+   * authenticated external cron while local development can use the button in the Agents page.
+   */
+  app.get('/api/agent-schedules', (_req, res) => {
+    res.json({ schedules: listSchedules(db) });
+  });
+  app.post('/api/agent-schedules', (req, res, next) => {
+    try {
+      res.status(201).json(createSchedule(db, agentScheduleInputSchema.parse(req.body), clock()));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.get('/api/agent-schedules/:id', (req, res, next) => {
+    try {
+      res.json({
+        schedule: getSchedule(db, req.params.id),
+        runs: listScheduleRuns(db, req.params.id),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.patch('/api/agent-schedules/:id', (req, res, next) => {
+    try {
+      res.json(setSchedulePaused(db, req.params.id, req.body, clock()));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/agent-schedules/:id/run-now', (req, res, next) => {
+    try {
+      res.json(runScheduleNow(db, req.params.id, clock()));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/agent-schedules/run-due', (_req, res, next) => {
+    try {
+      res.json({ runs: runDueSchedules(db, clock()) });
+    } catch (error) {
+      next(error);
+    }
+  });
   app.get('/api/agent-work-sessions', (req, res, next) => {
     try {
       res.json(reclaimableWorkSessions(db, clock()));
@@ -3415,6 +3472,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
               error instanceof PublishConfirmationError ||
               error instanceof ClientMergeError ||
               error instanceof AgentCoordinationError ||
+              error instanceof AgentScheduleError ||
               error instanceof RevisionConflictError ||
               error instanceof SignalSlotConflictError ||
               error instanceof SignalPostProtectedError ||
