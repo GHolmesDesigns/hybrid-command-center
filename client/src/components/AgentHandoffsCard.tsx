@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowRight, Handshake, RefreshCw } from 'lucide-react';
 import { api, send } from '../api';
 import type { Task } from '../../../shared/types';
@@ -43,6 +43,9 @@ export function AgentHandoffsCard({
   const [detailBusy, setDetailBusy] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelBusy, setCancelBusy] = useState(false);
+  const [searchParams] = useSearchParams();
+  const openHandoffId = searchParams.get('handoff')?.trim() || null;
+  const openedHandoffRef = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -59,7 +62,7 @@ export function AgentHandoffsCard({
     void load();
   }, [load]);
 
-  const openDetail = async (id: string) => {
+  const openDetail = useCallback(async (id: string) => {
     setSelectedId(id);
     setCancelReason('');
     setDetailBusy(true);
@@ -72,7 +75,15 @@ export function AgentHandoffsCard({
     } finally {
       setDetailBusy(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!openHandoffId || handoffs.length === 0) return;
+    if (openedHandoffRef.current === openHandoffId) return;
+    if (!handoffs.some((handoff) => handoff.id === openHandoffId)) return;
+    openedHandoffRef.current = openHandoffId;
+    void openDetail(openHandoffId);
+  }, [openHandoffId, handoffs, openDetail]);
 
   const closeDetail = () => {
     setSelectedId(null);

@@ -7,9 +7,11 @@ import type { AgentNotification } from '../../../shared/agent-summaries';
 type Page = { notifications: AgentNotification[]; unreadCount: number; nextCursor: string | null };
 const destinationHref = (n: AgentNotification) => {
   if (!n.destination) return null;
-  return n.destination.type === 'conversation'
-    ? '/agents/conversations'
-    : `/agents#${n.destination.type === 'agents' ? 'agent-directory' : n.destination.type === 'memory' ? 'agent-memory' : 'agent-handoffs'}`;
+  if (n.destination.type === 'conversation') return '/agents/conversations';
+  if (n.destination.type === 'handoff') {
+    return `/agents?handoff=${encodeURIComponent(n.destination.id)}#agent-handoffs`;
+  }
+  return `/agents#${n.destination.type === 'agents' ? 'agent-directory' : 'agent-memory'}`;
 };
 
 export function AgentNotificationsCard({

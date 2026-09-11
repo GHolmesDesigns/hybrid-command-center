@@ -173,5 +173,9 @@ describe('agent notifications card', () => {
       'href',
       '/agents/conversations',
     );
+    expect(screen.getAllByRole('link', { name: 'Open destination' })[2]).toHaveAttribute(
+      'href',
+      '/agents?handoff=h#agent-handoffs',
+    );
   });
 });
