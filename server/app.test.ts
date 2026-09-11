@@ -1172,6 +1172,26 @@ describe('command center API', () => {
     });
   });
 
+  describe('agent hub live tips', () => {
+    const put = (body: object) =>
+      request(createApp(db)).put('/api/settings/agent-hub-live-tips').send(body);
+    const stored = async () =>
+      (await request(createApp(db)).get('/api/settings/agent-hub-live-tips')).body.liveTips;
+
+    it('defaults off and stores enabled state', async () => {
+      expect(await stored()).toEqual({ enabled: false });
+      const saved = await put({ enabled: true });
+      expect(saved.status).toBe(200);
+      expect(saved.body.liveTips).toEqual({ enabled: true });
+      expect(await stored()).toEqual({ enabled: true });
+    });
+
+    it('rejects invalid settings without writing', async () => {
+      expect((await put({ enabled: 'yes' })).status).toBe(400);
+      expect(await stored()).toEqual({ enabled: false });
+    });
+  });
+
   it('reports sync blocked when Drive is disconnected', async () => {
     await setup();
     const sync = await request(createApp(db)).post('/api/drive/sync');

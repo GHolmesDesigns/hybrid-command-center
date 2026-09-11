@@ -389,6 +389,13 @@ import {
   markAllNotificationsRead,
   setPresence,
 } from './agent-summaries.ts';
+import { AgentHubTipRegistry, setAgentHubTipBridge } from './agent-hub/tips.ts';
+import { handleAgentHubTipsGet } from './agent-hub/sse-route.ts';
+import {
+  agentHubLiveTipsInput,
+  readAgentHubLiveTips,
+  updateAgentHubLiveTips,
+} from './agent-hub/settings.ts';
 
 const id = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
@@ -825,6 +832,8 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         : new UnavailableAgentCostProvider()),
     clock,
   );
+  const agentHubTips = new AgentHubTipRegistry();
+  setAgentHubTipBridge(agentHubTips);
   app.use(
     helmet({
       // Vite's development client needs a relaxed policy for HMR. The built client does not.
@@ -2181,6 +2190,16 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       next(error);
     }
   });
+  app.get('/api/settings/agent-hub-live-tips', (_req, res) =>
+    res.json({ liveTips: readAgentHubLiveTips(db) }),
+  );
+  app.put('/api/settings/agent-hub-live-tips', (req, res, next) => {
+    try {
+      res.json(updateAgentHubLiveTips(db, agentHubLiveTipsInput.parse(req.body)));
+    } catch (error) {
+      next(error);
+    }
+  });
   /**
    * The sample workbook, downloaded rather than looked up in the repository. One fixed file: the
    * name comes from a constant and never from the request, so the route cannot be asked for a
@@ -3069,6 +3088,9 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     } catch (error) {
       next(error);
     }
+  });
+  app.get('/api/agent-hub/tips', (req, res) => {
+    handleAgentHubTipsGet(req, res, agentHubTips);
   });
   app.get('/api/agent-summaries', (req, res, next) => {
     try {

@@ -4,6 +4,7 @@ import { transaction } from './db.ts';
 import { redactSecrets } from './integration-log.ts';
 import { listAgentDirectory } from './agent-directory.ts';
 import { insertHandoff } from './agent-coordination/service.ts';
+import { tipAgentHubConversation } from './agent-hub/tips.ts';
 import { notify } from './agent-summaries.ts';
 import { knownAgentMentionLabels } from '../shared/agent-mentions.ts';
 import { handoffMessageExcerpt } from '../shared/agent-coordination.ts';
@@ -167,6 +168,7 @@ export function createConversation(
     );
     for (const label of labels) insert.run(id, label);
   });
+  tipAgentHubConversation(id);
   return toConversation(
     db
       .prepare('SELECT *,0 message_count FROM agent_conversations WHERE id=?')
@@ -334,6 +336,7 @@ export function postMessage(
     }
 
     db.prepare('UPDATE agent_conversations SET updated_at=? WHERE id=?').run(instant, id);
+    tipAgentHubConversation(id);
     return toMessage(
       {
         id: messageId,
@@ -397,6 +400,7 @@ export function setConversationState(
     now.toISOString(),
     id,
   );
+  tipAgentHubConversation(id);
   return getConversation(db, id, actor);
 }
 
@@ -418,6 +422,7 @@ export function markConversationDecision(
        WHERE id=?`,
     ).run(outcome, at, at, id);
   });
+  tipAgentHubConversation(id);
   return getConversation(db, id, actor);
 }
 
@@ -430,6 +435,7 @@ export function clearConversationDecision(db: Db, id: string, actor: string, now
        WHERE id=?`,
     ).run(now.toISOString(), id);
   });
+  tipAgentHubConversation(id);
   return getConversation(db, id, actor);
 }
 

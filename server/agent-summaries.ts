@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { tipAgentHubNotifications } from './agent-hub/tips.ts';
 import type { Db } from './db.ts';
 import {
   presenceInputSchema,
@@ -111,6 +112,7 @@ export function notify(db: Db, input: unknown, now = new Date()) {
     parsed.destination ? JSON.stringify(parsed.destination) : null,
     now.toISOString(),
   );
+  tipAgentHubNotifications();
   return notification(
     db.prepare('SELECT * FROM agent_notifications WHERE incident_key=?').get(parsed.incidentKey),
   );
@@ -168,18 +170,19 @@ const validateDestination = (db: Db, destination: NotificationDestination) => {
     throw Object.assign(new Error('Notification destination does not exist.'), { status: 404 });
 };
 export function markAllNotificationsRead(db: Db, now = new Date()) {
-  return {
-    marked: (
-      db
-        .prepare('UPDATE agent_notifications SET read_at=? WHERE read_at IS NULL')
-        .run(now.toISOString()) as any
-    ).changes,
-  };
+  const marked = (
+    db
+      .prepare('UPDATE agent_notifications SET read_at=? WHERE read_at IS NULL')
+      .run(now.toISOString()) as any
+  ).changes;
+  if (marked > 0) tipAgentHubNotifications();
+  return { marked };
 }
 export function markNotificationRead(db: Db, id: string, now = new Date()) {
   const result = db
     .prepare('UPDATE agent_notifications SET read_at=? WHERE id=? AND read_at IS NULL')
     .run(now.toISOString(), id);
   if (!result.changes) throw Object.assign(new Error('Notification not found.'), { status: 404 });
+  tipAgentHubNotifications();
   return notification(db.prepare('SELECT * FROM agent_notifications WHERE id=?').get(id));
 }

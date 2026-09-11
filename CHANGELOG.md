@@ -1,5 +1,15 @@
 # Changelog
 
+## [6.8.7] - 2026-09-11
+
+### Added
+
+- Live update tips for conversations and notifications (optional setting).
+
+### Breaking changes
+
+None.
+
 ## [6.8.6] - 2026-09-11
 
 ### Added
