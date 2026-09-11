@@ -4,8 +4,10 @@ import { Archive, ArrowDown, CheckCircle2, MessageSquare, Send } from 'lucide-re
 import type { MessageLinkedHandoff } from '../../../shared/agent-conversations';
 import { api, send } from '../api';
 import { PageHead } from './Shell';
-import { MentionHandoffPreview, MessageLinkedHandoffs } from './MentionHandoffCompose';
+import { MentionHandoffPreview } from './MentionHandoffCompose';
 import { useMentionHandoffCompose } from './useMentionHandoffCompose';
+import { ConversationTurn } from './ConversationTurn';
+import type { AgentBadgePresence, AgentBadgeProfile } from './AgentBadge';
 
 type Conversation = {
   id: string;
@@ -24,10 +26,11 @@ type Message = {
   senderLabel: string;
   sentAt: string;
   body: string;
+  thoughtSummary?: string | null;
   provenance: 'UNKNOWN' | 'ASSERTED' | 'VERIFIED';
   linkedHandoffs?: MessageLinkedHandoff[];
 };
-type AgentDirectoryEntry = { label: string };
+type AgentDirectoryEntry = { label: string; displayName?: string; trustLevel?: string };
 type Page<T> = { items: T[]; nextCursor: string | null; hasMore: boolean };
 type ConversationFilter = 'ACTIVE' | 'ARCHIVED' | 'DECISIONS';
 
@@ -68,6 +71,9 @@ export function ConversationsView({
   const [body, setBody] = useState('');
   const [decisionOutcome, setDecisionOutcome] = useState('');
   const [registeredLabels, setRegisteredLabels] = useState<string[]>([]);
+  const [agentProfiles, setAgentProfiles] = useState<Record<string, AgentBadgeProfile>>({});
+  const [presenceByLabel, setPresenceByLabel] = useState<Record<string, AgentBadgePresence>>({});
+  const [summariesByLabel, setSummariesByLabel] = useState<Record<string, string>>({});
   const { offered, confirmed, toggle } = useMentionHandoffCompose(body, registeredLabels);
   const load = useCallback(async () => {
     try {
@@ -86,9 +92,46 @@ export function ConversationsView({
     void load();
   }, [load]);
   useEffect(() => {
-    void api<{ agents: AgentDirectoryEntry[] }>('/agents/directory')
-      .then((page) => setRegisteredLabels((page.agents ?? []).map((entry) => entry.label)))
-      .catch(() => setRegisteredLabels([]));
+    void Promise.all([
+      api<{ agents: AgentDirectoryEntry[] }>('/agents/directory'),
+      api<{ presence?: Array<{ agentLabel: string; state: string; lastActivityAt: string | null }> }>(
+        '/agents/presence',
+      ),
+      api<{ summaries?: Array<{ agentLabel: string; text: string }> }>('/agent-summaries'),
+    ])
+      .then(([directory, live, summaries]) => {
+        const agents = directory.agents ?? [];
+        setRegisteredLabels(agents.map((entry) => entry.label));
+        setAgentProfiles(
+          Object.fromEntries(
+            agents.map((entry) => [
+              entry.label.toLowerCase(),
+              {
+                label: entry.label,
+                displayName: entry.displayName ?? entry.label,
+                trustLevel: entry.trustLevel ?? 'UNVERIFIED',
+              },
+            ]),
+          ),
+        );
+        setPresenceByLabel(
+          Object.fromEntries(
+            (live.presence ?? []).map((row) => [
+              row.agentLabel.toLowerCase(),
+              { state: row.state, lastActivityAt: row.lastActivityAt },
+            ]),
+          ),
+        );
+        setSummariesByLabel(
+          Object.fromEntries(
+            (summaries.summaries ?? []).map((row) => [row.agentLabel.toLowerCase(), row.text]),
+          ),
+        );
+      })
+      .catch(() => {
+        setRegisteredLabels([]);
+        setAgentProfiles({});
+      });
   }, []);
   const openedConversationRef = useRef<string | null>(null);
   const open = useCallback(async (conversation: Conversation) => {
@@ -292,17 +335,17 @@ export function ConversationsView({
                 </button>
               )}
               {messages.map((message) => (
-                <article className="conversation-message" key={message.id}>
-                  <div>
-                    <strong>{message.senderLabel}</strong>
-                    <span className={`provenance ${message.provenance.toLowerCase()}`}>
-                      {message.provenance}
-                    </span>
-                    <time>{new Date(message.sentAt).toLocaleString()}</time>
-                  </div>
-                  <p>{message.body}</p>
-                  <MessageLinkedHandoffs handoffs={message.linkedHandoffs ?? []} />
-                </article>
+                <ConversationTurn
+                  key={message.id}
+                  message={message}
+                  agentProfiles={agentProfiles}
+                  presenceByLabel={presenceByLabel}
+                  fallbackThought={
+                    message.senderLabel === 'operator'
+                      ? null
+                      : (summariesByLabel[message.senderLabel.toLowerCase()] ?? null)
+                  }
+                />
               ))}
             </div>
             {selected.state === 'ACTIVE' && (

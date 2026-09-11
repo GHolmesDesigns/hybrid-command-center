@@ -161,7 +161,8 @@ CREATE TABLE IF NOT EXISTS agent_conversation_participants (
 CREATE TABLE IF NOT EXISTS agent_conversation_messages (
   id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES agent_conversations(id) ON DELETE CASCADE,
   sender_label TEXT NOT NULL, sent_at TEXT NOT NULL, body TEXT NOT NULL CHECK(length(body) BETWEEN 1 AND 4000),
-  sender_provenance TEXT NOT NULL DEFAULT 'UNKNOWN' CHECK(sender_provenance IN ('UNKNOWN','ASSERTED','VERIFIED'))
+  sender_provenance TEXT NOT NULL DEFAULT 'UNKNOWN' CHECK(sender_provenance IN ('UNKNOWN','ASSERTED','VERIFIED')),
+  thought_summary TEXT CHECK(thought_summary IS NULL OR length(thought_summary) BETWEEN 1 AND 4000)
 );
 CREATE TABLE IF NOT EXISTS agent_conversation_post_requests (
   conversation_id TEXT NOT NULL REFERENCES agent_conversations(id) ON DELETE CASCADE,
