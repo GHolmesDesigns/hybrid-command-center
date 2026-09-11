@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { agentLabelSchema, type AgentIdentityProvenance } from './agent-coordination.ts';
+import {
+  agentHandoffClientRequestIdSchema,
+  agentLabelSchema,
+  type AgentHandoffState,
+  type AgentIdentityProvenance,
+} from './agent-coordination.ts';
 
 export const CONVERSATION_SCOPE_TYPES = ['client', 'project', 'task', 'freeform'] as const;
 export type ConversationScopeType = (typeof CONVERSATION_SCOPE_TYPES)[number];
@@ -23,6 +28,14 @@ export const createConversationSchema = z
   })
   .strict();
 export const messageSchema = z.string().trim().min(1).max(4000);
+export const postMessageInputSchema = z
+  .object({
+    body: messageSchema,
+    confirmHandoffs: z.array(agentLabelSchema).max(50).default([]),
+    clientRequestId: agentHandoffClientRequestIdSchema.optional(),
+  })
+  .strict();
+export type PostMessageInput = z.infer<typeof postMessageInputSchema>;
 export const conversationListSchema = z
   .object({
     state: z.enum(CONVERSATION_STATES).optional(),
@@ -56,6 +69,12 @@ export type AgentConversation = {
   participants: string[];
   messageCount: number;
 };
+export type MessageLinkedHandoff = {
+  id: string;
+  toAgentLabel: string;
+  state: AgentHandoffState;
+};
+
 export type AgentConversationMessage = {
   id: string;
   conversationId: string;
@@ -63,5 +82,11 @@ export type AgentConversationMessage = {
   sentAt: string;
   body: string;
   provenance: AgentIdentityProvenance;
+  linkedHandoffs: MessageLinkedHandoff[];
+};
+
+export type AgentHandoffSource = {
+  conversationId: string;
+  messageId: string;
 };
 export type CursorPage<T> = { items: T[]; nextCursor: string | null; hasMore: boolean };

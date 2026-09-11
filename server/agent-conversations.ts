@@ -3,15 +3,19 @@ import type { Db } from './db.ts';
 import { transaction } from './db.ts';
 import { redactSecrets } from './integration-log.ts';
 import { listAgentDirectory } from './agent-directory.ts';
+import { insertHandoff } from './agent-coordination/service.ts';
+import { knownAgentMentionLabels } from '../shared/agent-mentions.ts';
 import type { AgentIdentityProvenance } from '../shared/agent-coordination.ts';
 import {
   createConversationSchema,
-  messageSchema,
+  postMessageInputSchema,
   type AgentConversation,
   type AgentConversationMessage,
   type ConversationState,
   type CreateConversationInput,
   type CursorPage,
+  type MessageLinkedHandoff,
+  type PostMessageInput,
 } from '../shared/agent-conversations.ts';
 
 const encode = (at: string, id: string) =>
@@ -63,11 +67,88 @@ const visible = (db: Db, id: string, actor: string | null) =>
     .get(id, actor);
 const requireVisible = (db: Db, id: string, actor: string | null) => {
   const row = db.prepare('SELECT * FROM agent_conversations WHERE id=?').get(id) as
-    ConversationRow | undefined;
+    | ConversationRow
+    | undefined;
   if (!row || !visible(db, id, actor))
     throw Object.assign(new Error('Conversation not found.'), { status: 404 });
   return row;
 };
+
+const registeredLabels = (db: Db) =>
+  listAgentDirectory(db).map((agent) => agent.label);
+
+const linkedHandoffsForMessages = (
+  db: Db,
+  messageIds: readonly string[],
+): Map<string, MessageLinkedHandoff[]> => {
+  if (messageIds.length === 0) return new Map();
+  const placeholders = messageIds.map(() => '?').join(',');
+  const rows = db
+    .prepare(
+      `SELECT l.message_id, l.to_agent_label, h.id, h.state
+       FROM agent_conversation_message_handoffs l
+       JOIN agent_handoffs h ON h.id = l.handoff_id
+       WHERE l.message_id IN (${placeholders})
+       ORDER BY l.to_agent_label COLLATE NOCASE`,
+    )
+    .all(...messageIds) as {
+    message_id: string;
+    to_agent_label: string;
+    id: string;
+    state: MessageLinkedHandoff['state'];
+  }[];
+  const byMessage = new Map<string, MessageLinkedHandoff[]>();
+  for (const row of rows) {
+    const current = byMessage.get(row.message_id) ?? [];
+    current.push({ id: row.id, toAgentLabel: row.to_agent_label, state: row.state });
+    byMessage.set(row.message_id, current);
+  }
+  return byMessage;
+};
+
+const toMessage = (
+  row: {
+    id: string;
+    conversation_id: string;
+    sender_label: string;
+    sent_at: string;
+    body: string;
+    sender_provenance: AgentIdentityProvenance;
+  },
+  linked: MessageLinkedHandoff[],
+): AgentConversationMessage => ({
+  id: row.id,
+  conversationId: row.conversation_id,
+  senderLabel: row.sender_label,
+  sentAt: row.sent_at,
+  body: row.body,
+  provenance: row.sender_provenance,
+  linkedHandoffs: linked,
+});
+
+const loadMessageById = (db: Db, messageId: string): AgentConversationMessage => {
+  const row = db.prepare('SELECT * FROM agent_conversation_messages WHERE id=?').get(messageId) as
+    | {
+        id: string;
+        conversation_id: string;
+        sender_label: string;
+        sent_at: string;
+        body: string;
+        sender_provenance: AgentIdentityProvenance;
+      }
+    | undefined;
+  if (!row) throw Object.assign(new Error('Message not found.'), { status: 404 });
+  const linked = linkedHandoffsForMessages(db, [row.id]).get(row.id) ?? [];
+  return toMessage(row, linked);
+};
+
+const parsePostInput = (raw: unknown): PostMessageInput => {
+  if (typeof raw === 'string') return postMessageInputSchema.parse({ body: raw });
+  if (raw && typeof raw === 'object' && 'body' in raw)
+    return postMessageInputSchema.parse(raw);
+  return postMessageInputSchema.parse({ body: raw });
+};
+
 export function createConversation(
   db: Db,
   raw: CreateConversationInput,
@@ -158,27 +239,91 @@ export function postMessage(
   raw: unknown,
   now = new Date(),
 ): AgentConversationMessage {
-  requireVisible(db, id, actor);
-  const body = redactSecrets(messageSchema.parse(raw));
+  const conversation = requireVisible(db, id, actor);
+  const input = parsePostInput(raw);
+  const body = redactSecrets(input.body);
+  const instant = now.toISOString();
+  const directory = registeredLabels(db);
+  const offered = new Set(knownAgentMentionLabels(body, directory));
+  for (const label of input.confirmHandoffs) {
+    if (!offered.has(label)) {
+      throw Object.assign(new Error(`Handoff confirmation for @${label} is not offered by this message.`), {
+        status: 400,
+      });
+    }
+  }
+  const confirmed = [...new Set(input.confirmHandoffs.filter((label) => offered.has(label)))];
   const provenance: AgentIdentityProvenance =
     actor === 'operator'
       ? 'VERIFIED'
       : listAgentDirectory(db).find((agent) => agent.label === actor)?.trustLevel === 'VERIFIED'
         ? 'VERIFIED'
         : 'ASSERTED';
-  const message = {
-    id: crypto.randomUUID(),
-    conversationId: id,
-    senderLabel: actor,
-    sentAt: now.toISOString(),
-    body,
-    provenance,
-  };
-  db.prepare(
-    'INSERT INTO agent_conversation_messages(id,conversation_id,sender_label,sent_at,body,sender_provenance) VALUES(?,?,?,?,?,?)',
-  ).run(message.id, id, actor, message.sentAt, message.body, message.provenance);
-  db.prepare('UPDATE agent_conversations SET updated_at=? WHERE id=?').run(message.sentAt, id);
-  return message;
+
+  return transaction(db, () => {
+    if (input.clientRequestId) {
+      const replay = db
+        .prepare(
+          `SELECT message_id FROM agent_conversation_post_requests
+           WHERE conversation_id=? AND client_request_id=?`,
+        )
+        .get(id, input.clientRequestId) as { message_id: string } | undefined;
+      if (replay) return loadMessageById(db, replay.message_id);
+    }
+
+    const messageId = crypto.randomUUID();
+    db.prepare(
+      'INSERT INTO agent_conversation_messages(id,conversation_id,sender_label,sent_at,body,sender_provenance) VALUES(?,?,?,?,?,?)',
+    ).run(messageId, id, actor, instant, body, provenance);
+    if (input.clientRequestId) {
+      db.prepare(
+        'INSERT INTO agent_conversation_post_requests(conversation_id,client_request_id,message_id) VALUES(?,?,?)',
+      ).run(id, input.clientRequestId, messageId);
+    }
+
+    const linked: MessageLinkedHandoff[] = [];
+    const participantInsert = db.prepare(
+      'INSERT OR IGNORE INTO agent_conversation_participants(conversation_id,agent_label) VALUES(?,?)',
+    );
+    const linkInsert = db.prepare(
+      'INSERT INTO agent_conversation_message_handoffs(message_id,handoff_id,to_agent_label) VALUES(?,?,?)',
+    );
+
+    for (const label of confirmed) {
+      participantInsert.run(id, label);
+      const handoffRequestId = input.clientRequestId
+        ? `${input.clientRequestId}:mention:${label}`
+        : undefined;
+      const handoff = insertHandoff(db, {
+        fromAgentLabel: actor === 'operator' ? 'operator' : actor,
+        fromAgentProvenance: provenance,
+        toAgentLabel: label,
+        subjectType: conversation.scope_type as
+          | 'client'
+          | 'project'
+          | 'task'
+          | 'freeform',
+        subjectId: conversation.scope_type === 'freeform' ? null : conversation.scope_id,
+        message: body,
+        clientRequestId: handoffRequestId,
+      }, instant);
+      linkInsert.run(messageId, handoff.id, label);
+      linked.push({ id: handoff.id, toAgentLabel: label, state: handoff.state });
+    }
+
+    db.prepare('UPDATE agent_conversations SET updated_at=? WHERE id=?').run(instant, id);
+    return toMessage(
+      {
+        id: messageId,
+        conversation_id: id,
+        sender_label: actor,
+        sent_at: instant,
+        body,
+        sender_provenance: provenance,
+      },
+      linked,
+    );
+  });
 }
 export function listMessages(
   db: Db,
@@ -208,14 +353,13 @@ export function listMessages(
     body: string;
     sender_provenance: AgentIdentityProvenance;
   }[];
-  const items = rows.slice(0, limit).map((r) => ({
-    id: r.id,
-    conversationId: r.conversation_id,
-    senderLabel: r.sender_label,
-    sentAt: r.sent_at,
-    body: r.body,
-    provenance: r.sender_provenance,
-  }));
+  const linkedByMessage = linkedHandoffsForMessages(
+    db,
+    rows.slice(0, limit).map((row) => row.id),
+  );
+  const items = rows.slice(0, limit).map((row) =>
+    toMessage(row, linkedByMessage.get(row.id) ?? []),
+  );
   if (before) items.reverse();
   const last = before ? items[0] : items.at(-1);
   return {

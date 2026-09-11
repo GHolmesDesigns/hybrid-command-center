@@ -3048,7 +3048,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   });
   app.post('/api/agent-conversations/:id/messages', (req, res, next) => {
     try {
-      res.status(201).json(postMessage(db, req.params.id, 'operator', req.body?.body, clock()));
+      res.status(201).json(postMessage(db, req.params.id, 'operator', req.body, clock()));
     } catch (error) {
       next(error);
     }
