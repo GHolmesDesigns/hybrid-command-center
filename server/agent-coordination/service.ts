@@ -245,11 +245,7 @@ export function countHandoffs(db: Db, state: AgentHandoffState): number {
  * Inserts an OPEN handoff when the caller already holds a database transaction.
  * Returns the existing row when `(from_agent_label, client_request_id)` already exists.
  */
-export function insertHandoff(
-  db: Db,
-  raw: AgentHandoffPostInput,
-  instant: string,
-): AgentHandoff {
+export function insertHandoff(db: Db, raw: AgentHandoffPostInput, instant: string): AgentHandoff {
   const input = agentHandoffPostInputSchema.parse(raw);
   const message = redactSecrets(input.message);
   const toAgentLabel = input.toAgentLabel ?? null;

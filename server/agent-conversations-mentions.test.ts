@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createDb } from './db.ts';
-import {
-  createConversation,
-  listMessages,
-  postMessage,
-} from './agent-conversations.ts';
+import { createConversation, listMessages, postMessage } from './agent-conversations.ts';
 import { claimHandoff, completeHandoff, getHandoff } from './agent-coordination/service.ts';
 
 const registerAgent = (db: ReturnType<typeof createDb>, label: string) => {

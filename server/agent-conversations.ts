@@ -67,15 +67,13 @@ const visible = (db: Db, id: string, actor: string | null) =>
     .get(id, actor);
 const requireVisible = (db: Db, id: string, actor: string | null) => {
   const row = db.prepare('SELECT * FROM agent_conversations WHERE id=?').get(id) as
-    | ConversationRow
-    | undefined;
+    ConversationRow | undefined;
   if (!row || !visible(db, id, actor))
     throw Object.assign(new Error('Conversation not found.'), { status: 404 });
   return row;
 };
 
-const registeredLabels = (db: Db) =>
-  listAgentDirectory(db).map((agent) => agent.label);
+const registeredLabels = (db: Db) => listAgentDirectory(db).map((agent) => agent.label);
 
 const linkedHandoffsForMessages = (
   db: Db,
@@ -144,8 +142,7 @@ const loadMessageById = (db: Db, messageId: string): AgentConversationMessage =>
 
 const parsePostInput = (raw: unknown): PostMessageInput => {
   if (typeof raw === 'string') return postMessageInputSchema.parse({ body: raw });
-  if (raw && typeof raw === 'object' && 'body' in raw)
-    return postMessageInputSchema.parse(raw);
+  if (raw && typeof raw === 'object' && 'body' in raw) return postMessageInputSchema.parse(raw);
   return postMessageInputSchema.parse({ body: raw });
 };
 
@@ -247,9 +244,12 @@ export function postMessage(
   const offered = new Set(knownAgentMentionLabels(body, directory));
   for (const label of input.confirmHandoffs) {
     if (!offered.has(label)) {
-      throw Object.assign(new Error(`Handoff confirmation for @${label} is not offered by this message.`), {
-        status: 400,
-      });
+      throw Object.assign(
+        new Error(`Handoff confirmation for @${label} is not offered by this message.`),
+        {
+          status: 400,
+        },
+      );
     }
   }
   const confirmed = [...new Set(input.confirmHandoffs.filter((label) => offered.has(label)))];
@@ -294,19 +294,19 @@ export function postMessage(
       const handoffRequestId = input.clientRequestId
         ? `${input.clientRequestId}:mention:${label}`
         : undefined;
-      const handoff = insertHandoff(db, {
-        fromAgentLabel: actor === 'operator' ? 'operator' : actor,
-        fromAgentProvenance: provenance,
-        toAgentLabel: label,
-        subjectType: conversation.scope_type as
-          | 'client'
-          | 'project'
-          | 'task'
-          | 'freeform',
-        subjectId: conversation.scope_type === 'freeform' ? null : conversation.scope_id,
-        message: body,
-        clientRequestId: handoffRequestId,
-      }, instant);
+      const handoff = insertHandoff(
+        db,
+        {
+          fromAgentLabel: actor === 'operator' ? 'operator' : actor,
+          fromAgentProvenance: provenance,
+          toAgentLabel: label,
+          subjectType: conversation.scope_type as 'client' | 'project' | 'task' | 'freeform',
+          subjectId: conversation.scope_type === 'freeform' ? null : conversation.scope_id,
+          message: body,
+          clientRequestId: handoffRequestId,
+        },
+        instant,
+      );
       linkInsert.run(messageId, handoff.id, label);
       linked.push({ id: handoff.id, toAgentLabel: label, state: handoff.state });
     }
@@ -357,9 +357,9 @@ export function listMessages(
     db,
     rows.slice(0, limit).map((row) => row.id),
   );
-  const items = rows.slice(0, limit).map((row) =>
-    toMessage(row, linkedByMessage.get(row.id) ?? []),
-  );
+  const items = rows
+    .slice(0, limit)
+    .map((row) => toMessage(row, linkedByMessage.get(row.id) ?? []));
   if (before) items.reverse();
   const last = before ? items[0] : items.at(-1);
   return {

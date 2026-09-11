@@ -34,7 +34,8 @@ test('confirmed mention handoff is claimable over MCP and returns completed on t
     listening.on('error', reject);
   });
   const address = server.address();
-  if (!address || typeof address === 'string') throw new Error('Mention handoff server did not bind.');
+  if (!address || typeof address === 'string')
+    throw new Error('Mention handoff server did not bind.');
   const request = (await browser.newContext({ baseURL: `http://127.0.0.1:${address.port}` }))
     .request;
   const run = Date.now();

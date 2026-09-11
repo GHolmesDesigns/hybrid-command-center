@@ -5,9 +5,7 @@ const directory = ['cursor', 'review.bot', 'e2e-agent'];
 
 describe('parseAgentMentions', () => {
   it('recognizes token-bound known labels and ignores unknown, email, and mid-word strings', () => {
-    expect(
-      parseAgentMentions('Please @cursor and @review.bot review this.', directory),
-    ).toEqual([
+    expect(parseAgentMentions('Please @cursor and @review.bot review this.', directory)).toEqual([
       expect.objectContaining({ label: 'cursor', known: true }),
       expect.objectContaining({ label: 'review.bot', known: true }),
     ]);

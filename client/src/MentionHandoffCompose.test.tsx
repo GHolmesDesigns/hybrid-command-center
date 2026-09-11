@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from './App.test-setup';
-import {
-  MentionHandoffPreview,
-  MessageLinkedHandoffs,
-} from './components/MentionHandoffCompose';
+import { MentionHandoffPreview, MessageLinkedHandoffs } from './components/MentionHandoffCompose';
 import { useMentionHandoffCompose } from './components/useMentionHandoffCompose';
 import { renderHook, act } from '@testing-library/react';
 

@@ -93,9 +93,7 @@ describe('DiscussionPanel', () => {
     fireEvent.change(screen.getByLabelText('Reply'), { target: { value: 'Reply' } });
     fireEvent.click(screen.getByRole('button', { name: 'Reply' }));
     await waitFor(() => expect(screen.getByText('Reply', { selector: 'p' })).toBeVisible());
-    await waitFor(() =>
-      expect(replyBody).toMatchObject({ body: 'Reply', confirmHandoffs: [] }),
-    );
+    await waitFor(() => expect(replyBody).toMatchObject({ body: 'Reply', confirmHandoffs: [] }));
     fireEvent.click(screen.getByRole('button', { name: 'Back to threads' }));
     expect(screen.getByLabelText('Thread title')).toBeVisible();
   });

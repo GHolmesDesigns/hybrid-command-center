@@ -30,9 +30,7 @@ export function handoffSourcesForIds(
 export function applyHandoffSources<T extends { id: string }>(
   db: Db,
   handoffs: T[],
-): Array<
-  T & { sourceConversationId: string | null; sourceMessageId: string | null }
-> {
+): Array<T & { sourceConversationId: string | null; sourceMessageId: string | null }> {
   const sources = handoffSourcesForIds(
     db,
     handoffs.map((handoff) => handoff.id),
