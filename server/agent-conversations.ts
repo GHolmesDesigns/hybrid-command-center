@@ -7,6 +7,7 @@ import { insertHandoff } from './agent-coordination/service.ts';
 import { knownAgentMentionLabels } from '../shared/agent-mentions.ts';
 import type { AgentIdentityProvenance } from '../shared/agent-coordination.ts';
 import {
+  conversationDecisionSchema,
   createConversationSchema,
   postMessageInputSchema,
   type AgentConversation,
@@ -36,6 +37,9 @@ type ConversationRow = {
   scope_type: string;
   scope_id: string | null;
   state: ConversationState;
+  is_decision: number;
+  decision_outcome: string | null;
+  decided_at: string | null;
   created_at: string;
   updated_at: string;
   message_count: number;
@@ -45,6 +49,9 @@ const toConversation = (row: ConversationRow, participants: string[]): AgentConv
   title: row.title,
   scope: { type: row.scope_type as AgentConversation['scope']['type'], id: row.scope_id },
   state: row.state,
+  isDecision: row.is_decision === 1,
+  decisionOutcome: row.decision_outcome,
+  decidedAt: row.decided_at,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
   participants,
@@ -179,6 +186,7 @@ export function listConversations(
 ): CursorPage<AgentConversation> {
   const input = raw as {
     state?: ConversationState;
+    isDecision?: boolean;
     scopeType?: string;
     scopeId?: string;
     limit?: number;
@@ -191,6 +199,10 @@ export function listConversations(
   if (input.scopeType && input.scopeId) {
     where.push('c.scope_type=? AND c.scope_id=?');
     params.push(input.scopeType, input.scopeId);
+  }
+  if (input.isDecision !== undefined) {
+    where.push('c.is_decision=?');
+    params.push(input.isDecision ? '1' : '0');
   }
   if (input.state) {
     where.push('c.state=?');
@@ -383,6 +395,40 @@ export function setConversationState(
   );
   return getConversation(db, id, actor);
 }
+
+export function markConversationDecision(
+  db: Db,
+  id: string,
+  actor: string,
+  raw: unknown = {},
+  now = new Date(),
+) {
+  const row = requireVisible(db, id, actor);
+  const input = conversationDecisionSchema.parse(raw);
+  const outcome = Object.hasOwn(input, 'outcome') ? input.outcome || null : row.decision_outcome;
+  const at = now.toISOString();
+  transaction(db, () => {
+    db.prepare(
+      `UPDATE agent_conversations
+       SET is_decision=1, decision_outcome=?, decided_at=COALESCE(decided_at,?), updated_at=?
+       WHERE id=?`,
+    ).run(outcome, at, at, id);
+  });
+  return getConversation(db, id, actor);
+}
+
+export function clearConversationDecision(db: Db, id: string, actor: string, now = new Date()) {
+  requireVisible(db, id, actor);
+  transaction(db, () => {
+    db.prepare(
+      `UPDATE agent_conversations
+       SET is_decision=0, decision_outcome=NULL, decided_at=NULL, updated_at=?
+       WHERE id=?`,
+    ).run(now.toISOString(), id);
+  });
+  return getConversation(db, id, actor);
+}
+
 export function purgeArchivedConversations(db: Db, before: string) {
   return db
     .prepare("DELETE FROM agent_conversations WHERE state='ARCHIVED' AND updated_at < ?")

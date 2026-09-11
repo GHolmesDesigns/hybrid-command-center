@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, Handshake, MessageSquare, Send } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CheckCircle2, Handshake, MessageSquare, Send } from 'lucide-react';
 import type { AgentHandoff, AgentHandoffPage } from '../../../shared/agent-coordination';
 import { AGENT_HANDOFF_SUBJECT_TYPE_LABEL } from '../../../shared/agent-coordination';
 import type { MessageLinkedHandoff } from '../../../shared/agent-conversations';
@@ -16,6 +16,8 @@ type Conversation = {
   messageCount: number;
   updatedAt: string;
   state: 'ACTIVE' | 'ARCHIVED';
+  isDecision: boolean;
+  decisionOutcome: string | null;
 };
 type Message = {
   id: string;
@@ -201,7 +203,15 @@ export function DiscussionPanel({
             key={item.id}
             onClick={() => void open(item)}
           >
-            <strong>{item.title}</strong>
+            <strong>
+              {item.title}{' '}
+              {item.isDecision && (
+                <span className="decision-badge">
+                  <CheckCircle2 aria-hidden="true" /> Decision
+                  {item.decisionOutcome ? `: ${item.decisionOutcome}` : ''}
+                </span>
+              )}
+            </strong>
             <span>
               {item.messageCount} messages · {formatDateTime(item.updatedAt)}
             </span>

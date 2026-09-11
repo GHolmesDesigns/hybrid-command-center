@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Archive, ArrowDown, MessageSquare, Send } from 'lucide-react';
+import { Archive, ArrowDown, CheckCircle2, MessageSquare, Send } from 'lucide-react';
 import type { MessageLinkedHandoff } from '../../../shared/agent-conversations';
 import { api, send } from '../api';
 import { PageHead } from './Shell';
@@ -15,6 +15,9 @@ type Conversation = {
   participants: string[];
   messageCount: number;
   updatedAt: string;
+  isDecision: boolean;
+  decisionOutcome: string | null;
+  decidedAt: string | null;
 };
 type Message = {
   id: string;
@@ -26,6 +29,7 @@ type Message = {
 };
 type AgentDirectoryEntry = { label: string };
 type Page<T> = { items: T[]; nextCursor: string | null; hasMore: boolean };
+type ConversationFilter = 'ACTIVE' | 'ARCHIVED' | 'DECISIONS';
 
 const SCOPE_LABEL = {
   client: 'Client',
@@ -56,29 +60,28 @@ export function ConversationsView({
   const openConversationId = searchParams.get('open')?.trim() || null;
   const scopeQuery =
     scopeType && scopeId ? `&scopeType=${scopeType}&scopeId=${encodeURIComponent(scopeId)}` : '';
-  const [state, setState] = useState<'ACTIVE' | 'ARCHIVED'>('ACTIVE');
+  const [filter, setFilter] = useState<ConversationFilter>('ACTIVE');
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selected, setSelected] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [older, setOlder] = useState<string | null>(null);
   const [body, setBody] = useState('');
+  const [decisionOutcome, setDecisionOutcome] = useState('');
   const [registeredLabels, setRegisteredLabels] = useState<string[]>([]);
   const { offered, confirmed, toggle } = useMentionHandoffCompose(body, registeredLabels);
   const load = useCallback(async () => {
     try {
       const page = await api<Page<Conversation>>(
-        `/agent-conversations?state=${state}${scopeQuery}`,
+        `/agent-conversations?${filter === 'DECISIONS' ? 'isDecision=true' : `state=${filter}`}${scopeQuery}`,
       );
       setConversations(page.items);
       setSelected((current) =>
-        current && page.items.some((conversation) => conversation.id === current.id)
-          ? current
-          : null,
+        current ? (page.items.find((item) => item.id === current.id) ?? null) : null,
       );
     } catch (error) {
       flash((error as Error).message, 'error');
     }
-  }, [flash, scopeQuery, state]);
+  }, [filter, flash, scopeQuery]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -90,12 +93,45 @@ export function ConversationsView({
   const openedConversationRef = useRef<string | null>(null);
   const open = useCallback(async (conversation: Conversation) => {
     setSelected(conversation);
+    setDecisionOutcome(conversation.decisionOutcome ?? '');
     const page = await api<Page<Message>>(
       `/agent-conversations/${conversation.id}/messages?limit=50&direction=before`,
     );
     setMessages(page.items);
     setOlder(page.nextCursor);
   }, []);
+  const saveDecision = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!selected) return;
+    try {
+      const updated = await send<Conversation>(
+        `/agent-conversations/${selected.id}/decision`,
+        'POST',
+        { outcome: decisionOutcome },
+      );
+      setSelected(updated);
+      setDecisionOutcome(updated.decisionOutcome ?? '');
+      await load();
+      flash('Decision saved.', 'success');
+    } catch (error) {
+      flash((error as Error).message, 'error');
+    }
+  };
+  const clearDecision = async () => {
+    if (!selected || !window.confirm('Clear the decision mark from this conversation?')) return;
+    try {
+      const updated = await send<Conversation>(
+        `/agent-conversations/${selected.id}/decision/clear`,
+        'POST',
+      );
+      setSelected(updated);
+      setDecisionOutcome('');
+      await load();
+      flash('Decision mark cleared.', 'success');
+    } catch (error) {
+      flash((error as Error).message, 'error');
+    }
+  };
   useEffect(() => {
     if (!openConversationId || conversations.length === 0) return;
     if (openedConversationRef.current === openConversationId) return;
@@ -152,11 +188,12 @@ export function ConversationsView({
             </h2>
             <select
               aria-label="Conversation state"
-              value={state}
-              onChange={(event) => setState(event.target.value as typeof state)}
+              value={filter}
+              onChange={(event) => setFilter(event.target.value as ConversationFilter)}
             >
               <option value="ACTIVE">Active</option>
               <option value="ARCHIVED">Archived</option>
+              <option value="DECISIONS">Decisions</option>
             </select>
           </div>
           {conversations.length === 0 && <p className="empty">No conversations.</p>}
@@ -172,7 +209,15 @@ export function ConversationsView({
                   className="conversation-open"
                   onClick={() => void open(conversation)}
                 >
-                  <strong>{conversation.title}</strong>
+                  <strong>
+                    {conversation.title}{' '}
+                    {conversation.isDecision && (
+                      <span className="decision-badge">
+                        <CheckCircle2 aria-hidden="true" /> Decision
+                        {conversation.decisionOutcome ? `: ${conversation.decisionOutcome}` : ''}
+                      </span>
+                    )}
+                  </strong>
                   <span>
                     {conversation.scope.type} · {conversation.messageCount} messages
                   </span>
@@ -209,6 +254,37 @@ export function ConversationsView({
                 </button>
               )}
             </div>
+            <form className="conversation-decision" onSubmit={(event) => void saveDecision(event)}>
+              {selected.isDecision && (
+                <p className="decision-summary">
+                  <span className="decision-badge">
+                    <CheckCircle2 aria-hidden="true" /> Decision
+                  </span>{' '}
+                  Outcome: {selected.decisionOutcome || 'No outcome recorded.'}
+                </p>
+              )}
+              <label>
+                Decision outcome <span className="field-hint">(optional)</span>
+                <textarea
+                  aria-label="Decision outcome"
+                  value={decisionOutcome}
+                  onChange={(event) => setDecisionOutcome(event.target.value)}
+                  maxLength={500}
+                  placeholder="What was decided?"
+                />
+              </label>
+              <div className="conversation-decision-actions">
+                <button className="secondary-btn" type="submit">
+                  <CheckCircle2 aria-hidden="true" />
+                  {selected.isDecision ? 'Save outcome' : 'Mark as decision'}
+                </button>
+                {selected.isDecision && (
+                  <button className="text-btn" type="button" onClick={() => void clearDecision()}>
+                    Clear decision mark
+                  </button>
+                )}
+              </div>
+            </form>
             <div className="conversation-messages">
               {older && (
                 <button className="secondary-btn" onClick={() => void loadOlder()}>

@@ -327,14 +327,17 @@ import {
 } from './agent-memory.ts';
 import { agentMemoryListSchema } from '../shared/agent-memory.ts';
 import {
+  clearConversationDecision,
   createConversation,
   getConversation,
   listConversations,
+  markConversationDecision,
   listMessages,
   postMessage,
   setConversationState,
 } from './agent-conversations.ts';
 import {
+  conversationDecisionSchema,
   conversationListSchema,
   messageListSchema,
   createConversationSchema,
@@ -3072,6 +3075,28 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   app.post('/api/agent-conversations/:id/archive', (req, res, next) => {
     try {
       res.json(setConversationState(db, req.params.id, 'operator', 'ARCHIVED', clock()));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/agent-conversations/:id/decision', (req, res, next) => {
+    try {
+      res.json(
+        markConversationDecision(
+          db,
+          req.params.id,
+          'operator',
+          conversationDecisionSchema.parse(req.body ?? {}),
+          clock(),
+        ),
+      );
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/agent-conversations/:id/decision/clear', (req, res, next) => {
+    try {
+      res.json(clearConversationDecision(db, req.params.id, 'operator', clock()));
     } catch (error) {
       next(error);
     }

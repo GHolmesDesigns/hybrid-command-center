@@ -10,6 +10,10 @@ export const CONVERSATION_SCOPE_TYPES = ['client', 'project', 'task', 'freeform'
 export type ConversationScopeType = (typeof CONVERSATION_SCOPE_TYPES)[number];
 export const CONVERSATION_STATES = ['ACTIVE', 'ARCHIVED'] as const;
 export type ConversationState = (typeof CONVERSATION_STATES)[number];
+const optionalBooleanQuery = z.preprocess(
+  (value) => (value === 'true' ? true : value === 'false' ? false : value),
+  z.boolean().optional(),
+);
 export const conversationScopeSchema = z
   .object({
     type: z.enum(CONVERSATION_SCOPE_TYPES),
@@ -35,10 +39,14 @@ export const postMessageInputSchema = z
     clientRequestId: agentHandoffClientRequestIdSchema.optional(),
   })
   .strict();
+export const conversationDecisionSchema = z
+  .object({ outcome: z.string().trim().max(500).optional() })
+  .strict();
 export type PostMessageInput = z.infer<typeof postMessageInputSchema>;
 export const conversationListSchema = z
   .object({
     state: z.enum(CONVERSATION_STATES).optional(),
+    isDecision: optionalBooleanQuery,
     scopeType: z.enum(CONVERSATION_SCOPE_TYPES).optional(),
     scopeId: z.string().trim().min(1).max(200).optional(),
     limit: z.number().int().min(1).max(100).optional(),
@@ -64,6 +72,9 @@ export type AgentConversation = {
   title: string;
   scope: { type: ConversationScopeType; id: string | null };
   state: ConversationState;
+  isDecision: boolean;
+  decisionOutcome: string | null;
+  decidedAt: string | null;
   createdAt: string;
   updatedAt: string;
   participants: string[];

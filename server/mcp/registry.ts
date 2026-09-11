@@ -337,6 +337,7 @@ const agentTools: McpToolRegistryEntry[] = [
     'List visible agent conversations.',
     {
       state: { type: 'string', enum: ['ACTIVE', 'ARCHIVED'] },
+      isDecision: { type: 'boolean' },
       limit: { type: 'integer', minimum: 1, maximum: 100 },
       cursor: { type: 'string' },
     },
