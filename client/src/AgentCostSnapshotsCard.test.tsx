@@ -70,11 +70,7 @@ describe('agent cost snapshots card', () => {
     testState.agentCostPayload = { available: true, snapshots: [snapshot] };
     testState.agentCostRefreshReason = null;
     const flashes: Array<{ message: string; type?: string }> = [];
-    render(
-      <AgentCostSnapshotsCard
-        flash={(message, type) => flashes.push({ message, type })}
-      />,
-    );
+    render(<AgentCostSnapshotsCard flash={(message, type) => flashes.push({ message, type })} />);
     await screen.findByText('queue-agent');
     fireEvent.click(screen.getByRole('button', { name: 'Refresh usage' }));
     await waitFor(() =>
@@ -87,17 +83,13 @@ describe('agent cost snapshots card', () => {
     testState.agentCostRefreshReason =
       'The provider returned no usage rows, so nothing was stored.';
     const flashes: Array<{ message: string; type?: string }> = [];
-    render(
-      <AgentCostSnapshotsCard
-        flash={(message, type) => flashes.push({ message, type })}
-      />,
-    );
+    render(<AgentCostSnapshotsCard flash={(message, type) => flashes.push({ message, type })} />);
     await screen.findByText('queue-agent');
     fireEvent.click(screen.getByRole('button', { name: 'Refresh usage' }));
     await waitFor(() =>
-      expect(flashes.some((entry) => entry.type === 'error' && entry.message.includes('no usage rows'))).toBe(
-        true,
-      ),
+      expect(
+        flashes.some((entry) => entry.type === 'error' && entry.message.includes('no usage rows')),
+      ).toBe(true),
     );
   });
 
