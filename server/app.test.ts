@@ -2465,4 +2465,46 @@ describe('request budgets', () => {
 
     expect(response.status).toBe(413);
   });
+
+  it('supports the operator decision lifecycle and its list filter over HTTP', async () => {
+    const app = createApp(db);
+    const created = await request(app)
+      .post('/api/agent-conversations')
+      .send({ title: 'HTTP decision', scope: { type: 'freeform' } })
+      .expect(201);
+    const id = created.body.id as string;
+
+    const marked = await request(app)
+      .post(`/api/agent-conversations/${id}/decision`)
+      .send({ outcome: 'Keep the current plan.' })
+      .expect(200);
+    expect(marked.body).toMatchObject({
+      id,
+      isDecision: true,
+      decisionOutcome: 'Keep the current plan.',
+    });
+    expect(marked.body.decidedAt).toBeTruthy();
+    expect(
+      (await request(app).get('/api/agent-conversations').query({ isDecision: 'true' })).body.items,
+    ).toHaveLength(1);
+
+    const edited = await request(app)
+      .post(`/api/agent-conversations/${id}/decision`)
+      .send({ outcome: 'Use the revised plan.' })
+      .expect(200);
+    expect(edited.body.decisionOutcome).toBe('Use the revised plan.');
+    expect(edited.body.decidedAt).toBe(marked.body.decidedAt);
+
+    const cleared = await request(app)
+      .post(`/api/agent-conversations/${id}/decision/clear`)
+      .expect(200);
+    expect(cleared.body).toMatchObject({
+      isDecision: false,
+      decisionOutcome: null,
+      decidedAt: null,
+    });
+    expect(
+      (await request(app).get('/api/agent-conversations').query({ isDecision: 'true' })).body.items,
+    ).toHaveLength(0);
+  });
 });

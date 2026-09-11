@@ -149,6 +149,9 @@ CREATE TABLE IF NOT EXISTS agent_conversations (
   id TEXT PRIMARY KEY, title TEXT NOT NULL CHECK(length(title) BETWEEN 1 AND 200),
   scope_type TEXT NOT NULL CHECK(scope_type IN ('client','project','task','freeform')),
   scope_id TEXT, state TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(state IN ('ACTIVE','ARCHIVED')),
+  is_decision INTEGER NOT NULL DEFAULT 0 CHECK(is_decision IN (0,1)),
+  decision_outcome TEXT CHECK(decision_outcome IS NULL OR length(decision_outcome) <= 500),
+  decided_at TEXT,
   created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS agent_conversation_participants (
@@ -835,6 +838,7 @@ CREATE INDEX IF NOT EXISTS idx_operator_mcp_bearers_session ON operator_mcp_bear
 CREATE INDEX IF NOT EXISTS idx_agent_credentials_agent ON agent_credentials(agent_id);
 CREATE INDEX IF NOT EXISTS idx_agent_credentials_expiry ON agent_credentials(expires_at);
 CREATE INDEX IF NOT EXISTS idx_agent_conversations_updated ON agent_conversations(updated_at, id);
+CREATE INDEX IF NOT EXISTS idx_agent_conversations_decision ON agent_conversations(is_decision, updated_at, id);
 CREATE INDEX IF NOT EXISTS idx_agent_conversation_messages_cursor ON agent_conversation_messages(conversation_id, sent_at, id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_drive_write_requests_replay
   ON drive_write_requests(agent_label, client_request_id);

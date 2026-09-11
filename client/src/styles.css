@@ -6307,6 +6307,49 @@ button.tag-chip.toggle.active {
 .conversation-open small {
   color: var(--muted);
 }
+.decision-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent-strong, #315f79);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.decision-badge svg {
+  width: 15px;
+  height: 15px;
+}
+.conversation-decision {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-alt);
+}
+.conversation-decision label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.conversation-decision textarea {
+  min-height: 62px;
+  width: 100%;
+}
+.decision-summary {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.conversation-decision-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
 .conversation-subject-link {
   justify-self: start;
   font-size: 12px;

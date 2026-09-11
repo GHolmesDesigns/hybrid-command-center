@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { createDb } from './db.ts';
 import {
+  clearConversationDecision,
   createConversation,
   listConversations,
   listMessages,
+  markConversationDecision,
   postMessage,
   setConversationState,
 } from './agent-conversations.ts';
@@ -93,5 +95,64 @@ describe('agent conversations', () => {
     const page = listConversations(db, 'cursor', { scopeType: 'project', scopeId: 'p1', limit: 1 });
     expect(page.items.map((item) => item.title)).toEqual(['Project one']);
     expect(page.hasMore).toBe(false);
+  });
+
+  it('persists decision metadata, filters decided threads, and clears the complete mark', () => {
+    const db = createDb(':memory:');
+    const decided = createConversation(
+      db,
+      { title: 'Decision thread', scope: { type: 'project', id: 'p1' }, participantLabels: [] },
+      'operator',
+      new Date('2026-09-10T12:00:00.000Z'),
+    );
+    const ordinary = createConversation(
+      db,
+      { title: 'Ordinary thread', scope: { type: 'project', id: 'p1' }, participantLabels: [] },
+      'operator',
+      new Date('2026-09-10T12:01:00.000Z'),
+    );
+
+    const marked = markConversationDecision(
+      db,
+      decided.id,
+      'operator',
+      { outcome: 'Use the approved brief.' },
+      new Date('2026-09-10T12:02:00.000Z'),
+    );
+    expect(marked).toMatchObject({
+      id: decided.id,
+      isDecision: true,
+      decisionOutcome: 'Use the approved brief.',
+      decidedAt: '2026-09-10T12:02:00.000Z',
+    });
+    expect(
+      listConversations(db, 'operator', { isDecision: true }).items.map((item) => item.id),
+    ).toEqual([decided.id]);
+    expect(
+      listConversations(db, 'operator', { isDecision: false }).items.map((item) => item.id),
+    ).toContain(ordinary.id);
+
+    const updated = markConversationDecision(
+      db,
+      decided.id,
+      'operator',
+      { outcome: 'Ship the approved brief.' },
+      new Date('2026-09-10T12:03:00.000Z'),
+    );
+    expect(updated.decisionOutcome).toBe('Ship the approved brief.');
+    expect(updated.decidedAt).toBe('2026-09-10T12:02:00.000Z');
+
+    const cleared = clearConversationDecision(
+      db,
+      decided.id,
+      'operator',
+      new Date('2026-09-10T12:04:00.000Z'),
+    );
+    expect(cleared).toMatchObject({
+      isDecision: false,
+      decisionOutcome: null,
+      decidedAt: null,
+    });
+    expect(listConversations(db, 'operator', { isDecision: true }).items).toHaveLength(0);
   });
 });

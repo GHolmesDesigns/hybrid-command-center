@@ -101,3 +101,59 @@ test('project thread @mention confirms a handoff and shows it on the message', a
   await expect(discussion.getByText(mentionBody)).toBeVisible();
   await expect(discussion.getByText('Handoff to @operator-session · OPEN')).toBeVisible();
 });
+
+test('operator decision tags persist, filter, and appear in scoped discussions', async ({
+  page,
+}) => {
+  const run = Date.now();
+  const client = await (
+    await page.request.post('/api/clients', { data: { name: `Decision Client ${run}` } })
+  ).json();
+  const project = await (
+    await page.request.post('/api/projects', {
+      data: { clientId: client.id, name: `Decision Project ${run}`, priority: 'HIGH' },
+    })
+  ).json();
+  const title = `Decision thread ${run}`;
+  await page.request.post('/api/agent-conversations', {
+    data: { title, scope: { type: 'project', id: project.id } },
+  });
+
+  await page.goto(`/agents/conversations?scopeType=project&scopeId=${project.id}`);
+  const list = page.getByRole('region', { name: 'Conversation list' });
+  await list.getByRole('button', { name: new RegExp(title) }).click();
+  const detail = page.getByRole('region', { name: 'Conversation detail' });
+  await detail.getByLabel('Decision outcome').fill('Use the approved plan.');
+  await detail.getByRole('button', { name: 'Mark as decision' }).click();
+  await expect(detail.getByText('Outcome: Use the approved plan.')).toBeVisible();
+  await expect(list.getByText('Decision: Use the approved plan.')).toBeVisible();
+
+  await page.reload();
+  await list.getByLabel('Conversation state').selectOption('DECISIONS');
+  await expect(list.getByText(title)).toBeVisible();
+  await list.getByRole('button', { name: new RegExp(title) }).click();
+  await expect(detail.getByText('Outcome: Use the approved plan.')).toBeVisible();
+
+  await page.goto(`/projects/${project.id}`);
+  const discussion = page.getByRole('region', { name: 'Threads' });
+  await expect(discussion.getByText('Decision: Use the approved plan.')).toBeVisible();
+
+  page.once('dialog', (dialog) => void dialog.accept());
+  await page.goto(`/agents/conversations?scopeType=project&scopeId=${project.id}`);
+  await page
+    .getByRole('region', { name: 'Conversation list' })
+    .getByLabel('Conversation state')
+    .selectOption('DECISIONS');
+  await page
+    .getByRole('region', { name: 'Conversation list' })
+    .getByRole('button', { name: new RegExp(title) })
+    .click();
+  await page
+    .getByRole('region', { name: 'Conversation detail' })
+    .getByRole('button', { name: 'Clear decision mark' })
+    .click();
+  const finalList = page.getByRole('region', { name: 'Conversation list' });
+  await finalList.getByLabel('Conversation state').selectOption('ACTIVE');
+  await expect(finalList.getByRole('button', { name: new RegExp(title) })).toBeVisible();
+  await expect(finalList.getByText('Decision: Use the approved plan.')).toBeHidden();
+});

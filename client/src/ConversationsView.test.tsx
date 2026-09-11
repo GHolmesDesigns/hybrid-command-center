@@ -134,4 +134,75 @@ describe('ConversationsView', () => {
       ),
     );
   });
+
+  it('marks a thread as a decision, edits its outcome, filters it, and clears the mark', async () => {
+    let current = {
+      id: 'decision-thread',
+      title: 'Decision thread',
+      state: 'ACTIVE',
+      scope: { type: 'freeform', id: null },
+      participants: ['cursor'],
+      messageCount: 0,
+      updatedAt: '2026-09-10T12:00:00Z',
+      isDecision: false,
+      decisionOutcome: null as string | null,
+      decidedAt: null as string | null,
+    };
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes('/agents/directory')) return new Response(JSON.stringify({ agents: [] }));
+      if (url.includes('/messages'))
+        return new Response(JSON.stringify({ items: [], nextCursor: null, hasMore: false }));
+      if (url.endsWith('/decision/clear') && init?.method === 'POST') {
+        current = { ...current, isDecision: false, decisionOutcome: null, decidedAt: null };
+        return new Response(JSON.stringify(current));
+      }
+      if (url.endsWith('/decision') && init?.method === 'POST') {
+        const { outcome } = JSON.parse(String(init.body)) as { outcome: string };
+        current = {
+          ...current,
+          isDecision: true,
+          decisionOutcome: outcome.trim() || null,
+          decidedAt: current.decidedAt ?? '2026-09-10T12:01:00Z',
+        };
+        return new Response(JSON.stringify(current));
+      }
+      return new Response(JSON.stringify({ items: [current], nextCursor: null, hasMore: false }));
+    });
+
+    render(
+      <MemoryRouter>
+        <ConversationsView flash={vi.fn()} />
+      </MemoryRouter>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: /Decision thread/ }));
+    fireEvent.change(screen.getByLabelText('Decision outcome'), {
+      target: { value: '  Use the approved plan.  ' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Mark as decision' }));
+    expect(await screen.findByText('Outcome: Use the approved plan.')).toBeVisible();
+    expect(screen.getByText('Decision: Use the approved plan.')).toBeVisible();
+
+    fireEvent.change(screen.getByLabelText('Decision outcome'), {
+      target: { value: 'Ship the revised plan.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save outcome' }));
+    expect(await screen.findByText('Outcome: Ship the revised plan.')).toBeVisible();
+
+    fireEvent.change(screen.getByLabelText('Conversation state'), {
+      target: { value: 'DECISIONS' },
+    });
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/agent-conversations?isDecision=true',
+        expect.any(Object),
+      ),
+    );
+    expect(screen.getByText('Decision: Ship the revised plan.')).toBeVisible();
+
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Clear decision mark' }));
+    expect(await screen.findByRole('button', { name: 'Mark as decision' })).toBeVisible();
+    expect(screen.queryByText('Decision: Ship the revised plan.')).not.toBeInTheDocument();
+  });
 });

@@ -1,5 +1,15 @@
 # Changelog
 
+## [6.7.1] - 2026-09-11
+
+### Added
+
+- Decision tagging and optional outcomes on conversation threads, with operator controls, a decisions filter, and scoped discussion badges.
+
+### Breaking changes
+
+None.
+
 ## [6.7.0] - 2026-09-11
 
 ### Added

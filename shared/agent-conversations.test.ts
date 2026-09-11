@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  conversationDecisionSchema,
   conversationListSchema,
   conversationScopeSchema,
   createConversationSchema,
@@ -34,5 +35,15 @@ describe('agent conversation schemas', () => {
     ).not.toThrow();
     expect(() => conversationListSchema.parse({ scopeType: 'project' })).toThrow();
     expect(() => conversationListSchema.parse({ scopeType: 'freeform', scopeId: 'x' })).toThrow();
+  });
+
+  it('normalizes the decision list query and bounds optional outcomes', () => {
+    expect(conversationListSchema.parse({ isDecision: 'true' }).isDecision).toBe(true);
+    expect(conversationListSchema.parse({ isDecision: false }).isDecision).toBe(false);
+    expect(conversationDecisionSchema.parse({ outcome: '  Approved  ' })).toEqual({
+      outcome: 'Approved',
+    });
+    expect(conversationDecisionSchema.parse({ outcome: '' })).toEqual({ outcome: '' });
+    expect(() => conversationDecisionSchema.parse({ outcome: 'x'.repeat(501) })).toThrow();
   });
 });

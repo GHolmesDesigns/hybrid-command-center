@@ -13,6 +13,8 @@ const conversation = {
   messageCount: 1,
   updatedAt: '2026-09-10T12:00:00Z',
   state: 'ACTIVE',
+  isDecision: true,
+  decisionOutcome: 'Use the approved brief.',
 };
 const handoff = {
   id: 'h1',
@@ -77,6 +79,7 @@ describe('DiscussionPanel', () => {
     );
 
     expect(await screen.findByText('Launch notes')).toBeVisible();
+    expect(screen.getByText('Decision: Use the approved brief.')).toBeVisible();
     expect(await screen.findByText('Review the project brief.')).toBeVisible();
     expect(screen.getByText('OPEN')).toBeVisible();
     expect(fetchMock).toHaveBeenCalledWith(
