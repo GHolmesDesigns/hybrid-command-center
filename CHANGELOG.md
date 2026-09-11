@@ -1,5 +1,15 @@
 # Changelog
 
+## [6.8.4] - 2026-09-11
+
+### Changed
+
+- Documented a message-count-triggered thread rollup direction with operator confirmation, visible evidence, and source-message preservation.
+
+### Breaking changes
+
+None.
+
 ## [6.8.3] - 2026-09-11
 
 ### Added
