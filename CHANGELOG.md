@@ -1,5 +1,16 @@
 # Changelog
 
+## [6.7.0] - 2026-09-11
+
+### Added
+
+- Optional descriptive charter text can be saved and displayed for registered agents in the directory.
+- Read-only MCP directory access includes each agent's charter.
+
+### Breaking changes
+
+None.
+
 ## [6.6.5] - 2026-09-10
 
 ### Added
