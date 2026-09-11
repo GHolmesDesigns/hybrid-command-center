@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createDb } from './db.ts';
 import { createConversation, listMessages, postMessage } from './agent-conversations.ts';
 import { claimHandoff, completeHandoff, getHandoff } from './agent-coordination/service.ts';
+import { listNotifications } from './agent-summaries.ts';
 
 const registerAgent = (db: ReturnType<typeof createDb>, label: string) => {
   db.prepare(
@@ -97,6 +98,81 @@ describe('conversation mention handoffs', () => {
       count: 1,
     });
     expect(getHandoff(db, first.linkedHandoffs[0]!.id).subjectId).toBeNull();
+  });
+
+  it('notifies each confirmed recipient once with a handoff deep link', () => {
+    const db = createDb(':memory:');
+    registerAgent(db, 'cursor');
+    registerAgent(db, 'reviewer');
+    const conversation = createConversation(
+      db,
+      { title: 'Notify', scope: { type: 'project', id: 'p3' }, participantLabels: [] },
+      'operator',
+    );
+    const message = postMessage(db, conversation.id, 'operator', {
+      body: '@cursor and @reviewer please review.',
+      confirmHandoffs: ['cursor', 'reviewer'],
+    });
+    const notifications = listNotifications(db).notifications;
+    expect(notifications).toHaveLength(2);
+    expect(notifications.map((row) => row.agentLabel).sort()).toEqual(['cursor', 'reviewer']);
+    for (const handoff of message.linkedHandoffs) {
+      expect(notifications).toContainEqual(
+        expect.objectContaining({
+          incidentKey: `mention-handoff:${handoff.id}`,
+          kind: 'mention_handoff',
+          agentLabel: handoff.toAgentLabel,
+          title: 'New handoff for you',
+          destination: { type: 'handoff', id: handoff.id },
+          readAt: null,
+        }),
+      );
+    }
+  });
+
+  it('creates no notification when handoffs are declined or labels are unknown', () => {
+    const db = createDb(':memory:');
+    registerAgent(db, 'cursor');
+    const conversation = createConversation(
+      db,
+      { title: 'No notify', scope: { type: 'project', id: 'p4' }, participantLabels: [] },
+      'operator',
+    );
+    postMessage(db, conversation.id, 'operator', {
+      body: '@cursor please help',
+      confirmHandoffs: [],
+    });
+    postMessage(db, conversation.id, 'operator', {
+      body: '@unknown-label please help',
+      confirmHandoffs: [],
+    });
+    expect(listNotifications(db).notifications).toEqual([]);
+  });
+
+  it('does not duplicate mention notifications on client request replay', () => {
+    const db = createDb(':memory:');
+    registerAgent(db, 'cursor');
+    const conversation = createConversation(
+      db,
+      { title: 'Notify replay', scope: { type: 'freeform' }, participantLabels: [] },
+      'operator',
+    );
+    const first = postMessage(db, conversation.id, 'operator', {
+      body: '@cursor freeform request',
+      confirmHandoffs: ['cursor'],
+      clientRequestId: 'notify-replay-1',
+    });
+    postMessage(db, conversation.id, 'operator', {
+      body: '@cursor freeform request',
+      confirmHandoffs: ['cursor'],
+      clientRequestId: 'notify-replay-1',
+    });
+    expect(listNotifications(db).notifications).toHaveLength(1);
+    expect(listNotifications(db).notifications[0]).toMatchObject({
+      incidentKey: `mention-handoff:${first.linkedHandoffs[0]!.id}`,
+      kind: 'mention_handoff',
+      agentLabel: 'cursor',
+    });
   });
 
   it('lets a confirmed recipient read the originating message after claim and completion', () => {

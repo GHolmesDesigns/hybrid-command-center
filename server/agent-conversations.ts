@@ -4,7 +4,9 @@ import { transaction } from './db.ts';
 import { redactSecrets } from './integration-log.ts';
 import { listAgentDirectory } from './agent-directory.ts';
 import { insertHandoff } from './agent-coordination/service.ts';
+import { notify } from './agent-summaries.ts';
 import { knownAgentMentionLabels } from '../shared/agent-mentions.ts';
+import { handoffMessageExcerpt } from '../shared/agent-coordination.ts';
 import type { AgentIdentityProvenance } from '../shared/agent-coordination.ts';
 import {
   conversationDecisionSchema,
@@ -316,6 +318,19 @@ export function postMessage(
       );
       linkInsert.run(messageId, handoff.id, label);
       linked.push({ id: handoff.id, toAgentLabel: label, state: handoff.state });
+      const fromDisplay = actor === 'operator' ? 'Operator' : `@${actor}`;
+      notify(
+        db,
+        {
+          incidentKey: `mention-handoff:${handoff.id}`,
+          kind: 'mention_handoff',
+          agentLabel: label,
+          title: 'New handoff for you',
+          body: `${fromDisplay} mentioned you in a conversation: ${handoffMessageExcerpt(body)}`,
+          destination: { type: 'handoff', id: handoff.id },
+        },
+        new Date(instant),
+      );
     }
 
     db.prepare('UPDATE agent_conversations SET updated_at=? WHERE id=?').run(instant, id);

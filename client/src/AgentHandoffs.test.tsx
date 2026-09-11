@@ -99,6 +99,22 @@ describe('Agents Agent handoffs card', () => {
     ).toHaveTextContent('Please finish the caption review.');
   });
 
+  it('opens a handoff from the notification deep link query param', async () => {
+    const row = openHandoff({ id: 'handoff-deep-link' });
+    testState.agentHandoffsPayload = [row];
+    testState.agentHandoffDetailPayload = { ...row, notes: [] };
+
+    render(
+      <MemoryRouter initialEntries={['/agents?handoff=handoff-deep-link#agent-handoffs']}>
+        <App />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('region', { name: 'Handoff detail' })).toBeVisible();
+    expect(screen.getByRole('region', { name: 'Handoff detail' })).toHaveTextContent(
+      'Please finish the caption review.',
+    );
+  });
+
   it('shows an error state when the list cannot be loaded', async () => {
     testState.agentHandoffsError = 'Coordination store is offline.';
     await openSettings();
