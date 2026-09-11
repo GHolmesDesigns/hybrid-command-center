@@ -180,6 +180,9 @@ const environment = z.object({
   BUFFER_KEY: z.string().optional(),
   // When the Buffer account has more than one organization, this names the one to read.
   BUFFER_ORGANIZATION_ID: z.string().optional(),
+  // Optional Cursor admin API key for provider-reported agent usage (C217). Owner-run probe only.
+  CURSOR_ADMIN_API_KEY: z.string().optional(),
+  CURSOR_ADMIN_API_BASE_URL: z.string().url().optional(),
   PUBLISH_TIMEZONE: z
     .string()
     .optional()
@@ -224,6 +227,8 @@ const parsed = environment.safeParse({
   BUFFER_API_KEY: read('BUFFER_API_KEY'),
   BUFFER_KEY: read('BUFFER_KEY'),
   BUFFER_ORGANIZATION_ID: read('BUFFER_ORGANIZATION_ID'),
+  CURSOR_ADMIN_API_KEY: read('CURSOR_ADMIN_API_KEY'),
+  CURSOR_ADMIN_API_BASE_URL: read('CURSOR_ADMIN_API_BASE_URL'),
   PUBLISH_TIMEZONE: read('PUBLISH_TIMEZONE'),
   LOG_LEVEL: read('LOG_LEVEL')?.toLowerCase() ?? ENVIRONMENT_DEFAULTS.LOG_LEVEL,
   SESSION_SECRET: read('SESSION_SECRET'),
@@ -271,6 +276,10 @@ export const config = {
     apiKey: env.BUFFER_API_KEY ?? env.BUFFER_KEY ?? '',
     organizationId: env.BUFFER_ORGANIZATION_ID ?? '',
   },
+  agentCost: {
+    apiKey: env.CURSOR_ADMIN_API_KEY ?? '',
+    baseUrl: env.CURSOR_ADMIN_API_BASE_URL ?? '',
+  },
   auth: {
     sessionSecret: env.SESSION_SECRET ?? '',
     operatorPasswordHash: env.OPERATOR_PASSWORD_HASH ?? '',
@@ -286,6 +295,9 @@ export const publishConfigured = () => Boolean(config.publish.apiKey && config.p
 
 /** Buffer read access is optional and independent of Post Bridge publishing. */
 export const bufferConfigured = () => Boolean(config.buffer.apiKey);
+
+/** Agent cost reads are optional and independent of every other integration. */
+export const agentCostConfigured = () => Boolean(config.agentCost.apiKey);
 
 /** Runtime view of the §5.1 checklist against the loaded config. */
 export const authIsConfigured = () =>

@@ -14,6 +14,7 @@ export const INTEGRATION_SOURCES = [
   'signal-import',
   'signal-campaign',
   'google-drive',
+  'agent-hub',
 ] as const;
 export type IntegrationSource = (typeof INTEGRATION_SOURCES)[number];
 
@@ -57,6 +58,9 @@ export const INTEGRATION_OPERATIONS = [
   // name over one of its windows. One replaces a whole snapshot or replaces nothing, so a log reader
   // can tell an all-or-nothing window read apart from a per-post refresh at a glance.
   'signal.analytics-window-refresh',
+  // Reading provider-reported agent usage. Separate from every Signal operation because it changes
+  // no post, no handoff, and no workspace row — it appends usage snapshots only.
+  'agent.cost-refresh',
 ] as const;
 export type IntegrationOperation = (typeof INTEGRATION_OPERATIONS)[number];
 
@@ -133,6 +137,7 @@ export const INTEGRATION_SOURCE_LABEL: Record<IntegrationSource, string> = {
   'signal-import': 'Signal import',
   'signal-campaign': 'Signal Campaign',
   'google-drive': 'Google Drive',
+  'agent-hub': 'Agent Hub',
 };
 
 export const INTEGRATION_OPERATION_LABEL: Record<IntegrationOperation, string> = {
@@ -153,6 +158,7 @@ export const INTEGRATION_OPERATION_LABEL: Record<IntegrationOperation, string> =
   'signal.provider-inventory-refresh': 'Signal provider inventory refresh',
   'signal.buffer-accounts-refresh': 'Signal Buffer accounts refresh',
   'signal.analytics-window-refresh': 'Signal analytics window refresh',
+  'agent.cost-refresh': 'Agent cost refresh',
 };
 
 export const INTEGRATION_OUTCOME_LABEL: Record<IntegrationOutcome, string> = {
