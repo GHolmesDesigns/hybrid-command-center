@@ -16,16 +16,6 @@ export type AgentHandoffState = (typeof AGENT_HANDOFF_STATES)[number];
 export const AGENT_HANDOFF_LIST_DEFAULT_LIMIT = 50;
 export const AGENT_HANDOFF_LIST_MAX_LIMIT = 100;
 
-export const agentHandoffListFilterSchema = z
-  .object({
-    state: z.enum(AGENT_HANDOFF_STATES).optional(),
-    limit: z.number().int().min(1).max(AGENT_HANDOFF_LIST_MAX_LIMIT).optional(),
-    offset: z.number().int().min(0).optional(),
-  })
-  .strict();
-
-export type AgentHandoffListFilter = z.infer<typeof agentHandoffListFilterSchema>;
-
 export const AGENT_HANDOFF_SUBJECT_TYPES = [
   'task',
   'signal_post',
@@ -47,6 +37,26 @@ export const AGENT_COORDINATION_LIMITS = {
   evidenceItem: 500,
   evidenceItems: 50,
 } as const;
+
+export const agentHandoffListFilterSchema = z
+  .object({
+    state: z.enum(AGENT_HANDOFF_STATES).optional(),
+    subjectType: z.enum(AGENT_HANDOFF_SUBJECT_TYPES).optional(),
+    subjectId: z.string().trim().min(1).max(AGENT_COORDINATION_LIMITS.subjectId).optional(),
+    limit: z.number().int().min(1).max(AGENT_HANDOFF_LIST_MAX_LIMIT).optional(),
+    offset: z.number().int().min(0).optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (Boolean(value.subjectType) !== Boolean(value.subjectId)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'subjectType and subjectId must be supplied together.',
+      });
+    }
+  });
+
+export type AgentHandoffListFilter = z.infer<typeof agentHandoffListFilterSchema>;
 
 export const AGENT_HANDOFF_OUTCOMES = [
   'SUCCEEDED',

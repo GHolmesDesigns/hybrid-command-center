@@ -251,7 +251,11 @@ export function FilesView({
       <div className="board-filters">
         <label>
           <span>Project</span>
-          <select value={selected} onChange={(event) => choose('project', event.target.value)}>
+          <select
+            aria-label="Project"
+            value={selected}
+            onChange={(event) => choose('project', event.target.value)}
+          >
             {browsable.map((candidate) => (
               <option key={candidate.id} value={candidate.id}>
                 {candidate.name}
@@ -262,6 +266,7 @@ export function FilesView({
         <label>
           <span>Folder</span>
           <select
+            aria-label="Folder"
             value={folderId}
             disabled={scopes.length === 0}
             onChange={(event) => choose('folder', event.target.value)}

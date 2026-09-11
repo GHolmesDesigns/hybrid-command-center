@@ -5,6 +5,7 @@
  * hand-maintained tool list cannot drift from what the server actually exposes.
  */
 import {
+  AGENT_COORDINATION_LIMITS,
   AGENT_HANDOFF_LIST_MAX_LIMIT,
   AGENT_HANDOFF_STATES,
   AGENT_HANDOFF_SUBJECT_TYPES,
@@ -77,11 +78,14 @@ const driveWriteRequestTool: McpToolRegistryEntry = {
 const coordinationTools: McpToolRegistryEntry[] = [
   {
     name: 'coordination_list_handoffs',
-    description: 'List a bounded page of agent handoffs, optionally filtered by state.',
+    description:
+      'List a bounded page of agent handoffs, optionally filtered by state or an exact subject.',
     inputSchema: {
       type: 'object',
       properties: {
         state: { type: 'string', enum: [...AGENT_HANDOFF_STATES] },
+        subjectType: { type: 'string', enum: [...AGENT_HANDOFF_SUBJECT_TYPES] },
+        subjectId: { type: 'string', maxLength: AGENT_COORDINATION_LIMITS.subjectId },
         limit: { type: 'integer', minimum: 1, maximum: AGENT_HANDOFF_LIST_MAX_LIMIT },
         offset: { type: 'integer', minimum: 0 },
       },

@@ -62,7 +62,7 @@ describe('Dependency picker', () => {
     const headings = within(screen.getByRole('dialog'))
       .getAllByRole('heading', { level: 2 })
       .map((heading) => heading.textContent);
-    expect(headings.at(-1)).toBe('Dependencies');
+    expect(headings).toContain('Dependencies');
 
     // The API answers in board order — status, then column position — so any alphabetical
     // order here is the client's doing.

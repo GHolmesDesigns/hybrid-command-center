@@ -38,10 +38,15 @@ describe('Project page task ordering', () => {
     );
     expect(await screen.findByRole('heading', { level: 1, name: 'Site refresh' })).toBeVisible();
   };
-  const stageHeadings = () =>
-    screen
+  const stageHeadings = () => {
+    const tasksPanel = screen
+      .getByRole('heading', { level: 2, name: 'All project tasks' })
+      .closest('section');
+    if (!tasksPanel) throw new Error('All project tasks panel is missing.');
+    return within(tasksPanel)
       .getAllByRole('heading', { level: 3 })
       .map((heading) => heading.textContent?.replace(/\d+$/, ''));
+  };
   const rowTitles = () =>
     screen
       .getAllByRole('button', { name: /^Drag / })

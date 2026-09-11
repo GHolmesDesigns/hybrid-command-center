@@ -39,7 +39,7 @@ test('the Files page browses a project read-only and states its Drive problem pl
   await page.goto(`/projects/${project.id}`);
   await page.getByRole('link', { name: /Browse files/ }).click();
   await expect(page).toHaveURL(new RegExp(`/files\\?project=${project.id}`));
-  await expect(page.getByLabel('Project')).toHaveValue(project.id);
+  await expect(page.getByLabel('Project', { exact: true })).toHaveValue(project.id);
 
   // No credentials on this machine, so that is what it says — with somewhere to go.
   await expect(page.getByRole('alert')).toContainText(/Google Drive is not/);
@@ -51,9 +51,9 @@ test('the Files page browses a project read-only and states its Drive problem pl
   // Keyboard reaches the controls in reading order. The folder picker is deliberately
   // skipped: with no Drive folder there is nothing to pick, and it says so rather than
   // taking a tab stop that leads nowhere.
-  await page.getByLabel('Project').focus();
-  await expect(page.getByLabel('Project')).toBeFocused();
-  await expect(page.getByLabel('Folder')).toBeDisabled();
+  await page.getByLabel('Project', { exact: true }).focus();
+  await expect(page.getByLabel('Project', { exact: true })).toBeFocused();
+  await expect(page.getByLabel('Folder', { exact: true })).toBeDisabled();
   await page.keyboard.press('Tab');
   await expect(page.getByRole('link', { name: 'Open Settings' })).toBeFocused();
 

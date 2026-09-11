@@ -204,21 +204,24 @@ export function listHandoffs(db: Db, rawFilter: unknown = {}): AgentHandoffPage 
   const filter = agentHandoffListFilterSchema.parse(rawFilter);
   const limit = filter.limit ?? AGENT_HANDOFF_LIST_DEFAULT_LIMIT;
   const offset = filter.offset ?? 0;
-  const rows = filter.state
-    ? (db
-        .prepare(
-          `SELECT * FROM agent_handoffs WHERE state = ?
-           ORDER BY created_at DESC, id DESC
-           LIMIT ? OFFSET ?`,
-        )
-        .all(filter.state, limit + 1, offset) as unknown as HandoffRow[])
-    : (db
-        .prepare(
-          `SELECT * FROM agent_handoffs
-           ORDER BY created_at DESC, id DESC
-           LIMIT ? OFFSET ?`,
-        )
-        .all(limit + 1, offset) as unknown as HandoffRow[]);
+  const where: string[] = [];
+  const params: Array<string | number> = [];
+  if (filter.state) {
+    where.push('state = ?');
+    params.push(filter.state);
+  }
+  if (filter.subjectType && filter.subjectId) {
+    where.push('subject_type = ? AND subject_id = ?');
+    params.push(filter.subjectType, filter.subjectId);
+  }
+  params.push(limit + 1, offset);
+  const rows = db
+    .prepare(
+      `SELECT * FROM agent_handoffs${where.length ? ` WHERE ${where.join(' AND ')}` : ''}
+       ORDER BY created_at DESC, id DESC
+       LIMIT ? OFFSET ?`,
+    )
+    .all(...params) as unknown as HandoffRow[];
   return {
     handoffs: rows.slice(0, limit).map(toHandoff),
     limit,

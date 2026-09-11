@@ -21,6 +21,7 @@ import { type Modal } from './App';
 import { formatDate, initials } from './formatting';
 import { DriveBadge, Empty, SearchBox } from './Primitives';
 import { PageHead } from './Shell';
+import { DiscussionPanel } from './DiscussionPanel';
 
 export function Clients({
   clients,
@@ -376,6 +377,12 @@ export function ClientDetail({
           )}
         </section>
       </div>
+      <DiscussionPanel
+        scopeType="client"
+        scopeId={client.id}
+        subjectLabel={client.name}
+        subjectPath={`/clients/${client.id}`}
+      />
     </>
   );
 }

@@ -125,6 +125,41 @@ describe('postHandoff', () => {
       truncated: false,
     });
   });
+
+  it('filters an exact related subject before applying the page limit', () => {
+    const related = postHandoff(
+      db,
+      {
+        fromAgentLabel: 'cursor',
+        subjectType: 'project',
+        subjectId: 'project-1',
+        message: 'Related.',
+      },
+      NOW,
+    );
+    postHandoff(
+      db,
+      {
+        fromAgentLabel: 'cursor',
+        subjectType: 'project',
+        subjectId: 'project-2',
+        message: 'Newer but unrelated.',
+      },
+      new Date(NOW.getTime() + 1000),
+    );
+
+    expect(
+      listHandoffs(db, {
+        subjectType: 'project',
+        subjectId: 'project-1',
+        limit: 1,
+      }),
+    ).toMatchObject({
+      handoffs: [expect.objectContaining({ id: related.id })],
+      truncated: false,
+    });
+    expect(() => listHandoffs(db, { subjectType: 'project' })).toThrow(/subjectType and subjectId/);
+  });
 });
 
 describe('claimHandoff', () => {
