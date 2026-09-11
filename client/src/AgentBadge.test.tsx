@@ -36,6 +36,16 @@ describe('AgentBadge', () => {
     expect(screen.getByText(/Unverified agent/)).toBeVisible();
   });
 
+  it('renders explicit offline presence when activity is fresh', () => {
+    render(
+      <AgentBadge
+        profile={{ label: 'worker', displayName: 'Worker', trustLevel: 'UNVERIFIED' }}
+        presence={{ state: 'OFFLINE', lastActivityAt: new Date().toISOString() }}
+      />,
+    );
+    expect(screen.getByText(/Offline/)).toBeVisible();
+  });
+
   it('hides meta copy in compact mode', () => {
     render(
       <AgentBadge

@@ -219,4 +219,40 @@ describe('CommandAiPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /Command AI/i }));
     expect(onClick).toHaveBeenCalledTimes(1);
   });
+
+  it('shows a refresh error and offers view all for long history', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/agents/directory')) return json({ agents: [] });
+      if (url.includes('/agents/presence')) return json({ presence: [] });
+      if (url.includes('/agent-summaries')) return json({ summaries: [] });
+      if (url.includes('/agent-conversations?')) {
+        return json({
+          items: Array.from({ length: 6 }, (_, index) => ({
+            id: `conv-${index}`,
+            title: `Thread ${index}`,
+            state: 'ACTIVE',
+            scope: { type: 'freeform', id: null },
+            participants: ['operator'],
+            messageCount: 0,
+            updatedAt: `2026-09-1${index}T12:00:00.000Z`,
+          })),
+          nextCursor: null,
+          hasMore: false,
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    render(
+      <MemoryRouter>
+        <CommandAiPanel open onClose={() => undefined} />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('Thread 0')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'View all' }));
+    expect(await screen.findByRole('heading', { name: 'Chat history' })).toBeVisible();
+    expect(screen.getAllByRole('button', { name: /Thread/ })).toHaveLength(6);
+  });
 });
