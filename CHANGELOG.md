@@ -1,5 +1,16 @@
 # Changelog
 
+## [6.6.4] - 2026-09-10
+
+### Added
+
+- Discussion panels on project, client, and task detail pages with scoped thread creation, inline replies, related handoffs, and links to a scoped full conversation view.
+- Server-side conversation scope filtering before pagination for isolated detail discussions.
+
+### Breaking changes
+
+None.
+
 ## [6.6.3] - 2026-09-10
 
 ### Added
