@@ -98,7 +98,9 @@ test('project thread @mention confirms a handoff and shows it on the message', a
   await expect(handoffConfirm).toBeVisible();
   await expect(handoffConfirm).toBeChecked();
   await discussion.getByRole('button', { name: 'Reply' }).click();
-  await expect(discussion.getByText(mentionBody)).toBeVisible();
+  // Scope to the message list: a confirmed handoff echoes the same body in "Related handoffs",
+  // so an unscoped match is ambiguous once that section has loaded.
+  await expect(discussion.getByRole('article').getByText(mentionBody)).toBeVisible();
   await expect(discussion.getByText('Handoff to @operator-session · OPEN')).toBeVisible();
 });
 
