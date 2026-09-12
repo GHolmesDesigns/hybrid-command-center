@@ -1,5 +1,16 @@
 # Changelog
 
+## [6.8.8] - 2026-09-12
+
+### Fixed
+
+- `changePassword` no longer returns success while leaving the old password valid when
+  `OPERATOR_PASSWORD_HASH` is configured via environment — it now refuses with a 409 instead.
+
+### Breaking changes
+
+None.
+
 ## [6.8.7] - 2026-09-11
 
 ### Added
