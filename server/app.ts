@@ -1324,7 +1324,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         now: authNowMs(),
       });
       if (!result.ok) {
-        res.status(401).json({ error: result.error });
+        res.status(result.reason === 'env-managed' ? 409 : 401).json({ error: result.error });
         return;
       }
       res.setHeader('Set-Cookie', clearSessionCookie({ secure: secureCookies }));

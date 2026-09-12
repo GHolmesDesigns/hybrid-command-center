@@ -135,6 +135,54 @@ describe('auth service', () => {
     expect(again.ok).toBe(true);
   });
 
+  it('changePassword refuses when the hash comes from the environment', async () => {
+    const session = await login(db, {
+      password: PASSWORD,
+      clientAddress: '127.0.0.2',
+      sessionSecret: SECRET,
+      envHash: hash,
+      now: 0,
+    });
+    expect(session.ok).toBe(true);
+
+    const refused = await changePassword(db, {
+      currentPassword: PASSWORD,
+      newPassword: 'brand-new-password',
+      envHash: hash,
+      now: 50,
+    });
+    expect(refused.ok).toBe(false);
+    if (refused.ok) return;
+    expect(refused.reason).toBe('env-managed');
+
+    // No dead row: an env hash unset later must not promote a forgotten write to the live credential.
+    expect(getSetting(db, OPERATOR_PASSWORD_HASH_SETTING_KEY)).toBeFalsy();
+
+    if (session.ok) {
+      expect(
+        lookupSession(db, { rawToken: session.rawToken, sessionSecret: SECRET, now: 60 }),
+      ).not.toBeNull();
+    }
+
+    const oldStillWorks = await login(db, {
+      password: PASSWORD,
+      clientAddress: '127.0.0.2',
+      sessionSecret: SECRET,
+      envHash: hash,
+      now: 70,
+    });
+    expect(oldStillWorks.ok).toBe(true);
+
+    const newRejected = await login(db, {
+      password: 'brand-new-password',
+      clientAddress: '127.0.0.2',
+      sessionSecret: SECRET,
+      envHash: hash,
+      now: 80,
+    });
+    expect(newRejected.ok).toBe(false);
+  });
+
   it('resetPassword sets a new hash and revokes every session without the old password', async () => {
     setSetting(db, OPERATOR_PASSWORD_HASH_SETTING_KEY, hash);
     const session = await login(db, {

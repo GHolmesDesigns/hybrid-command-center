@@ -105,8 +105,14 @@ export function logout(db: Db, options: { tokenHash: string | null; now?: number
   }
 }
 
+export type ChangePasswordFailure = 'invalid-current-password' | 'env-managed';
+
 /**
  * Change the operator password: verify the current one, store the new hash, revoke every session.
+ *
+ * Refuses when `OPERATOR_PASSWORD_HASH` is set, because `getPasswordHash` always prefers the env
+ * value: writing the settings row would report success while leaving the old password working.
+ * The refusal comes after verification so an unauthenticated caller learns nothing about the host.
  */
 export async function changePassword(
   db: Db,
@@ -116,10 +122,23 @@ export async function changePassword(
     envHash?: string;
     now?: number;
   },
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true } | { ok: false; error: string; reason: ChangePasswordFailure }> {
   const hash = getPasswordHash(db, options.envHash);
   if (!hash || !(await verifyPassword(hash, options.currentPassword))) {
-    return { ok: false, error: 'Current password is incorrect.' };
+    return {
+      ok: false,
+      error: 'Current password is incorrect.',
+      reason: 'invalid-current-password',
+    };
+  }
+  if (options.envHash?.trim()) {
+    return {
+      ok: false,
+      error:
+        'OPERATOR_PASSWORD_HASH is set in the environment; rotate it there and restart. ' +
+        'No password was changed and no sessions were revoked.',
+      reason: 'env-managed',
+    };
   }
   const next = await hashPassword(options.newPassword);
   setSetting(db, OPERATOR_PASSWORD_HASH_SETTING_KEY, next);
