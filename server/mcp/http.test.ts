@@ -440,11 +440,42 @@ describe('network MCP (C113)', () => {
     expect(res.status).toBe(401);
   });
 
-  it('revokes bearer on password change', async () => {
+  it('refuses a password change under an env hash and leaves the bearer intact', async () => {
     const { cookie, csrfToken } = await login();
     const bearer = await issueBearer(cookie, csrfToken);
 
     const changed = await request(app())
+      .post('/api/auth/password')
+      .set('Cookie', cookie)
+      .set(CSRF_HEADER_NAME, csrfToken)
+      .send({ currentPassword: PASSWORD, newPassword: 'new-operator-password-ok!' });
+    expect(changed.status).toBe(409);
+
+    const res = await request(app())
+      .post(MCP_HTTP_PATH)
+      .set('Authorization', `Bearer ${bearer}`)
+      .set(MCP_AGENT_LABEL_HEADER, 'cursor')
+      .send({ jsonrpc: '2.0', id: 5, method: 'ping' });
+    expect(res.status).toBe(200);
+  });
+
+  it('revokes bearer on password change', async () => {
+    const { cookie, csrfToken } = await login();
+    const bearer = await issueBearer(cookie, csrfToken);
+
+    // The env hash always wins, so a rotation can only land on a host where it is unset and the
+    // settings row is live. Same db, so the session cookie and the bearer carry over.
+    const settingsRowApp = createApp(db, {
+      enforceAuth: true,
+      auth: {
+        sessionSecret: SECRET,
+        operatorPasswordHash: '',
+        trustedProxyHops: 0,
+        secureCookies: false,
+      },
+    });
+
+    const changed = await request(settingsRowApp)
       .post('/api/auth/password')
       .set('Cookie', cookie)
       .set(CSRF_HEADER_NAME, csrfToken)
