@@ -1,5 +1,17 @@
 # Changelog
 
+## [6.8.9] - 2026-09-12
+
+### Changed
+
+- Planning docs only: every open decision in the Wave 39 and Wave 40 studies is recorded, the
+  Wave 40 status palette is measured against the contrast checks, W40-C is split into C1 and C2,
+  and the 6.8.7 brief is marked superseded for execution. No product behaviour changes.
+
+### Breaking changes
+
+None.
+
 ## [6.8.8] - 2026-09-12
 
 ### Fixed
