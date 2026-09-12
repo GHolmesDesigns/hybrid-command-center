@@ -139,7 +139,7 @@ Two, both confirmed by their verifiers rather than merely reported.
 
 #### Password change is a no-op in the production configuration — `server/auth/service.ts:125`
 
-Three verifiers CONFIRMED, none dissented; severity corrected high → medium.
+**FIXED in `c691482`.** Three verifiers CONFIRMED, none dissented; severity corrected high → medium.
 
 `getPasswordHash` (:42-47) returns the `OPERATOR_PASSWORD_HASH` env value whenever it is set and
 only falls back to the `operator_password_hash` settings row when it is not. `changePassword`
@@ -160,12 +160,19 @@ durable — the next login fails immediately. The documented rotation path (SSM 
 `docs/cloud-hosting.md:374`) works. What keeps it above low is that this is a compromise-recovery
 flow returning success while the leaked credential stays valid.
 
-Fix: refuse in `changePassword` when `options.envHash` is non-empty, map to 409 at
-`server/app.ts:1326`, give `resetPassword` the same guard, and add a test that builds the service
-with an env hash and asserts the old password still authenticates. A latent second-order trap
-worth fixing at the same time: the dead settings row persists, so if `OPERATOR_PASSWORD_HASH` is
-later unset, a hash written by a long-forgotten "successful" change silently becomes the live
-credential.
+Applied fix (`c691482`): `changePassword` refuses with a distinct `'env-managed'` reason after
+verifying the current password, so an unauthenticated caller learns nothing; `server/app.ts` maps
+that to 409. `resetPassword` was deliberately **not** given the same guard — its only caller is the
+local bootstrap CLI, where writing the settings row is the intended effect, and its doc comment
+already discloses the env-hash limitation. An existing `http.test.ts` case that asserted the buggy
+200-under-env-hash behavior was corrected; new tests cover the refusal, that the bearer survives it,
+and that a real settings-row rotation still revokes sessions and bearers as before.
+
+A latent second-order trap remains, deliberately not touched by this fix: any settings-row hash
+written before this fix landed still persists, so if `OPERATOR_PASSWORD_HASH` is later unset, that
+old forgotten write silently becomes the live credential. Anyone relying on the env hash today
+should confirm the settings row is empty (or overwrite it once, off an unset env var) as part of
+adopting this fix.
 
 #### `resources/read` bypasses the MCP credential scope gate — `server/mcp/resources.ts:160`
 
