@@ -109,20 +109,66 @@ pin it *before* the selection bridge lands, or the bridge will be blamed for it.
 
 ---
 
-## 2. Project security review — PARTIAL, resumes from cache
+## 2. Project security review — PARTIAL, and it does not converge by resuming
 
 113 agents planned across 11 dimensions (authn/session, MCP OAuth, authz/IDOR, MCP tool surface,
 injection, SSRF/egress, secrets/crypto, web transport/CSRF/SSE, client-side, agent trust boundary,
-supply chain). 63 completed; 50 died on a spend limit — many verifier votes, both completeness
-critics, and the final synthesis, which therefore returned `null`.
+supply chain).
 
-**Verified so far: 17 findings survived adversarial verification — 0 critical, 1 high, 9 medium,
-7 low.** These are survivors of a three-lens adversarial pass (accuracy / already-mitigated /
-reachability), not raw reviewer output; 2 were dismissed.
+Two attempts, both cut off by a spend limit before reaching the critics or the synthesis:
 
-### The one finding read in full
+| Run | Agents done | Survivors reported | Reached synthesis |
+| --- | --- | --- | --- |
+| initial | 63 / 113 | 17 (1 high, 9 medium, 7 low) | no — `report` was `null` |
+| resume | 34 / 113 | 8 (6 medium, 2 low) | no — `report` was `null` |
 
-**`resources/read` bypasses the MCP credential scope gate** — `server/mcp/resources.ts:160`.
+**Do not read the drop from 17 to 8 as findings disappearing.** A finding is only counted as a
+survivor when enough of its three verifiers return; each run completed a different subset of
+verifiers, so the count tracks verification coverage, not the findings themselves. The union across
+`journal.jsonl` is authoritative, and no dimension sweep has ever had to re-run — those are all
+cached.
+
+**Resuming again is not the way to finish this.** The sweeps and most verifications are done; what
+is missing is one ranking pass. The cheap path is a single agent that reads `journal.jsonl`
+directly and produces the ranked report, rather than a 113-agent workflow that spends its budget
+re-walking verification before it ever reaches synthesis.
+
+### Verified findings read in full
+
+Two, both confirmed by their verifiers rather than merely reported.
+
+#### Password change is a no-op in the production configuration — `server/auth/service.ts:125`
+
+Three verifiers CONFIRMED, none dissented; severity corrected high → medium.
+
+`getPasswordHash` (:42-47) returns the `OPERATOR_PASSWORD_HASH` env value whenever it is set and
+only falls back to the `operator_password_hash` settings row when it is not. `changePassword`
+(:111-129) verifies the current password against that resolved hash and then writes the new hash to
+the settings row at :125 — a row `getPasswordHash` will never read while the env value is present.
+Because `config.ts:64-69` makes a non-empty env hash a precondition for auth being enforced at all,
+**every deployment in which this endpoint answers is one where the write is dead.**
+
+`POST /api/auth/password` (`server/app.ts:1308-1335`) returns 200 `{ok:true}`, revokes every session
+and every MCP bearer, and clears the cookie — all the visible signals of a successful rotation. The
+operator's *old* password still logs in; their new one does not, which reads as a login bug rather
+than a failed rotation. `resetPassword` carries a comment acknowledging this for itself
+(:132-133); `changePassword` does not.
+
+Why medium and not high: it grants no capability an attacker lacked (calling it requires the
+current password), sessions and bearers really are revoked, and the deception is loud rather than
+durable — the next login fails immediately. The documented rotation path (SSM parameter + restart,
+`docs/cloud-hosting.md:374`) works. What keeps it above low is that this is a compromise-recovery
+flow returning success while the leaked credential stays valid.
+
+Fix: refuse in `changePassword` when `options.envHash` is non-empty, map to 409 at
+`server/app.ts:1326`, give `resetPassword` the same guard, and add a test that builds the service
+with an env hash and asserts the old password still authenticates. A latent second-order trap
+worth fixing at the same time: the dead settings row persists, so if `OPERATOR_PASSWORD_HASH` is
+later unset, a hash written by a long-forgotten "successful" change silently becomes the live
+credential.
+
+#### `resources/read` bypasses the MCP credential scope gate — `server/mcp/resources.ts:160`
+
 Scope enforcement is keyed to `tools/call` in both places it exists: `requiredToolScope()` returns
 null for any other method (`server/mcp/http.ts:233-236`), so the gate at `http.ts:474-480` never
 fires, and `dispatch.ts:89-91` is only reached from the `tools/call` branch. The `resources/read`
@@ -141,17 +187,45 @@ and is the template.
 
 The other 16 are in the artifacts below and have **not** been ranked or synthesized yet.
 
-### To resume — replays the 63 cached agents for free
+### Named but not yet verified
 
-```
-Workflow({
-  scriptPath: "C:\\Users\\GarnieHolmes\\.claude\\projects\\C--Users-GarnieHolmes-HCC--claude-worktrees-post-bridge-integrations-plan-39a95a\\40d38c5a-a317-4083-b4fb-353e81f51413\\workflows\\scripts\\hcc-security-review-wf_66173326-d6b.js",
-  resumeFromRunId: "wf_66173326-d6b"
-})
-```
+Every sweep completed, so these finding IDs exist in `journal.jsonl` with full descriptions,
+attack scenarios and recommendations — only their adversarial verification died. Treat each as a
+reviewer's claim, not a confirmed defect, until read against the code.
 
-Do not edit that script before resuming — any edit invalidates the cache from the edit point
-onward, and the dimension prompts sit at the top of the file.
+- **agent trust boundary** (most relevant to Wave 39) — `agent-authored-mention-mints-actionable-handoff`,
+  `mention-handoff-bypasses-coordination-scope-limit-and-audit`,
+  `notification-list-returns-every-agents-notifications`, `handoff-reads-are-not-actor-scoped`,
+  `agent-self-approves-its-own-memory`
+- **MCP tool surface** — `agent-tools-bypass-write-budget-and-audit-log`,
+  `handoff-creation-without-coordination-write`, `memory-self-approval`,
+  `memory-delete-no-confirmation-gate`, `notification-agent-label-spoofing`
+- **authz / IDOR** — `drive-write-commit-missing-ownership-predicate`,
+  `work-resume-context-no-owner-check`, `system-capabilities-ungated-client-roster`,
+  `agent-memory-self-approval-over-mcp`
+- **secrets / crypto** — `redact-misses-own-bearer-shape`, `mcp-failure-results-skip-redaction`,
+  `ssm-secrets-stored-as-plaintext-string`, `backup-role-reads-snapshots-and-key`
+- **web transport** — `sse-no-connection-cap`, `health-dashboard-public-by-prefix`,
+  `mcp-session-cross-credential-eviction`
+- **injection** — `import-parser-reachable-without-budget`, `xlsx-inflate-no-max-output-length`,
+  `xlsx-column-index-array-length-hang`, `agent-memory-suggestedby-unvalidated`
+- **authn / session** — `login-lockout-per-address-only`, `login-rate-limit-map-unbounded`
+- **MCP OAuth** — `password-reset-does-not-revoke-oauth-credentials`,
+  `consent-page-approval-token-cacheable`
+- **SSRF / egress** — `post-bridge-json-client-no-timeout`
+- **client side** — `provider-url-rendered-as-href-without-scheme-check`
+
+### How to finish it cheaply
+
+Do **not** re-invoke the 113-agent workflow. Both attempts spent their budget re-walking
+verification and never reached synthesis, and a third would do the same. Instead spawn a single
+agent pointed at `journal.jsonl` with instructions to extract every `result` line, union the
+findings across both runs, drop anything a verifier marked `FALSE_POSITIVE` or `MITIGATED`, and
+produce the ranked posture report plus the Wave 39 section. One agent, no re-verification.
+
+The original script is preserved at
+`…/40d38c5a-…/workflows/scripts/hcc-security-review-wf_66173326-d6b.js` (run `wf_66173326-d6b`)
+should a targeted re-run of one dimension ever be wanted.
 
 ### Artifacts
 
