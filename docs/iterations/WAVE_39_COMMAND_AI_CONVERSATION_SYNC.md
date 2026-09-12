@@ -1,7 +1,8 @@
 # Wave 39 — One conversation, two surfaces
 
-**Status:** Study draft — no GitHub cards filed  
+**Status:** Contracts recorded — ready to file once W40-A lands; no GitHub cards opened yet  
 **Prepared:** 11 September 2026  
+**Revised:** 12 September 2026 — owner decisions recorded for §2.1, §2.2, and §2.3; W40-A recorded as a hard predecessor  
 **Source:** Operator screen recording and screenshots of `/agents/conversations` with the Command AI drawer open, plus the Novi Navigator side-panel interaction supplied as a UX reference; reviewed against `origin/main` through C218 and the in-progress C219 branch.  
 **Theme:** Make the full Conversations page and the Command AI drawer behave as two views of one selected conversation rather than two independent chat clients.
 
@@ -15,25 +16,39 @@
 | What should change? | They should share one selected conversation identity and remain two presentation surfaces. |
 | What stays separate? | Message fetching, handoff mutation, drawer open/closed preference, and full-view-only scoped discussions unless explicitly expanded. |
 | What is the recommended contract? | Freeform synchronization first; the full-page `open` query remains the reloadable canonical link. |
-| What is not being filed yet? | GitHub cards, issue numbers, release fragments, or product-code changes. |
+| What is not being filed yet? | GitHub cards and issue numbers. Contracts are settled; W40-A gates the first card. |
 
 ### Recommended study order
 
 1. Read §0 to separate the observed mismatch from the intended design reference.
 2. Read §1 to validate the operator experience in concrete terms.
-3. Decide the two contracts in §2.1–§2.2 and confirm the failure behavior in §2.3.
+3. Note the recorded contracts in §2.1–§2.3; they are decided, not open.
 4. Review §3 for card boundaries and §4–§6 for safety, verification, and completion.
 
-### Decisions requested from the study
+### Decisions recorded (12 September 2026)
 
-- Should Wave 39 synchronize freeform Command AI threads only, or should the drawer also become a
-  reader for scoped project, client, and task discussions?
-- Should the Conversations URL remain canonical, with a small bridge into the persistent drawer, or
-  should a global selection store become canonical?
-- When the operator selects a scoped thread while the drawer is open, should the drawer clear its
-  freeform selection or show a read-only “Open in full view” state?
+All three questions the study raised are answered. The W39 placeholders are now ready to become
+numbered cards, subject to the W40-A predecessor below.
 
-Until these are answered, the W39 placeholders are intentionally not ready to become numbered cards.
+| Question | Owner decision |
+| --- | --- |
+| Synchronize freeform threads only, or every conversation scope? | **Freeform only** (§2.1 Option A). |
+| Is the Conversations URL canonical, or a global selection store? | **URL canonical, app-level bridge to the drawer** (§2.2 Option A). |
+| What does the drawer do with a scoped thread it cannot represent? | **A short read-only explanatory state with a link to full view** (§2.3). |
+
+### Predecessor — W40-A must land first
+
+W39-A's acceptance evidence requires that no duplicate fetch loop is introduced. `CommandAiPanel`
+**already contains one on `main`** — `refresh` carries `selected` in its dependency array
+(`CommandAiPanel.tsx:139`) while `openThread` reassigns `selected` to a freshly parsed object, so
+the `[open, refresh]` effect at `:141–144` re-fires without bound. W39-A cannot be honestly
+accepted against that component, and the committed suite cannot see the loop. Land
+`W40-A` (`docs/iterations/WAVE_40_OPERATOR_WORKFLOW_UI.md`) before opening W39-A.
+
+**Expect rework:** W39-B rewires `CommandAiPanel`'s selection through the §2.2 bridge and will
+likely replace the `selectedRef` machinery W40-A introduces. The request-generation guard survives
+the rewire and stays valuable — a bridge changes where selection comes from, not the fact that an
+in-flight message response can resolve after the operator has moved on.
 
 ### Terminology
 
@@ -102,23 +117,27 @@ The drawer may remain visually open across navigation. Its open/closed preferenc
 
 ### 2.1 Scope of synchronization
 
-**Recommended: Option A — synchronize freeform threads first.** The drawer is currently a Command AI freeform surface, and the recording demonstrates a freeform/full-view mismatch. Scoped project, client, and task discussions remain full-view-first until a later card deliberately expands the drawer's scope vocabulary.
+**Owner decision: Option A — synchronize freeform threads first.** The drawer is currently a Command AI freeform surface, and the recording demonstrates a freeform/full-view mismatch. Scoped project, client, and task discussions remain full-view-first until a later card deliberately expands the drawer's scope vocabulary.
 
-- **Option A (recommended):** synchronize only freeform threads; selecting a scoped thread in the full page clears the drawer selection or shows a clear “Open in full view” state.
+- **Option A (selected):** synchronize only freeform threads; selecting a scoped thread in the full page puts the drawer into the read-only “Open in full view” state recorded in §2.3.
 - **Option B:** extend the drawer to render every conversation scope and synchronize all accessible threads in both surfaces.
 
 The choice changes the API/UI contract and must be recorded before cards are filed. Do not silently make the drawer appear to support scoped conversations by passing a scoped thread into a freeform-only list.
 
 ### 2.2 Canonical selection state
 
-**Recommended: Option A — route is canonical on the full page; shared app state bridges the drawer.** The `open` query parameter remains the reloadable deep link. A small app-level conversation-selection bridge mirrors that value to the drawer and emits navigation when the drawer selects a thread.
+**Owner decision: Option A — route is canonical on the full page; shared app state bridges the drawer.** The `open` query parameter remains the reloadable deep link. A small app-level conversation-selection bridge mirrors that value to the drawer and emits navigation when the drawer selects a thread.
 
-- **Option A (recommended):** URL is canonical for `/agents/conversations`; app state synchronizes the persistent drawer.
+- **Option A (selected):** URL is canonical for `/agents/conversations`; app state synchronizes the persistent drawer.
 - **Option B:** make a global context/store canonical and project it into the URL only on the full page.
 
 Option A preserves existing deep links, browser Back/Forward behavior, notification destinations, and the current `Open full view` contract with the smallest routing change.
 
 ### 2.3 Missing, archived, or inaccessible selection
+
+**Owner decision: the drawer shows a short read-only explanatory state with a link to full view.**
+It never silently clears and never substitutes another thread — an operator who selects something
+the drawer cannot represent is told why, in place, and handed the surface that can show it.
 
 The bridge must fail closed:
 
@@ -207,7 +226,7 @@ Update the user manual and the Conversations/Command AI help text to explain tha
 - Do not merge all conversation storage into a second client-side cache.
 - Do not make SSE authoritative or place message bodies in tip payloads.
 - Do not make the browser execute, claim, or complete an agent handoff merely because a thread is selected.
-- Do not broaden the drawer to scoped discussions without choosing Option B in §2.1.
+- Do not broaden the drawer to scoped discussions. §2.1 is decided as freeform-only; widening it is a later wave, not a W39 card.
 - Do not add OS/browser push notifications; the existing in-app notification surface remains separate.
 - Do not change server conversation permissions, retention, provenance, or pagination rules unless a synchronization defect proves a contract gap.
 

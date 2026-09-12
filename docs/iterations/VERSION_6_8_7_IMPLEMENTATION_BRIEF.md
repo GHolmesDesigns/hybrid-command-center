@@ -1,5 +1,26 @@
 # Version 6.8.7 Implementation Brief
 
+> **Superseded for execution by Wave 40** (`docs/iterations/WAVE_40_OPERATOR_WORKFLOW_UI.md`),
+> 12 September 2026. This brief remains the record of what was originally requested and why; Wave 40
+> is the document to work from. Where the two disagree, Wave 40 wins and says so explicitly.
+>
+> The seven items here map onto Wave 40's cards as: 1→W40-A, 2→W40-B, 3→W40-D, 4→W40-F, 5→W40-E,
+> 6→W40-C1/C2, 7→W40-G.
+>
+> Three deliberate departures are recorded in Wave 40 rather than here:
+>
+> - **Item 1** is re-scoped. The "New chat does not open a new chat" symptom is not a `startNew()`
+>   defect — it is a downstream effect of an unbounded `refresh`/`selected` dependency loop
+>   confirmed in `docs/audits/session-handoff-2026-09-12.md` §1. Wave 40's W40-A fixes the loop.
+> - **Item 6** is split. This brief asks for one button in one location; Wave 40 owner decisions
+>   Q3–Q6 expand it to a global entry point, durable `?task=` selection, and timer-conflict
+>   confirmations, filed as W40-C1 and W40-C2.
+> - **Item 7** goes further than this brief's "keep Campaign as-is". Wave 40 Q14 converts Campaign
+>   to the shared multi-select alongside Client and Project, and records why.
+>
+> The line-number inventories below were taken against 6.8.7 and have drifted. Wave 40's "Code
+> seams" sections were re-verified against `main` and should be used instead.
+
 ## Purpose
 
 Convert the supplied Version 6.8.7 backlog notes into implementation-ready work. This brief keeps the requested behavior, records the clarified repro and interaction rules, and identifies the existing code seams to reuse.
