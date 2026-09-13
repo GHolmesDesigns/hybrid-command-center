@@ -1,5 +1,15 @@
 # Changelog
 
+## [6.9.6] - 2026-09-13
+
+### Fixed
+
+- Tasks now asks before Start, Reset, or task selection would discard a Pomodoro session on another task or reset the clock on the current one.
+- When a different task is selected while a timer runs elsewhere, the Pomodoro card shows that task's idle clock and a status line naming the running task and its remaining time.
+
+### Breaking changes
+
+None.
 ## [6.9.5] - 2026-09-13
 
 ## Added

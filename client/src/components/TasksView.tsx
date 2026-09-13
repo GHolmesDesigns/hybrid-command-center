@@ -14,6 +14,10 @@ import {
   readTaskTimer,
   reconcileTaskTimer,
   startTaskTimer,
+  taskTimerDisplayClock,
+  taskTimerPickerReselectConfirm,
+  taskTimerPickerSwitchConfirm,
+  taskTimerReplaceConfirm,
   writeTaskTimer,
   readTaskTimerSettings,
   type TaskTimerSettings,
@@ -140,10 +144,15 @@ export function TasksView({
     readTaskTimer(window.localStorage),
   );
   const activeTimer = timer ? reconcileTaskTimer(timer) : null;
-  const seconds = activeTimer?.remainingSeconds ?? 25 * 60;
-  const mode = activeTimer?.phase ?? 'work';
+  const displayClock = taskTimerDisplayClock(activeTimer, selectedId);
+  const seconds = displayClock.seconds;
+  const mode = displayClock.phase;
   const running = Boolean(activeTimer && !activeTimer.paused && selectedId === activeTimer.taskId);
   const selected = filteredTasks.find((task) => task.id === selectedId);
+  const otherTimedTask =
+    activeTimer && selectedId && activeTimer.taskId !== selectedId
+      ? activeTasks.find((task) => task.id === activeTimer.taskId)
+      : undefined;
   const [settings] = useState<TaskTimerSettings>(() => readTaskTimerSettings(window.localStorage));
   const [owner, setOwner] = useState(true);
   const ownerId = useRef(crypto.randomUUID());
@@ -323,7 +332,30 @@ export function TasksView({
   ];
 
   const reset = () => {
-    if (selectedId) setTimer(newTaskTimerSession(selectedId));
+    if (!selectedId) return;
+    const current = activeTimer;
+    const message = taskTimerReplaceConfirm(current, selectedId, 'reset');
+    if (message && !window.confirm(message)) return;
+    setTimer(newTaskTimerSession(selectedId));
+  };
+
+  const pickTask = (nextTaskId: string) => {
+    const current = activeTimer;
+    if (nextTaskId === selectedId) {
+      const reselect = taskTimerPickerReselectConfirm(current, nextTaskId);
+      if (reselect && !window.confirm(reselect)) return;
+      if (reselect) setTimer(newTaskTimerSession(nextTaskId));
+      return;
+    }
+    const message = taskTimerPickerSwitchConfirm(current, nextTaskId);
+    if (message && !window.confirm(message)) return;
+    setSelectedId(nextTaskId);
+    const next = new URLSearchParams(params);
+    next.set('task', nextTaskId);
+    setParams(next);
+    if (!current || current.taskId !== nextTaskId || message) {
+      setTimer(newTaskTimerSession(nextTaskId));
+    }
   };
 
   return (
@@ -347,6 +379,12 @@ export function TasksView({
           <p className="pomodoro-task">
             {selected ? `Working on ${selected.title}` : 'Select a task to begin'}
           </p>
+          {otherTimedTask && activeTimer && (
+            <p className="pomodoro-status" role="status">
+              Timer {activeTimer.paused ? 'paused' : 'running'} on {otherTimedTask.title} —{' '}
+              {clock(activeTimer.remainingSeconds)} remaining
+            </p>
+          )}
           <div className="pomodoro-actions">
             <button
               className="primary-btn"
@@ -354,17 +392,20 @@ export function TasksView({
               onClick={() => {
                 if (!selectedId) return;
                 if (!owner) return;
+                const current = activeTimer;
+                if (current && current.taskId === selectedId && !current.paused) {
+                  setTimer(pauseTaskTimer(current));
+                  return;
+                }
+                const message = taskTimerReplaceConfirm(current, selectedId, 'start');
+                if (message && !window.confirm(message)) return;
                 if (typeof Notification !== 'undefined' && Notification.permission === 'default')
                   void Notification.requestPermission();
-                setTimer((current) =>
-                  current && current.taskId === selectedId && !current.paused
-                    ? pauseTaskTimer(current)
-                    : startTaskTimer(
-                        current && current.taskId === selectedId
-                          ? current
-                          : newTaskTimerSession(selectedId),
-                      ),
-                );
+                const base =
+                  current && current.taskId === selectedId
+                    ? current
+                    : newTaskTimerSession(selectedId);
+                setTimer(startTaskTimer(base));
               }}
               disabled={!selected}
             >
@@ -461,19 +502,7 @@ export function TasksView({
                   className={`task-picker-row ${task.id === selected?.id ? 'selected' : ''}`}
                   key={task.id}
                   type="button"
-                  onClick={() => {
-                    if (
-                      running &&
-                      task.id !== selectedId &&
-                      !window.confirm('Stop the current timer and switch tasks?')
-                    )
-                      return;
-                    setSelectedId(task.id);
-                    setTimer(newTaskTimerSession(task.id));
-                    const next = new URLSearchParams(params);
-                    next.set('task', task.id);
-                    setParams(next);
-                  }}
+                  onClick={() => pickTask(task.id)}
                 >
                   <span className="task-picker-icon">
                     <CheckCircle2 />

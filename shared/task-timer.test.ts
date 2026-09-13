@@ -7,8 +7,17 @@ import {
   readTaskTimerSettings,
   reconcileTaskTimer,
   startTaskTimer,
+  TASK_TIMER_REPLACE_CONFIRM,
+  TASK_TIMER_RESET_CONFIRM,
   TASK_TIMER_SETTINGS_KEY,
   TASK_TIMER_STORAGE_KEY,
+  TASK_TIMER_SWITCH_CONFIRM,
+  taskTimerDisplayClock,
+  taskTimerIsFreshIdle,
+  taskTimerPickerReselectConfirm,
+  taskTimerPickerSwitchConfirm,
+  taskTimerReplaceConfirm,
+  taskTimerSessionIsDestroyable,
   writeTaskTimerSettings,
   WORK_SECONDS,
 } from './task-timer';
@@ -44,6 +53,32 @@ describe('persistent task timer', () => {
     const paused = pauseTaskTimer(startTaskTimer(newTaskTimerSession('t1'), 1_000), 5_000);
     store.setItem(TASK_TIMER_STORAGE_KEY, JSON.stringify(paused));
     expect(readTaskTimer(store)?.remainingSeconds).toBe(WORK_SECONDS - 4);
+  });
+});
+
+describe('task timer session conflicts', () => {
+  it('treats a paused full work session as fresh idle', () => {
+    expect(taskTimerIsFreshIdle(newTaskTimerSession('t1'))).toBe(true);
+  });
+  it('treats a running or partial session as destroyable', () => {
+    const running = startTaskTimer(newTaskTimerSession('t1'), 1_000);
+    expect(taskTimerSessionIsDestroyable(running)).toBe(true);
+    const partial = pauseTaskTimer(startTaskTimer(newTaskTimerSession('t1'), 1_000), 5_000);
+    expect(taskTimerSessionIsDestroyable(partial)).toBe(true);
+  });
+  it('shows the selected task idle clock when another task is timed', () => {
+    const running = startTaskTimer(newTaskTimerSession('t1'), 1_000);
+    const elapsed = reconcileTaskTimer(running, 11_001);
+    expect(taskTimerDisplayClock(elapsed, 't2')).toEqual({ seconds: WORK_SECONDS, phase: 'work' });
+    expect(taskTimerDisplayClock(elapsed, 't1').seconds).toBeLessThan(WORK_SECONDS);
+  });
+  it('returns the expected confirmation messages', () => {
+    const running = startTaskTimer(newTaskTimerSession('t1'), 1_000);
+    expect(taskTimerPickerSwitchConfirm(running, 't2')).toBe(TASK_TIMER_SWITCH_CONFIRM);
+    expect(taskTimerPickerSwitchConfirm(running, 't1')).toBeNull();
+    expect(taskTimerPickerReselectConfirm(running, 't1')).toBe(TASK_TIMER_RESET_CONFIRM);
+    expect(taskTimerReplaceConfirm(running, 't2', 'start')).toBe(TASK_TIMER_REPLACE_CONFIRM);
+    expect(taskTimerReplaceConfirm(newTaskTimerSession('t1'), 't1', 'reset')).toBeNull();
   });
 });
 

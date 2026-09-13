@@ -131,3 +131,66 @@ export function pauseTaskTimer(session: TaskTimerSession, now = Date.now()): Tas
   const current = reconcileTaskTimer(session, now);
   return { ...current, paused: true, startedAt: null, targetEndAt: null };
 }
+
+export function taskTimerIsFreshIdle(session: TaskTimerSession): boolean {
+  return (
+    session.paused &&
+    session.phase === 'work' &&
+    session.remainingSeconds === WORK_SECONDS &&
+    session.cycleCount === 0 &&
+    session.startedAt === null
+  );
+}
+
+export function taskTimerSessionIsDestroyable(session: TaskTimerSession): boolean {
+  if (!session.paused) return true;
+  return !taskTimerIsFreshIdle(session);
+}
+
+export const TASK_TIMER_SWITCH_CONFIRM = 'Stop the current timer and switch tasks?';
+export const TASK_TIMER_RESET_CONFIRM = 'Reset the timer for this task?';
+export const TASK_TIMER_REPLACE_CONFIRM =
+  "Replace the timer for another task? That task's progress will be lost.";
+
+export function taskTimerPickerReselectConfirm(
+  session: TaskTimerSession | null,
+  taskId: string,
+): string | null {
+  if (!session || session.taskId !== taskId) return null;
+  return taskTimerSessionIsDestroyable(session) ? TASK_TIMER_RESET_CONFIRM : null;
+}
+
+export function taskTimerPickerSwitchConfirm(
+  session: TaskTimerSession | null,
+  nextTaskId: string,
+): string | null {
+  if (!session || session.taskId === nextTaskId) return null;
+  return taskTimerSessionIsDestroyable(session) ? TASK_TIMER_SWITCH_CONFIRM : null;
+}
+
+export function taskTimerReplaceConfirm(
+  session: TaskTimerSession | null,
+  selectedTaskId: string,
+  action: 'start' | 'reset',
+): string | null {
+  if (!session || !selectedTaskId) return null;
+  if (session.taskId === selectedTaskId) {
+    return action === 'reset' && taskTimerSessionIsDestroyable(session)
+      ? TASK_TIMER_RESET_CONFIRM
+      : null;
+  }
+  return taskTimerSessionIsDestroyable(session) ? TASK_TIMER_REPLACE_CONFIRM : null;
+}
+
+export function taskTimerDisplayClock(
+  session: TaskTimerSession | null,
+  selectedTaskId: string,
+): { seconds: number; phase: 'work' | 'break' } {
+  if (session && selectedTaskId && session.taskId !== selectedTaskId) {
+    return { seconds: WORK_SECONDS, phase: 'work' };
+  }
+  return {
+    seconds: session?.remainingSeconds ?? WORK_SECONDS,
+    phase: session?.phase ?? 'work',
+  };
+}

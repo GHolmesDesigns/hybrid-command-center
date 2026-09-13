@@ -56,3 +56,47 @@ test('Project Status Start Task selects a task without auto-starting the timer',
   await page.getByRole('button', { name: /^Start/ }).click();
   await expect(page.getByRole('button', { name: /^Pause/ })).toBeVisible();
 });
+
+test('Start Task confirms before replacing another running session and cancel keeps it', async ({
+  page,
+}) => {
+  const run = Date.now();
+  const client = await (
+    await page.request.post('/api/clients', { data: { name: `Conflict Client ${run}` } })
+  ).json();
+  const project = await (
+    await page.request.post('/api/projects', {
+      data: { clientId: client.id, name: `Conflict Project ${run}` },
+    })
+  ).json();
+  const firstTask = await (
+    await page.request.post('/api/tasks', {
+      data: { projectId: project.id, title: `Running task ${run}` },
+    })
+  ).json();
+  const secondTask = await (
+    await page.request.post('/api/tasks', {
+      data: { projectId: project.id, title: `Other task ${run}` },
+    })
+  ).json();
+
+  await page.goto('/tasks');
+  const pomodoro = page.getByRole('region', { name: 'Pomodoro timer' });
+  await page.getByRole('button', { name: new RegExp(firstTask.title) }).click();
+  await pomodoro.getByRole('button', { name: 'Start', exact: true }).click();
+  await expect(pomodoro.getByRole('button', { name: 'Pause', exact: true })).toBeVisible();
+
+  await page.goto(`/tasks?task=${secondTask.id}`);
+  await expect(page).toHaveURL(new RegExp(`/tasks\\?task=${secondTask.id}`));
+  await expect(page.getByText(`Working on Other task ${run}`)).toBeVisible();
+  await expect(pomodoro.getByRole('status')).toContainText(new RegExp(`Running task ${run}`));
+
+  page.once('dialog', async (dialog) => {
+    expect(dialog.type()).toBe('confirm');
+    expect(dialog.message()).toContain('Replace the timer for another task');
+    await dialog.dismiss();
+  });
+  await pomodoro.getByRole('button', { name: 'Start', exact: true }).click();
+  await expect(pomodoro.getByRole('button', { name: 'Pause', exact: true })).toBeHidden();
+  await expect(pomodoro.getByRole('status')).toContainText(new RegExp(`Running task ${run}`));
+});
