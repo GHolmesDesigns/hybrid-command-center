@@ -1,5 +1,19 @@
 # Changelog
 
+## [6.9.2] - 2026-09-13
+
+### Fixed
+
+- Stabilize intermittent e2e specs: wait for font-settled layout before Settings column geometry is measured, wait for merge preview reads to finish before confirming import-identity merge choices, and scope the health dashboard status assertion away from unrelated toast notifications.
+- Unit-test the new merge-preview helpers in `e2e/ready.ts` so the `{server,e2e}/**` function-coverage gate stays above 95%.
+
+### Changed
+
+- Add `e2e/README.md` documenting per-spec data isolation and why the suite keeps `workers: 1` and `retries: 0`.
+
+### Breaking changes
+
+None.
 ## [6.9.1] - 2026-09-13
 
 ### Added
