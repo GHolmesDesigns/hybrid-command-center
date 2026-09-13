@@ -51,6 +51,20 @@ const fail: (message: string) => never = (message) => {
   process.exit(1);
 };
 
+const skip: (reason: string) => never = (reason) => {
+  console.log(`check:manual-version skipped — ${reason}`);
+  process.exit(0);
+};
+
+const prLabels =
+  process.env.HCC_PR_LABELS?.split(',')
+    .map((label) => label.trim())
+    .filter(Boolean) ?? [];
+
+if (prLabels.includes('no-version-bump')) {
+  skip('pull request carries no-version-bump; manual stamps are unchanged.');
+}
+
 let manual: string;
 try {
   manual = readFileSync(MANUAL_PATH, 'utf8');

@@ -240,7 +240,9 @@ Follow `AGENTS.md` and the repository testing guidance:
 - Server tests only where the existing API contract needs an explicit synchronization-supporting change.
 - One Wave 39 `e2e/` spec for the complete two-surface workflow.
 - `npm test`, `npm run test:coverage`, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build`, and `npm run test:e2e`.
-- Keep the work in draft branches with `changes/<issue>.md`; perform release finalization only after review and exact-head CI.
+- Keep the work in draft branches with `changes/<issue>.md`; run `npm run finalize:card -- <issue>` once
+  synchronize CI is green and immediately before marking ready. **One implementing pull request at a
+  time** — do not open the next card until the previous merge is on `main`.
 
 ---
 

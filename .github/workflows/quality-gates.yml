@@ -120,6 +120,8 @@ jobs:
         if: >-
           github.ref == 'refs/heads/main' ||
           (github.event_name == 'pull_request' && github.event.pull_request.draft == false)
+        env:
+          HCC_PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
         run: npm run check:version-bump
 
       # Same "only once a version claim is real" condition as the step above: during draft,
@@ -130,6 +132,8 @@ jobs:
         if: >-
           github.ref == 'refs/heads/main' ||
           (github.event_name == 'pull_request' && github.event.pull_request.draft == false)
+        env:
+          HCC_PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
         run: npm run check:manual-version
 
       # `ready_for_review` is the one moment a human (or another agent) can put a card branch

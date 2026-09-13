@@ -43,6 +43,22 @@ Operational reads and writes are exposed as `agent_health_dashboard`, `agent_get
 After connecting, fetch workflow prompts with `prompts/list` and `prompts/get`. Start with
 `start_claimed_work` when you have a handoff ID, and `verify_before_complete` before finishing.
 
+## Serial merge protocol (wave builds)
+
+When building milestone cards in this repository:
+
+- **One implementing pull request at a time.** Do not open the next branch until the previous card
+  is merged on `main`.
+- Keep pull requests **draft** until synchronize CI is green.
+- **Never pre-assign version numbers.** Run `npm run version:next -- --milestone "<title>"` at
+  finalize time only.
+- Finalize atomically: `npm run finalize:card -- <issue> [--milestone "<title>"]`, then push and
+  `gh pr ready`.
+- Evidence-only commits belong on the implementation branch, not a separate pull request.
+- Do not run parallel agents on different versioned cards.
+
+See `AGENTS.md` § Branches and versioning.
+
 ## Discovery
 
 This skill lives at `.cursor/skills/hybrid-command-center/`. Cursor surfaces it alongside other
