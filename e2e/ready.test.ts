@@ -102,4 +102,3 @@ describe('waitForMergePreview', () => {
     expect(waitForResponse).toHaveBeenCalledOnce();
   });
 });
-
