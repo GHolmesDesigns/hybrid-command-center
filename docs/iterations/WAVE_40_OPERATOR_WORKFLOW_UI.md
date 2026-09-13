@@ -772,7 +772,10 @@ Other cards rely on focused unit/UI tests unless E2E adds disproportionate value
 - **Land W40-H before the client cards.** Until it does, `npm run test:coverage` can fail a green
   card on the `client/src/**` function threshold; if that happens, read the coverage line before
   rerunning — the failure is the gate, not necessarily the card.
-- Draft branches with `changes/<issue>.md` fragments; finalize version only after review per `AGENTS.md`.
+- Draft branches with `changes/<issue>.md` fragments; finalize with `npm run finalize:card -- <issue>`
+  immediately before marking ready per `AGENTS.md`.
+- **Serial merge only** — one open implementing pull request at a time; cards must not parallelize
+  across branches even when independent in code.
 
 ---
 

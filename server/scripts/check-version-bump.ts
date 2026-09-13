@@ -61,6 +61,14 @@ const parse = (version: string) => {
 /** Positive when a is newer than b, negative when older, zero when identical. */
 const compare = (a: number[], b: number[]) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
 
+const isDocsOnlyPath = (file: string) =>
+  file.startsWith('docs/') || (file.startsWith('.github/') && file.endsWith('.md'));
+
+const prLabels =
+  process.env.HCC_PR_LABELS?.split(',')
+    .map((label) => label.trim())
+    .filter(Boolean) ?? [];
+
 if (tryGit('rev-parse', '--git-dir') === null) {
   skip('not a Git checkout, so there is no base branch to compare against.');
 }
@@ -68,6 +76,20 @@ if (tryGit('rev-parse', '--git-dir') === null) {
 const baseCommit = tryGit('rev-parse', '--verify', `${baseRef}^{commit}`);
 if (baseCommit === null) {
   skip(`base ref '${baseRef}' could not be resolved. Fetch it, or pass another ref.`);
+}
+
+if (prLabels.includes('no-version-bump')) {
+  const diffNames = tryGit('diff', '--name-only', baseRef, 'HEAD');
+  if (diffNames !== null) {
+    const files = diffNames.split('\n').filter(Boolean);
+    const hasFragmentChange = files.some((file) => file.startsWith('changes/') && file.endsWith('.md'));
+    const outsideDocs = files.filter((file) => !isDocsOnlyPath(file));
+    if (!hasFragmentChange && outsideDocs.length === 0) {
+      skip(
+        'pull request carries no-version-bump and only docs or GitHub markdown changed, with no changes fragment.',
+      );
+    }
+  }
 }
 
 const headCommit = tryGit('rev-parse', 'HEAD');

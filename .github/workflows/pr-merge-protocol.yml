@@ -1,0 +1,50 @@
+name: PR merge protocol
+
+# Cheap guardrail when a card pull request opens: current main version, suggested next version,
+# and a warning when another implementing PR is already open.
+on:
+  pull_request:
+    types: [opened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Post merge-protocol comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          git fetch origin main
+          MAIN_VERSION=$(git show origin/main:package.json | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>console.log(JSON.parse(d).version))")
+          NEXT_VERSION=$(node --experimental-strip-types server/scripts/next-version.ts 2>/dev/null | tail -1 || echo "(run npm run version:next locally)")
+          OPEN_OTHERS=$(gh pr list --repo "$REPO" --state open --json number,title,isDraft --jq "[.[] | select(.number != ${PR_NUMBER})] | length")
+          BODY="## Merge protocol
+
+          **\`main\` version:** \`${MAIN_VERSION}\`
+          **Suggested next version (patch):** \`${NEXT_VERSION}\`
+
+          - Keep this pull request **draft** until synchronize CI is green.
+          - Run \`npm run finalize:card -- <issue> [--milestone \"<title>\"]\` immediately before \`gh pr ready\`.
+          - **One implementing PR at a time** — ${OPEN_OTHERS} other open PR(s) exist in this repo right now.
+          - Do not pre-assign version numbers; re-run \`finalize:card\` if \`main\` moves before merge.
+
+          See \`AGENTS.md\` § Branches and versioning."
+
+          gh pr comment "$PR_NUMBER" --repo "$REPO" --body "$BODY"

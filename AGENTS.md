@@ -213,13 +213,22 @@
   (`Added`, `Changed`, `Fixed`, or another Keep a Changelog heading), its bullets, and a
   `Breaking changes` heading whose content is explicit, including `None.`. One file per card means
   concurrent cards do not conflict.
-- After review, the merge owner serializes finalization: refresh `origin/main`, merge or rebase it
-  into the branch, reread the issue's bump rule, and take the next available version. Run
-  `npm version <new-version> --no-git-tag-version`, set `APP_VERSION` in `shared/branding.ts` to the
-  same value, move the fragment's content under a new dated version heading at the top of
-  `CHANGELOG.md`, and delete the fragment. Run `npm run check:version-bump` and all required gates,
-  then mark the pull request ready and merge it. If another card lands first, repeat finalization
-  against the new `origin/main`; never preserve a now-taken number.
+- **One implementing pull request open at a time.** Do not open the next card branch while another
+  card's pull request is still open (draft or ready). Evidence-only commits belong on the
+  implementation branch — never a separate pull request with `changes/<issue>.md` for the same card.
+- **Never pre-assign version numbers** in wave plans, agent prompts, or issue comments. At
+  finalize time run `npm run version:next -- --milestone "<milestone title>"` (or `--minor` /
+  `--patch` when the milestone rule is already known).
+- After review and green draft-time CI, the merge owner finalizes **once**, immediately before marking
+  ready: `npm run finalize:card -- <issue> [--milestone "<title>"]`. That command rebases onto
+  `origin/main`, assigns the next version, updates `package.json`, `shared/branding.ts`, the manual's
+  four version stamps, and `CHANGELOG.md`, deletes the fragment, runs `check:version-bump` and
+  `check:manual-version`, and commits. Push, mark ready, merge. If another card lands first, run
+  `finalize:card` again — never preserve a now-taken number.
+- **Docs and planning batches** may land without consuming multiple semver slots: batch several
+  doc-only edits into **one card** (one version bump), or open a docs pull request with the
+  `no-version-bump` label when the diff touches only `docs/` and `.github/*.md` and carries **no**
+  `changes/<issue>.md` fragment.
 - A ready pull request must contain the finalized version and no fragment for its card. A draft
   pull request must contain the fragment and must leave the four shared release locations alone.
   Dependabot and other automated branches follow the same draft-then-finalize path.
