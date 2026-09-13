@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 
 /**
  * When a page is ready to be clicked or measured — which is later than when it says it has loaded.
@@ -57,4 +57,33 @@ export async function layoutSettled(page: Page): Promise<void> {
 export async function gotoSettled(page: Page, path: string): Promise<void> {
   await page.goto(path);
   await layoutSettled(page);
+}
+
+/** True when the response is a successful merge preview read for any client. */
+const isMergePreviewResponse = (response: {
+  request: () => { method: () => string };
+  url: () => string;
+  ok: () => boolean;
+}) =>
+  response.request().method() === 'POST' &&
+  response.url().includes('/merge/preview') &&
+  response.ok();
+
+/**
+ * The merge dialog re-plans on a short debounce after each field choice. Confirmation is only
+ * valid once the preview on screen matches those choices — wait for that pairing rather than
+ * clicking through a stale plan.
+ */
+export async function waitForMergePreview(page: Page): Promise<void> {
+  await page.waitForResponse(isMergePreviewResponse);
+}
+
+/**
+ * After the last merge preview has landed, wait for confirmation to be offered again.
+ *
+ * Pair `waitForMergePreview` with the choice that triggers the read; call this only once that
+ * response has arrived — not after a field that does not re-plan (for example keeping the name).
+ */
+export async function mergeConfirmationReady(page: Page, dialog: Locator): Promise<void> {
+  await expect(dialog.getByRole('button', { name: 'Merge clients' })).toBeEnabled();
 }

@@ -163,6 +163,7 @@ test('a Settings card follows its own column, and no card follows the other one'
   await serveConnectedDrive(page);
   await openSettings(page);
   await expect(page.getByRole('button', { name: 'Disconnect Google Drive' })).toBeVisible();
+  await layoutSettled(page);
   const connected = await cardBoxes(page);
 
   // The same card a few hundred pixels shorter: no credentials, so nothing but the warning and
@@ -170,6 +171,7 @@ test('a Settings card follows its own column, and no card follows the other one'
   await serveUnconfiguredDrive(page);
   await openSettings(page);
   await expect(page.getByText('Credentials required')).toBeVisible();
+  await layoutSettled(page);
   const disconnected = await cardBoxes(page);
 
   const shrankBy =
