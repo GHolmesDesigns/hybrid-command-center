@@ -78,8 +78,12 @@ export async function waitForMergePreview(page: Page): Promise<void> {
   await page.waitForResponse(isMergePreviewResponse);
 }
 
-/** After the last merge choice, wait for the preview and for confirmation to be offered again. */
+/**
+ * After the last merge preview has landed, wait for confirmation to be offered again.
+ *
+ * Pair `waitForMergePreview` with the choice that triggers the read; call this only once that
+ * response has arrived — not after a field that does not re-plan (for example keeping the name).
+ */
 export async function mergeConfirmationReady(page: Page, dialog: Locator): Promise<void> {
-  await waitForMergePreview(page);
   await expect(dialog.getByRole('button', { name: 'Merge clients' })).toBeEnabled();
 }

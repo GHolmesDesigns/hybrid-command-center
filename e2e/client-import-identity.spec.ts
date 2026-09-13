@@ -125,21 +125,25 @@ test('a client identity outlives a rename at its source, and follows a merge', a
   // The notes the playbook wrote onto the imported client, offered beside the survivor's blank.
   const notes = plan.getByRole('group', { name: 'Notes' });
   await expect(notes.getByText('Imported by the E2E suite')).toBeVisible();
-  const nextPreview = () => waitForMergePreview(page);
-  await Promise.all([nextPreview(), notes.getByRole('radio', { name: /Use source/ }).click()]);
-  const contact = plan.getByRole('group', { name: 'Contact name' });
-  await Promise.all([nextPreview(), contact.getByRole('radio', { name: /Custom value/ }).click()]);
   await Promise.all([
-    nextPreview(),
-    contact.getByLabel('Custom contact name').fill(`E2E Chosen Contact ${run}`),
+    waitForMergePreview(page),
+    notes.getByRole('radio', { name: /Use source/ }).click(),
   ]);
+  const contact = plan.getByRole('group', { name: 'Contact name' });
+  await Promise.all([
+    waitForMergePreview(page),
+    contact.getByRole('radio', { name: /Custom value/ }).click(),
+  ]);
+  // Debounced custom text is planned after fill settles — listen once the value is in the field.
+  await contact.getByLabel('Custom contact name').fill(`E2E Chosen Contact ${run}`);
+  await expect(contact.getByLabel('Custom contact name')).toHaveValue(`E2E Chosen Contact ${run}`);
+  await waitForMergePreview(page);
   // The name is left on the survivor, so its web address is not rewritten either.
   await expect(
     plan
       .getByRole('group', { name: 'Name', exact: true })
       .getByRole('radio', { name: /Keep destination/ }),
   ).toBeChecked();
-  // The last preview-triggering choice was the custom contact name; name stays on the survivor.
   await expect(merge.getByRole('button', { name: 'Merge clients' })).toBeEnabled();
   await merge.getByRole('button', { name: 'Merge clients' }).click();
   await expect(page.getByRole('heading', { name: survivorName })).toBeVisible();

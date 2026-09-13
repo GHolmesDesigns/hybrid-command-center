@@ -14,9 +14,8 @@ import type { Locator, Page } from '@playwright/test';
 import { mergeConfirmationReady } from './ready.ts';
 
 describe('mergeConfirmationReady', () => {
-  it('waits for the preview, then for confirmation to be enabled', async () => {
-    const waitForResponse = vi.fn(async () => undefined);
-    const page = { waitForResponse } as unknown as Page;
+  it('waits for confirmation to be enabled after the preview has landed', async () => {
+    const page = {} as unknown as Page;
     const mergeButton = {};
     const dialog = {
       getByRole: vi.fn(() => mergeButton),
@@ -24,7 +23,6 @@ describe('mergeConfirmationReady', () => {
 
     await mergeConfirmationReady(page, dialog);
 
-    expect(waitForResponse).toHaveBeenCalledOnce();
     expect(dialog.getByRole).toHaveBeenCalledWith('button', { name: 'Merge clients' });
     expect(toBeEnabled).toHaveBeenCalledOnce();
   });
