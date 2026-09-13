@@ -66,6 +66,12 @@ export function CommandAiPanel({ open, onClose }: { open: boolean; onClose: () =
   const [registeredLabels, setRegisteredLabels] = useState<string[]>([]);
   const { offered, confirmed, toggle } = useMentionHandoffCompose(compose, registeredLabels);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const selectedRef = useRef<Conversation | null>(null);
+  const threadRequestRef = useRef(0);
+
+  useEffect(() => {
+    selectedRef.current = selected;
+  }, [selected]);
 
   const loadAgents = useCallback(async () => {
     try {
@@ -115,12 +121,14 @@ export function CommandAiPanel({ open, onClose }: { open: boolean; onClose: () =
   }, []);
 
   const openThread = useCallback(async (conversation: Conversation) => {
+    const requestId = ++threadRequestRef.current;
     setSelected(conversation);
     setView('thread');
     setError('');
     const page = await api<Page<Message>>(
       `/agent-conversations/${conversation.id}/messages?limit=50&direction=before`,
     );
+    if (requestId !== threadRequestRef.current) return;
     setMessages(page.items);
   }, []);
 
@@ -128,15 +136,16 @@ export function CommandAiPanel({ open, onClose }: { open: boolean; onClose: () =
     try {
       await loadAgents();
       const items = await loadConversations();
-      if (selected) {
-        const current = items.find((item) => item.id === selected.id);
-        if (current) await openThread(current);
+      const current = selectedRef.current;
+      if (current) {
+        const match = items.find((item) => item.id === current.id);
+        if (match) await openThread(match);
       }
       setError('');
     } catch (problem) {
       setError((problem as Error).message);
     }
-  }, [loadAgents, loadConversations, openThread, selected]);
+  }, [loadAgents, loadConversations, openThread]);
 
   useEffect(() => {
     if (!open) return;
@@ -150,6 +159,8 @@ export function CommandAiPanel({ open, onClose }: { open: boolean; onClose: () =
   }, [messages, view]);
 
   const startNew = () => {
+    selectedRef.current = null;
+    threadRequestRef.current += 1;
     setSelected(null);
     setMessages([]);
     setCompose('');

@@ -1,5 +1,15 @@
 # Changelog
 
+## [6.9.3] - 2026-09-13
+
+### Fixed
+
+- Stop the Command AI drawer from re-fetching in a loop when a freeform thread stays selected, so **New** and **← New chat** reliably return to an empty compose state.
+- Ignore stale message responses that arrive after the operator starts a new chat.
+
+### Breaking changes
+
+None.
 ## [6.9.2] - 2026-09-13
 
 ### Fixed

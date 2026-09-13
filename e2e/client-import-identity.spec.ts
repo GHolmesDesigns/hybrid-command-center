@@ -1,5 +1,10 @@
 import { test, expect } from '@playwright/test';
-import { gotoSettled, waitForMergePreview } from './ready';
+import {
+  editMergeFieldAndWait,
+  gotoSettled,
+  mergeConfirmationReady,
+  waitForMergePreview,
+} from './ready';
 
 /**
  * The Wave 10 spec for C70. Import identity is only worth anything across two separate imports of a
@@ -135,16 +140,18 @@ test('a client identity outlives a rename at its source, and follows a merge', a
     contact.getByRole('radio', { name: /Custom value/ }).click(),
   ]);
   // Debounced custom text is planned after fill settles — listen once the value is in the field.
-  await contact.getByLabel('Custom contact name').fill(`E2E Chosen Contact ${run}`);
-  await expect(contact.getByLabel('Custom contact name')).toHaveValue(`E2E Chosen Contact ${run}`);
-  await waitForMergePreview(page);
+  const chosenContact = `E2E Chosen Contact ${run}`;
+  await editMergeFieldAndWait(page, async () => {
+    await contact.getByLabel('Custom contact name').fill(chosenContact);
+  });
+  await expect(contact.getByLabel('Custom contact name')).toHaveValue(chosenContact);
   // The name is left on the survivor, so its web address is not rewritten either.
   await expect(
     plan
       .getByRole('group', { name: 'Name', exact: true })
       .getByRole('radio', { name: /Keep destination/ }),
   ).toBeChecked();
-  await expect(merge.getByRole('button', { name: 'Merge clients' })).toBeEnabled();
+  await mergeConfirmationReady(page, merge);
   await merge.getByRole('button', { name: 'Merge clients' }).click();
   await expect(page.getByRole('heading', { name: survivorName })).toBeVisible();
 
@@ -161,7 +168,7 @@ test('a client identity outlives a rename at its source, and follows a merge', a
   expect(merged).toMatchObject({
     name: survivorName,
     slug: survivor.slug,
-    contactName: `E2E Chosen Contact ${run}`,
+    contactName: chosenContact,
     notes: 'Imported by the E2E suite',
   });
 

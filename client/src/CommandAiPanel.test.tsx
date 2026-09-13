@@ -9,6 +9,16 @@ const json = (body: unknown, status = 200) =>
     headers: { 'Content-Type': 'application/json' },
   });
 
+const freeformConversation = (id: string, title: string) => ({
+  id,
+  title,
+  state: 'ACTIVE' as const,
+  scope: { type: 'freeform' as const, id: null },
+  participants: ['operator'],
+  messageCount: 1,
+  updatedAt: '2026-09-10T12:00:00.000Z',
+});
+
 describe('CommandAiPanel', () => {
   it('starts a freeform thread from the compose field', async () => {
     let createBody: unknown;
@@ -218,6 +228,163 @@ describe('CommandAiPanel', () => {
     render(<CommandAiTopbarToggle open onClick={onClick} />);
     fireEvent.click(screen.getByRole('button', { name: /Command AI/i }));
     expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps conversation reads bounded after selecting a recent thread', async () => {
+    let listReads = 0;
+    let messageReads = 0;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/agents/directory')) return json({ agents: [] });
+      if (url.includes('/agents/presence')) return json({ presence: [] });
+      if (url.includes('/agent-summaries')) return json({ summaries: [] });
+      if (url.includes('/agent-conversations?')) {
+        listReads += 1;
+        return json({
+          items: [freeformConversation('conv-loop', 'Loop thread')],
+          nextCursor: null,
+          hasMore: false,
+        });
+      }
+      if (url.includes('/agent-conversations/conv-loop/messages')) {
+        messageReads += 1;
+        return json({
+          items: [
+            {
+              id: 'm-loop',
+              senderLabel: 'operator',
+              sentAt: '2026-09-10T12:00:01.000Z',
+              body: 'Loop thread',
+              thoughtSummary: null,
+              provenance: 'VERIFIED',
+              linkedHandoffs: [],
+            },
+          ],
+          nextCursor: null,
+          hasMore: false,
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    render(
+      <MemoryRouter>
+        <CommandAiPanel open onClose={() => undefined} />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Loop thread/ }));
+    expect(await screen.findByRole('heading', { level: 3, name: 'Loop thread' })).toBeVisible();
+    expect(listReads).toBeLessThanOrEqual(2);
+    expect(messageReads).toBe(1);
+  });
+
+  it('returns to empty chat from Recent and from the thread back control', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/agents/directory')) return json({ agents: [] });
+      if (url.includes('/agents/presence')) return json({ presence: [] });
+      if (url.includes('/agent-summaries')) return json({ summaries: [] });
+      if (url.includes('/agent-conversations?')) {
+        return json({
+          items: [freeformConversation('conv-recent', 'Recent thread')],
+          nextCursor: null,
+          hasMore: false,
+        });
+      }
+      if (url.includes('/agent-conversations/conv-recent/messages')) {
+        return json({
+          items: [
+            {
+              id: 'm-recent',
+              senderLabel: 'operator',
+              sentAt: '2026-09-10T12:00:01.000Z',
+              body: 'Recent thread',
+              thoughtSummary: null,
+              provenance: 'VERIFIED',
+              linkedHandoffs: [],
+            },
+          ],
+          nextCursor: null,
+          hasMore: false,
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    render(
+      <MemoryRouter>
+        <CommandAiPanel open onClose={() => undefined} />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Recent thread/ }));
+    expect(await screen.findByRole('heading', { level: 3, name: 'Recent thread' })).toBeVisible();
+
+    fireEvent.click(screen.getByRole('button', { name: 'New' }));
+    expect(await screen.findByText('What are you curious about?')).toBeVisible();
+    expect(screen.queryByRole('heading', { level: 3, name: 'Recent thread' })).toBeNull();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Recent thread/ }));
+    expect(await screen.findByRole('heading', { level: 3, name: 'Recent thread' })).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: '← New chat' }));
+    expect(await screen.findByText('What are you curious about?')).toBeVisible();
+  });
+
+  it('discards a stale message response after New chat', async () => {
+    let resolveMessages: ((response: Response) => void) | undefined;
+    const messagesPromise = new Promise<Response>((resolve) => {
+      resolveMessages = resolve;
+    });
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/agents/directory')) return json({ agents: [] });
+      if (url.includes('/agents/presence')) return json({ presence: [] });
+      if (url.includes('/agent-summaries')) return json({ summaries: [] });
+      if (url.includes('/agent-conversations?')) {
+        return json({
+          items: [freeformConversation('conv-stale', 'Stale thread')],
+          nextCursor: null,
+          hasMore: false,
+        });
+      }
+      if (url.includes('/agent-conversations/conv-stale/messages')) {
+        return messagesPromise;
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    render(
+      <MemoryRouter>
+        <CommandAiPanel open onClose={() => undefined} />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Stale thread/ }));
+    expect(await screen.findByRole('heading', { level: 3, name: 'Stale thread' })).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: '← New chat' }));
+    expect(await screen.findByText('What are you curious about?')).toBeVisible();
+
+    resolveMessages?.(
+      json({
+        items: [
+          {
+            id: 'm-stale',
+            senderLabel: 'operator',
+            sentAt: '2026-09-10T12:00:01.000Z',
+            body: 'Should not reappear',
+            thoughtSummary: null,
+            provenance: 'VERIFIED',
+            linkedHandoffs: [],
+          },
+        ],
+        nextCursor: null,
+        hasMore: false,
+      }),
+    );
+
+    expect(screen.queryByText('Should not reappear')).toBeNull();
+    expect(screen.getByText('What are you curious about?')).toBeVisible();
   });
 
   it('shows a refresh error and offers view all for long history', async () => {
