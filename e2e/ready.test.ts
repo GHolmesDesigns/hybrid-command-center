@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Page } from '@playwright/test';
-import { gotoSettled, layoutSettled } from './ready.ts';
+import { gotoSettled, layoutSettled, waitForMergePreview } from './ready.ts';
 
 /**
  * The helper's contract without a browser: that it waits on the document's own font promise, and
@@ -78,3 +78,28 @@ describe('gotoSettled', () => {
     expect(calls).toEqual(['goto /settings', 'evaluate']);
   });
 });
+
+describe('waitForMergePreview', () => {
+  it('waits for a successful merge preview POST', async () => {
+    const waitForResponse = vi.fn(async (predicate: (response: unknown) => boolean) => {
+      expect(
+        predicate({
+          request: () => ({ method: () => 'POST' }),
+          url: () => 'http://localhost:8788/api/clients/a/merge/preview',
+          ok: () => true,
+        }),
+      ).toBe(true);
+      expect(
+        predicate({
+          request: () => ({ method: () => 'GET' }),
+          url: () => 'http://localhost:8788/api/clients/a/merge/preview',
+          ok: () => true,
+        }),
+      ).toBe(false);
+    });
+    const page = { waitForResponse } as unknown as Page;
+    await waitForMergePreview(page);
+    expect(waitForResponse).toHaveBeenCalledOnce();
+  });
+});
+
