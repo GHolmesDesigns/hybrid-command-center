@@ -56,11 +56,11 @@ const entry = (
  * of emphasis and never of contrast.
  */
 export const PROJECT_STATUS_PRESENTATION: Record<ProjectStatus, ProjectStatusPresentation> = {
-  PLANNING: entry('Planning', CircleDashed, '#6a4a9c', '#ece4f7'),
-  BUILDING: entry('Building', Blocks, '#275d8c', '#dcecf7'),
+  PLANNING: entry('Planning', CircleDashed, '#275d8c', '#dcecf7'),
+  BUILDING: entry('Building', Blocks, '#6f5a10', '#f7eec9'),
   ACTIVE: entry('Active', CirclePlay, '#2f6f52', '#dcece4'),
-  ON_HOLD: entry('On hold', CirclePause, '#8a5711', '#faead0'),
-  COMPLETE: entry('Complete', CircleCheck, '#315f79', '#e1edf4'),
+  ON_HOLD: entry('On hold', CirclePause, '#7d4038', '#f3ded8'),
+  COMPLETE: entry('Complete', CircleCheck, '#6a4a9c', '#ece4f7'),
   ARCHIVED: entry('Archived', Archive, '#5f6764', '#eff1ef'),
 };
 
