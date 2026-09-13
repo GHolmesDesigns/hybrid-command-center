@@ -78,6 +78,12 @@ type ManualState = {
   url: string | null;
 };
 
+type NotificationPermissionState = NotificationPermission | 'unavailable';
+
+function readNotificationPermission(): NotificationPermissionState {
+  return typeof Notification === 'undefined' ? 'unavailable' : Notification.permission;
+}
+
 export function SettingsView({
   branding,
   viewDefaults,
@@ -115,6 +121,9 @@ export function SettingsView({
   const [timerSettings, setTimerSettings] = useState<TaskTimerSettings>(() =>
     readTaskTimerSettings(window.localStorage),
   );
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermissionState>(
+    readNotificationPermission,
+  );
   const [liveTipsForm, setLiveTipsForm, markLiveTipsSaved] =
     useServerSeeded<AgentHubLiveTipsSettings>(liveTips);
   const [liveTipsBusy, setLiveTipsBusy] = useState(false);
@@ -131,6 +140,15 @@ export function SettingsView({
       .then((next) => setManual(next))
       .catch((error: unknown) => setManualError((error as Error).message));
   }, []);
+  useEffect(() => {
+    const refreshPermission = () => setNotificationPermission(readNotificationPermission());
+    document.addEventListener('visibilitychange', refreshPermission);
+    return () => document.removeEventListener('visibilitychange', refreshPermission);
+  }, []);
+  const requestNotificationPermission = async () => {
+    if (typeof Notification === 'undefined') return;
+    setNotificationPermission(await Notification.requestPermission());
+  };
   const connect = async () => {
     try {
       const { url } = await api<{ url: string }>('/drive/oauth/start');
@@ -322,69 +340,71 @@ export function SettingsView({
               Completion alerts work while the page is hidden. Browser-closed push notifications are
               not supported.
             </p>
-            <label>
-              <input
-                type="checkbox"
-                checked={timerSettings.enabled}
-                onChange={(e) => {
-                  const next = { ...timerSettings, enabled: e.target.checked };
-                  setTimerSettings(next);
-                  writeTaskTimerSettings(window.localStorage, next);
-                }}
-              />{' '}
-              Enable timer notifications
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={timerSettings.completion}
-                disabled={!timerSettings.enabled}
-                onChange={(e) => {
-                  const next = { ...timerSettings, completion: e.target.checked };
-                  setTimerSettings(next);
-                  writeTaskTimerSettings(window.localStorage, next);
-                }}
-              />{' '}
-              Session completion
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={timerSettings.unavailable}
-                disabled={!timerSettings.enabled}
-                onChange={(e) => {
-                  const next = { ...timerSettings, unavailable: e.target.checked };
-                  setTimerSettings(next);
-                  writeTaskTimerSettings(window.localStorage, next);
-                }}
-              />{' '}
-              Permission unavailable warnings
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={timerSettings.sound}
-                disabled={!timerSettings.enabled}
-                onChange={(e) => {
-                  const next = { ...timerSettings, sound: e.target.checked };
-                  setTimerSettings(next);
-                  writeTaskTimerSettings(window.localStorage, next);
-                }}
-              />{' '}
-              Sound when supported
-            </label>
             <button
               type="button"
               className="secondary"
-              onClick={() => void Notification.requestPermission()}
-              disabled={typeof Notification === 'undefined'}
+              onClick={() => void requestNotificationPermission()}
+              disabled={notificationPermission === 'unavailable'}
             >
               Allow notifications
             </button>
-            <p className="field-hint" role="status">
+            <p className="field-hint" role="status" aria-label="Notification permission status">
               Permission:{' '}
-              {typeof Notification === 'undefined' ? 'Unavailable' : Notification.permission}.
+              {notificationPermission === 'unavailable' ? 'Unavailable' : notificationPermission}.
             </p>
+            <div className="timer-notification-options">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={timerSettings.enabled}
+                  onChange={(e) => {
+                    const next = { ...timerSettings, enabled: e.target.checked };
+                    setTimerSettings(next);
+                    writeTaskTimerSettings(window.localStorage, next);
+                  }}
+                />{' '}
+                Enable timer notifications
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={timerSettings.completion}
+                  disabled={!timerSettings.enabled}
+                  onChange={(e) => {
+                    const next = { ...timerSettings, completion: e.target.checked };
+                    setTimerSettings(next);
+                    writeTaskTimerSettings(window.localStorage, next);
+                  }}
+                />{' '}
+                Session completion
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={timerSettings.unavailable}
+                  disabled={!timerSettings.enabled}
+                  onChange={(e) => {
+                    const next = { ...timerSettings, unavailable: e.target.checked };
+                    setTimerSettings(next);
+                    writeTaskTimerSettings(window.localStorage, next);
+                  }}
+                />{' '}
+                Permission unavailable warnings
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={timerSettings.sound}
+                  disabled={!timerSettings.enabled}
+                  onChange={(e) => {
+                    const next = { ...timerSettings, sound: e.target.checked };
+                    setTimerSettings(next);
+                    writeTaskTimerSettings(window.localStorage, next);
+                  }}
+                />{' '}
+                Sound when supported
+              </label>
+            </div>
           </section>
           <CategoriesCard
             categories={categories}

@@ -1,5 +1,15 @@
 # Changelog
 
+## [6.9.7] - 2026-09-13
+
+### Fixed
+
+- Timer notifications settings show **Allow notifications** first, with notification options listed below.
+- Notification permission status updates immediately after the browser prompt and when returning to the tab.
+
+### Breaking changes
+
+None.
 ## [6.9.6] - 2026-09-13
 
 ### Fixed

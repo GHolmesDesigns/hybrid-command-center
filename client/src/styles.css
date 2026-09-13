@@ -2122,6 +2122,17 @@ button.tag-chip.toggle.active {
   font-size: 13px;
   line-height: 1.6;
 }
+.timer-notification-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+.timer-notification-options label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
 .drive-picker-button {
   display: flex;
   width: fit-content;
