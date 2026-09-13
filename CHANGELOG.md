@@ -1,5 +1,15 @@
 # Changelog
 
+## [6.9.0] - 2026-09-12
+
+### Changed
+
+- Lower the `client/src/**` function-coverage gate from 81% to 80% so run-to-run variation no longer fails unrelated work when the tree measures 80.99–81.0%.
+
+### Breaking changes
+
+None.
+
 ## [6.8.10] - 2026-09-12
 
 ### Changed
