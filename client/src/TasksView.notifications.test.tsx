@@ -48,11 +48,7 @@ class FakeNotification {
 const renderTasks = (tasks = [task('t1', 'Draft the proposal')]) =>
   render(
     <MemoryRouter>
-      <TasksView
-        tasks={tasks}
-        projects={projects}
-        clients={[client('client-p1', 'Acme')]}
-      />
+      <TasksView tasks={tasks} projects={projects} clients={[client('client-p1', 'Acme')]} />
     </MemoryRouter>,
   );
 
