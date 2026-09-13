@@ -23,6 +23,7 @@ import {
   Menu,
   PanelLeft,
   PanelLeftClose,
+  Play,
   Plus,
   Settings,
   Timer,
@@ -34,6 +35,8 @@ import { api } from '../api';
 import type { Category, Client, DashboardData, Project, Tag, Task } from '../../../shared/types';
 import { APP_VERSION, DEFAULT_BRANDING, type Branding } from '../../../shared/branding';
 import { CANONICAL_VIEW_DEFAULTS, type ViewDefaults } from '../../../shared/view-defaults';
+import { readTaskTimer } from '../../../shared/task-timer';
+import { resolveGlobalStartTask, startTaskPath } from '../../../shared/start-task';
 import {
   DEFAULT_AGENT_HUB_LIVE_TIPS_SETTINGS,
   type AgentHubLiveTipsSettings,
@@ -108,6 +111,64 @@ function TopbarAddPost() {
   return (
     <button className="top-action" type="button" onClick={open}>
       <Plus /> Add post
+    </button>
+  );
+}
+
+function TopbarStartTask({
+  modal,
+  tasks,
+  projects,
+  clients,
+}: {
+  modal: Modal;
+  tasks: Task[];
+  projects: Project[];
+  clients: Client[];
+}) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [savedSessionTaskId, setSavedSessionTaskId] = useState<string | null>(
+    () => readTaskTimer(window.localStorage)?.taskId ?? null,
+  );
+  useEffect(() => {
+    const refresh = () =>
+      setSavedSessionTaskId(readTaskTimer(window.localStorage)?.taskId ?? null);
+    window.addEventListener('focus', refresh);
+    window.addEventListener('storage', refresh);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('storage', refresh);
+    };
+  }, []);
+  const routeTaskId =
+    location.pathname.startsWith('/tasks/') && location.pathname !== '/tasks'
+      ? location.pathname.slice('/tasks/'.length).split('/')[0] || null
+      : null;
+  const modalTask = modal?.type === 'taskDetail' ? modal.value : null;
+  const { taskId, disabledReason } = resolveGlobalStartTask({
+    modalTask,
+    routeTaskId,
+    savedSessionTaskId,
+    tasks,
+    projects,
+    clients,
+  });
+  const disabled = !taskId;
+  const title = disabledReason ?? (disabled ? 'No task is available to start' : 'Start Task');
+  return (
+    <button
+      className="top-action"
+      type="button"
+      disabled={disabled}
+      title={title}
+      aria-label={disabled ? title : 'Start Task'}
+      onClick={() => {
+        if (!taskId) return;
+        navigate(startTaskPath(taskId));
+      }}
+    >
+      <Play /> Start Task
     </button>
   );
 }
@@ -394,17 +455,23 @@ export function App() {
             </button>
             <BreadcrumbTrail clients={clients} projects={projects} tasks={tasks} />
             <div className="top-actions">
-              <CommandAiTopbarToggle
-                open={commandAiOpen}
-                onClick={() => setCommandAiOpen((value) => !value)}
+              <TopbarStartTask
+                modal={modal}
+                tasks={tasks}
+                projects={projects}
+                clients={clients}
               />
-              <TopbarAddPost />
               <button
                 className="top-action"
                 onClick={() => setModal({ type: 'task', projectId: defaultProject })}
               >
                 <Plus /> New task
               </button>
+              <TopbarAddPost />
+              <CommandAiTopbarToggle
+                open={commandAiOpen}
+                onClick={() => setCommandAiOpen((value) => !value)}
+              />
             </div>
           </header>
           <div className="page-wrap">
