@@ -81,21 +81,22 @@ test('Start Task confirms before replacing another running session and cancel ke
   ).json();
 
   await page.goto('/tasks');
+  const pomodoro = page.getByRole('region', { name: 'Pomodoro timer' });
   await page.getByRole('button', { name: new RegExp(firstTask.title) }).click();
-  await page.getByRole('button', { name: /^Start/ }).click();
-  await expect(page.getByRole('button', { name: /^Pause/ })).toBeVisible();
+  await pomodoro.getByRole('button', { name: 'Start', exact: true }).click();
+  await expect(pomodoro.getByRole('button', { name: 'Pause', exact: true })).toBeVisible();
 
   await page.goto(`/tasks?task=${secondTask.id}`);
   await expect(page).toHaveURL(new RegExp(`/tasks\\?task=${secondTask.id}`));
   await expect(page.getByText(`Working on Other task ${run}`)).toBeVisible();
-  await expect(page.getByRole('status')).toContainText(new RegExp(`Running task ${run}`));
+  await expect(pomodoro.getByRole('status')).toContainText(new RegExp(`Running task ${run}`));
 
   page.once('dialog', async (dialog) => {
     expect(dialog.type()).toBe('confirm');
     expect(dialog.message()).toContain('Replace the timer for another task');
     await dialog.dismiss();
   });
-  await page.getByRole('button', { name: /^Start/ }).click();
-  await expect(page.getByRole('button', { name: /^Pause/ })).toBeHidden();
-  await expect(page.getByRole('status')).toContainText(new RegExp(`Running task ${run}`));
+  await pomodoro.getByRole('button', { name: 'Start', exact: true }).click();
+  await expect(pomodoro.getByRole('button', { name: 'Pause', exact: true })).toBeHidden();
+  await expect(pomodoro.getByRole('status')).toContainText(new RegExp(`Running task ${run}`));
 });
