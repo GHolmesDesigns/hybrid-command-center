@@ -738,7 +738,7 @@ Branch names follow `<type>/<issue>-<slug>`.
 | W40-C1 | [#631](https://github.com/GHolmesDesigns/hybrid-command-center/issues/631) | feat | start-task-entry-points | — |
 | W40-C2 | [#632](https://github.com/GHolmesDesigns/hybrid-command-center/issues/632) | fix | timer-session-confirmations | W40-C1 |
 | W40-I | [#638](https://github.com/GHolmesDesigns/hybrid-command-center/issues/638) | chore | e2e-intermittent-specs | — |
-| W40-E2 | not filed | feat | health-integration-activity | W40-E (optional) |
+| W40-E2 | **file after #634** | feat | health-integration-activity | W40-E (#634) — shared panel; see `W40_E_INTEGRATION_ACTIVITY_SPIKE.md` |
 
 ---
 
