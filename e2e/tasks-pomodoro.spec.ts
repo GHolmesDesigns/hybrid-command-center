@@ -30,7 +30,9 @@ test('Tasks page lets an operator select a Project task and start Pomodoro focus
   await expect(page).toHaveURL(/\/status$/);
 });
 
-test('Project Status Start Task selects a task without auto-starting the timer', async ({ page }) => {
+test('Project Status Start Task selects a task without auto-starting the timer', async ({
+  page,
+}) => {
   const run = Date.now();
   const client = await (
     await page.request.post('/api/clients', { data: { name: `Kanban Timer Client ${run}` } })

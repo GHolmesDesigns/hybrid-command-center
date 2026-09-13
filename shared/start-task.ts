@@ -20,9 +20,7 @@ export function taskStartAvailability(
   if (!project) return { available: false, reason: "This task's project is unavailable." };
   if (project.status === 'ARCHIVED')
     return { available: false, reason: 'This task belongs to an archived project.' };
-  const client = clients.find(
-    (candidate) => candidate.id === (task.clientId || project.clientId),
-  );
+  const client = clients.find((candidate) => candidate.id === (task.clientId || project.clientId));
   if (client?.status === 'ARCHIVED')
     return { available: false, reason: 'This task belongs to an archived client.' };
   return { available: true, reason: null };

@@ -132,8 +132,7 @@ function TopbarStartTask({
     () => readTaskTimer(window.localStorage)?.taskId ?? null,
   );
   useEffect(() => {
-    const refresh = () =>
-      setSavedSessionTaskId(readTaskTimer(window.localStorage)?.taskId ?? null);
+    const refresh = () => setSavedSessionTaskId(readTaskTimer(window.localStorage)?.taskId ?? null);
     window.addEventListener('focus', refresh);
     window.addEventListener('storage', refresh);
     return () => {
@@ -455,12 +454,7 @@ export function App() {
             </button>
             <BreadcrumbTrail clients={clients} projects={projects} tasks={tasks} />
             <div className="top-actions">
-              <TopbarStartTask
-                modal={modal}
-                tasks={tasks}
-                projects={projects}
-                clients={clients}
-              />
+              <TopbarStartTask modal={modal} tasks={tasks} projects={projects} clients={clients} />
               <button
                 className="top-action"
                 onClick={() => setModal({ type: 'task', projectId: defaultProject })}
