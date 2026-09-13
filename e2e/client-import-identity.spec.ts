@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { gotoSettled } from './ready';
+import { gotoSettled, mergeConfirmationReady, waitForMergePreview } from './ready';
 
 /**
  * The Wave 10 spec for C70. Import identity is only worth anything across two separate imports of a
@@ -125,19 +125,22 @@ test('a client identity outlives a rename at its source, and follows a merge', a
   // The notes the playbook wrote onto the imported client, offered beside the survivor's blank.
   const notes = plan.getByRole('group', { name: 'Notes' });
   await expect(notes.getByText('Imported by the E2E suite')).toBeVisible();
-  await notes.getByRole('radio', { name: /Use source/ }).click();
+  const nextPreview = () => waitForMergePreview(page);
+  await Promise.all([nextPreview(), notes.getByRole('radio', { name: /Use source/ }).click()]);
   const contact = plan.getByRole('group', { name: 'Contact name' });
-  await contact.getByRole('radio', { name: /Custom value/ }).click();
-  await contact.getByLabel('Custom contact name').fill(`E2E Chosen Contact ${run}`);
+  await Promise.all([nextPreview(), contact.getByRole('radio', { name: /Custom value/ }).click()]);
+  await Promise.all([
+    nextPreview(),
+    contact.getByLabel('Custom contact name').fill(`E2E Chosen Contact ${run}`),
+  ]);
   // The name is left on the survivor, so its web address is not rewritten either.
   await expect(
     plan
       .getByRole('group', { name: 'Name', exact: true })
       .getByRole('radio', { name: /Keep destination/ }),
   ).toBeChecked();
-  const confirm = merge.getByRole('button', { name: 'Merge clients' });
-  await expect(confirm).toBeEnabled();
-  await confirm.click();
+  await mergeConfirmationReady(page, merge);
+  await merge.getByRole('button', { name: 'Merge clients' }).click();
   await expect(page.getByRole('heading', { name: survivorName })).toBeVisible();
 
   // The survivor holds exactly what was chosen: the imported notes, the typed contact, its name.
