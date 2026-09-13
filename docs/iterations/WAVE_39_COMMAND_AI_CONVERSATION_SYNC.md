@@ -1,8 +1,8 @@
 # Wave 39 — One conversation, two surfaces
 
-**Status:** Contracts recorded — ready to file once W40-A lands; no GitHub cards opened yet  
+**Status:** **Filed** — cards C230–C235 (#640–#645) opened under the Wave 39 milestone and tracked on project 10; C230 blocked on C220  
 **Prepared:** 11 September 2026  
-**Revised:** 12 September 2026 — owner decisions recorded for §2.1, §2.2, and §2.3; W40-A recorded as a hard predecessor  
+**Revised:** 12 September 2026 — owner decisions recorded for §2.1, §2.2, and §2.3; cards filed as C230–C235; C220 recorded as a hard predecessor  
 **Source:** Operator screen recording and screenshots of `/agents/conversations` with the Command AI drawer open, plus the Novi Navigator side-panel interaction supplied as a UX reference; reviewed against `origin/main` through C218 and the in-progress C219 branch.  
 **Theme:** Make the full Conversations page and the Command AI drawer behave as two views of one selected conversation rather than two independent chat clients.
 
@@ -16,7 +16,7 @@
 | What should change? | They should share one selected conversation identity and remain two presentation surfaces. |
 | What stays separate? | Message fetching, handoff mutation, drawer open/closed preference, and full-view-only scoped discussions unless explicitly expanded. |
 | What is the recommended contract? | Freeform synchronization first; the full-page `open` query remains the reloadable canonical link. |
-| What is not being filed yet? | GitHub cards and issue numbers. Contracts are settled; W40-A gates the first card. |
+| What is not being filed yet? | Nothing. Cards C230–C235 are filed; C230 is blocked on C220 (the Wave 40 drawer fix) rather than unfiled. |
 
 ### Recommended study order
 
@@ -27,8 +27,8 @@
 
 ### Decisions recorded (12 September 2026)
 
-All three questions the study raised are answered. The W39 placeholders are now ready to become
-numbered cards, subject to the W40-A predecessor below.
+All three questions the study raised are answered, and the placeholders are now filed as C230–C235,
+subject to the C220 predecessor below.
 
 | Question | Owner decision |
 | --- | --- |
@@ -36,17 +36,17 @@ numbered cards, subject to the W40-A predecessor below.
 | Is the Conversations URL canonical, or a global selection store? | **URL canonical, app-level bridge to the drawer** (§2.2 Option A). |
 | What does the drawer do with a scoped thread it cannot represent? | **A short read-only explanatory state with a link to full view** (§2.3). |
 
-### Predecessor — W40-A must land first
+### Predecessor — C220 must land first
 
 W39-A's acceptance evidence requires that no duplicate fetch loop is introduced. `CommandAiPanel`
 **already contains one on `main`** — `refresh` carries `selected` in its dependency array
 (`CommandAiPanel.tsx:139`) while `openThread` reassigns `selected` to a freshly parsed object, so
 the `[open, refresh]` effect at `:141–144` re-fires without bound. W39-A cannot be honestly
 accepted against that component, and the committed suite cannot see the loop. Land
-`W40-A` (`docs/iterations/WAVE_40_OPERATOR_WORKFLOW_UI.md`) before opening W39-A.
+**C220** (#629, `docs/iterations/WAVE_40_OPERATOR_WORKFLOW_UI.md`) before starting C230.
 
-**Expect rework:** W39-B rewires `CommandAiPanel`'s selection through the §2.2 bridge and will
-likely replace the `selectedRef` machinery W40-A introduces. The request-generation guard survives
+**Expect rework:** C231 (W39-B) rewires `CommandAiPanel`'s selection through the §2.2 bridge and will
+likely replace the `selectedRef` machinery C220 introduces. The request-generation guard survives
 the rewire and stays valuable — a bridge changes where selection comes from, not the fact that an
 in-flight message response can resolve after the operator has moved on.
 
@@ -147,9 +147,31 @@ The bridge must fail closed:
 
 ---
 
-## 3. Proposed card sequence
+## 3. Card sequence (filed)
 
-Issue and card numbers are intentionally omitted until live GitHub occupancy is rechecked. The names below are planning placeholders, not filed work.
+Filed 12 September 2026 under milestone **Wave 39 — One conversation, two surfaces**, and tracked
+on the [Command Center v6.0.0 board](https://github.com/users/GHolmesDesigns/projects/10).
+
+**The `C###` number and the issue number are the identifiers that carry.** The `W39-x` labels are
+documentation and cataloguing only. Branch names follow `<type>/<issue>-<slug>`.
+
+| C# | Issue | W39 | Type | Slug | Size / est. | Depends on |
+| --- | --- | --- | --- | --- | --- | --- |
+| C230 | [#640](https://github.com/GHolmesDesigns/hybrid-command-center/issues/640) | A | feat | conversation-selection-bridge | L / 6h | **C220** — blocked |
+| C231 | [#641](https://github.com/GHolmesDesigns/hybrid-command-center/issues/641) | B | feat | drawer-fullview-sync | L / 6h | C230 |
+| C232 | [#642](https://github.com/GHolmesDesigns/hybrid-command-center/issues/642) | C | feat | conversation-live-reread | M / 3h | C231, C219 |
+| C233 | [#643](https://github.com/GHolmesDesigns/hybrid-command-center/issues/643) | CONTEXT | feat | page-context-boundary | M / 3h | C231 (deferred) |
+| C234 | [#644](https://github.com/GHolmesDesigns/hybrid-command-center/issues/644) | D | chore | conversation-sync-e2e | M / 3h | C231 — lands last |
+| C235 | [#645](https://github.com/GHolmesDesigns/hybrid-command-center/issues/645) | E | docs | conversation-sync-language | S / 1h | C231 |
+
+Sizes follow the repository's label definitions: `size-s` under 1 hour, `size-m` 1–3 hours,
+`size-l` 4–8 hours. Board estimates use the top of each band.
+
+**C230 is blocked on C220** (`#629`, the Wave 40 drawer refresh loop). Its acceptance evidence
+requires that no duplicate fetch loop is introduced, and one already exists on `main` — see
+"Predecessor" above. The card carries the `blocked` label until C220 lands.
+
+---
 
 ### W39-A — Shared conversation selection contract
 

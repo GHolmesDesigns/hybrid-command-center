@@ -1,5 +1,17 @@
 # Changelog
 
+## [6.8.11] - 2026-09-12
+
+### Changed
+
+- Planning docs only: Wave 40 and Wave 39 cards renumbered into the sequential C### series (C220–C235,
+  issues #629–#645) and added to the Command Center v6.0.0 project board with priority, size, and
+  estimate. The W40/W39 labels are retained for cataloguing only. No product behaviour changes.
+
+### Breaking changes
+
+None.
+
 ## [6.8.10] - 2026-09-12
 
 ### Changed

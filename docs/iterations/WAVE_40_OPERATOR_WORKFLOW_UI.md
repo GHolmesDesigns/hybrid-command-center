@@ -723,22 +723,29 @@ leakage between specs. **Auto-retrying it would suppress a real defect.**
 
 ## Card sequence (filed)
 
-Filed 12 September 2026 under milestone **Wave 40 — Operator workflow and UI polish**.
+Filed 12 September 2026 under milestone **Wave 40 — Operator workflow and UI polish**, and tracked
+on the [Command Center v6.0.0 board](https://github.com/users/GHolmesDesigns/projects/10).
+
+**The `C###` number and the issue number are the identifiers that carry.** The `W40-x` labels are
+documentation and cataloguing only — they name a card's place in this plan, not the work item.
 Branch names follow `<type>/<issue>-<slug>`.
 
-| ID | Issue | Type | Slug | Depends on |
-| --- | --- | --- | --- | --- |
-| W40-H | [#637](https://github.com/GHolmesDesigns/hybrid-command-center/issues/637) | chore | client-coverage-threshold | — (land first) |
-| W40-A | [#629](https://github.com/GHolmesDesigns/hybrid-command-center/issues/629) | fix | command-ai-drawer-refresh-loop | — (blocks W39-A) |
-| W40-E | [#634](https://github.com/GHolmesDesigns/hybrid-command-center/issues/634) | chore | integration-activity-spike | — |
-| W40-B | [#630](https://github.com/GHolmesDesigns/hybrid-command-center/issues/630) | feat | project-status-colors | — |
-| W40-D | [#633](https://github.com/GHolmesDesigns/hybrid-command-center/issues/633) | fix | timer-notification-permission | — |
-| W40-F | [#635](https://github.com/GHolmesDesigns/hybrid-command-center/issues/635) | feat | conversations-composer-layout | **blocked** — evidence committed |
-| W40-G | [#636](https://github.com/GHolmesDesigns/hybrid-command-center/issues/636) | feat | signal-filter-multiselect | — |
-| W40-C1 | [#631](https://github.com/GHolmesDesigns/hybrid-command-center/issues/631) | feat | start-task-entry-points | — |
-| W40-C2 | [#632](https://github.com/GHolmesDesigns/hybrid-command-center/issues/632) | fix | timer-session-confirmations | W40-C1 |
-| W40-I | [#638](https://github.com/GHolmesDesigns/hybrid-command-center/issues/638) | chore | e2e-intermittent-specs | — |
-| W40-E2 | not filed | feat | health-integration-activity | W40-E (optional) |
+| C# | Issue | W40 | Type | Slug | Size / est. | Depends on |
+| --- | --- | --- | --- | --- | --- | --- |
+| C228 | [#637](https://github.com/GHolmesDesigns/hybrid-command-center/issues/637) | H | chore | client-coverage-threshold | S / 1h | — (land first) |
+| C220 | [#629](https://github.com/GHolmesDesigns/hybrid-command-center/issues/629) | A | fix | command-ai-drawer-refresh-loop | M / 3h | — (**P1**; blocks C230) |
+| C225 | [#634](https://github.com/GHolmesDesigns/hybrid-command-center/issues/634) | E | chore | integration-activity-spike | M / 3h | — |
+| C221 | [#630](https://github.com/GHolmesDesigns/hybrid-command-center/issues/630) | B | feat | project-status-colors | S / 1h | — |
+| C224 | [#633](https://github.com/GHolmesDesigns/hybrid-command-center/issues/633) | D | fix | timer-notification-permission | S / 1h | — |
+| C226 | [#635](https://github.com/GHolmesDesigns/hybrid-command-center/issues/635) | F | feat | conversations-composer-layout | S / 1h | **blocked** — evidence |
+| C227 | [#636](https://github.com/GHolmesDesigns/hybrid-command-center/issues/636) | G | feat | signal-filter-multiselect | M / 3h | — |
+| C222 | [#631](https://github.com/GHolmesDesigns/hybrid-command-center/issues/631) | C1 | feat | start-task-entry-points | L / 6h | — |
+| C223 | [#632](https://github.com/GHolmesDesigns/hybrid-command-center/issues/632) | C2 | fix | timer-session-confirmations | M / 3h | C222 |
+| C229 | [#638](https://github.com/GHolmesDesigns/hybrid-command-center/issues/638) | I | chore | e2e-intermittent-specs | M / 3h | — |
+| — | not filed | E2 | feat | health-integration-activity | — | C225 (optional) |
+
+Sizes follow the repository's label definitions: `size-s` under 1 hour, `size-m` 1–3 hours,
+`size-l` 4–8 hours, `size-xl` 8–12 hours. Board estimates use the top of each band.
 
 ---
 
