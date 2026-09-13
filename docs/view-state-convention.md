@@ -58,6 +58,7 @@ resolving even when they contain an unknown or retired value.
 | Calendar | Time view | Current month | View and selected date/month when away from the default |
 | Signal | Time view | Current month | View and selected date/month when away from the default, `post` for an open post, `new` for the shared Add Post form, `lifecycle` for active / retired / all plans (lifecycle dimension, not planning status), `client`, `project`, and `campaign` for the planner's own scope, and `campaigns`, `channels`, `accounts`, `from`, and `to` for the campaign-figures filters |
 | Files | Context browser | Explicit project, remembered project, then first live project | Project and folder selections |
+| Tasks | Context browser | First active task in the filtered list | `task` for the selected Pomodoro task; client, project, priority, type, focus, and tag filters |
 
 Projects uses `live`, `archived`, and `all`; Clients uses its domain term `active` in place of
 `live`. The default live/active value is omitted from the address; choosing Archived or All is

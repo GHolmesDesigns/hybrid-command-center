@@ -7,6 +7,7 @@ import { isDueNextSevenDays, isDueToday } from '../../../shared/deadlines';
 import { PageHead } from './Shell';
 import { SearchBox } from './Primitives';
 import { TASK_TYPE_LABEL, tagAccent } from './ui-shared';
+import { taskParamSelectionIssue } from '../../../shared/start-task';
 import {
   newTaskTimerSession,
   pauseTaskTimer,
@@ -94,7 +95,9 @@ export function TasksView({
   const selectedTypes = values('type');
   const selectedFocus = values('filter');
   const selectedTags = values('tags');
+  const paramTaskId = params.get('task') || '';
   const [query, setQuery] = useState(params.get('search') || '');
+  const [taskParamNotice, setTaskParamNotice] = useState<string | null>(null);
   const activeTasks = useMemo(() => tasks.filter((task) => task.status !== 'COMPLETE'), [tasks]);
   const filteredTasks = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -201,6 +204,39 @@ export function TasksView({
     };
   }, [activeTimer]);
 
+  const prevParamTaskId = useRef(paramTaskId);
+  useEffect(() => {
+    const paramChanged = prevParamTaskId.current !== paramTaskId;
+    prevParamTaskId.current = paramTaskId;
+    if (!paramTaskId) {
+      setTaskParamNotice(null);
+      return;
+    }
+    const taskRecord = tasks.find((task) => task.id === paramTaskId);
+    const inFilteredList = filteredTasks.some((task) => task.id === paramTaskId);
+    const issue = taskParamSelectionIssue(
+      paramTaskId,
+      taskRecord,
+      projects,
+      clients,
+      inFilteredList,
+    );
+    if (!issue) {
+      setTaskParamNotice(null);
+      setSelectedId((current) => (current === paramTaskId ? current : paramTaskId));
+      return;
+    }
+    setTaskParamNotice(issue);
+    if (paramChanged) {
+      setSelectedId((current) => {
+        // Keep an in-page picker choice; only fall back when the URL drove navigation.
+        if (current === paramTaskId) return current;
+        const fallbackId = filteredTasks[0]?.id ?? '';
+        return current === fallbackId ? current : fallbackId;
+      });
+    }
+  }, [paramTaskId, filteredTasks, tasks, projects, clients]);
+
   useEffect(() => {
     if (filteredTasks.some((task) => task.id === selectedId)) return;
     if (!selectedId) {
@@ -297,6 +333,11 @@ export function TasksView({
         title="Tasks"
         body="Choose a Project task, then work in focused Pomodoro sessions."
       />
+      {taskParamNotice && (
+        <p className="signal-preset-notice" role="status">
+          {taskParamNotice}
+        </p>
+      )}
       <div className="tasks-layout">
         <section className="pomodoro-card" aria-label="Pomodoro timer">
           <span className="eyebrow">{mode === 'work' ? 'Work session' : 'Short break'}</span>
@@ -429,6 +470,9 @@ export function TasksView({
                       return;
                     setSelectedId(task.id);
                     setTimer(newTaskTimerSession(task.id));
+                    const next = new URLSearchParams(params);
+                    next.set('task', task.id);
+                    setParams(next);
                   }}
                 >
                   <span className="task-picker-icon">

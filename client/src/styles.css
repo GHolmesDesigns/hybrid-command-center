@@ -1906,10 +1906,34 @@ button.tag-chip.toggle.active {
   background: #fffbf2;
 }
 .card-labels {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 5px 8px;
+  align-items: start;
+}
+.card-labels-chips {
   display: flex;
+  flex-wrap: wrap;
   gap: 5px;
   align-items: center;
-  flex-wrap: wrap;
+  min-width: 0;
+}
+.card-start-task {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--green);
+  background: #eef8f1;
+  border: 1px solid #cfe8d7;
+  border-radius: 6px;
+  padding: 4px 7px;
+  white-space: nowrap;
+}
+.card-start-task svg {
+  width: 11px;
+  height: 11px;
 }
 .blocked-label,
 .overdue-label {

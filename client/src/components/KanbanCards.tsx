@@ -1,8 +1,10 @@
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { AlertCircle, GripVertical, ListChecks, ShieldAlert } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { AlertCircle, GripVertical, ListChecks, Play, ShieldAlert } from 'lucide-react';
 import type { Task, TaskStatus } from '../../../shared/types';
+import { startTaskPath } from '../../../shared/start-task';
 import { TASK_STATUSES } from '../../../shared/types';
 import { type Modal } from './App';
 import { TagChip } from './FormControls';
@@ -52,6 +54,7 @@ function KanbanCard({
   open: (m: Modal) => void;
   move: (t: Task, s: TaskStatus) => void;
 }) {
+  const navigate = useNavigate();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
   });
@@ -62,18 +65,28 @@ function KanbanCard({
       className={`kanban-card ${isDragging ? 'dragging' : ''} ${task.overdue ? 'is-overdue' : ''} ${task.blocked ? 'is-blocked' : ''}`}
     >
       <div className="card-labels">
-        <PriorityBadge priority={task.priority} />
-        {task.taskType && <TaskTypeBadge type={task.taskType} />}
-        {task.blocked && (
-          <span className="blocked-label">
-            <ShieldAlert /> Blocked
-          </span>
-        )}
-        {task.overdue && (
-          <span className="overdue-label">
-            <AlertCircle /> Overdue
-          </span>
-        )}
+        <div className="card-labels-chips">
+          <PriorityBadge priority={task.priority} />
+          {task.taskType && <TaskTypeBadge type={task.taskType} />}
+          {task.blocked && (
+            <span className="blocked-label">
+              <ShieldAlert /> Blocked
+            </span>
+          )}
+          {task.overdue && (
+            <span className="overdue-label">
+              <AlertCircle /> Overdue
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          className="card-start-task"
+          aria-label={`Start Task for ${task.title}`}
+          onClick={() => navigate(startTaskPath(task.id))}
+        >
+          <Play /> Start Task
+        </button>
       </div>
       <button className="card-title" onClick={() => open({ type: 'taskDetail', value: task })}>
         <strong>{task.title}</strong>
