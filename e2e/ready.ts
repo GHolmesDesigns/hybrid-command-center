@@ -60,7 +60,11 @@ export async function gotoSettled(page: Page, path: string): Promise<void> {
 }
 
 /** True when the response is a successful merge preview read for any client. */
-const isMergePreviewResponse = (response: { request: () => { method: () => string }; url: () => string; ok: () => boolean }) =>
+const isMergePreviewResponse = (response: {
+  request: () => { method: () => string };
+  url: () => string;
+  ok: () => boolean;
+}) =>
   response.request().method() === 'POST' &&
   response.url().includes('/merge/preview') &&
   response.ok();
