@@ -9,6 +9,8 @@ import {
   vi,
   afterEach,
   task,
+  projects,
+  client,
 } from './App.test-setup';
 import { TasksView } from './components/TasksView';
 import { MemoryRouter } from 'react-router-dom';
@@ -46,7 +48,11 @@ class FakeNotification {
 const renderTasks = (tasks = [task('t1', 'Draft the proposal')]) =>
   render(
     <MemoryRouter>
-      <TasksView tasks={tasks} />
+      <TasksView
+        tasks={tasks}
+        projects={projects}
+        clients={[client('client-p1', 'Acme')]}
+      />
     </MemoryRouter>,
   );
 

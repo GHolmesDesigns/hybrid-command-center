@@ -228,8 +228,12 @@ export function TasksView({
     }
     setTaskParamNotice(issue);
     if (paramChanged) {
-      const fallbackId = filteredTasks[0]?.id ?? '';
-      setSelectedId((current) => (current === fallbackId ? current : fallbackId));
+      setSelectedId((current) => {
+        // Keep an in-page picker choice; only fall back when the URL drove navigation.
+        if (current === paramTaskId) return current;
+        const fallbackId = filteredTasks[0]?.id ?? '';
+        return current === fallbackId ? current : fallbackId;
+      });
     }
   }, [paramTaskId, filteredTasks, tasks, projects, clients]);
 

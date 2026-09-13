@@ -9,6 +9,8 @@ import {
   vi,
   afterEach,
   task,
+  projects,
+  client,
 } from './App.test-setup';
 import { TasksView } from './components/TasksView';
 import { MemoryRouter } from 'react-router-dom';
@@ -25,7 +27,11 @@ describe('TasksView task reassignment', () => {
 
     const { rerender } = render(
       <MemoryRouter>
-        <TasksView tasks={[running, other]} />
+        <TasksView
+          tasks={[running, other]}
+          projects={projects}
+          clients={[client('client-p1', 'Acme')]}
+        />
       </MemoryRouter>,
     );
 
@@ -43,7 +49,11 @@ describe('TasksView task reassignment', () => {
     // the active list while its session is still running.
     rerender(
       <MemoryRouter>
-        <TasksView tasks={[{ ...running, status: 'COMPLETE' }, other]} />
+        <TasksView
+          tasks={[{ ...running, status: 'COMPLETE' }, other]}
+          projects={projects}
+          clients={[client('client-p1', 'Acme')]}
+        />
       </MemoryRouter>,
     );
 
@@ -67,7 +77,11 @@ describe('TasksView task reassignment', () => {
 
     const { rerender } = render(
       <MemoryRouter>
-        <TasksView tasks={[running, other]} />
+        <TasksView
+          tasks={[running, other]}
+          projects={projects}
+          clients={[client('client-p1', 'Acme')]}
+        />
       </MemoryRouter>,
     );
 
@@ -78,7 +92,11 @@ describe('TasksView task reassignment', () => {
     // An unrelated list refresh (e.g. a new task added elsewhere) must not disturb the session.
     rerender(
       <MemoryRouter>
-        <TasksView tasks={[running, other, task('new-task', 'Plan kickoff')]} />
+        <TasksView
+          tasks={[running, other, task('new-task', 'Plan kickoff')]}
+          projects={projects}
+          clients={[client('client-p1', 'Acme')]}
+        />
       </MemoryRouter>,
     );
 
