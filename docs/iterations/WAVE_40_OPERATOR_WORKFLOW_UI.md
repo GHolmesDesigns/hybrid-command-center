@@ -1,6 +1,6 @@
 # Wave 40 — Operator workflow and UI polish
 
-**Status:** Ready to file — every question Q1–Q14 decided; **W40-F blocked on evidence**; GitHub cards not yet opened  
+**Status:** **Filed** — cards #629–#638 opened under the Wave 40 milestone; every question Q1–Q14 decided; **W40-F (#635) blocked on evidence**  
 **Prepared:** 12 September 2026  
 **Revised:** 12 September 2026 (second pass) — Q1, Q7, Q9, Q10, Q13 decided; Q14 added for the Signal scope departure; W40-B palette values measured and recorded, unblocking it; W40-C split into C1 and C2; W40-H added for the coverage gate  
 **Source:** Version 6.8.7 backlog notes (`docs/iterations/VERSION_6_8_7_IMPLEMENTATION_BRIEF.md`), operator screenshots for Start Task and Conversations layout (September 2026), planning review against `origin/main`, and the confirmed root-cause analysis in `docs/audits/session-handoff-2026-09-12.md` (§1).  
@@ -14,7 +14,7 @@
 
 | Question | Locked answer |
 | --- | --- |
-| What ships? | Nine small cards: one P1 bug (A), two P2 fixes (D, C2), one spike (E), three UI polish items (B, F, G), one feature (C1), one chore (H). |
+| What ships? | Ten small cards: one P1 bug (A), two P2 fixes (D, C2), one spike (E), three UI polish items (B, F, G), one feature (C1), two chores (H, I). |
 | What is out of scope? | Wave 39 drawer/full-page conversation sync; raw request debug logs; duplicate Start Task buttons on Calendar page headers or Task detail modals. |
 | W40-A boundary | Drawer-only: fix the `refresh`/`selected` dependency loop **and** discard stale message responses after **New** via a request generation (Q1); not W39 selection sync. |
 | W40-B palette | **Measured and recorded below** — see "W40-B palette (locked)". On hold is a muted brick `#7d4038`, ΔE 26 from the error red (Q2). |
@@ -26,7 +26,7 @@
 | W40-E outcome | Spike first; the spike decides the activity surface (Q8); retention stays at the existing 200-row bound with no pagination (Q9); follow-on E2 only if inventory proves operator value. |
 | W40-F evidence | Operator to re-supply Conversations spacing screenshots; commit under `docs/iterations/evidence/` before implementation. Proof is a browser test at two viewports (Q10). |
 | W40-G filters | Extract shared `MultiSelectFilter` with Escape and outside-click dismissal (Q12); Client, Project, **and Campaign** use it (Q14 — a recorded departure from the 6.8.7 brief); copy search stays `SearchBox`. |
-| W40-H | Lower the `client/src/**` function-coverage threshold from 81% to 80%, restoring headroom before the wave's client cards land. |
+| W40-H, W40-I | Gate hygiene. Lower the `client/src/**` function-coverage threshold from 81% to 80%, and triage three intermittent e2e specs — **without** reaching for retries, which would hide the cause. |
 | Execution order | W40-H and W40-A first; B, C1, D, E, and G proceed independently; C2 follows C1; F waits for evidence; E gates only optional E2 (Q13). |
 
 ### Relationship to other work
@@ -215,7 +215,7 @@ oversight.
 ## Execution order
 
 ```text
-W40-H (chore — coverage gate headroom; land first so later cards fail on their own merits)
+W40-H + W40-I (chores — gate hygiene; H lands first so later cards fail on their own merits)
 W40-A (P1 — drawer refresh loop; blocks W39-A)
     ├── W40-E (spike) ──→ optional W40-E2 (Health activity UI)
     ├── W40-B, W40-D, W40-G (may parallelize)
@@ -680,22 +680,65 @@ are untouched, as are every other path's thresholds.
 
 ---
 
-## Proposed card sequence
+## W40-I — Triage intermittent e2e specs (chore)
 
-Issue numbers omitted until GitHub occupancy is rechecked. Branch names follow `<type>/<issue>-<slug>` when filed.
+### Problem
 
-| ID | Type | Slug hint | Depends on |
-| --- | --- | --- | --- |
-| W40-H | chore | client-coverage-threshold | — (land first) |
-| W40-A | fix | command-ai-drawer-refresh-loop | — (blocks W39-A) |
-| W40-E | chore | integration-activity-spike | — |
-| W40-B | feat | project-status-colors | — |
-| W40-D | fix | timer-notification-permission | — |
-| W40-F | feat | conversations-composer-layout | evidence committed |
-| W40-G | feat | signal-filter-multiselect | — |
-| W40-C1 | feat | start-task-entry-points | — |
-| W40-C2 | fix | timer-session-confirmations | W40-C1 |
-| W40-E2 | feat | health-integration-activity | W40-E (optional) |
+Three e2e specs failed and then passed **with no code change in between** during a single day's
+work on `main` and its PRs. Together with the coverage gate in W40-H, a red run currently carries
+little information — which trains reviewers to rerun rather than read.
+
+| Spec | Failure | Status |
+| --- | --- | --- |
+| `e2e/scoped-discussion.spec.ts:101` | Strict-mode violation — the mention body matched twice once "Related handoffs" loaded | **Fixed** in #627; a genuinely ambiguous locator, not a flake |
+| `e2e/settings-column-independence.spec.ts:157` | `expect(received).toBe(expected)` on column-follow geometry | Failed once, passed on rerun — untriaged |
+| `e2e/client-import-identity.spec.ts:17` | `toMatchObject` — got `contactName: "E2E Survivor Contact"` and no `notes` | Failed on `a1a8e1d`, passed on `08f35c4` — untriaged |
+
+### Triage before treatment — do not reach for retries
+
+`playwright.config.ts` sets `workers: 1` and configures **no retries**. Specs run serially against a
+shared database, which makes cross-spec state leakage and ordering dependence a far likelier
+explanation than a parallel race — and means adding `retries` would hide the cause rather than fix
+it.
+
+The `client-import-identity` failure deserves particular suspicion. The received values are a
+*coherent alternative outcome* of a client merge — the survivor's own contact, no imported notes —
+not garbage or a timeout. That is the shape of a real merge-field-precedence bug or genuine data
+leakage between specs. **Auto-retrying it would suppress a real defect.**
+
+### Acceptance criteria
+
+- Each untriaged spec is reproduced or explained: ordering dependence, leaked state, or a real defect.
+- For `client-import-identity`, establish which. If it is a product bug, file it separately — do not close this card by stabilising the test.
+- Any fix isolates per-spec data or removes the ordering dependence rather than masking it.
+- `retries` stays at 0 unless a specific, documented source of nondeterminism justifies it.
+- A short note on per-spec data isolation lands in the e2e README or `AGENTS.md`.
+
+### Non-goals
+
+- Rewriting the suite's fixture strategy wholesale.
+- Enabling parallel workers.
+
+---
+
+## Card sequence (filed)
+
+Filed 12 September 2026 under milestone **Wave 40 — Operator workflow and UI polish**.
+Branch names follow `<type>/<issue>-<slug>`.
+
+| ID | Issue | Type | Slug | Depends on |
+| --- | --- | --- | --- | --- |
+| W40-H | [#637](https://github.com/GHolmesDesigns/hybrid-command-center/issues/637) | chore | client-coverage-threshold | — (land first) |
+| W40-A | [#629](https://github.com/GHolmesDesigns/hybrid-command-center/issues/629) | fix | command-ai-drawer-refresh-loop | — (blocks W39-A) |
+| W40-E | [#634](https://github.com/GHolmesDesigns/hybrid-command-center/issues/634) | chore | integration-activity-spike | — |
+| W40-B | [#630](https://github.com/GHolmesDesigns/hybrid-command-center/issues/630) | feat | project-status-colors | — |
+| W40-D | [#633](https://github.com/GHolmesDesigns/hybrid-command-center/issues/633) | fix | timer-notification-permission | — |
+| W40-F | [#635](https://github.com/GHolmesDesigns/hybrid-command-center/issues/635) | feat | conversations-composer-layout | **blocked** — evidence committed |
+| W40-G | [#636](https://github.com/GHolmesDesigns/hybrid-command-center/issues/636) | feat | signal-filter-multiselect | — |
+| W40-C1 | [#631](https://github.com/GHolmesDesigns/hybrid-command-center/issues/631) | feat | start-task-entry-points | — |
+| W40-C2 | [#632](https://github.com/GHolmesDesigns/hybrid-command-center/issues/632) | fix | timer-session-confirmations | W40-C1 |
+| W40-I | [#638](https://github.com/GHolmesDesigns/hybrid-command-center/issues/638) | chore | e2e-intermittent-specs | — |
+| W40-E2 | not filed | feat | health-integration-activity | W40-E (optional) |
 
 ---
 
@@ -745,5 +788,5 @@ Wave 40 is complete when:
 6. Start Task works from the reordered global topbar (per the Q3 resolution order) and Kanban cards without auto-starting the timer, and `?task=` is durable (W40-C1).
 7. No path in Tasks destroys a timer session without confirmation — Start, Reset, re-selecting the timed task, and switching away from a paused session (W40-C2).
 8. Signal Client/Project/Campaign filters use the shared multi-select with Escape and outside-click dismissal; URL and filter semantics preserved; special options always listed.
-9. The `client/src/**` function-coverage gate has headroom again (W40-H).
+9. The `client/src/**` function-coverage gate has headroom again (W40-H), and the three intermittent e2e specs are triaged and explained rather than retried away (W40-I).
 10. All quality gates green; milestone E2E covers New chat and Start Task flows.

@@ -1,5 +1,16 @@
 # Changelog
 
+## [6.8.10] - 2026-09-12
+
+### Changed
+
+- Planning docs only: Wave 40 cards filed as #629–#638 under the Wave 40 milestone, and W40-I
+  added to triage three intermittent e2e specs. No product behaviour changes.
+
+### Breaking changes
+
+None.
+
 ## [6.8.9] - 2026-09-12
 
 ### Changed
