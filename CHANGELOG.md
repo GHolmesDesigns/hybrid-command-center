@@ -1,5 +1,19 @@
 # Changelog
 
+## [6.9.1] - 2026-09-13
+
+### Added
+
+- `npm run version:next` and `npm run finalize:card` for atomic release finalization (version, branding, manual stamps, changelog) without partial-finalize mistakes.
+- Pull-request merge-protocol comment workflow and `no-version-bump` label support for docs-only batches.
+
+### Changed
+
+- `AGENTS.md`, wave docs, and the HCC Cursor skill now require one implementing pull request at a time and forbid pre-assigned version numbers in plans.
+
+### Breaking changes
+
+None.
 ## [6.9.0] - 2026-09-12
 
 ### Changed
