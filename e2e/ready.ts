@@ -78,6 +78,20 @@ export async function waitForMergePreview(page: Page): Promise<void> {
   await page.waitForResponse(isMergePreviewResponse);
 }
 
+/** Keep in sync with `PLAN_DELAY_MS` in `ClientMerge.tsx`. */
+export const MERGE_PREVIEW_DEBOUNCE_MS = 250;
+
+/**
+ * Custom merge fields re-plan on debounce after typing. Register the next preview response,
+ * edit, wait for debounce, then await that response — not an earlier one still in flight.
+ */
+export async function editMergeFieldAndWait(page: Page, edit: () => Promise<void>): Promise<void> {
+  const preview = page.waitForResponse(isMergePreviewResponse);
+  await edit();
+  await page.waitForTimeout(MERGE_PREVIEW_DEBOUNCE_MS);
+  await preview;
+}
+
 /**
  * After the last merge preview has landed, wait for confirmation to be offered again.
  *
