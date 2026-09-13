@@ -65,7 +65,9 @@ describe('TasksView task reassignment', () => {
     expect(screen.queryByText('Working on Draft the proposal')).toBeNull();
 
     // Choosing a task explicitly is still possible afterward.
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     fireEvent.click(screen.getByText('Review contracts'));
+    confirmSpy.mockRestore();
     expect(screen.getByText('Working on Review contracts')).toBeVisible();
     expect(screen.getByRole('button', { name: /^Start/ })).toBeEnabled();
   });
