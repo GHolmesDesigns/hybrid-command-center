@@ -13,6 +13,13 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, unlinkSync, existsSync } from 'node:fs';
 import { resolveNextVersion, tryGit } from './version-utils.ts';
 
+const runNpm = (args: string[]) => {
+  execFileSync('npm', args, {
+    stdio: 'inherit',
+    shell: process.platform === 'win32',
+  });
+};
+
 const MANUAL_PATH = 'docs/manual/hybrid-command-center-manual.html';
 const CHANGELOG_PATH = 'CHANGELOG.md';
 const BRANDING_PATH = 'shared/branding.ts';
@@ -76,7 +83,7 @@ const version =
 
 console.log(`finalize-card: assigning ${version}…`);
 
-execFileSync('npm', ['version', version, '--no-git-tag-version'], { stdio: 'inherit' });
+runNpm(['version', version, '--no-git-tag-version']);
 
 const branding = readFileSync(BRANDING_PATH, 'utf8');
 const brandingNext = branding.replace(
@@ -135,8 +142,8 @@ writeFileSync(CHANGELOG_PATH, heading + entry + changelog.slice(heading.length))
 unlinkSync(fragmentPath);
 
 console.log('finalize-card: running check:version-bump and check:manual-version…');
-execFileSync('npm', ['run', 'check:version-bump'], { stdio: 'inherit' });
-execFileSync('npm', ['run', 'check:manual-version'], { stdio: 'inherit' });
+runNpm(['run', 'check:version-bump']);
+runNpm(['run', 'check:manual-version']);
 
 execFileSync(
   'git',
