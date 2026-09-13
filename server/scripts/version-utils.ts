@@ -92,8 +92,7 @@ export const resolveNextVersion = (options: NextVersionOptions = {}) => {
       );
     }
     const bumpKind = closed === 0 ? ('minor' as const) : ('patch' as const);
-    const next =
-      bumpKind === 'minor' ? bumpMinor(baseVersion) : bumpPatch(baseVersion);
+    const next = bumpKind === 'minor' ? bumpMinor(baseVersion) : bumpPatch(baseVersion);
     if (!next) throw new Error(`Could not compute next version from ${baseVersion}`);
     return { baseVersion, nextVersion: next, bumpKind };
   }

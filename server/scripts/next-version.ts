@@ -11,8 +11,7 @@ import { resolveNextVersion, tryGit } from './version-utils.ts';
 
 const args = process.argv.slice(2);
 const milestoneIdx = args.indexOf('--milestone');
-const milestone =
-  milestoneIdx >= 0 && args[milestoneIdx + 1] ? args[milestoneIdx + 1] : undefined;
+const milestone = milestoneIdx >= 0 && args[milestoneIdx + 1] ? args[milestoneIdx + 1] : undefined;
 const forceMinor = args.includes('--minor');
 const forcePatch = args.includes('--patch');
 

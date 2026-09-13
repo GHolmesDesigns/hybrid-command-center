@@ -82,7 +82,9 @@ if (prLabels.includes('no-version-bump')) {
   const diffNames = tryGit('diff', '--name-only', baseRef, 'HEAD');
   if (diffNames !== null) {
     const files = diffNames.split('\n').filter(Boolean);
-    const hasFragmentChange = files.some((file) => file.startsWith('changes/') && file.endsWith('.md'));
+    const hasFragmentChange = files.some(
+      (file) => file.startsWith('changes/') && file.endsWith('.md'),
+    );
     const outsideDocs = files.filter((file) => !isDocsOnlyPath(file));
     if (!hasFragmentChange && outsideDocs.length === 0) {
       skip(

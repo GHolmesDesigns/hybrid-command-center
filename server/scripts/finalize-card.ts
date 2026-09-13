@@ -117,8 +117,7 @@ for (const stamp of stampPatterns) {
   }
   manualNext = manualNext.replace(
     stamp.pattern,
-    (_match, prefix: string, _oldVersion: string, suffix: string) =>
-      `${prefix}${version}${suffix}`,
+    (_match, prefix: string, _oldVersion: string, suffix: string) => `${prefix}${version}${suffix}`,
   );
 }
 writeFileSync(MANUAL_PATH, manualNext);
@@ -139,12 +138,18 @@ console.log('finalize-card: running check:version-bump and check:manual-version�
 execFileSync('npm', ['run', 'check:version-bump'], { stdio: 'inherit' });
 execFileSync('npm', ['run', 'check:manual-version'], { stdio: 'inherit' });
 
-execFileSync('git', ['add', 'package.json', 'package-lock.json', BRANDING_PATH, MANUAL_PATH, CHANGELOG_PATH], {
-  stdio: 'inherit',
-});
+execFileSync(
+  'git',
+  ['add', 'package.json', 'package-lock.json', BRANDING_PATH, MANUAL_PATH, CHANGELOG_PATH],
+  {
+    stdio: 'inherit',
+  },
+);
 execFileSync('git', ['add', '-u', 'changes'], { stdio: 'inherit' });
 execFileSync('git', ['commit', '-m', `chore: finalize release ${version} (#${issue})`], {
   stdio: 'inherit',
 });
 
-console.log(`finalize-card: done — committed ${version} for #${issue}. Push, then mark the PR ready.`);
+console.log(
+  `finalize-card: done — committed ${version} for #${issue}. Push, then mark the PR ready.`,
+);
