@@ -76,9 +76,7 @@ describe('timer notification settings', () => {
     FakeNotification.permission = 'denied';
     Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
     document.dispatchEvent(new Event('visibilitychange'));
-    await waitFor(() =>
-      expect(permissionStatus()).toHaveTextContent('Permission: denied.'),
-    );
+    await waitFor(() => expect(permissionStatus()).toHaveTextContent('Permission: denied.'));
   });
 
   it('disables dependent options when timer notifications are off', async () => {
