@@ -1,5 +1,14 @@
 # Changelog
 
+## [6.9.4] - 2026-09-13
+
+### Changed
+
+- Remap project status colours: Planning is blue, Building is ochre yellow, On hold is muted brick red, and Complete is purple; Active and Archived are unchanged. Status chips, tiles, filters, and detail views all read from the same palette.
+
+### Breaking changes
+
+None.
 ## [6.9.3] - 2026-09-13
 
 ### Fixed
