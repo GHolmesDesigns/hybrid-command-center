@@ -50,7 +50,7 @@ if (!tryGit('rev-parse', '--git-dir')) {
   process.exit(1);
 }
 
-const status = tryGit('status', '--porcelain');
+const status = tryGit('status', '--porcelain', '--untracked-files=no');
 if (status) {
   console.error('finalize-card: working tree is not clean. Commit or stash changes first.');
   console.error(status);
