@@ -1,5 +1,14 @@
 # Changelog
 
+## [6.9.8] - 2026-09-13
+
+### Added
+
+- Integration activity spike (`docs/iterations/W40_E_INTEGRATION_ACTIVITY_SPIKE.md`): producer inventory, credential safety review, Q8 surface decision (shared panel on Import and Health), Q9 retention finding (200 rows, no pagination), UI state spec, and W40-E2 follow-on recommendation.
+
+### Breaking changes
+
+None.
 ## [6.9.7] - 2026-09-13
 
 ### Fixed
