@@ -12,5 +12,5 @@ test('operator can open the health dashboard and re-check its separate signals',
     page.getByRole('heading', { name: 'Active remote-agent verification' }),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Re-check health' }).click();
-  await expect(page.getByRole('status')).toContainText('Overall status:');
+  await expect(page.locator('.refresh-status')).toContainText('Overall status:');
 });

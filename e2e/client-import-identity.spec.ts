@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { gotoSettled, mergeConfirmationReady, waitForMergePreview } from './ready';
+import { gotoSettled, waitForMergePreview } from './ready';
 
 /**
  * The Wave 10 spec for C70. Import identity is only worth anything across two separate imports of a
@@ -139,7 +139,8 @@ test('a client identity outlives a rename at its source, and follows a merge', a
       .getByRole('group', { name: 'Name', exact: true })
       .getByRole('radio', { name: /Keep destination/ }),
   ).toBeChecked();
-  await mergeConfirmationReady(page, merge);
+  // The last preview-triggering choice was the custom contact name; name stays on the survivor.
+  await expect(merge.getByRole('button', { name: 'Merge clients' })).toBeEnabled();
   await merge.getByRole('button', { name: 'Merge clients' }).click();
   await expect(page.getByRole('heading', { name: survivorName })).toBeVisible();
 
