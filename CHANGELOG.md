@@ -1,5 +1,15 @@
 # Changelog
 
+## [6.9.9] - 2026-09-14
+
+### Changed
+
+- Align the Conversations detail header, controls, messages, reply composer, and Send action to one consistent content width across wide and narrow screens.
+- Preserve readable wrapping and spacing for operator replies and thread messages.
+
+### Breaking changes
+
+None.
 ## [6.9.8] - 2026-09-13
 
 ### Added
