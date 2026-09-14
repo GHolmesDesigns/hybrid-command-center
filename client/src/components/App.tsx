@@ -654,6 +654,7 @@ export function App() {
             open={commandAiOpen}
             onClose={() => setCommandAiOpen(false)}
             liveTipsEnabled={liveTips.enabled}
+            breadcrumbData={{ clients, projects, tasks }}
           />
           <CommandAiFab open={commandAiOpen} onClick={() => setCommandAiOpen(true)} />
           {notice && (

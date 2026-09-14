@@ -1,5 +1,19 @@
 # Changelog
 
+## [6.10.3] - 2026-09-14
+
+## Added
+
+- Command AI shows **Current page context** on workspace pages as a labelled, ephemeral attachment — it is included with your next message only and is not saved to the thread unless you send.
+- Navigating from a workspace page to Conversations promotes the drawer’s selected thread into the `open` query parameter so the same conversation stays selected.
+
+## Changed
+
+- Conversation identity no longer drops when opening the full Conversations page from another route without an explicit deep link.
+
+## Breaking changes
+
+None.
 ## [6.10.2] - 2026-09-14
 
 ## Added

@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import { ConversationSelectionProvider } from './components/ConversationSelectionProvider';
 import { useConversationSelection } from './useConversationSelection';
@@ -13,26 +13,37 @@ function wrapper(initialEntry: string) {
   return function Wrapper({ children }: { children: React.ReactNode }) {
     return (
       <MemoryRouter initialEntries={[initialEntry]}>
-        <Routes>
-          <Route
-            path="/agents/conversations"
-            element={
-              <ConversationSelectionProvider>
-                <LocationProbe />
-                {children}
-              </ConversationSelectionProvider>
-            }
-          />
-          <Route
-            path="/"
-            element={
-              <ConversationSelectionProvider>
-                <LocationProbe />
-                {children}
-              </ConversationSelectionProvider>
-            }
-          />
-        </Routes>
+        <ConversationSelectionProvider>
+          <Routes>
+            <Route
+              path="/agents/conversations"
+              element={
+                <>
+                  <LocationProbe />
+                  {children}
+                </>
+              }
+            />
+            <Route
+              path="/"
+              element={
+                <>
+                  <LocationProbe />
+                  {children}
+                </>
+              }
+            />
+            <Route
+              path="/projects"
+              element={
+                <>
+                  <LocationProbe />
+                  {children}
+                </>
+              }
+            />
+          </Routes>
+        </ConversationSelectionProvider>
       </MemoryRouter>
     );
   };
@@ -144,5 +155,32 @@ describe('ConversationSelectionProvider', () => {
     expect(result.current.conversationsOpenPath('thread-d')).toBe(
       '/agents/conversations?open=thread-d',
     );
+  });
+
+  it('promotes off-page drawer selection into the conversations URL', async () => {
+    const { result } = renderHook(
+      () => ({
+        bridge: useConversationSelection(),
+        location: useLocation(),
+        navigate: useNavigate(),
+      }),
+      { wrapper: wrapper('/projects') },
+    );
+    await waitFor(() => expect(result.current.bridge.onConversationsPage).toBe(false));
+    act(() => {
+      result.current.bridge.applySelection('thread-c', 'drawer', {
+        scopeType: 'freeform',
+        state: 'ACTIVE',
+      });
+    });
+    await waitFor(() => expect(result.current.bridge.conversationId).toBe('thread-c'));
+    act(() => {
+      result.current.navigate('/agents/conversations');
+    });
+    await waitFor(() => {
+      expect(result.current.bridge.conversationId).toBe('thread-c');
+      expect(result.current.location.search).toContain('open=thread-c');
+      expect(result.current.bridge.onConversationsPage).toBe(true);
+    });
   });
 });

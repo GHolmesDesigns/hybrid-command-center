@@ -14,6 +14,8 @@ import { formatDateTime } from './formatting';
 import { useMentionHandoffCompose } from './useMentionHandoffCompose';
 import { MentionHandoffPreview } from './MentionHandoffCompose';
 import { drawerSelectionIssueMessage } from './conversationSelectionUi';
+import { useCommandAiPageContext } from '../useCommandAiPageContext';
+import type { BreadcrumbData } from './breadcrumbs';
 
 type Conversation = {
   id: string;
@@ -61,10 +63,12 @@ export function CommandAiPanel({
   open,
   onClose,
   liveTipsEnabled = false,
+  breadcrumbData = { clients: [], projects: [] },
 }: {
   open: boolean;
   onClose: () => void;
   liveTipsEnabled?: boolean;
+  breadcrumbData?: BreadcrumbData;
 }) {
   const {
     conversationId: bridgeConversationId,
@@ -73,6 +77,7 @@ export function CommandAiPanel({
     clearSelection,
     conversationsOpenPath,
   } = useConversationSelection();
+  const pageContext = useCommandAiPageContext(breadcrumbData);
   const [view, setView] = useState<PanelView>('home');
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selected, setSelected] = useState<Conversation | null>(null);
@@ -426,6 +431,16 @@ export function CommandAiPanel({
       </div>
 
       <footer className="command-ai-foot">
+        {pageContext && (
+          <div className="command-ai-page-context" aria-label="Current page context">
+            <p className="command-ai-page-context-label">
+              <strong>Current page context:</strong> {pageContext.label}
+            </p>
+            <p className="field-hint">
+              Included with your next message only. Not saved to the thread unless you send.
+            </p>
+          </div>
+        )}
         <form
           className="command-ai-compose"
           onSubmit={(event) => {
