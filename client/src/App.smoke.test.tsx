@@ -49,7 +49,7 @@ describe('App', () => {
     );
 
     expect(await screen.findByText(branding.title)).toBeInTheDocument();
-    expect(opened).toContain('/api/agent-hub/tips');
+    await waitFor(() => expect(opened).toContain('/api/agent-hub/tips'));
     const initialReads = notificationReads().length;
     act(() => {
       onmessage?.({ data: JSON.stringify({ feeds: ['notifications'] }) } as MessageEvent);

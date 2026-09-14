@@ -1,6 +1,6 @@
 # Wave 40 — Operator workflow and UI polish
 
-**Status:** **Filed** — cards #629–#638 opened under the Wave 40 milestone; every question Q1–Q14 decided; **W40-F (#635) blocked on evidence**  
+**Status:** **Filed** — cards #629–#638 opened under the Wave 40 milestone; every question Q1–Q14 decided; **W40-F (#635) evidence committed** (implementation unblocked once PR merges)  
 **Prepared:** 12 September 2026  
 **Revised:** 12 September 2026 (second pass) — Q1, Q7, Q9, Q10, Q13 decided; Q14 added for the Signal scope departure; W40-B palette values measured and recorded, unblocking it; W40-C split into C1 and C2; W40-H added for the coverage gate  
 **Source:** Version 6.8.7 backlog notes (`docs/iterations/VERSION_6_8_7_IMPLEMENTATION_BRIEF.md`), operator screenshots for Start Task and Conversations layout (September 2026), planning review against `origin/main`, and the confirmed root-cause analysis in `docs/audits/session-handoff-2026-09-12.md` (§1).  
@@ -601,9 +601,16 @@ Consistent horizontal padding on the Conversations detail panel. Reply composer 
 - `client/src/components/ConversationTurn.tsx` — message presentation.
 - `e2e/project-spacing.spec.ts`, `e2e/settings-card-height.spec.ts` — layout-assertion precedent.
 
-### Evidence (required before implementation)
+### Evidence (committed)
 
-Re-supply operator screenshots; commit under `docs/iterations/evidence/` with a short index in this wave doc or the card body. Original brief referenced `codex-clipboard-*.png` filenames not present in the repo.
+Operator screenshots live under `docs/iterations/evidence/` — see [`docs/iterations/evidence/README.md`](evidence/README.md) for the W40-F index. Files:
+
+- `w635-conversations-list-detail-view.png` — split layout, thread-list header spacing (red arrow on **Active** filter).
+- `w635-conversations-detail-reply-area.png` — narrow viewport; archive placement and composer width (red arrows).
+- `w635-conversations-thread-messages-composer.png` — message column vs composer alignment and handoff-row spacing (red arrows).
+- `w635-conversations-composer-width-reference.png` — composer narrower than messages (green outline).
+
+Issues called out: archive button spacing/placement, composer narrower than message column, thread-list vertical padding.
 
 ---
 
@@ -733,7 +740,7 @@ Branch names follow `<type>/<issue>-<slug>`.
 | W40-E | [#634](https://github.com/GHolmesDesigns/hybrid-command-center/issues/634) | chore | integration-activity-spike | — |
 | W40-B | [#630](https://github.com/GHolmesDesigns/hybrid-command-center/issues/630) | feat | project-status-colors | — |
 | W40-D | [#633](https://github.com/GHolmesDesigns/hybrid-command-center/issues/633) | fix | timer-notification-permission | — |
-| W40-F | [#635](https://github.com/GHolmesDesigns/hybrid-command-center/issues/635) | feat | conversations-composer-layout | **blocked** — evidence committed |
+| W40-F | [#635](https://github.com/GHolmesDesigns/hybrid-command-center/issues/635) | feat | conversations-composer-layout | evidence committed — ready after merge |
 | W40-G | [#636](https://github.com/GHolmesDesigns/hybrid-command-center/issues/636) | feat | signal-filter-multiselect | — |
 | W40-C1 | [#631](https://github.com/GHolmesDesigns/hybrid-command-center/issues/631) | feat | start-task-entry-points | — |
 | W40-C2 | [#632](https://github.com/GHolmesDesigns/hybrid-command-center/issues/632) | fix | timer-session-confirmations | W40-C1 |
