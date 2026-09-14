@@ -135,6 +135,7 @@ test('Conversations preserves its states and aligns the reply composer at wide a
   // Archived state: the thread remains readable but exposes neither active-only controls.
   await page.goto(conversationPage(project.id));
   const archivedList = listFor(page);
+  await expect(archivedList.getByRole('button', { name: new RegExp(activeTitle) })).toBeVisible();
   await archivedList.getByLabel('Conversation state').selectOption('ARCHIVED');
   await expect(archivedList.getByText(archivedTitle)).toBeVisible();
   await archivedList.getByRole('button', { name: new RegExp(archivedTitle) }).click();
