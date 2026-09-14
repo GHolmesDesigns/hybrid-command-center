@@ -1,7 +1,9 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
+import type { AgentHubTipPayload } from '../../shared/agent-hub-sse';
 import { CommandAiFab, CommandAiPanel, CommandAiTopbarToggle } from './components/CommandAiPanel';
+import { AgentHubTipsContext } from './components/AgentHubTipsContext';
 import { ConversationSelectionProvider } from './components/ConversationSelectionProvider';
 
 function renderPanel(ui: React.ReactElement) {
@@ -266,6 +268,73 @@ describe('CommandAiPanel', () => {
     expect(await screen.findByRole('heading', { level: 3, name: 'Loop thread' })).toBeVisible();
     expect(listReads).toBeLessThanOrEqual(2);
     expect(messageReads).toBe(1);
+  });
+
+  it('rereads the open thread when a matching live tip arrives', async () => {
+    const conversation = freeformConversation('live-thread', 'Live thread');
+    const firstMessage = {
+      id: 'm1',
+      senderLabel: 'operator',
+      sentAt: '2026-09-10T12:00:01.000Z',
+      body: 'First',
+      thoughtSummary: null,
+      provenance: 'VERIFIED' as const,
+      linkedHandoffs: [],
+    };
+    const secondMessage = { ...firstMessage, id: 'm2', body: 'Second' };
+    let messageReads = 0;
+    let emitTip: ((tip: AgentHubTipPayload) => void) | null = null;
+    const subscribe = (listener: (tip: AgentHubTipPayload) => void) => {
+      emitTip = listener;
+      return () => {
+        emitTip = null;
+      };
+    };
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/agents/directory')) return json({ agents: [] });
+      if (url.includes('/agents/presence')) return json({ presence: [] });
+      if (url.includes('/agent-summaries')) return json({ summaries: [] });
+      if (url.includes('/agent-conversations?')) {
+        return json({ items: [conversation], nextCursor: null, hasMore: false });
+      }
+      if (url.includes('/agent-conversations/live-thread/messages')) {
+        messageReads += 1;
+        return json({
+          items: [messageReads > 1 ? secondMessage : firstMessage],
+          nextCursor: null,
+          hasMore: false,
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    render(
+      <MemoryRouter>
+        <ConversationSelectionProvider>
+          <AgentHubTipsContext.Provider value={subscribe}>
+            <CommandAiPanel open liveTipsEnabled onClose={() => undefined} />
+          </AgentHubTipsContext.Provider>
+        </ConversationSelectionProvider>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Live thread/ }));
+    expect(await screen.findByText('First')).toBeVisible();
+
+    act(() => {
+      emitTip?.({ feeds: ['conversations'], conversationId: 'other-thread' });
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    });
+    expect(screen.getByText('First')).toBeVisible();
+    expect(messageReads).toBe(1);
+
+    act(() => {
+      emitTip?.({ feeds: ['conversations'], conversationId: 'live-thread' });
+    });
+    expect(await screen.findByText('Second', {}, { timeout: 2000 })).toBeVisible();
   });
 
   it('returns to empty chat from Recent and from the thread back control', async () => {
