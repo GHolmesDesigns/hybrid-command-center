@@ -25,13 +25,33 @@ export function ConversationSelectionProvider({ children }: { children: ReactNod
   >({});
   const [source, setSource] = useState<ConversationSelectionSource | null>(null);
   const echoGuardRef = useRef<ConversationSelectionSource | null>(null);
+  const wasOnConversationsPageRef = useRef(onConversationsPage);
   const lastAppliedRef = useRef<{ id: string | null; source: ConversationSelectionSource | null }>({
     id: null,
     source: null,
   });
 
-  const conversationId = onConversationsPage ? urlConversationId : memoryConversationId;
+  const conversationId = onConversationsPage
+    ? (urlConversationId ?? memoryConversationId)
+    : memoryConversationId;
   const hint = conversationId ? (hintsById[conversationId] ?? null) : null;
+
+  useEffect(() => {
+    const enteredConversationsPage =
+      onConversationsPage && !wasOnConversationsPageRef.current;
+    wasOnConversationsPageRef.current = onConversationsPage;
+    if (!enteredConversationsPage) return;
+    if (urlConversationId || !memoryConversationId) return;
+    echoGuardRef.current = 'drawer';
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.set('open', memoryConversationId);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [onConversationsPage, urlConversationId, memoryConversationId, setSearchParams]);
 
   useEffect(() => {
     if (echoGuardRef.current) {

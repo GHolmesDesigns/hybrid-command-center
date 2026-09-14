@@ -1,17 +1,74 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import type { AgentHubTipPayload } from '../../shared/agent-hub-sse';
 import { CommandAiFab, CommandAiPanel, CommandAiTopbarToggle } from './components/CommandAiPanel';
+import type { BreadcrumbData } from './components/breadcrumbs';
 import { AgentHubTipsContext } from './components/AgentHubTipsContext';
 import { ConversationSelectionProvider } from './components/ConversationSelectionProvider';
 
-function renderPanel(ui: React.ReactElement) {
+type PanelOptions = {
+  initialEntry?: string;
+  breadcrumbData?: BreadcrumbData;
+};
+
+function renderPanel(ui: React.ReactElement, options?: PanelOptions) {
+  const initialEntry = options?.initialEntry ?? '/';
   return render(
-    <MemoryRouter>
-      <ConversationSelectionProvider>{ui}</ConversationSelectionProvider>
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <ConversationSelectionProvider>
+        <Routes>
+          <Route path="/projects/:id" element={ui} />
+          <Route path="/agents/conversations" element={ui} />
+          <Route path="*" element={ui} />
+        </Routes>
+      </ConversationSelectionProvider>
     </MemoryRouter>,
   );
+}
+
+function renderRoutedPanel(
+  panelProps: React.ComponentProps<typeof CommandAiPanel>,
+  options?: PanelOptions,
+) {
+  const initialEntry = options?.initialEntry ?? '/';
+  let navigateRef: ReturnType<typeof useNavigate> | null = null;
+  const result = render(
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <ConversationSelectionProvider>
+        <Routes>
+          <Route
+            path="/projects"
+            element={
+              <>
+                <CommandAiPanel
+                  {...panelProps}
+                  breadcrumbData={options?.breadcrumbData ?? panelProps.breadcrumbData}
+                />
+                <NavigationCapture onReady={(navigate) => (navigateRef = navigate)} />
+              </>
+            }
+          />
+          <Route
+            path="/tasks"
+            element={
+              <CommandAiPanel
+                {...panelProps}
+                breadcrumbData={options?.breadcrumbData ?? panelProps.breadcrumbData}
+              />
+            }
+          />
+        </Routes>
+      </ConversationSelectionProvider>
+    </MemoryRouter>,
+  );
+  return { ...result, getNavigate: () => navigateRef };
+}
+
+function NavigationCapture({ onReady }: { onReady: (navigate: ReturnType<typeof useNavigate>) => void }) {
+  const navigate = useNavigate();
+  onReady(navigate);
+  return null;
 }
 
 const json = (body: unknown, status = 200) =>
@@ -467,5 +524,117 @@ describe('CommandAiPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'View all' }));
     expect(await screen.findByRole('heading', { name: 'Chat history' })).toBeVisible();
     expect(screen.getAllByRole('button', { name: /Thread/ })).toHaveLength(6);
+  });
+
+  it('labels current-page context without adding it to the message list', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/agents/directory')) return json({ agents: [] });
+      if (url.includes('/agents/presence')) return json({ presence: [] });
+      if (url.includes('/agent-summaries')) return json({ summaries: [] });
+      if (url.includes('/agent-conversations?')) return json({ items: [], nextCursor: null, hasMore: false });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    renderPanel(
+      <CommandAiPanel
+        open
+        onClose={() => undefined}
+        breadcrumbData={{
+          clients: [],
+          projects: [
+            { id: 'p1', name: 'Website Refresh', clientId: 'c1', clientName: 'Acme', status: 'ACTIVE' },
+          ],
+        }}
+      />,
+      { initialEntry: '/projects/p1' },
+    );
+
+    expect(await screen.findByLabelText('Current page context')).toBeVisible();
+    expect(screen.getByText(/Current page context:/)).toBeVisible();
+    expect(screen.getByText(/Projects · Website Refresh/)).toBeVisible();
+    expect(
+      screen.getByText(/Included with your next message only. Not saved to the thread unless you send./),
+    ).toBeVisible();
+    expect(screen.queryByRole('article')).toBeNull();
+  });
+
+  it('hides page context on the conversations page', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/agents/directory')) return json({ agents: [] });
+      if (url.includes('/agents/presence')) return json({ presence: [] });
+      if (url.includes('/agent-summaries')) return json({ summaries: [] });
+      if (url.includes('/agent-conversations?')) return json({ items: [], nextCursor: null, hasMore: false });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    renderPanel(<CommandAiPanel open onClose={() => undefined} />, {
+      initialEntry: '/agents/conversations',
+    });
+
+    await waitFor(() => expect(screen.getByLabelText('Command AI message')).toBeVisible());
+    expect(screen.queryByLabelText('Current page context')).toBeNull();
+  });
+
+  it('keeps the selected thread and messages when navigating between workspace pages', async () => {
+    let createCalls = 0;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes('/agents/directory')) return json({ agents: [] });
+      if (url.includes('/agents/presence')) return json({ presence: [] });
+      if (url.includes('/agent-summaries')) return json({ summaries: [] });
+      if (url.includes('/agent-conversations?')) {
+        return json({
+          items: [freeformConversation('conv-nav', 'Navigation thread')],
+          nextCursor: null,
+          hasMore: false,
+        });
+      }
+      if (url.endsWith('/api/agent-conversations') && init?.method === 'POST') {
+        createCalls += 1;
+        throw new Error('Navigation must not create a conversation');
+      }
+      if (url.includes('/agent-conversations/conv-nav/messages')) {
+        return json({
+          items: [
+            {
+              id: 'm-nav',
+              senderLabel: 'operator',
+              sentAt: '2026-09-11T12:00:01.000Z',
+              body: 'Still here',
+              provenance: 'VERIFIED',
+            },
+          ],
+          nextCursor: null,
+          hasMore: false,
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    const { getNavigate } = renderRoutedPanel(
+      { open: true, onClose: () => undefined },
+      {
+        initialEntry: '/projects',
+        breadcrumbData: {
+          clients: [],
+          projects: [{ id: 'p1', name: 'Website Refresh', clientId: 'c1', clientName: 'Acme', status: 'ACTIVE' }],
+        },
+      },
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Navigation thread/ }));
+    expect(await screen.findByText('Still here')).toBeVisible();
+
+    const navigate = getNavigate();
+    expect(navigate).toBeTruthy();
+    act(() => {
+      navigate!('/tasks');
+    });
+
+    expect(await screen.findByText('Still here')).toBeVisible();
+    expect(screen.getByRole('heading', { level: 3, name: 'Navigation thread' })).toBeVisible();
+    expect(createCalls).toBe(0);
   });
 });
