@@ -112,9 +112,7 @@ test('Command AI drawer and Conversations full view stay synchronized', async ({
 
   await page.goto(`/agents/conversations?open=${encodeURIComponent(scoped.id)}`);
   await expect(detail.getByRole('heading', { name: scopedTitle })).toBeVisible();
-  await expect(
-    drawer.getByText(/Command AI shows active freeform threads only/i),
-  ).toBeVisible();
+  await expect(drawer.getByText(/Command AI shows active freeform threads only/i)).toBeVisible();
   await expect(drawer.getByRole('heading', { level: 3, name: titleA })).toHaveCount(0);
   await expect(drawer.getByRole('heading', { level: 3, name: titleB })).toHaveCount(0);
 });
