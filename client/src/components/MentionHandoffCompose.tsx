@@ -15,7 +15,10 @@ export function MentionHandoffPreview({
       <legend>
         <Handshake aria-hidden="true" /> Confirm handoffs
       </legend>
-      <p className="field-hint">Each confirmed @mention opens a handoff to that agent.</p>
+      <p className="field-hint">
+        Handoffs open only for checked @mentions. Unchecked mentions are sent as text in your
+        message.
+      </p>
       <ul>
         {offered.map((label) => (
           <li key={label}>

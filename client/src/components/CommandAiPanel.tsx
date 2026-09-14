@@ -354,7 +354,11 @@ export function CommandAiPanel({
             <div className="command-ai-welcome">
               <Lightbulb aria-hidden="true" />
               <h3>What are you curious about?</h3>
-              <p>Ask a question, mention an agent with @label, or start a new thread.</p>
+              <p>
+                Ask a question, mention an agent with @label, or resume a recent thread. This drawer
+                and the Conversations page show the same selected freeform thread — they are not two
+                separate chats.
+              </p>
             </div>
             {recent.length > 0 && (
               <div className="command-ai-recent">
@@ -406,7 +410,7 @@ export function CommandAiPanel({
               </button>
               <h3>{selected.title}</h3>
               <p className="field-hint">
-                Conversation {shortConversationId(selected.id)} ·{' '}
+                Conversation {shortConversationId(selected.id)} · synchronized with full view ·{' '}
                 <Link to={conversationsOpenPath(selected.id)}>Open full view</Link>
               </p>
             </div>
