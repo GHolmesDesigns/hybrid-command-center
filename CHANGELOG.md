@@ -1,5 +1,15 @@
 # Changelog
 
+## [6.10.1] - 2026-09-14
+
+## Added
+
+- The Command AI drawer and full Conversations page now stay on the same selected thread: choosing a thread in either surface updates the other, and **Open full view** keeps the thread you were reading.
+- When the drawer cannot show the selected thread (scoped, archived, or missing), it explains why and links to the full Conversations view instead of showing a different thread.
+
+## Breaking changes
+
+None.
 ## [6.10.0] - 2026-09-14
 
 ## Added
