@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { CheckCircle2, Pause, Play, RotateCcw, Tag as TagIcon } from 'lucide-react';
 import type { Client, Project, Tag, Task } from '../../../shared/types';
@@ -23,57 +23,9 @@ import {
   type TaskTimerSettings,
   type TaskTimerSession,
 } from '../../../shared/task-timer';
+import { MultiSelectFilter } from './MultiSelectFilter';
 
 const NO_TASK_TYPE = 'none';
-type FilterOption = { value: string; label: string };
-
-function MultiSelectFilter({
-  label,
-  emptyLabel,
-  options,
-  selected,
-  onChange,
-}: {
-  label: string;
-  emptyLabel: string;
-  options: FilterOption[];
-  selected: string[];
-  onChange: (value: string, checked: boolean) => void;
-}) {
-  const labelId = useId();
-  const chosen = options
-    .filter((option) => selected.includes(option.value))
-    .map((option) => option.label);
-  const summary =
-    chosen.length === 0
-      ? emptyLabel
-      : chosen.length === 1
-        ? chosen[0]
-        : `${chosen.length} selected`;
-  return (
-    <div className="multi-filter">
-      <span id={labelId}>{label}</span>
-      <details>
-        <summary role="button" aria-label={`${label}: ${summary}`}>
-          {summary}
-        </summary>
-        <fieldset aria-labelledby={labelId}>
-          {options.map((option) => (
-            <label key={option.value}>
-              <input
-                type="checkbox"
-                checked={selected.includes(option.value)}
-                onChange={(event) => onChange(option.value, event.target.checked)}
-              />
-              <span>{option.label}</span>
-            </label>
-          ))}
-        </fieldset>
-      </details>
-    </div>
-  );
-}
-
 function clock(seconds: number) {
   return `${Math.floor(seconds / 60)
     .toString()

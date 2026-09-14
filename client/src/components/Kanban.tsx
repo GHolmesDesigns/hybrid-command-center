@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   DndContext,
@@ -21,6 +21,7 @@ import { SearchBox } from './Primitives';
 import { STATUS_LABEL, TASK_TYPE_LABEL, tagAccent } from './ui-shared';
 import { PageHead } from './Shell';
 import type { TaskFilter, TaskFilterPreset } from '../../../shared/task-filters';
+import { MultiSelectFilter, type FilterOption } from './MultiSelectFilter';
 
 /**
  * The `type` value that asks for tasks carrying no type at all. Untyped tasks predate the
@@ -28,56 +29,6 @@ import type { TaskFilter, TaskFilterPreset } from '../../../shared/task-filters'
  * Lowercase, so it can never collide with a `TASK_TYPES` member sharing the same param.
  */
 const NO_TASK_TYPE = 'none';
-
-type FilterOption = { value: string; label: string };
-
-function MultiSelectFilter({
-  label,
-  emptyLabel,
-  options,
-  selected,
-  onChange,
-}: {
-  label: string;
-  emptyLabel: string;
-  options: FilterOption[];
-  selected: string[];
-  onChange: (value: string, checked: boolean) => void;
-}) {
-  const labelId = useId();
-  const selectedLabels = options
-    .filter((option) => selected.includes(option.value))
-    .map((option) => option.label);
-  const summary =
-    selectedLabels.length === 0
-      ? emptyLabel
-      : selectedLabels.length === 1
-        ? selectedLabels[0]
-        : `${selectedLabels.length} selected`;
-
-  return (
-    <div className="multi-filter">
-      <span id={labelId}>{label}</span>
-      <details>
-        <summary role="button" aria-label={`${label}: ${summary}`}>
-          {summary}
-        </summary>
-        <fieldset aria-labelledby={labelId}>
-          {options.map((option) => (
-            <label key={option.value}>
-              <input
-                type="checkbox"
-                checked={selected.includes(option.value)}
-                onChange={(event) => onChange(option.value, event.target.checked)}
-              />
-              <span>{option.label}</span>
-            </label>
-          ))}
-        </fieldset>
-      </details>
-    </div>
-  );
-}
 
 const parseValues = (value: string | null) => [
   ...new Set((value || '').split(',').filter(Boolean)),

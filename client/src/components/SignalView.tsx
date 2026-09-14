@@ -82,6 +82,7 @@ import { Empty, SearchBox } from './Primitives';
 import { Select, TagChipInput } from './FormControls';
 import { SignalCampaignAnalyticsPanel } from './SignalCampaignAnalytics';
 import { PageHead } from './Shell';
+import { MultiSelectFilter } from './MultiSelectFilter';
 import {
   deliveryModeFor,
   deliveryModeInstruction,
@@ -2082,31 +2083,6 @@ const listParam = (value: string | null) =>
     .map((part) => part.trim())
     .filter(Boolean);
 
-/**
- * One filter value, on or off — the same toggle chip the campaign-figures panel and the board's
- * tag filter use, so a filter behaves the same way everywhere it appears.
- */
-function FilterChip({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      className={`tag-chip toggle ${active ? 'active' : ''}`}
-      aria-pressed={active}
-      onClick={onClick}
-    >
-      {label}
-    </button>
-  );
-}
-
 export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
   const [params, setParams] = useSearchParams();
   const now = today();
@@ -2217,6 +2193,18 @@ export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
   const visibleProjects = projects.filter(
     (project) => viewDefaults.signal.projectVisibility === 'all' || project.status !== 'ARCHIVED',
   );
+  const clientFilterOptions = [
+    ...visibleClients.map((client) => ({ value: client.id, label: client.name })),
+    { value: SIGNAL_CLIENT_UNBOUND, label: SIGNAL_CLIENT_UNBOUND_LABEL },
+  ];
+  const projectFilterOptions = visibleProjects.map((project) => ({
+    value: project.id,
+    label: project.name,
+  }));
+  const campaignFilterOptions = [
+    ...campaigns.map((campaign) => ({ value: campaign.id, label: campaign.name })),
+    { value: SIGNAL_CAMPAIGN_NONE, label: SIGNAL_CAMPAIGN_NONE_LABEL },
+  ];
   useEffect(() => {
     void api<Client[]>('/clients')
       .then(setClients)
@@ -2237,12 +2225,10 @@ export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
       },
       { replace: true },
     );
-  const toggleFilter = (key: string, chosen: string[], value: string) =>
+  const toggleFilter = (key: string, chosen: string[], value: string, checked: boolean) =>
     setFilterParam(
       key,
-      (chosen.includes(value) ? chosen.filter((item) => item !== value) : [...chosen, value]).join(
-        ',',
-      ),
+      (checked ? [...chosen, value] : chosen.filter((item) => item !== value)).join(','),
     );
   const clearFilters = () => {
     setSearchInput('');
@@ -2498,72 +2484,30 @@ export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
             </button>
           )}
         </div>
-        <div className="filterbar">
+        <div className="filterbar signal-filterbar">
           <SearchBox value={searchInput} set={setSearchInput} placeholder="Search post copy…" />
+          <MultiSelectFilter
+            label="Client"
+            emptyLabel="All clients"
+            options={clientFilterOptions}
+            selected={clientIds}
+            onChange={(value, checked) => toggleFilter('client', clientIds, value, checked)}
+          />
+          <MultiSelectFilter
+            label="Project"
+            emptyLabel="All projects"
+            options={projectFilterOptions}
+            selected={projectIds}
+            onChange={(value, checked) => toggleFilter('project', projectIds, value, checked)}
+          />
+          <MultiSelectFilter
+            label="Campaign"
+            emptyLabel="All campaigns"
+            options={campaignFilterOptions}
+            selected={campaignIds}
+            onChange={(value, checked) => toggleFilter('campaign', campaignIds, value, checked)}
+          />
         </div>
-        {visibleClients.length > 0 && (
-          <div className="tag-filter">
-            <span className="tag-filter-label" id="signal-client-filter-label">
-              Client
-            </span>
-            <div role="group" aria-labelledby="signal-client-filter-label">
-              {visibleClients.map((client) => (
-                <FilterChip
-                  key={client.id}
-                  label={client.name}
-                  active={clientIds.includes(client.id)}
-                  onClick={() => toggleFilter('client', clientIds, client.id)}
-                />
-              ))}
-              {/* Unbound posts are a group a person can ask for by name, not a residue reachable
-                  only by clearing every other filter — the same treatment as No campaign below. */}
-              <FilterChip
-                label={SIGNAL_CLIENT_UNBOUND_LABEL}
-                active={clientIds.includes(SIGNAL_CLIENT_UNBOUND)}
-                onClick={() => toggleFilter('client', clientIds, SIGNAL_CLIENT_UNBOUND)}
-              />
-            </div>
-          </div>
-        )}
-        {visibleProjects.length > 0 && (
-          <div className="tag-filter">
-            <span className="tag-filter-label" id="signal-project-filter-label">
-              Project
-            </span>
-            <div role="group" aria-labelledby="signal-project-filter-label">
-              {visibleProjects.map((project) => (
-                <FilterChip
-                  key={project.id}
-                  label={project.name}
-                  active={projectIds.includes(project.id)}
-                  onClick={() => toggleFilter('project', projectIds, project.id)}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-        {campaigns.length > 0 && (
-          <div className="tag-filter">
-            <span className="tag-filter-label" id="signal-campaign-filter-label">
-              Campaign
-            </span>
-            <div role="group" aria-labelledby="signal-campaign-filter-label">
-              {campaigns.map((campaign) => (
-                <FilterChip
-                  key={campaign.id}
-                  label={campaign.name}
-                  active={campaignIds.includes(campaign.id)}
-                  onClick={() => toggleFilter('campaign', campaignIds, campaign.id)}
-                />
-              ))}
-              <FilterChip
-                label={SIGNAL_CAMPAIGN_NONE_LABEL}
-                active={campaignIds.includes(SIGNAL_CAMPAIGN_NONE)}
-                onClick={() => toggleFilter('campaign', campaignIds, SIGNAL_CAMPAIGN_NONE)}
-              />
-            </div>
-          </div>
-        )}
         {(clientIds.length > 1 || projectIds.length > 1 || campaignIds.length > 1) && (
           <p className="filterbar-hint">
             Several selections within one filter are read as <strong>or</strong>; client, project,

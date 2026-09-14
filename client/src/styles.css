@@ -1136,8 +1136,18 @@ button svg,
   gap: 12px;
   align-items: flex-start;
 }
+.signal-filterbar {
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.signal-filterbar .multi-filter {
+  flex: 1 1 10rem;
+}
 .filterbar .search-box {
   flex: 1;
+}
+.filterbar.signal-filterbar .search-box {
+  flex: 2 1 16rem;
 }
 .filterbar-hint {
   margin: 12px 0 14px;

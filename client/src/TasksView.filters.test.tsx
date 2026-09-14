@@ -96,4 +96,20 @@ describe('TasksView filters', () => {
     fireEvent.click(screen.getByText('Plain task'));
     expect(screen.getByRole('button', { name: /^Start/ })).toBeEnabled();
   });
+
+  it('dismisses an open filter on outside pointer', () => {
+    render(
+      <MemoryRouter>
+        <TasksView tasks={[]} />
+      </MemoryRouter>,
+    );
+
+    const summary = screen.getByRole('button', { name: 'Client: All clients' });
+    fireEvent.click(summary);
+    const details = summary.closest('details')!;
+    expect(details.open).toBe(true);
+
+    fireEvent.pointerDown(document.body);
+    expect(details.open).toBe(false);
+  });
 });
