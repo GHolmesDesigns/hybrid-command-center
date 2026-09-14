@@ -1,5 +1,15 @@
 # Changelog
 
+## [6.10.2] - 2026-09-14
+
+## Added
+
+- Live update tips now reread the selected conversation in both the Command AI drawer and the full Conversations page, so a reply appears in both surfaces without a full-page reload.
+- Tips for another conversation refresh the conversation list but leave the selected thread and its messages unchanged.
+
+## Breaking changes
+
+None.
 ## [6.10.1] - 2026-09-14
 
 ## Added
