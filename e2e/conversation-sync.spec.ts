@@ -89,7 +89,9 @@ test('Command AI drawer and Conversations full view stay synchronized', async ({
 
   const missingId = `missing-conversation-${run}`;
   await page.goto(`/agents/conversations?open=${encodeURIComponent(missingId)}`);
-  await expect(page.getByRole('region', { name: 'Conversation unavailable' })).toBeVisible();
+  await expect(
+    page.getByRole('region', { name: 'Conversation unavailable', exact: true }),
+  ).toBeVisible();
   await expect(detail).toHaveCount(0);
   await expect(drawer.getByText(/could not be found/i)).toBeVisible();
   await expect(drawer.getByRole('heading', { level: 3, name: titleB })).toHaveCount(0);
