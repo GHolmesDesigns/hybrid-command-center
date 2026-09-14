@@ -3,12 +3,14 @@ import { Link } from 'react-router-dom';
 import { Clock3, Lightbulb, MessageSquare, PlusSquare, Send, Sparkles, X } from 'lucide-react';
 import { api, send } from '../api';
 import type { MessageLinkedHandoff } from '../../../shared/agent-conversations';
+import { useConversationSelection } from '../useConversationSelection';
 import { ConversationTurn } from './ConversationTurn';
 import { shortConversationId } from './formatting';
 import type { AgentBadgePresence, AgentBadgeProfile } from './AgentBadge';
 import { formatDateTime } from './formatting';
 import { useMentionHandoffCompose } from './useMentionHandoffCompose';
 import { MentionHandoffPreview } from './MentionHandoffCompose';
+import { drawerSelectionIssueMessage } from './conversationSelectionUi';
 
 type Conversation = {
   id: string;
@@ -53,6 +55,13 @@ export function CommandAiFab({ onClick, open }: { onClick: () => void; open: boo
 }
 
 export function CommandAiPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const {
+    conversationId: bridgeConversationId,
+    drawerIssue,
+    applySelection,
+    clearSelection,
+    conversationsOpenPath,
+  } = useConversationSelection();
   const [view, setView] = useState<PanelView>('home');
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selected, setSelected] = useState<Conversation | null>(null);
@@ -120,37 +129,62 @@ export function CommandAiPanel({ open, onClose }: { open: boolean; onClose: () =
     return freeform;
   }, []);
 
-  const openThread = useCallback(async (conversation: Conversation) => {
-    const requestId = ++threadRequestRef.current;
-    setSelected(conversation);
-    setView('thread');
-    setError('');
-    const page = await api<Page<Message>>(
-      `/agent-conversations/${conversation.id}/messages?limit=50&direction=before`,
-    );
-    if (requestId !== threadRequestRef.current) return;
-    setMessages(page.items);
-  }, []);
+  const openThread = useCallback(
+    async (conversation: Conversation, options?: { fromBridge?: boolean }) => {
+      const requestId = ++threadRequestRef.current;
+      if (!options?.fromBridge) {
+        applySelection(conversation.id, 'drawer', {
+          scopeType: conversation.scope.type,
+          state: conversation.state,
+        });
+      }
+      setSelected(conversation);
+      setView('thread');
+      setError('');
+      const page = await api<Page<Message>>(
+        `/agent-conversations/${conversation.id}/messages?limit=50&direction=before`,
+      );
+      if (requestId !== threadRequestRef.current) return;
+      setMessages(page.items);
+    },
+    [applySelection],
+  );
 
   const refresh = useCallback(async () => {
     try {
       await loadAgents();
-      const items = await loadConversations();
-      const current = selectedRef.current;
-      if (current) {
-        const match = items.find((item) => item.id === current.id);
-        if (match) await openThread(match);
-      }
+      await loadConversations();
       setError('');
     } catch (problem) {
       setError((problem as Error).message);
     }
-  }, [loadAgents, loadConversations, openThread]);
+  }, [loadAgents, loadConversations]);
 
   useEffect(() => {
     if (!open) return;
     void refresh();
   }, [open, refresh]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (drawerIssue && bridgeConversationId) {
+      if (selectedRef.current) {
+        selectedRef.current = null;
+        threadRequestRef.current += 1;
+        setSelected(null);
+        setMessages([]);
+      }
+      setView('thread');
+      return;
+    }
+    if (!bridgeConversationId) {
+      if (view === 'thread' && !selectedRef.current) setView('home');
+      return;
+    }
+    if (selectedRef.current?.id === bridgeConversationId) return;
+    const match = conversations.find((item) => item.id === bridgeConversationId);
+    if (match) void openThread(match, { fromBridge: true });
+  }, [open, drawerIssue, bridgeConversationId, conversations, openThread, view]);
 
   useEffect(() => {
     if (view === 'thread') {
@@ -159,6 +193,7 @@ export function CommandAiPanel({ open, onClose }: { open: boolean; onClose: () =
   }, [messages, view]);
 
   const startNew = () => {
+    clearSelection('drawer');
     selectedRef.current = null;
     threadRequestRef.current += 1;
     setSelected(null);
@@ -189,6 +224,10 @@ export function CommandAiPanel({ open, onClose }: { open: boolean; onClose: () =
         conversation = await send<Conversation>('/agent-conversations', 'POST', {
           title: deriveTitle(trimmed),
           scope: { type: 'freeform' },
+        });
+        applySelection(conversation.id, 'drawer', {
+          scopeType: conversation.scope.type,
+          state: conversation.state,
         });
         setSelected(conversation);
         setView('thread');
@@ -310,7 +349,23 @@ export function CommandAiPanel({ open, onClose }: { open: boolean; onClose: () =
           </section>
         )}
 
-        {view === 'thread' && selected && (
+        {view === 'thread' && drawerIssue && bridgeConversationId && (
+          <section
+            className="command-ai-thread command-ai-selection-issue"
+            aria-label="Selected conversation unavailable in Command AI"
+          >
+            <div className="command-ai-welcome">
+              <MessageSquare aria-hidden="true" />
+              <h3>Selected thread unavailable here</h3>
+              <p>{drawerSelectionIssueMessage(drawerIssue)}</p>
+              <Link className="primary-btn" to={conversationsOpenPath(bridgeConversationId)}>
+                Open full view
+              </Link>
+            </div>
+          </section>
+        )}
+
+        {view === 'thread' && selected && !drawerIssue && (
           <section className="command-ai-thread" aria-label={selected.title}>
             <div className="command-ai-thread-head">
               <button type="button" className="text-btn" onClick={() => startNew()}>
@@ -319,9 +374,7 @@ export function CommandAiPanel({ open, onClose }: { open: boolean; onClose: () =
               <h3>{selected.title}</h3>
               <p className="field-hint">
                 Conversation {shortConversationId(selected.id)} ·{' '}
-                <Link to={`/agents/conversations?open=${encodeURIComponent(selected.id)}`}>
-                  Open full view
-                </Link>
+                <Link to={conversationsOpenPath(selected.id)}>Open full view</Link>
               </p>
             </div>
             <div className="command-ai-messages">

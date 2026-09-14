@@ -1,5 +1,6 @@
 import { act } from '@testing-library/react';
 import { AgentHubTipsContext } from './components/AgentHubTipsContext';
+import { ConversationSelectionProvider } from './components/ConversationSelectionProvider';
 import { ConversationsView } from './components/ConversationsView';
 import type { AgentHubTipPayload } from '../../shared/agent-hub-sse';
 import {
@@ -14,6 +15,14 @@ import {
   waitFor,
   vi,
 } from './App.test-setup';
+
+function renderConversations(ui: React.ReactElement, initialEntry = '/agents/conversations') {
+  return render(
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <ConversationSelectionProvider>{ui}</ConversationSelectionProvider>
+    </MemoryRouter>,
+  );
+}
 
 describe('ConversationsView', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -67,11 +76,7 @@ describe('ConversationsView', () => {
         JSON.stringify({ items: [conversation], nextCursor: null, hasMore: false }),
       );
     });
-    render(
-      <MemoryRouter>
-        <ConversationsView flash={vi.fn()} />
-      </MemoryRouter>,
-    );
+    renderConversations(<ConversationsView flash={vi.fn()} />);
     expect(await screen.findByText('Review')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: /Review/ }));
     expect(await screen.findByText('Hello')).toBeVisible();
@@ -105,10 +110,9 @@ describe('ConversationsView', () => {
           ),
       );
 
-    render(
-      <MemoryRouter initialEntries={['/agents/conversations?scopeType=task&scopeId=task%201']}>
-        <ConversationsView flash={vi.fn()} />
-      </MemoryRouter>,
+    renderConversations(
+      <ConversationsView flash={vi.fn()} />,
+      '/agents/conversations?scopeType=task&scopeId=task%201',
     );
 
     expect(await screen.findByText(/Showing task discussion/)).toBeVisible();
@@ -173,11 +177,7 @@ describe('ConversationsView', () => {
       return new Response(JSON.stringify({ items: [current], nextCursor: null, hasMore: false }));
     });
 
-    render(
-      <MemoryRouter>
-        <ConversationsView flash={vi.fn()} />
-      </MemoryRouter>,
-    );
+    renderConversations(<ConversationsView flash={vi.fn()} />);
     fireEvent.click(await screen.findByRole('button', { name: /Decision thread/ }));
     fireEvent.change(screen.getByLabelText('Decision outcome'), {
       target: { value: '  Use the approved plan.  ' },
@@ -262,12 +262,10 @@ describe('ConversationsView', () => {
       );
     });
 
-    render(
-      <MemoryRouter>
-        <AgentHubTipsContext.Provider value={subscribe}>
-          <ConversationsView flash={vi.fn()} liveTipsEnabled />
-        </AgentHubTipsContext.Provider>
-      </MemoryRouter>,
+    renderConversations(
+      <AgentHubTipsContext.Provider value={subscribe}>
+        <ConversationsView flash={vi.fn()} liveTipsEnabled />
+      </AgentHubTipsContext.Provider>,
     );
     fireEvent.click(await screen.findByRole('button', { name: /Live thread/ }));
     expect(await screen.findByText('First')).toBeVisible();
