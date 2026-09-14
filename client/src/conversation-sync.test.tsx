@@ -1,8 +1,6 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+﻿import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
-import type { AgentHubTipPayload } from '../../shared/agent-hub-sse';
-import { AgentHubTipsContext } from './components/AgentHubTipsContext';
 import { CommandAiPanel } from './components/CommandAiPanel';
 import { ConversationSelectionProvider } from './components/ConversationSelectionProvider';
 import { ConversationsView } from './components/ConversationsView';
@@ -16,34 +14,24 @@ const json = (body: unknown, status = 200) =>
 function ConversationsWithDrawer({
   initialEntry = '/agents/conversations',
   drawerOpen = true,
-  liveTipsEnabled = false,
-  subscribeTips = null,
 }: {
   initialEntry?: string;
   drawerOpen?: boolean;
-  liveTipsEnabled?: boolean;
-  subscribeTips?: ((listener: (tip: AgentHubTipPayload) => void) => () => void) | null;
 }) {
   return (
     <MemoryRouter initialEntries={[initialEntry]}>
       <ConversationSelectionProvider>
-        <AgentHubTipsContext.Provider value={subscribeTips}>
-          <Routes>
-            <Route
-              path="/agents/conversations"
-              element={
-                <>
-                  <ConversationsView flash={vi.fn()} liveTipsEnabled={liveTipsEnabled} />
-                  <CommandAiPanel
-                    open={drawerOpen}
-                    onClose={() => undefined}
-                    liveTipsEnabled={liveTipsEnabled}
-                  />
-                </>
-              }
-            />
-          </Routes>
-        </AgentHubTipsContext.Provider>
+        <Routes>
+          <Route
+            path="/agents/conversations"
+            element={
+              <>
+                <ConversationsView flash={vi.fn()} />
+                <CommandAiPanel open={drawerOpen} onClose={() => undefined} />
+              </>
+            }
+          />
+        </Routes>
       </ConversationSelectionProvider>
     </MemoryRouter>
   );
@@ -233,77 +221,5 @@ describe('conversation drawer and full-view sync', () => {
       'href',
       '/agents/conversations?open=conv-scoped',
     );
-  });
-
-  it('rereads the selected thread in both surfaces after a matching live tip', async () => {
-    const firstMessage = {
-      id: 'm-a',
-      senderLabel: 'operator',
-      sentAt: '2026-09-10T12:00:01.000Z',
-      body: 'Message A',
-      provenance: 'VERIFIED' as const,
-    };
-    const secondMessage = { ...firstMessage, id: 'm-a2', body: 'Reply A' };
-    let messageReads = 0;
-    let emitTip: ((tip: AgentHubTipPayload) => void) | null = null;
-    const subscribe = (listener: (tip: AgentHubTipPayload) => void) => {
-      emitTip = listener;
-      return () => {
-        emitTip = null;
-      };
-    };
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
-      const url = String(input);
-      if (url.includes('/agents/directory')) return json({ agents: [] });
-      if (url.includes('/agents/presence')) return json({ presence: [] });
-      if (url.includes('/agent-summaries')) return json({ summaries: [] });
-      if (url.includes('/agent-conversations?')) {
-        return json({
-          items: [
-            freeformConversation('conv-a', 'Thread A'),
-            freeformConversation('conv-b', 'Thread B'),
-          ],
-          nextCursor: null,
-          hasMore: false,
-        });
-      }
-      if (url.includes('/agent-conversations/conv-a/messages')) {
-        messageReads += 1;
-        return json({
-          items: [messageReads > 1 ? secondMessage : firstMessage],
-          nextCursor: null,
-          hasMore: false,
-        });
-      }
-      if (url.includes('/agent-conversations/conv-b/messages')) {
-        return json({ items: [], nextCursor: null, hasMore: false });
-      }
-      throw new Error(`Unexpected request: ${url}`);
-    });
-
-    render(
-      <ConversationsWithDrawer
-        initialEntry="/agents/conversations?open=conv-a"
-        liveTipsEnabled
-        subscribeTips={subscribe}
-      />,
-    );
-
-    expect((await screen.findAllByText('Message A')).length).toBeGreaterThanOrEqual(2);
-    const drawer = screen.getByRole('complementary', { name: 'Command AI' });
-
-    act(() => {
-      emitTip?.({ feeds: ['conversations'], conversationId: 'conv-b' });
-    });
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 350));
-    });
-    expect(screen.queryByText('Reply A')).not.toBeInTheDocument();
-    expect(within(drawer).getByRole('heading', { level: 3, name: 'Thread A' })).toBeVisible();
-
-    act(() => {
-      emitTip?.({ feeds: ['conversations'], conversationId: 'conv-a' });
-    });
-    expect((await screen.findAllByText('Reply A')).length).toBeGreaterThanOrEqual(2);
   });
 });
