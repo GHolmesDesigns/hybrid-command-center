@@ -249,8 +249,8 @@ export function ConversationsView({
         </p>
       )}
       <div className="split-layout">
-        <section className="card" aria-label="Conversation list">
-          <div className="card-head">
+        <section className="card conversation-list-card" aria-label="Conversation list">
+          <div className="card-head conversation-list-head">
             <h2>
               <MessageSquare /> Threads
             </h2>
@@ -301,8 +301,8 @@ export function ConversationsView({
           })}
         </section>
         {selected && (
-          <section className="card" aria-label="Conversation detail">
-            <div className="card-head">
+          <section className="card conversation-detail-card" aria-label="Conversation detail">
+            <div className="card-head conversation-detail-head">
               <div>
                 <h2>{selected.title}</h2>
                 <p>
