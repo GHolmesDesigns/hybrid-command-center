@@ -1,5 +1,17 @@
 # Changelog
 
+## [6.9.10] - 2026-09-14
+
+### Changed
+
+- Align Signal Client, Project, and Campaign filtering with the shared multi-select control used by Kanban and Tasks.
+- Add Escape and outside-click dismissal with focus returning to the filter summary, while keeping Signal filter dimensions URL-durable and search transient.
+- Keep Unbound client and No campaign available even when there are no named options.
+
+### Breaking changes
+
+None.
+
 ## [6.9.9] - 2026-09-14
 
 ### Changed
