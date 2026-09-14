@@ -1,5 +1,15 @@
 # Changelog
 
+## [6.10.0] - 2026-09-14
+
+## Added
+
+- A shared conversation selection bridge that keeps one selected conversation id observable across the Command AI drawer and full Conversations page, with explicit selection sources and loop protection.
+- Fail-closed drawer states for missing, scoped, and archived threads so an unsupported selection is explained rather than replaced with another thread.
+
+## Breaking changes
+
+None.
 ## [6.9.10] - 2026-09-14
 
 ### Changed
