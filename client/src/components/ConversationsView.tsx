@@ -276,8 +276,14 @@ export function ConversationsView({
       <PageHead
         eyebrow="Agents"
         title="Conversations"
-        body="Review and respond to agent threads with frozen message provenance."
+        body="One conversation at a time across this page and the Command AI drawer. Freeform threads stay in sync; scoped discussions open here only."
       />
+      <p className="field-hint">
+        The Command AI drawer and this page are synchronized views, not two separate clients.
+        Selecting a freeform thread here updates the drawer when it is open, and vice versa.{' '}
+        <strong>Open full view</strong> in the drawer lands on the same thread. @mentions open
+        handoffs only after you check them in the confirm preview.
+      </p>
       {scopeType && scopeId && (
         <p className="field-hint">
           Showing {scopeType} discussion for <code>{scopeId}</code>.{' '}

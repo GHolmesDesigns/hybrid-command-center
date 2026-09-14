@@ -2214,8 +2214,9 @@ http://localhost:8787</code></pre>
                 <h4>Agents <span class="rw">READ / CONTROL</span></h4>
                 <p>
                   Set up local or hosted MCP connections, issue scoped credentials, verify
-                  connection health, review handoffs and leased work sessions, and approve or deny
-                  agent-requested Drive writes and publish confirmations.
+                  connection health, review handoffs and leased work sessions, hold Conversations
+                  with agents, and approve or deny agent-requested Drive writes and publish
+                  confirmations. Command AI is the synchronized drawer for active freeform threads.
                 </p>
               </div>
               <div class="mod">
@@ -2717,6 +2718,42 @@ http://localhost:8787</code></pre>
             <p>
               Restarting one client does not affect the others, and a failed connection never harms
               your records &mdash; the board is read from the same database the app uses.
+            </p>
+
+            <h4>Conversations and Command AI</h4>
+            <p>
+              <strong>Conversations</strong> is the full-page view of agent threads: every scope
+              (freeform, client, project, task), archive, decision marks, linked handoffs, and
+              reloadable deep links such as <code>/agents/conversations?open=&lt;id&gt;</code>. Open
+              it from <strong>Agents</strong> &rarr; <strong>Open Conversations</strong>.
+            </p>
+            <p>
+              <strong>Command AI</strong> is the drawer that stays open while you work elsewhere.
+              It lists <strong>active freeform threads only</strong> and is meant as a convenient
+              side panel, not a second chat client.
+            </p>
+            <p>
+              The drawer and full page are <strong>synchronized views of one conversation</strong>,
+              not two independent clients. When both are open, selecting a freeform thread in either
+              surface selects the same thread in the other. <strong>Open full view</strong>
+              navigates to the Conversations page and preserves the thread you had selected in the
+              drawer. Sending from either surface appends to the same thread; nothing is
+              duplicated. The browser address bar <code>?open=</code> link is the reloadable record
+              of which thread the full page shows.
+            </p>
+            <p>
+              When the drawer cannot represent your current selection, it shows a short explanation
+              and an <strong>Open full view</strong> link rather than substituting a different
+              thread. That happens for scoped project, client, or task discussions; for archived
+              threads while the drawer lists active threads only; and when a conversation cannot be
+              found or you lack access.
+            </p>
+            <p>
+              Type <code>@agent-label</code> in either composer to mention a registered agent.
+              Before you send, a <strong>Confirm handoffs</strong> preview appears: only
+              <strong>checked</strong> mentions open handoffs. Unchecked mentions are still sent
+              as plain text in the message. Each confirmed mention creates one linked handoff on
+              the Agents board &mdash; nothing is posted silently.
             </p>
 
             <h4>Reading the board: Agents &rarr; Agent handoffs</h4>

@@ -1259,7 +1259,8 @@ on Files or **Open Drive** on a project to manage files themselves in Google Dri
 
 ### Agents
 
-**Agents** is where you connect IDE assistants to this Command Center and watch their handoffs:
+**Agents** is where you connect IDE assistants to this Command Center, hold Conversations with
+them, and watch their handoffs:
 
 - **Agent connection setup** — register an agent label, issue or rotate a scoped credential, follow
   numbered steps for Cursor, Claude, or Codex, and copy a ready-to-paste HTTPS setup into that
@@ -1269,6 +1270,36 @@ on Files or **Open Drive** on a project to manage files themselves in Google Dri
 - **Agent handoffs** — open and claimed items, completed and cancelled from the last seven days,
   notes on a handoff, and operator cancel with a required reason. Agents post and claim through MCP;
   this panel does not create handoffs.
+
+#### Conversations and Command AI
+
+**Conversations** is the full-page view of agent threads: every scope (freeform, client, project,
+task), archive, decision marks, linked handoffs, and reloadable deep links such as
+`/agents/conversations?open=<id>`. Open it from **Agents** → **Open Conversations**.
+
+**Command AI** is the drawer that stays open while you work elsewhere. It lists **active freeform
+threads only** and is meant as a convenient side panel, not a second chat client.
+
+The drawer and full page are **synchronized views of one conversation**, not two independent
+clients:
+
+- When both are open, selecting a freeform thread in either surface selects the same thread in the
+  other.
+- **Open full view** navigates to the Conversations page and preserves the thread you had selected
+  in the drawer.
+- Sending from either surface appends to the same thread; nothing is duplicated.
+- The browser address bar `?open=` link is the reloadable record of which thread the full page
+  shows.
+
+When the drawer cannot represent your current selection, it shows a short explanation and an **Open
+full view** link rather than substituting a different thread. That happens for scoped project,
+client, or task discussions; for archived threads while the drawer lists active threads only; and
+when a conversation cannot be found or you lack access.
+
+Type `@agent-label` in either composer to mention a registered agent. Before you send, a **Confirm
+handoffs** preview appears: only **checked** mentions open handoffs. Unchecked mentions are still
+sent as plain text in the message. Each confirmed mention creates one linked handoff on the Agents
+board — nothing is posted silently.
 
 ## 9. Deadlines and timezones
 
