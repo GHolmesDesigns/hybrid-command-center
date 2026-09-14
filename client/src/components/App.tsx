@@ -61,6 +61,7 @@ import { TasksView } from './TasksView';
 import { HealthView } from './HealthView';
 import { ConversationsView } from './ConversationsView';
 import { CommandAiFab, CommandAiPanel, CommandAiTopbarToggle } from './CommandAiPanel';
+import { ConversationSelectionProvider } from './ConversationSelectionProvider';
 import { TaskDetail } from './TaskDetail';
 import { PageHead } from './Shell';
 import { Nav } from './Shell';
@@ -363,295 +364,302 @@ export function App() {
     );
   return (
     <AgentHubTipsContext.Provider value={liveTips.enabled ? subscribeAgentHubTips : null}>
-      <div
-        className={`app-shell ${collapsed ? 'sidebar-collapsed' : ''} ${commandAiOpen ? 'command-ai-open' : ''}`}
-      >
-        <aside
-          className={`sidebar ${navOpen ? 'open' : ''} ${collapsed ? 'collapsed' : ''}`}
-          style={brandStyle(branding)}
+      <ConversationSelectionProvider>
+        <div
+          className={`app-shell ${collapsed ? 'sidebar-collapsed' : ''} ${commandAiOpen ? 'command-ai-open' : ''}`}
         >
-          <div className="brand">
-            <BrandMark branding={branding} />
-            <div className="brand-copy">
-              <strong>{branding.title}</strong>
-              <span>{branding.subtitle}</span>
-            </div>
-            <button
-              className="icon-btn mobile-close"
-              onClick={() => setNavOpen(false)}
-              aria-label="Close navigation"
-            >
-              <X />
-            </button>
-          </div>
-          <nav aria-label="Primary navigation">
-            <Nav icon={<LayoutDashboard />} to="/" label="Dashboard" collapsed={collapsed} />
-            <Nav icon={<Users />} to="/clients" label="Clients" collapsed={collapsed} />
-            <Nav
-              icon={<BriefcaseBusiness />}
-              to="/projects"
-              label="Projects"
-              collapsed={collapsed}
-            />
-            <Nav icon={<FolderKanban />} to="/status" label="Status" collapsed={collapsed} />
-            <Nav icon={<Timer />} to="/tasks" label="Tasks" collapsed={collapsed} />
-            <Nav icon={<Upload />} to="/import" label="Import" collapsed={collapsed} />
-            <Nav icon={<FileText />} to="/files" label="Files" collapsed={collapsed} />
-            <Nav icon={<CalendarDays />} to="/calendar" label="Calendar" collapsed={collapsed} />
-            <Nav icon={<Megaphone />} to="/signal" label="Signal" collapsed={collapsed} />
-            <Nav icon={<HeartPulse />} to="/health" label="Health" collapsed={collapsed} />
-            <Nav
-              icon={
-                <>
-                  <Bot />
-                  <Bell
-                    aria-label={
-                      unreadNotifications
-                        ? `${unreadNotifications} unread notifications`
-                        : 'Notifications'
-                    }
-                  />
-                </>
-              }
-              to="/agents"
-              label="Agents"
-              collapsed={collapsed}
-            />
-            <Nav icon={<Settings />} to="/settings" label="Settings" collapsed={collapsed} />
-          </nav>
-          <div className="sidebar-foot">
-            <button
-              className="collapse-btn"
-              onClick={toggleCollapse}
-              aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            >
-              {collapsed ? <PanelLeft /> : <PanelLeftClose />}
-              {!collapsed && <span>Collapse</span>}
-            </button>
-            <div className="version-track" title={`Hybrid Command Center ${APP_VERSION}`}>
-              <span className="connection-dot" />
-              {!collapsed && <span>Local · {branding.tagline}</span>}
-              <strong>v{APP_VERSION}</strong>
-            </div>
-          </div>
-        </aside>
-        {navOpen && (
-          <button
-            className="nav-scrim"
-            aria-label="Close navigation"
-            onClick={() => setNavOpen(false)}
-          />
-        )}
-        <main>
-          <header className="topbar">
-            <button
-              className="icon-btn menu-btn"
-              onClick={() => setNavOpen(true)}
-              aria-label="Open navigation"
-            >
-              <Menu />
-            </button>
-            <BreadcrumbTrail clients={clients} projects={projects} tasks={tasks} />
-            <div className="top-actions">
-              <TopbarStartTask modal={modal} tasks={tasks} projects={projects} clients={clients} />
+          <aside
+            className={`sidebar ${navOpen ? 'open' : ''} ${collapsed ? 'collapsed' : ''}`}
+            style={brandStyle(branding)}
+          >
+            <div className="brand">
+              <BrandMark branding={branding} />
+              <div className="brand-copy">
+                <strong>{branding.title}</strong>
+                <span>{branding.subtitle}</span>
+              </div>
               <button
-                className="top-action"
-                onClick={() => setModal({ type: 'task', projectId: defaultProject })}
+                className="icon-btn mobile-close"
+                onClick={() => setNavOpen(false)}
+                aria-label="Close navigation"
               >
-                <Plus /> New task
+                <X />
               </button>
-              <TopbarAddPost />
-              <CommandAiTopbarToggle
-                open={commandAiOpen}
-                onClick={() => setCommandAiOpen((value) => !value)}
-              />
             </div>
-          </header>
-          <div className="page-wrap">
-            <Routes>
-              <Route
-                path="/"
-                element={
-                  <Dashboard
-                    dashboard={dashboard}
-                    refreshedAt={dashboardRefreshedAt}
-                    refreshError={dashboardRefreshError}
-                    refreshing={refreshing}
-                    open={open}
-                    defaultProject={defaultProject}
-                    refresh={refresh}
-                    flash={flash}
-                  />
+            <nav aria-label="Primary navigation">
+              <Nav icon={<LayoutDashboard />} to="/" label="Dashboard" collapsed={collapsed} />
+              <Nav icon={<Users />} to="/clients" label="Clients" collapsed={collapsed} />
+              <Nav
+                icon={<BriefcaseBusiness />}
+                to="/projects"
+                label="Projects"
+                collapsed={collapsed}
+              />
+              <Nav icon={<FolderKanban />} to="/status" label="Status" collapsed={collapsed} />
+              <Nav icon={<Timer />} to="/tasks" label="Tasks" collapsed={collapsed} />
+              <Nav icon={<Upload />} to="/import" label="Import" collapsed={collapsed} />
+              <Nav icon={<FileText />} to="/files" label="Files" collapsed={collapsed} />
+              <Nav icon={<CalendarDays />} to="/calendar" label="Calendar" collapsed={collapsed} />
+              <Nav icon={<Megaphone />} to="/signal" label="Signal" collapsed={collapsed} />
+              <Nav icon={<HeartPulse />} to="/health" label="Health" collapsed={collapsed} />
+              <Nav
+                icon={
+                  <>
+                    <Bot />
+                    <Bell
+                      aria-label={
+                        unreadNotifications
+                          ? `${unreadNotifications} unread notifications`
+                          : 'Notifications'
+                      }
+                    />
+                  </>
                 }
+                to="/agents"
+                label="Agents"
+                collapsed={collapsed}
               />
-              <Route
-                path="/clients"
-                element={
-                  <Clients
-                    clients={clients}
-                    projects={projects}
-                    viewDefaults={viewDefaults}
-                    open={open}
-                    refresh={refresh}
-                    flash={flash}
-                  />
-                }
-              />
-              <Route
-                path="/clients/:id"
-                element={
-                  <ClientDetail
-                    clients={clients}
-                    projects={projects}
-                    open={open}
-                    refresh={refresh}
-                    flash={flash}
-                  />
-                }
-              />
-              <Route
-                path="/projects"
-                element={
-                  <Projects
-                    projects={projects}
-                    updateProjects={setProjects}
-                    clients={clients}
-                    categories={categories}
-                    tasks={tasks}
-                    viewDefaults={viewDefaults}
-                    open={open}
-                    refresh={refresh}
-                    flash={flash}
-                  />
-                }
-              />
-              <Route
-                path="/projects/:id"
-                element={
-                  <ProjectDetail
-                    projects={projects}
-                    tasks={tasks}
-                    updateTasks={setTasks}
-                    open={open}
-                    remember={setLastProjectId}
-                    refresh={refresh}
-                    flash={flash}
-                  />
-                }
-              />
-              <Route
-                path="/status"
-                element={
-                  <Kanban
-                    tasks={tasks}
-                    updateTasks={setTasks}
-                    clients={clients}
-                    projects={projects}
-                    tags={tags}
-                    open={open}
-                    remember={setLastProjectId}
-                    refresh={refresh}
-                    flash={flash}
-                  />
-                }
-              />
-              {/* Bookmarks and older dashboard tiles still use /kanban; keep the query string. */}
-              <Route path="/kanban" element={<LegacyKanbanRedirect />} />
-              <Route
-                path="/tasks"
-                element={
-                  <TasksView tasks={tasks} clients={clients} projects={projects} tags={tags} />
-                }
-              />
-              <Route
-                path="/tasks/:taskId"
-                element={
-                  <TaskDetailRoute
-                    tasks={tasks}
-                    projects={projects}
-                    clients={clients}
-                    tags={tags}
-                    refresh={refresh}
-                    flash={flash}
-                    edit={(task) => setModal({ type: 'task', value: task })}
-                  />
-                }
-              />
-              <Route
-                path="/import"
-                element={
-                  <ImportView
-                    open={() => setModal({ type: 'import' })}
-                    openSignal={() => setModal({ type: 'signalImport' })}
-                    importedAt={importedAt}
-                  />
-                }
-              />
-              <Route
-                path="/files"
-                element={
-                  <FilesView
-                    projects={projects}
-                    defaultProject={defaultProject}
-                    remember={setLastProjectId}
-                  />
-                }
-              />
-              <Route path="/calendar" element={<CalendarView viewDefaults={viewDefaults} />} />
-              <Route path="/signal" element={<SignalView viewDefaults={viewDefaults} />} />
-              <Route path="/agents" element={<AgentsView tasks={tasks} flash={flash} />} />
-              <Route
-                path="/agents/conversations"
-                element={<ConversationsView flash={flash} liveTipsEnabled={liveTips.enabled} />}
-              />
-              <Route path="/health" element={<HealthView />} />
-              <Route
-                path="/settings"
-                element={
-                  <SettingsView
-                    branding={branding}
-                    viewDefaults={viewDefaults}
-                    liveTips={liveTips}
-                    onLiveTipsSaved={setLiveTips}
-                    tags={tags}
-                    tasks={tasks}
-                    categories={categories}
-                    projects={projects}
-                    clients={clients}
-                    refresh={refresh}
-                    flash={flash}
-                  />
-                }
-              />
-            </Routes>
-          </div>
-        </main>
-        {modal && (
-          <ModalHost
-            modal={modal}
-            clients={clients}
-            projects={projects}
-            tasks={tasks}
-            tags={tags}
-            categories={categories}
-            close={() => setModal(null)}
-            edit={(task) => setModal({ type: 'task', value: task })}
-            saved={saved}
-            imported={() => setImportedAt(Date.now())}
-            refresh={refresh}
-            flash={flash}
-          />
-        )}
-        <CommandAiPanel open={commandAiOpen} onClose={() => setCommandAiOpen(false)} />
-        <CommandAiFab open={commandAiOpen} onClick={() => setCommandAiOpen(true)} />
-        {notice && (
-          <div className={`toast ${notice.tone}`} role="status">
-            {notice.tone === 'success' ? <CheckCircle2 /> : <CircleAlert />}
-            {notice.text}
-          </div>
-        )}
-      </div>
+              <Nav icon={<Settings />} to="/settings" label="Settings" collapsed={collapsed} />
+            </nav>
+            <div className="sidebar-foot">
+              <button
+                className="collapse-btn"
+                onClick={toggleCollapse}
+                aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              >
+                {collapsed ? <PanelLeft /> : <PanelLeftClose />}
+                {!collapsed && <span>Collapse</span>}
+              </button>
+              <div className="version-track" title={`Hybrid Command Center ${APP_VERSION}`}>
+                <span className="connection-dot" />
+                {!collapsed && <span>Local · {branding.tagline}</span>}
+                <strong>v{APP_VERSION}</strong>
+              </div>
+            </div>
+          </aside>
+          {navOpen && (
+            <button
+              className="nav-scrim"
+              aria-label="Close navigation"
+              onClick={() => setNavOpen(false)}
+            />
+          )}
+          <main>
+            <header className="topbar">
+              <button
+                className="icon-btn menu-btn"
+                onClick={() => setNavOpen(true)}
+                aria-label="Open navigation"
+              >
+                <Menu />
+              </button>
+              <BreadcrumbTrail clients={clients} projects={projects} tasks={tasks} />
+              <div className="top-actions">
+                <TopbarStartTask
+                  modal={modal}
+                  tasks={tasks}
+                  projects={projects}
+                  clients={clients}
+                />
+                <button
+                  className="top-action"
+                  onClick={() => setModal({ type: 'task', projectId: defaultProject })}
+                >
+                  <Plus /> New task
+                </button>
+                <TopbarAddPost />
+                <CommandAiTopbarToggle
+                  open={commandAiOpen}
+                  onClick={() => setCommandAiOpen((value) => !value)}
+                />
+              </div>
+            </header>
+            <div className="page-wrap">
+              <Routes>
+                <Route
+                  path="/"
+                  element={
+                    <Dashboard
+                      dashboard={dashboard}
+                      refreshedAt={dashboardRefreshedAt}
+                      refreshError={dashboardRefreshError}
+                      refreshing={refreshing}
+                      open={open}
+                      defaultProject={defaultProject}
+                      refresh={refresh}
+                      flash={flash}
+                    />
+                  }
+                />
+                <Route
+                  path="/clients"
+                  element={
+                    <Clients
+                      clients={clients}
+                      projects={projects}
+                      viewDefaults={viewDefaults}
+                      open={open}
+                      refresh={refresh}
+                      flash={flash}
+                    />
+                  }
+                />
+                <Route
+                  path="/clients/:id"
+                  element={
+                    <ClientDetail
+                      clients={clients}
+                      projects={projects}
+                      open={open}
+                      refresh={refresh}
+                      flash={flash}
+                    />
+                  }
+                />
+                <Route
+                  path="/projects"
+                  element={
+                    <Projects
+                      projects={projects}
+                      updateProjects={setProjects}
+                      clients={clients}
+                      categories={categories}
+                      tasks={tasks}
+                      viewDefaults={viewDefaults}
+                      open={open}
+                      refresh={refresh}
+                      flash={flash}
+                    />
+                  }
+                />
+                <Route
+                  path="/projects/:id"
+                  element={
+                    <ProjectDetail
+                      projects={projects}
+                      tasks={tasks}
+                      updateTasks={setTasks}
+                      open={open}
+                      remember={setLastProjectId}
+                      refresh={refresh}
+                      flash={flash}
+                    />
+                  }
+                />
+                <Route
+                  path="/status"
+                  element={
+                    <Kanban
+                      tasks={tasks}
+                      updateTasks={setTasks}
+                      clients={clients}
+                      projects={projects}
+                      tags={tags}
+                      open={open}
+                      remember={setLastProjectId}
+                      refresh={refresh}
+                      flash={flash}
+                    />
+                  }
+                />
+                {/* Bookmarks and older dashboard tiles still use /kanban; keep the query string. */}
+                <Route path="/kanban" element={<LegacyKanbanRedirect />} />
+                <Route
+                  path="/tasks"
+                  element={
+                    <TasksView tasks={tasks} clients={clients} projects={projects} tags={tags} />
+                  }
+                />
+                <Route
+                  path="/tasks/:taskId"
+                  element={
+                    <TaskDetailRoute
+                      tasks={tasks}
+                      projects={projects}
+                      clients={clients}
+                      tags={tags}
+                      refresh={refresh}
+                      flash={flash}
+                      edit={(task) => setModal({ type: 'task', value: task })}
+                    />
+                  }
+                />
+                <Route
+                  path="/import"
+                  element={
+                    <ImportView
+                      open={() => setModal({ type: 'import' })}
+                      openSignal={() => setModal({ type: 'signalImport' })}
+                      importedAt={importedAt}
+                    />
+                  }
+                />
+                <Route
+                  path="/files"
+                  element={
+                    <FilesView
+                      projects={projects}
+                      defaultProject={defaultProject}
+                      remember={setLastProjectId}
+                    />
+                  }
+                />
+                <Route path="/calendar" element={<CalendarView viewDefaults={viewDefaults} />} />
+                <Route path="/signal" element={<SignalView viewDefaults={viewDefaults} />} />
+                <Route path="/agents" element={<AgentsView tasks={tasks} flash={flash} />} />
+                <Route
+                  path="/agents/conversations"
+                  element={<ConversationsView flash={flash} liveTipsEnabled={liveTips.enabled} />}
+                />
+                <Route path="/health" element={<HealthView />} />
+                <Route
+                  path="/settings"
+                  element={
+                    <SettingsView
+                      branding={branding}
+                      viewDefaults={viewDefaults}
+                      liveTips={liveTips}
+                      onLiveTipsSaved={setLiveTips}
+                      tags={tags}
+                      tasks={tasks}
+                      categories={categories}
+                      projects={projects}
+                      clients={clients}
+                      refresh={refresh}
+                      flash={flash}
+                    />
+                  }
+                />
+              </Routes>
+            </div>
+          </main>
+          {modal && (
+            <ModalHost
+              modal={modal}
+              clients={clients}
+              projects={projects}
+              tasks={tasks}
+              tags={tags}
+              categories={categories}
+              close={() => setModal(null)}
+              edit={(task) => setModal({ type: 'task', value: task })}
+              saved={saved}
+              imported={() => setImportedAt(Date.now())}
+              refresh={refresh}
+              flash={flash}
+            />
+          )}
+          <CommandAiPanel open={commandAiOpen} onClose={() => setCommandAiOpen(false)} />
+          <CommandAiFab open={commandAiOpen} onClick={() => setCommandAiOpen(true)} />
+          {notice && (
+            <div className={`toast ${notice.tone}`} role="status">
+              {notice.tone === 'success' ? <CheckCircle2 /> : <CircleAlert />}
+              {notice.text}
+            </div>
+          )}
+        </div>
+      </ConversationSelectionProvider>
     </AgentHubTipsContext.Provider>
   );
 }
