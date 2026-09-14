@@ -6,6 +6,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Archive, ArrowDown, CheckCircle2, MessageSquare, Send } from 'lucide-react';
 import type { MessageLinkedHandoff } from '../../../shared/agent-conversations';
 import { api, send } from '../api';
+import { useConversationSelection } from '../useConversationSelection';
+import { fullViewSelectionIssueMessage } from './conversationSelectionUi';
 import { PageHead } from './Shell';
 import { MentionHandoffPreview } from './MentionHandoffCompose';
 import { useMentionHandoffCompose } from './useMentionHandoffCompose';
@@ -57,6 +59,13 @@ export function ConversationsView({
   liveTipsEnabled?: boolean;
 }) {
   const [searchParams] = useSearchParams();
+  const {
+    conversationId: openConversationId,
+    fullViewIssue,
+    applySelection,
+    registerHint,
+    clearSelection,
+  } = useConversationSelection();
   const requestedScopeType = searchParams.get('scopeType');
   const scopeType =
     requestedScopeType === 'client' ||
@@ -65,7 +74,6 @@ export function ConversationsView({
       ? requestedScopeType
       : null;
   const scopeId = scopeType ? searchParams.get('scopeId')?.trim() || null : null;
-  const openConversationId = searchParams.get('open')?.trim() || null;
   const scopeQuery =
     scopeType && scopeId ? `&scopeType=${scopeType}&scopeId=${encodeURIComponent(scopeId)}` : '';
   const [filter, setFilter] = useState<ConversationFilter>('ACTIVE');
@@ -86,13 +94,16 @@ export function ConversationsView({
         `/agent-conversations?${filter === 'DECISIONS' ? 'isDecision=true' : `state=${filter}`}${scopeQuery}`,
       );
       setConversations(page.items);
+      for (const item of page.items) {
+        registerHint(item.id, { scopeType: item.scope.type, state: item.state });
+      }
       setSelected((current) =>
         current ? (page.items.find((item) => item.id === current.id) ?? null) : null,
       );
     } catch (error) {
       flash((error as Error).message, 'error');
     }
-  }, [filter, flash, scopeQuery]);
+  }, [filter, flash, registerHint, scopeQuery]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -140,6 +151,10 @@ export function ConversationsView({
   }, []);
   const openedConversationRef = useRef<string | null>(null);
   const open = useCallback(async (conversation: Conversation) => {
+    registerHint(conversation.id, {
+      scopeType: conversation.scope.type,
+      state: conversation.state,
+    });
     setSelected(conversation);
     setDecisionOutcome(conversation.decisionOutcome ?? '');
     const page = await api<Page<Message>>(
@@ -147,7 +162,7 @@ export function ConversationsView({
     );
     setMessages(page.items);
     setOlder(page.nextCursor);
-  }, []);
+  }, [registerHint]);
   const selectedRef = useRef<Conversation | null>(null);
   useEffect(() => {
     selectedRef.current = selected;
@@ -201,14 +216,35 @@ export function ConversationsView({
     }
   };
   useEffect(() => {
-    if (!openConversationId || conversations.length === 0) return;
-    if (openedConversationRef.current === openConversationId) return;
+    if (!openConversationId) {
+      openedConversationRef.current = null;
+      return;
+    }
+    if (fullViewIssue === 'missing') {
+      openedConversationRef.current = openConversationId;
+      setSelected(null);
+      setMessages([]);
+      return;
+    }
+    if (conversations.length === 0) return;
+    if (openedConversationRef.current === openConversationId && selected?.id === openConversationId) {
+      return;
+    }
     const conversation = conversations.find((entry) => entry.id === openConversationId);
     if (conversation) {
       openedConversationRef.current = openConversationId;
       void open(conversation);
+      return;
     }
-  }, [openConversationId, conversations, open]);
+    registerHint(openConversationId, null);
+  }, [
+    openConversationId,
+    conversations,
+    fullViewIssue,
+    open,
+    registerHint,
+    selected?.id,
+  ]);
   const post = async () => {
     if (!selected || !body.trim()) return;
     const message = await send<Message>(`/agent-conversations/${selected.id}/messages`, 'POST', {
@@ -224,6 +260,7 @@ export function ConversationsView({
     if (!selected) return;
     if (!window.confirm('Archive this conversation?')) return;
     await send(`/agent-conversations/${selected.id}/archive`, 'POST');
+    clearSelection('full-view');
     setSelected(null);
     await load();
   };
@@ -275,7 +312,12 @@ export function ConversationsView({
                 <button
                   type="button"
                   className="conversation-open"
-                  onClick={() => void open(conversation)}
+                  onClick={() => {
+                    applySelection(conversation.id, 'full-view', {
+                      scopeType: conversation.scope.type,
+                      state: conversation.state,
+                    });
+                  }}
                 >
                   <strong>
                     {conversation.title}{' '}
@@ -300,6 +342,14 @@ export function ConversationsView({
             );
           })}
         </section>
+        {fullViewIssue === 'missing' && openConversationId && !selected && (
+          <section
+            className="card conversation-detail-card conversation-selection-issue"
+            aria-label="Conversation unavailable"
+          >
+            <p>{fullViewSelectionIssueMessage('missing')}</p>
+          </section>
+        )}
         {selected && (
           <section className="card conversation-detail-card" aria-label="Conversation detail">
             <div className="card-head conversation-detail-head">

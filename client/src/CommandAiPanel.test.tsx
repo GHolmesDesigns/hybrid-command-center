@@ -2,6 +2,15 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { CommandAiFab, CommandAiPanel, CommandAiTopbarToggle } from './components/CommandAiPanel';
+import { ConversationSelectionProvider } from './components/ConversationSelectionProvider';
+
+function renderPanel(ui: React.ReactElement) {
+  return render(
+    <MemoryRouter>
+      <ConversationSelectionProvider>{ui}</ConversationSelectionProvider>
+    </MemoryRouter>,
+  );
+}
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -61,11 +70,7 @@ describe('CommandAiPanel', () => {
       throw new Error(`Unexpected request: ${url}`);
     });
 
-    render(
-      <MemoryRouter>
-        <CommandAiPanel open onClose={() => undefined} />
-      </MemoryRouter>,
-    );
+    renderPanel(<CommandAiPanel open onClose={() => undefined} />);
 
     fireEvent.change(screen.getByLabelText('Command AI message'), {
       target: { value: 'Queue health question' },
@@ -132,11 +137,7 @@ describe('CommandAiPanel', () => {
       throw new Error(`Unexpected request: ${url} ${init?.method ?? 'GET'}`);
     });
 
-    render(
-      <MemoryRouter>
-        <CommandAiPanel open onClose={() => undefined} />
-      </MemoryRouter>,
-    );
+    renderPanel(<CommandAiPanel open onClose={() => undefined} />);
 
     expect(await screen.findByText('Prior inquiry')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'History' }));
@@ -182,11 +183,7 @@ describe('CommandAiPanel', () => {
       throw new Error(`Unexpected request: ${url}`);
     });
 
-    render(
-      <MemoryRouter>
-        <CommandAiPanel open onClose={() => undefined} />
-      </MemoryRouter>,
-    );
+    renderPanel(<CommandAiPanel open onClose={() => undefined} />);
 
     fireEvent.change(screen.getByLabelText('Command AI message'), {
       target: { value: 'Fresh question' },
@@ -212,11 +209,7 @@ describe('CommandAiPanel', () => {
       throw new Error(`Unexpected request: ${url}`);
     });
 
-    render(
-      <MemoryRouter>
-        <CommandAiPanel open onClose={onClose} />
-      </MemoryRouter>,
-    );
+    renderPanel(<CommandAiPanel open onClose={onClose} />);
 
     await screen.findByText('What are you curious about?');
     fireEvent.click(screen.getByRole('button', { name: 'Close Command AI' }));
@@ -267,11 +260,7 @@ describe('CommandAiPanel', () => {
       throw new Error(`Unexpected request: ${url}`);
     });
 
-    render(
-      <MemoryRouter>
-        <CommandAiPanel open onClose={() => undefined} />
-      </MemoryRouter>,
-    );
+    renderPanel(<CommandAiPanel open onClose={() => undefined} />);
 
     fireEvent.click(await screen.findByRole('button', { name: /Loop thread/ }));
     expect(await screen.findByRole('heading', { level: 3, name: 'Loop thread' })).toBeVisible();
@@ -312,11 +301,7 @@ describe('CommandAiPanel', () => {
       throw new Error(`Unexpected request: ${url}`);
     });
 
-    render(
-      <MemoryRouter>
-        <CommandAiPanel open onClose={() => undefined} />
-      </MemoryRouter>,
-    );
+    renderPanel(<CommandAiPanel open onClose={() => undefined} />);
 
     fireEvent.click(await screen.findByRole('button', { name: /Recent thread/ }));
     expect(await screen.findByRole('heading', { level: 3, name: 'Recent thread' })).toBeVisible();
@@ -354,11 +339,7 @@ describe('CommandAiPanel', () => {
       throw new Error(`Unexpected request: ${url}`);
     });
 
-    render(
-      <MemoryRouter>
-        <CommandAiPanel open onClose={() => undefined} />
-      </MemoryRouter>,
-    );
+    renderPanel(<CommandAiPanel open onClose={() => undefined} />);
 
     fireEvent.click(await screen.findByRole('button', { name: /Stale thread/ }));
     expect(await screen.findByRole('heading', { level: 3, name: 'Stale thread' })).toBeVisible();
@@ -411,11 +392,7 @@ describe('CommandAiPanel', () => {
       throw new Error(`Unexpected request: ${url}`);
     });
 
-    render(
-      <MemoryRouter>
-        <CommandAiPanel open onClose={() => undefined} />
-      </MemoryRouter>,
-    );
+    renderPanel(<CommandAiPanel open onClose={() => undefined} />);
 
     expect(await screen.findByText('Thread 0')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'View all' }));

@@ -6650,6 +6650,15 @@ button.tag-chip.toggle.active {
   color: var(--muted);
   font-size: 13px;
 }
+.command-ai-selection-issue .command-ai-welcome {
+  padding-top: 12px;
+}
+.conversation-selection-issue {
+  display: grid;
+  align-content: center;
+  min-height: 220px;
+  color: var(--muted);
+}
 .command-ai-recent h4,
 .command-ai-history h3,
 .command-ai-thread-head h3 {
