@@ -1,5 +1,14 @@
 # Changelog
 
+## [6.10.4] - 2026-09-14
+
+## Added
+
+- End-to-end coverage for Wave 39 conversation synchronization: the Command AI drawer and full Conversations view share one selected freeform thread across selection, send, reload, browser history, missing IDs, and unsupported scoped threads.
+
+## Breaking changes
+
+None.
 ## [6.10.3] - 2026-09-14
 
 ## Added
