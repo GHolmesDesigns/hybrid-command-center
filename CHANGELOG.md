@@ -1,5 +1,15 @@
 # Changelog
 
+## [6.10.5] - 2026-09-14
+
+## Added
+
+- User manual and in-app help now explain that the Command AI drawer and Conversations full page are synchronized views of one thread, not two separate chat clients.
+- Help text covers **Open full view** preserving the selected thread, @mention handoffs opening only after confirmation, and the drawer explaining rather than substituting when it cannot represent a scoped, archived, or missing selection.
+
+## Breaking changes
+
+None.
 ## [6.10.4] - 2026-09-14
 
 ## Added
