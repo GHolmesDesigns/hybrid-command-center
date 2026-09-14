@@ -52,6 +52,14 @@ const openPlanner = async (entry = '/signal?month=2026-09') => {
 const filters = () => screen.getByRole('region', { name: 'Filter the planner' });
 const lastRequestTo = (segment: string) =>
   [...requests].reverse().find((request) => request.url.includes(segment));
+const filterSummary = (label: string) =>
+  within(filters()).getByRole('button', { name: new RegExp(`^${label}:`) });
+const selectFilterOption = (label: string, option: string) => {
+  const summary = filterSummary(label);
+  const details = summary.closest('details');
+  if (!details?.open) fireEvent.click(summary);
+  fireEvent.click(within(details!).getByRole('checkbox', { name: option }));
+};
 
 describe('the planner filter bar', () => {
   beforeEach(() => {
@@ -64,18 +72,15 @@ describe('the planner filter bar', () => {
   it('puts a client filter in the address and sends it to posts, queue, and card-delivery, with several read as or', async () => {
     await openPlanner();
 
-    fireEvent.click(within(filters()).getByRole('button', { name: 'Acme' }));
+    selectFilterOption('Client', 'Acme');
     await waitFor(() =>
       expect(lastRequestTo('/api/signal/posts?')?.url).toContain(`client=${acme.id}`),
     );
     expect(lastRequestTo('/api/signal/queue')?.url).toContain(`client=${acme.id}`);
     expect(lastRequestTo('/api/signal/card-delivery')?.url).toContain(`client=${acme.id}`);
-    expect(within(filters()).getByRole('button', { name: 'Acme' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    expect(filterSummary('Client')).toHaveAccessibleName('Client: Acme');
 
-    fireEvent.click(within(filters()).getByRole('button', { name: 'Brightline' }));
+    selectFilterOption('Client', 'Brightline');
     await waitFor(() =>
       expect(lastRequestTo('/api/signal/posts?')?.url).toContain(
         `client=${encodeURIComponent(`${acme.id},${brightline.id}`)}`,
@@ -83,7 +88,7 @@ describe('the planner filter bar', () => {
     );
 
     // Selecting it again takes it back out.
-    fireEvent.click(within(filters()).getByRole('button', { name: 'Acme' }));
+    selectFilterOption('Client', 'Acme');
     await waitFor(() =>
       expect(lastRequestTo('/api/signal/posts?')?.url).toContain(`client=${brightline.id}`),
     );
@@ -93,12 +98,12 @@ describe('the planner filter bar', () => {
   it('asks for unbound posts and unclassified posts by their reserved names', async () => {
     await openPlanner();
 
-    fireEvent.click(within(filters()).getByRole('button', { name: SIGNAL_CLIENT_UNBOUND_LABEL }));
+    selectFilterOption('Client', SIGNAL_CLIENT_UNBOUND_LABEL);
     await waitFor(() =>
       expect(lastRequestTo('/api/signal/posts?')?.url).toContain(`client=${SIGNAL_CLIENT_UNBOUND}`),
     );
 
-    fireEvent.click(within(filters()).getByRole('button', { name: SIGNAL_CAMPAIGN_NONE_LABEL }));
+    selectFilterOption('Campaign', SIGNAL_CAMPAIGN_NONE_LABEL);
     await waitFor(() =>
       expect(lastRequestTo('/api/signal/posts?')?.url).toContain(
         `campaign=${SIGNAL_CAMPAIGN_NONE}`,
@@ -109,12 +114,12 @@ describe('the planner filter bar', () => {
   it('filters by project and by campaign', async () => {
     await openPlanner();
 
-    fireEvent.click(within(filters()).getByRole('button', { name: 'Acme rollout' }));
+    selectFilterOption('Project', 'Acme rollout');
     await waitFor(() =>
       expect(lastRequestTo('/api/signal/posts?')?.url).toContain(`project=${acmeProject.id}`),
     );
 
-    fireEvent.click(within(filters()).getByRole('button', { name: 'Clarity Campaign' }));
+    selectFilterOption('Campaign', 'Clarity Campaign');
     await waitFor(() =>
       expect(lastRequestTo('/api/signal/posts?')?.url).toContain(`campaign=${clarity.id}`),
     );
@@ -135,10 +140,7 @@ describe('the planner filter bar', () => {
   it('clears every durable filter at once and leaves the planner’s month alone', async () => {
     await openPlanner(`/signal?month=2026-09&client=${acme.id}&campaign=${clarity.id}`);
 
-    expect(within(filters()).getByRole('button', { name: 'Acme' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    expect(filterSummary('Client')).toHaveAccessibleName('Client: Acme');
     fireEvent.click(within(filters()).getByRole('button', { name: 'Clear filters' }));
     await waitFor(() => expect(lastRequestTo('/api/signal/posts?')?.url).not.toContain('client='));
     expect(lastRequestTo('/api/signal/posts?')?.url).not.toContain('campaign=');
@@ -154,5 +156,45 @@ describe('the planner filter bar', () => {
       expect(screen.getByRole('heading', { name: 'October 2026' })).toBeInTheDocument(),
     );
     expect(lastRequestTo('/api/signal/posts?')?.url).toContain(`client=${acme.id}`);
+  });
+
+  it('dismisses open filters on Escape and outside pointer, returning focus to the summary', async () => {
+    await openPlanner();
+
+    const summary = filterSummary('Client');
+    fireEvent.click(summary);
+    const details = summary.closest('details')!;
+    expect(details.open).toBe(true);
+
+    fireEvent.keyDown(summary, { key: 'Escape' });
+    expect(details.open).toBe(false);
+    expect(document.activeElement).toBe(summary);
+
+    fireEvent.click(summary);
+    expect(details.open).toBe(true);
+    fireEvent.pointerDown(document.body);
+    expect(details.open).toBe(false);
+  });
+
+  it('always offers unbound client and no campaign, even when there are no named options', async () => {
+    testState.clientsPayload = [];
+    testState.projectsPayload = [];
+    testState.signalCampaignsPayload = [];
+    await openPlanner();
+
+    expect(filterSummary('Client')).toHaveAccessibleName('Client: All clients');
+    expect(filterSummary('Project')).toHaveAccessibleName('Project: All projects');
+    expect(filterSummary('Campaign')).toHaveAccessibleName('Campaign: All campaigns');
+
+    selectFilterOption('Client', SIGNAL_CLIENT_UNBOUND_LABEL);
+    await waitFor(() =>
+      expect(lastRequestTo('/api/signal/posts?')?.url).toContain(`client=${SIGNAL_CLIENT_UNBOUND}`),
+    );
+    selectFilterOption('Campaign', SIGNAL_CAMPAIGN_NONE_LABEL);
+    await waitFor(() =>
+      expect(lastRequestTo('/api/signal/posts?')?.url).toContain(
+        `campaign=${SIGNAL_CAMPAIGN_NONE}`,
+      ),
+    );
   });
 });

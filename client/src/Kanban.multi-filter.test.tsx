@@ -104,4 +104,17 @@ describe('Status board multi-select filters', () => {
     expect(location()).toBe('/status');
     expect(titles()).toEqual(['Urgent graphics', 'High legacy task', 'Medium graphics']);
   });
+
+  it('dismisses an open filter on Escape and returns focus to its summary', async () => {
+    await renderBoard();
+
+    const summary = screen.getByRole('button', { name: 'Priority: Any priority' });
+    fireEvent.click(summary);
+    const details = summary.closest('details')!;
+    expect(details.open).toBe(true);
+
+    fireEvent.keyDown(summary, { key: 'Escape' });
+    expect(details.open).toBe(false);
+    expect(document.activeElement).toBe(summary);
+  });
 });
