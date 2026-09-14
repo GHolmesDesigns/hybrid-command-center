@@ -150,19 +150,22 @@ export function ConversationsView({
       });
   }, []);
   const openedConversationRef = useRef<string | null>(null);
-  const open = useCallback(async (conversation: Conversation) => {
-    registerHint(conversation.id, {
-      scopeType: conversation.scope.type,
-      state: conversation.state,
-    });
-    setSelected(conversation);
-    setDecisionOutcome(conversation.decisionOutcome ?? '');
-    const page = await api<Page<Message>>(
-      `/agent-conversations/${conversation.id}/messages?limit=50&direction=before`,
-    );
-    setMessages(page.items);
-    setOlder(page.nextCursor);
-  }, [registerHint]);
+  const open = useCallback(
+    async (conversation: Conversation) => {
+      registerHint(conversation.id, {
+        scopeType: conversation.scope.type,
+        state: conversation.state,
+      });
+      setSelected(conversation);
+      setDecisionOutcome(conversation.decisionOutcome ?? '');
+      const page = await api<Page<Message>>(
+        `/agent-conversations/${conversation.id}/messages?limit=50&direction=before`,
+      );
+      setMessages(page.items);
+      setOlder(page.nextCursor);
+    },
+    [registerHint],
+  );
   const selectedRef = useRef<Conversation | null>(null);
   useEffect(() => {
     selectedRef.current = selected;
@@ -227,7 +230,10 @@ export function ConversationsView({
       return;
     }
     if (conversations.length === 0) return;
-    if (openedConversationRef.current === openConversationId && selected?.id === openConversationId) {
+    if (
+      openedConversationRef.current === openConversationId &&
+      selected?.id === openConversationId
+    ) {
       return;
     }
     const conversation = conversations.find((entry) => entry.id === openConversationId);
@@ -237,14 +243,7 @@ export function ConversationsView({
       return;
     }
     registerHint(openConversationId, null);
-  }, [
-    openConversationId,
-    conversations,
-    fullViewIssue,
-    open,
-    registerHint,
-    selected?.id,
-  ]);
+  }, [openConversationId, conversations, fullViewIssue, open, registerHint, selected?.id]);
   const post = async () => {
     if (!selected || !body.trim()) return;
     const message = await send<Message>(`/agent-conversations/${selected.id}/messages`, 'POST', {

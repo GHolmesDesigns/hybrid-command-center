@@ -16,10 +16,7 @@ import {
   vi,
 } from './App.test-setup';
 
-function renderConversations(
-  ui: React.ReactElement,
-  initialEntry = '/agents/conversations',
-) {
+function renderConversations(ui: React.ReactElement, initialEntry = '/agents/conversations') {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <ConversationSelectionProvider>{ui}</ConversationSelectionProvider>

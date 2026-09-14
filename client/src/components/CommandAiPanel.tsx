@@ -184,14 +184,7 @@ export function CommandAiPanel({ open, onClose }: { open: boolean; onClose: () =
     if (selectedRef.current?.id === bridgeConversationId) return;
     const match = conversations.find((item) => item.id === bridgeConversationId);
     if (match) void openThread(match, { fromBridge: true });
-  }, [
-    open,
-    drawerIssue,
-    bridgeConversationId,
-    conversations,
-    openThread,
-    view,
-  ]);
+  }, [open, drawerIssue, bridgeConversationId, conversations, openThread, view]);
 
   useEffect(() => {
     if (view === 'thread') {

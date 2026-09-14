@@ -100,9 +100,7 @@ describe('conversation drawer and full-view sync', () => {
       throw new Error(`Unexpected request: ${url}`);
     });
 
-    render(
-      <ConversationsWithDrawer initialEntry="/agents/conversations?open=conv-a" />,
-    );
+    render(<ConversationsWithDrawer initialEntry="/agents/conversations?open=conv-a" />);
 
     expect((await screen.findAllByText('Message A')).length).toBeGreaterThanOrEqual(1);
     const drawer = screen.getByRole('complementary', { name: 'Command AI' });
@@ -214,14 +212,10 @@ describe('conversation drawer and full-view sync', () => {
       throw new Error(`Unexpected request: ${url}`);
     });
 
-    render(
-      <ConversationsWithDrawer initialEntry="/agents/conversations?open=conv-scoped" />,
-    );
+    render(<ConversationsWithDrawer initialEntry="/agents/conversations?open=conv-scoped" />);
 
     expect(await screen.findByText('Project thread')).toBeVisible();
-    expect(
-      await screen.findByText(/Command AI shows active freeform threads only/i),
-    ).toBeVisible();
+    expect(await screen.findByText(/Command AI shows active freeform threads only/i)).toBeVisible();
     expect(screen.queryByRole('heading', { level: 3, name: 'Freeform thread' })).toBeNull();
     expect(screen.getByRole('link', { name: 'Open full view' })).toHaveAttribute(
       'href',
