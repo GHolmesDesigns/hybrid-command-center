@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Clock3, Lightbulb, MessageSquare, PlusSquare, Send, Sparkles, X } from 'lucide-react';
+import type { AgentHubTipPayload } from '../../../shared/agent-hub-sse';
 import { api, send } from '../api';
 import type { MessageLinkedHandoff } from '../../../shared/agent-conversations';
+import { useDebouncedAgentHubTip } from '../useAgentHubTips';
 import { useConversationSelection } from '../useConversationSelection';
+import { useAgentHubTipsSubscribe } from './AgentHubTipsContext';
 import { ConversationTurn } from './ConversationTurn';
 import { shortConversationId } from './formatting';
 import type { AgentBadgePresence, AgentBadgeProfile } from './AgentBadge';
@@ -54,7 +57,15 @@ export function CommandAiFab({ onClick, open }: { onClick: () => void; open: boo
   );
 }
 
-export function CommandAiPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function CommandAiPanel({
+  open,
+  onClose,
+  liveTipsEnabled = false,
+}: {
+  open: boolean;
+  onClose: () => void;
+  liveTipsEnabled?: boolean;
+}) {
   const {
     conversationId: bridgeConversationId,
     drawerIssue,
@@ -164,6 +175,23 @@ export function CommandAiPanel({ open, onClose }: { open: boolean; onClose: () =
     if (!open) return;
     void refresh();
   }, [open, refresh]);
+
+  const subscribeAgentHubTips = useAgentHubTipsSubscribe();
+  const handleConversationTip = useCallback(
+    (tip: AgentHubTipPayload) => {
+      void loadConversations();
+      const current = selectedRef.current;
+      if (!current) return;
+      if (tip.conversationId && tip.conversationId !== current.id) return;
+      void openThread(current, { fromBridge: true });
+    },
+    [loadConversations, openThread],
+  );
+  useDebouncedAgentHubTip(
+    liveTipsEnabled ? subscribeAgentHubTips : null,
+    'conversations',
+    handleConversationTip,
+  );
 
   useEffect(() => {
     if (!open) return;

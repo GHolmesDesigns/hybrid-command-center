@@ -650,7 +650,11 @@ export function App() {
               flash={flash}
             />
           )}
-          <CommandAiPanel open={commandAiOpen} onClose={() => setCommandAiOpen(false)} />
+          <CommandAiPanel
+            open={commandAiOpen}
+            onClose={() => setCommandAiOpen(false)}
+            liveTipsEnabled={liveTips.enabled}
+          />
           <CommandAiFab open={commandAiOpen} onClick={() => setCommandAiOpen(true)} />
           {notice && (
             <div className={`toast ${notice.tone}`} role="status">
