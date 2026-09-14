@@ -37,8 +37,7 @@ export function ConversationSelectionProvider({ children }: { children: ReactNod
   const hint = conversationId ? (hintsById[conversationId] ?? null) : null;
 
   useEffect(() => {
-    const enteredConversationsPage =
-      onConversationsPage && !wasOnConversationsPageRef.current;
+    const enteredConversationsPage = onConversationsPage && !wasOnConversationsPageRef.current;
     wasOnConversationsPageRef.current = onConversationsPage;
     if (!enteredConversationsPage) return;
     if (urlConversationId || !memoryConversationId) return;

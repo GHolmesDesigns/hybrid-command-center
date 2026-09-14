@@ -46,9 +46,7 @@ export function commandAiPageContextSubject(pathname: string): {
 }
 
 /** Human label from breadcrumb segments, omitting the Command Center root. */
-export function formatCommandAiPageContextLabel(
-  segments: readonly { label: string }[],
-): string {
+export function formatCommandAiPageContextLabel(segments: readonly { label: string }[]): string {
   const pageSegments = segments.slice(1);
   if (pageSegments.length === 0) {
     return segments[0]?.label ?? 'Current page';

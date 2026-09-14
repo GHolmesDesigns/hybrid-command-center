@@ -65,7 +65,11 @@ function renderRoutedPanel(
   return { ...result, getNavigate: () => navigateRef };
 }
 
-function NavigationCapture({ onReady }: { onReady: (navigate: ReturnType<typeof useNavigate>) => void }) {
+function NavigationCapture({
+  onReady,
+}: {
+  onReady: (navigate: ReturnType<typeof useNavigate>) => void;
+}) {
   const navigate = useNavigate();
   onReady(navigate);
   return null;
@@ -532,7 +536,8 @@ describe('CommandAiPanel', () => {
       if (url.includes('/agents/directory')) return json({ agents: [] });
       if (url.includes('/agents/presence')) return json({ presence: [] });
       if (url.includes('/agent-summaries')) return json({ summaries: [] });
-      if (url.includes('/agent-conversations?')) return json({ items: [], nextCursor: null, hasMore: false });
+      if (url.includes('/agent-conversations?'))
+        return json({ items: [], nextCursor: null, hasMore: false });
       throw new Error(`Unexpected request: ${url}`);
     });
 
@@ -543,7 +548,13 @@ describe('CommandAiPanel', () => {
         breadcrumbData={{
           clients: [],
           projects: [
-            { id: 'p1', name: 'Website Refresh', clientId: 'c1', clientName: 'Acme', status: 'ACTIVE' },
+            {
+              id: 'p1',
+              name: 'Website Refresh',
+              clientId: 'c1',
+              clientName: 'Acme',
+              status: 'ACTIVE',
+            },
           ],
         }}
       />,
@@ -554,7 +565,9 @@ describe('CommandAiPanel', () => {
     expect(screen.getByText(/Current page context:/)).toBeVisible();
     expect(screen.getByText(/Projects · Website Refresh/)).toBeVisible();
     expect(
-      screen.getByText(/Included with your next message only. Not saved to the thread unless you send./),
+      screen.getByText(
+        /Included with your next message only. Not saved to the thread unless you send./,
+      ),
     ).toBeVisible();
     expect(screen.queryByRole('article')).toBeNull();
   });
@@ -565,7 +578,8 @@ describe('CommandAiPanel', () => {
       if (url.includes('/agents/directory')) return json({ agents: [] });
       if (url.includes('/agents/presence')) return json({ presence: [] });
       if (url.includes('/agent-summaries')) return json({ summaries: [] });
-      if (url.includes('/agent-conversations?')) return json({ items: [], nextCursor: null, hasMore: false });
+      if (url.includes('/agent-conversations?'))
+        return json({ items: [], nextCursor: null, hasMore: false });
       throw new Error(`Unexpected request: ${url}`);
     });
 
@@ -619,7 +633,15 @@ describe('CommandAiPanel', () => {
         initialEntry: '/projects',
         breadcrumbData: {
           clients: [],
-          projects: [{ id: 'p1', name: 'Website Refresh', clientId: 'c1', clientName: 'Acme', status: 'ACTIVE' }],
+          projects: [
+            {
+              id: 'p1',
+              name: 'Website Refresh',
+              clientId: 'c1',
+              clientName: 'Acme',
+              status: 'ACTIVE',
+            },
+          ],
         },
       },
     );
