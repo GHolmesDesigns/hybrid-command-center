@@ -761,6 +761,71 @@ describe('CommandAiPanel', () => {
     expect(await screen.findByText('Scoped message')).toBeVisible();
   });
 
+  it('declines a scope-change prompt for the rest of the browser session', async () => {
+    sessionStorage.clear();
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/agents/directory')) return json({ agents: [] });
+      if (url.includes('/agents/presence')) return json({ presence: [] });
+      if (url.includes('/agent-summaries')) return json({ summaries: [] });
+      if (url.includes('/agent-conversations?')) {
+        return json({
+          items: [freeformConversation('conv-free', 'Freeform thread')],
+          nextCursor: null,
+          hasMore: false,
+        });
+      }
+      if (url.includes('/agent-conversations/conv-free/messages')) {
+        return json({ items: [], nextCursor: null, hasMore: false });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    function ScopePromptHarness() {
+      const [open, setOpen] = useState(false);
+      const { applySelection } = useConversationSelection();
+      useEffect(() => {
+        applySelection('conv-free', 'drawer', {
+          scopeType: 'freeform',
+          scopeId: null,
+          state: 'ACTIVE',
+        });
+        setOpen(true);
+      }, [applySelection]);
+      return (
+        <CommandAiPanel
+          open={open}
+          onClose={() => undefined}
+          breadcrumbData={{
+            clients: [],
+            projects: [
+              {
+                id: 'p1',
+                name: 'Website Refresh',
+                clientId: 'c1',
+                clientName: 'Acme',
+                status: 'ACTIVE',
+              },
+            ],
+          }}
+        />
+      );
+    }
+
+    render(
+      <MemoryRouter initialEntries={['/projects/p1']}>
+        <ConversationSelectionProvider>
+          <ScopePromptHarness />
+        </ConversationSelectionProvider>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByLabelText('Scope change prompt')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Keep current thread' }));
+    expect(screen.queryByLabelText('Scope change prompt')).toBeNull();
+    sessionStorage.clear();
+  });
+
   it('labels secondary scoped threads in the drawer', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = String(input);
