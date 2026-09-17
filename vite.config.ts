@@ -7,6 +7,11 @@ export default defineConfig({
   build: { outDir: '../dist/client', emptyOutDir: true },
   server: {
     port: 5173,
-    proxy: { '/api': `http://127.0.0.1:${process.env.API_PORT || '8787'}` },
+    proxy: {
+      '/api': {
+        target: `http://127.0.0.1:${process.env.API_PORT || '8787'}`,
+        ws: true,
+      },
+    },
   },
 });
