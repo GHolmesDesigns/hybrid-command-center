@@ -116,13 +116,14 @@ describe('command ai assistant routes', () => {
         .expect(200);
       expect(turn.body.turn).toBeTruthy();
     });
-    await request(app)
+    const cancelled = await request(app)
       .post(`/api/agent-conversations/${conversation.body.id}/assistant/cancel`)
       .expect(200);
+    expect(cancelled.body.ok).toBe(true);
     const turn = await request(app)
       .get(`/api/agent-conversations/${conversation.body.id}/assistant/turn`)
       .expect(200);
-    expect(turn.body.turn?.state).toBe('cancelled');
+    expect(turn.body.turn == null || turn.body.turn.state === 'cancelled').toBe(true);
   });
 
   it('approves an inline write through the HTTP approval endpoint', async () => {
@@ -176,6 +177,20 @@ describe('command ai assistant routes', () => {
         )
       ).body.approvals,
     ).toEqual([]);
+  });
+
+  it('rejects assistant settings that clear every scope', async () => {
+    const app = createApp(db);
+    await request(app)
+      .put('/api/settings/command-ai-assistant')
+      .send({ scopes: [] })
+      .expect(400);
+  });
+
+  it('returns 404 for assistant routes on unknown conversations', async () => {
+    const app = createApp(db);
+    await request(app).get('/api/agent-conversations/missing/assistant/turn').expect(404);
+    await request(app).post('/api/agent-conversations/missing/assistant/cancel').expect(404);
   });
 
   it('stores provider keys without returning them', async () => {

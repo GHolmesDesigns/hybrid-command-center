@@ -21,5 +21,7 @@ describe('assistant vs MCP permission matrix', () => {
   it('refuses tools outside granted scopes', () => {
     expect(assistantToolAvailable('settings_update_branding', ['workspace:read'])).toBe(false);
     expect(assistantToolAvailable('workspace_list_tasks', ['workspace:read'])).toBe(true);
+    expect(assistantToolAvailable('drive_request_write', ['workspace:read'])).toBe(false);
+    expect(assistantToolAvailable('drive_request_write', ['drive:write-request'])).toBe(true);
   });
 });
