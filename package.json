@@ -1,6 +1,6 @@
 {
   "name": "hybrid-command-center",
-  "version": "6.10.7",
+  "version": "6.10.8",
   "private": true,
   "type": "module",
   "engines": {
@@ -54,7 +54,7 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "express-rate-limit": "^8.7.0",
-    "googleapis": "^178.0.0",
+    "googleapis": "^180.0.0",
     "helmet": "^8.3.0",
     "lucide-react": "^1.45.0",
     "pino": "^10.3.1",

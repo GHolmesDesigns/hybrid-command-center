@@ -1,5 +1,14 @@
 # Changelog
 
+## [6.10.8] - 2026-09-17
+
+### Changed
+
+- Bumped `googleapis` 178.0.0 → 180.0.0.
+
+### Breaking changes
+
+None.
 ## [6.10.7] - 2026-09-17
 
 ### Changed
