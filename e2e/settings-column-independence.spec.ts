@@ -16,7 +16,7 @@ import { layoutSettled } from './ready';
  *     pushed down by the other column reads as a larger distance, which is the bug, in pixels.
  *   - Growing and shrinking one column moves that column's later cards by exactly as much, and
  *     moves the neighbouring column by nothing.
- *   - At one column the two stacks meet at the same gap they use internally, so the eleven cards
+ *   - At one column the two stacks meet at the same gap they use internally, so the twelve cards
  *     read as one stack, in document order.
  *
  * Both Drive states are faked at the HTTP boundary with `page.route`, as they are in
@@ -31,6 +31,7 @@ const GAP = 18;
 /** The cards in document order, which is the order they are meant to be read in. */
 const READING_ORDER = [
   'Live updates',
+  'Command AI assistant',
   'Timer notifications',
   'Project categories',
   'Task tags',
@@ -130,9 +131,9 @@ test('each Settings column stacks on its own at desktop width', async ({ page })
 
   const cards = await cardBoxes(page);
   expect(cards.map((card) => card.heading)).toEqual(READING_ORDER);
-  // Five cards in the left stack and six in the right, and every card in one — a card left as
+  // Six cards in the left stack and six in the right, and every card in one — a card left as
   // the grid's own child would report column -1 and be back in a shared row track.
-  expect(cards.map((card) => card.column)).toEqual([0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1]);
+  expect(cards.map((card) => card.column)).toEqual([0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1]);
 
   const [left, right] = [0, 1].map((column) => cards.filter((card) => card.column === column));
 
