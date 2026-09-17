@@ -15,11 +15,13 @@ import {
   postMessageInputSchema,
   type AgentConversation,
   type AgentConversationMessage,
+  type ConversationScopeType,
   type ConversationState,
   type CreateConversationInput,
   type CursorPage,
   type MessageLinkedHandoff,
   type PostMessageInput,
+  type ScopedConversationResolution,
 } from '../shared/agent-conversations.ts';
 
 const encode = (at: string, id: string) =>
@@ -40,6 +42,7 @@ type ConversationRow = {
   scope_type: string;
   scope_id: string | null;
   state: ConversationState;
+  is_canonical: number;
   is_decision: number;
   decision_outcome: string | null;
   decided_at: string | null;
@@ -52,6 +55,7 @@ const toConversation = (row: ConversationRow, participants: string[]): AgentConv
   title: row.title,
   scope: { type: row.scope_type as AgentConversation['scope']['type'], id: row.scope_id },
   state: row.state,
+  isCanonical: row.is_canonical === 1,
   isDecision: row.is_decision === 1,
   decisionOutcome: row.decision_outcome,
   decidedAt: row.decided_at,
@@ -60,6 +64,112 @@ const toConversation = (row: ConversationRow, participants: string[]): AgentConv
   participants,
   messageCount: row.message_count,
 });
+
+const scopedSubject = (
+  scopeType: ConversationScopeType,
+  scopeId: string | null,
+): scopeType is Exclude<ConversationScopeType, 'freeform'> => {
+  return scopeType !== 'freeform' && !!scopeId;
+};
+
+const hasActiveCanonical = (
+  db: Db,
+  scopeType: Exclude<ConversationScopeType, 'freeform'>,
+  scopeId: string,
+) =>
+  !!db
+    .prepare(
+      `SELECT 1 FROM agent_conversations
+       WHERE scope_type = ? AND scope_id = ? AND is_canonical = 1 AND state = 'ACTIVE'`,
+    )
+    .get(scopeType, scopeId);
+
+const isCanonicalOnCreate = (
+  db: Db,
+  scope: CreateConversationInput['scope'],
+  secondary?: boolean,
+): number => {
+  if (scope.type === 'freeform') return 0;
+  if (secondary) return 0;
+  return hasActiveCanonical(db, scope.type, scope.id!) ? 0 : 1;
+};
+
+/** Resolves the canonical active thread id for a scoped subject, if one exists. */
+export function resolveCanonicalConversationId(
+  db: Db,
+  scopeType: Exclude<ConversationScopeType, 'freeform'>,
+  scopeId: string,
+): string | null {
+  const row = db
+    .prepare(
+      `SELECT id FROM agent_conversations
+       WHERE scope_type = ? AND scope_id = ? AND is_canonical = 1 AND state = 'ACTIVE'`,
+    )
+    .get(scopeType, scopeId) as { id: string } | undefined;
+  return row?.id ?? null;
+}
+
+export function resolveScopedConversation(
+  db: Db,
+  scopeType: Exclude<ConversationScopeType, 'freeform'>,
+  scopeId: string,
+  actor: string | null,
+): ScopedConversationResolution {
+  const rows = db
+    .prepare(
+      `SELECT c.*, COUNT(m.id) message_count
+       FROM agent_conversations c
+       JOIN agent_conversation_participants p ON p.conversation_id = c.id
+       LEFT JOIN agent_conversation_messages m ON m.conversation_id = c.id
+       WHERE c.scope_type = ? AND c.scope_id = ? AND c.state = 'ACTIVE'
+       GROUP BY c.id
+       ORDER BY c.is_canonical DESC, c.updated_at DESC, c.id DESC`,
+    )
+    .all(scopeType, scopeId) as ConversationRow[];
+  const visibleRows = rows.filter((row) => visible(db, row.id, actor));
+  const canonical = visibleRows.find((row) => row.is_canonical === 1) ?? null;
+  const secondaryThreads = visibleRows
+    .filter((row) => row.is_canonical !== 1)
+    .map((row) => toConversation(row, participants(db, row.id)));
+  return {
+    scope: { type: scopeType, id: scopeId },
+    canonicalId: canonical?.id ?? null,
+    secondaryThreads,
+  };
+}
+
+export function promoteConversationToCanonical(
+  db: Db,
+  id: string,
+  actor: string,
+  now = new Date(),
+): AgentConversation {
+  const row = requireVisible(db, id, actor);
+  if (!scopedSubject(row.scope_type as ConversationScopeType, row.scope_id)) {
+    throw Object.assign(new Error('Only scoped conversations can be promoted to canonical.'), {
+      status: 400,
+    });
+  }
+  if (row.state !== 'ACTIVE') {
+    throw Object.assign(new Error('Only active conversations can be promoted to canonical.'), {
+      status: 400,
+    });
+  }
+  const at = now.toISOString();
+  transaction(db, () => {
+    db.prepare(
+      `UPDATE agent_conversations
+       SET is_canonical = 0, updated_at = ?
+       WHERE scope_type = ? AND scope_id = ? AND is_canonical = 1 AND state = 'ACTIVE'`,
+    ).run(at, row.scope_type, row.scope_id);
+    db.prepare('UPDATE agent_conversations SET is_canonical = 1, updated_at = ? WHERE id = ?').run(
+      at,
+      id,
+    );
+  });
+  tipAgentHubConversation(id);
+  return getConversation(db, id, actor);
+}
 const participants = (db: Db, id: string) =>
   (
     db
@@ -159,10 +269,20 @@ export function createConversation(
   const id = crypto.randomUUID(),
     at = now.toISOString(),
     labels = [...new Set([actor, ...input.participantLabels])];
+  const isCanonical = isCanonicalOnCreate(db, input.scope, input.secondary);
   transaction(db, () => {
     db.prepare(
-      'INSERT INTO agent_conversations(id,title,scope_type,scope_id,state,created_at,updated_at) VALUES(?,?,?,?,?,?,?)',
-    ).run(id, input.title, input.scope.type, input.scope.id ?? null, 'ACTIVE', at, at);
+      'INSERT INTO agent_conversations(id,title,scope_type,scope_id,state,is_canonical,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)',
+    ).run(
+      id,
+      input.title,
+      input.scope.type,
+      input.scope.id ?? null,
+      'ACTIVE',
+      isCanonical,
+      at,
+      at,
+    );
     const insert = db.prepare(
       'INSERT INTO agent_conversation_participants(conversation_id,agent_label) VALUES(?,?)',
     );
@@ -395,11 +515,20 @@ export function setConversationState(
   now = new Date(),
 ) {
   requireVisible(db, id, actor);
-  db.prepare('UPDATE agent_conversations SET state=?,updated_at=? WHERE id=?').run(
-    state,
-    now.toISOString(),
-    id,
-  );
+  const isCanonical = state === 'ARCHIVED' ? 0 : undefined;
+  if (isCanonical === 0) {
+    db.prepare('UPDATE agent_conversations SET state=?, is_canonical=0, updated_at=? WHERE id=?').run(
+      state,
+      now.toISOString(),
+      id,
+    );
+  } else {
+    db.prepare('UPDATE agent_conversations SET state=?,updated_at=? WHERE id=?').run(
+      state,
+      now.toISOString(),
+      id,
+    );
+  }
   tipAgentHubConversation(id);
   return getConversation(db, id, actor);
 }

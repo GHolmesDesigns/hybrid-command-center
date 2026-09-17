@@ -19,6 +19,7 @@ type Conversation = {
   title: string;
   state: 'ACTIVE' | 'ARCHIVED';
   scope: { type: 'client' | 'project' | 'task' | 'freeform'; id: string | null };
+  isCanonical: boolean;
   participants: string[];
   messageCount: number;
   updatedAt: string;
@@ -95,7 +96,11 @@ export function ConversationsView({
       );
       setConversations(page.items);
       for (const item of page.items) {
-        registerHint(item.id, { scopeType: item.scope.type, state: item.state });
+        registerHint(item.id, {
+          scopeType: item.scope.type,
+          scopeId: item.scope.id,
+          state: item.state,
+        });
       }
       setSelected((current) =>
         current ? (page.items.find((item) => item.id === current.id) ?? null) : null,
@@ -154,6 +159,7 @@ export function ConversationsView({
     async (conversation: Conversation) => {
       registerHint(conversation.id, {
         scopeType: conversation.scope.type,
+        scopeId: conversation.scope.id,
         state: conversation.state,
       });
       setSelected(conversation);
@@ -255,6 +261,25 @@ export function ConversationsView({
     setBody('');
     await load();
   };
+  const createScopedThread = async () => {
+    if (!scopeType || !scopeId) return;
+    try {
+      const created = await send<Conversation>('/agent-conversations', 'POST', {
+        title: `${scopeType} thread`,
+        scope: { type: scopeType, id: scopeId },
+        secondary: true,
+      });
+      applySelection(created.id, 'full-view', {
+        scopeType: created.scope.type,
+        scopeId: created.scope.id,
+        state: created.state,
+      });
+      await load();
+      flash('Secondary thread created.', 'success');
+    } catch (error) {
+      flash((error as Error).message, 'error');
+    }
+  };
   const archive = async () => {
     if (!selected) return;
     if (!window.confirm('Archive this conversation?')) return;
@@ -276,18 +301,22 @@ export function ConversationsView({
       <PageHead
         eyebrow="Agents"
         title="Conversations"
-        body="One conversation at a time across this page and the Command AI drawer. Freeform threads stay in sync; scoped discussions open here only."
+        body="One conversation at a time across this page and the Command AI drawer for every scope."
       />
       <p className="field-hint">
         The Command AI drawer and this page are synchronized views, not two separate clients.
-        Selecting a freeform thread here updates the drawer when it is open, and vice versa.{' '}
-        <strong>Open full view</strong> in the drawer lands on the same thread. @mentions open
+        Selecting any active thread here updates the drawer when it is open, and vice versa.{' '}
+        <strong>Open full view</strong> in the drawer lands on the same thread. Scoped subjects keep
+        one canonical thread; additional threads are labelled Secondary thread. @mentions open
         handoffs only after you check them in the confirm preview.
       </p>
       {scopeType && scopeId && (
         <p className="field-hint">
           Showing {scopeType} discussion for <code>{scopeId}</code>.{' '}
-          <Link to="/agents/conversations">Show every conversation</Link>
+          <button type="button" className="text-btn" onClick={() => void createScopedThread()}>
+            New thread
+          </button>{' '}
+          · <Link to="/agents/conversations">Show every conversation</Link>
         </p>
       )}
       <div className="split-layout">
@@ -320,12 +349,16 @@ export function ConversationsView({
                   onClick={() => {
                     applySelection(conversation.id, 'full-view', {
                       scopeType: conversation.scope.type,
+                      scopeId: conversation.scope.id,
                       state: conversation.state,
                     });
                   }}
                 >
                   <strong>
                     {conversation.title}{' '}
+                    {conversation.scope.type !== 'freeform' && !conversation.isCanonical && (
+                      <span className="secondary-thread-badge">Secondary thread</span>
+                    )}
                     {conversation.isDecision && (
                       <span className="decision-badge">
                         <CheckCircle2 aria-hidden="true" /> Decision
@@ -359,7 +392,12 @@ export function ConversationsView({
           <section className="card conversation-detail-card" aria-label="Conversation detail">
             <div className="card-head conversation-detail-head">
               <div>
-                <h2>{selected.title}</h2>
+                <h2>
+                  {selected.title}{' '}
+                  {selected.scope.type !== 'freeform' && !selected.isCanonical && (
+                    <span className="secondary-thread-badge">Secondary thread</span>
+                  )}
+                </h2>
                 <p>
                   {scopePath(selected.scope) ? (
                     <Link to={scopePath(selected.scope)!}>

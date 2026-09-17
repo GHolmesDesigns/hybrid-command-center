@@ -12,6 +12,7 @@ export type ConversationSelectionIssue = (typeof CONVERSATION_SELECTION_ISSUES)[
 
 export type ConversationSelectionHint = {
   scopeType: ConversationScopeType;
+  scopeId: string | null;
   state: ConversationState;
 };
 
@@ -36,14 +37,13 @@ export function conversationsPathWithOpen(conversationId: string): string {
   return `/agents/conversations?${conversationOpenQuery(conversationId)}`;
 }
 
-/** The drawer represents active freeform threads only. */
+/** The drawer lists active threads for every scope; archived and missing stay fail-closed. */
 export function drawerSelectionIssue(
   conversationId: string | null,
   hint: ConversationSelectionHint | null | undefined,
 ): ConversationSelectionIssue | null {
   if (!conversationId) return null;
   if (!hint) return 'missing';
-  if (hint.scopeType !== 'freeform') return 'unsupported_scope';
   if (hint.state === 'ARCHIVED') return 'archived_in_drawer';
   return null;
 }

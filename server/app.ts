@@ -367,6 +367,8 @@ import {
   markConversationDecision,
   listMessages,
   postMessage,
+  promoteConversationToCanonical,
+  resolveScopedConversation,
   setConversationState,
 } from './agent-conversations.ts';
 import {
@@ -374,6 +376,7 @@ import {
   conversationListSchema,
   messageListSchema,
   createConversationSchema,
+  scopedConversationResolutionSchema,
 } from '../shared/agent-conversations.ts';
 import { INTEGRATION_EVENT_PAGE_MAX, INTEGRATION_SOURCES } from '../shared/integration-log.ts';
 import { clientBrandingIssues } from '../shared/branding.ts';
@@ -3216,6 +3219,16 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       next(error);
     }
   });
+  app.get('/api/agent-conversations/scoped-resolution', (req, res, next) => {
+    try {
+      const input = scopedConversationResolutionSchema.parse(req.query);
+      res.json(
+        resolveScopedConversation(db, input.scopeType, input.scopeId, null),
+      );
+    } catch (error) {
+      next(error);
+    }
+  });
   app.get('/api/agent-conversations/:id', (req, res, next) => {
     try {
       res.json(getConversation(db, req.params.id, null));
@@ -3250,6 +3263,13 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   app.post('/api/agent-conversations/:id/archive', (req, res, next) => {
     try {
       res.json(setConversationState(db, req.params.id, 'operator', 'ARCHIVED', clock()));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/agent-conversations/:id/promote-canonical', (req, res, next) => {
+    try {
+      res.json(promoteConversationToCanonical(db, req.params.id, 'operator', clock()));
     } catch (error) {
       next(error);
     }

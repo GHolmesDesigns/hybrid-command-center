@@ -149,6 +149,7 @@ CREATE TABLE IF NOT EXISTS agent_conversations (
   id TEXT PRIMARY KEY, title TEXT NOT NULL CHECK(length(title) BETWEEN 1 AND 200),
   scope_type TEXT NOT NULL CHECK(scope_type IN ('client','project','task','freeform')),
   scope_id TEXT, state TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(state IN ('ACTIVE','ARCHIVED')),
+  is_canonical INTEGER NOT NULL DEFAULT 0 CHECK(is_canonical IN (0,1)),
   is_decision INTEGER NOT NULL DEFAULT 0 CHECK(is_decision IN (0,1)),
   decision_outcome TEXT CHECK(decision_outcome IS NULL OR length(decision_outcome) <= 500),
   decided_at TEXT,
@@ -910,6 +911,9 @@ CREATE INDEX IF NOT EXISTS idx_agent_credentials_agent ON agent_credentials(agen
 CREATE INDEX IF NOT EXISTS idx_agent_credentials_expiry ON agent_credentials(expires_at);
 CREATE INDEX IF NOT EXISTS idx_agent_conversations_updated ON agent_conversations(updated_at, id);
 CREATE INDEX IF NOT EXISTS idx_agent_conversations_decision ON agent_conversations(is_decision, updated_at, id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_conversations_canonical_scope
+  ON agent_conversations(scope_type, scope_id)
+  WHERE is_canonical = 1 AND state = 'ACTIVE' AND scope_type != 'freeform';
 CREATE INDEX IF NOT EXISTS idx_agent_conversation_messages_cursor ON agent_conversation_messages(conversation_id, sent_at, id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_drive_write_requests_replay
   ON drive_write_requests(agent_label, client_request_id);
@@ -1406,6 +1410,41 @@ export function backfillProjectActivity(db: Db): number {
 }
 
 /**
+ * Marks one active scoped thread per subject as canonical when the column is new and every row
+ * still reads false. The earliest created thread wins; later boots write nothing.
+ */
+export function backfillConversationCanonical(db: Db): number {
+  return transaction(db, () => {
+    const scopes = db
+      .prepare(
+        `SELECT scope_type, scope_id
+         FROM agent_conversations
+         WHERE scope_type != 'freeform' AND state = 'ACTIVE'
+         GROUP BY scope_type, scope_id
+         HAVING MAX(is_canonical) = 0`,
+      )
+      .all() as { scope_type: string; scope_id: string }[];
+    let promoted = 0;
+    for (const scope of scopes) {
+      const row = db
+        .prepare(
+          `SELECT id FROM agent_conversations
+           WHERE scope_type = ? AND scope_id = ? AND state = 'ACTIVE'
+           ORDER BY created_at ASC, id ASC
+           LIMIT 1`,
+        )
+        .get(scope.scope_type, scope.scope_id) as { id: string } | undefined;
+      if (!row) continue;
+      promoted += Number(
+        db.prepare('UPDATE agent_conversations SET is_canonical = 1 WHERE id = ?').run(row.id)
+          .changes,
+      );
+    }
+    return promoted;
+  });
+}
+
+/**
  * Turns the free text in `signal_posts.campaign` into `signal_campaigns` rows and the join that
  * attaches them, and returns how many campaigns it created and how many posts it attached.
  *
@@ -1759,6 +1798,7 @@ export function createDb(
   purgeDriveWriteRequestPayloads(db);
   relaxPublicationScheduledInstant(db);
   backfillProjectActivity(db);
+  backfillConversationCanonical(db);
   backfillSignalCampaigns(db);
   backfillProviderAccounts(db);
   backfillProviderInventory(db);

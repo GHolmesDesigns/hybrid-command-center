@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useEffect, useState } from 'react';
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import type { AgentHubTipPayload } from '../../shared/agent-hub-sse';
@@ -6,6 +7,7 @@ import { CommandAiFab, CommandAiPanel, CommandAiTopbarToggle } from './component
 import type { BreadcrumbData } from './components/breadcrumbs';
 import { AgentHubTipsContext } from './components/AgentHubTipsContext';
 import { ConversationSelectionProvider } from './components/ConversationSelectionProvider';
+import { useConversationSelection } from './useConversationSelection';
 
 type PanelOptions = {
   initialEntry?: string;
@@ -86,9 +88,14 @@ const freeformConversation = (id: string, title: string) => ({
   title,
   state: 'ACTIVE' as const,
   scope: { type: 'freeform' as const, id: null },
+  isCanonical: false,
   participants: ['operator'],
   messageCount: 1,
   updatedAt: '2026-09-10T12:00:00.000Z',
+  isDecision: false,
+  decisionOutcome: null,
+  decidedAt: null,
+  createdAt: '2026-09-10T12:00:00.000Z',
 });
 
 describe('CommandAiPanel', () => {
@@ -658,5 +665,125 @@ describe('CommandAiPanel', () => {
     expect(await screen.findByText('Still here')).toBeVisible();
     expect(screen.getByRole('heading', { level: 3, name: 'Navigation thread' })).toBeVisible();
     expect(createCalls).toBe(0);
+  });
+
+  it('offers a scope-change prompt and opens the canonical scoped thread on accept', async () => {
+    const scopedConversation = {
+      ...freeformConversation('conv-project', 'Project chat'),
+      scope: { type: 'project' as const, id: 'p1' },
+      isCanonical: true,
+    };
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes('/agents/directory')) return json({ agents: [] });
+      if (url.includes('/agents/presence')) return json({ presence: [] });
+      if (url.includes('/agent-summaries')) return json({ summaries: [] });
+      if (url.includes('/agent-conversations/scoped-resolution')) {
+        return json({
+          scope: { type: 'project', id: 'p1' },
+          canonicalId: 'conv-project',
+          secondaryThreads: [],
+        });
+      }
+      if (url.includes('/agent-conversations?')) {
+        return json({ items: [freeformConversation('conv-free', 'Freeform thread'), scopedConversation], nextCursor: null, hasMore: false });
+      }
+      if (url.includes('/agent-conversations/conv-project/messages')) {
+        return json({
+          items: [
+            {
+              id: 'm-project',
+              senderLabel: 'operator',
+              sentAt: '2026-09-10T12:00:01.000Z',
+              body: 'Scoped message',
+              provenance: 'VERIFIED',
+            },
+          ],
+          nextCursor: null,
+          hasMore: false,
+        });
+      }
+      if (url.includes('/agent-conversations/conv-free/messages')) {
+        return json({ items: [], nextCursor: null, hasMore: false });
+      }
+      if (url.endsWith('/api/agent-conversations') && init?.method === 'POST') {
+        throw new Error('Accept should reuse the canonical thread');
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    function ScopePromptHarness() {
+      const [open, setOpen] = useState(false);
+      const { applySelection } = useConversationSelection();
+      useEffect(() => {
+        applySelection('conv-free', 'drawer', {
+          scopeType: 'freeform',
+          scopeId: null,
+          state: 'ACTIVE',
+        });
+        setOpen(true);
+      }, [applySelection]);
+      return (
+        <CommandAiPanel
+          open={open}
+          onClose={() => undefined}
+          breadcrumbData={{
+            clients: [],
+            projects: [
+              {
+                id: 'p1',
+                name: 'Website Refresh',
+                clientId: 'c1',
+                clientName: 'Acme',
+                status: 'ACTIVE',
+              },
+            ],
+          }}
+        />
+      );
+    }
+
+    render(
+      <MemoryRouter initialEntries={['/projects/p1']}>
+        <ConversationSelectionProvider>
+          <ScopePromptHarness />
+        </ConversationSelectionProvider>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByLabelText('Scope change prompt')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Switch' }));
+    expect(await screen.findByRole('heading', { level: 3, name: 'Project chat' })).toBeVisible();
+    expect(await screen.findByText('Scoped message')).toBeVisible();
+  });
+
+  it('labels secondary scoped threads in the drawer', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/agents/directory')) return json({ agents: [] });
+      if (url.includes('/agents/presence')) return json({ presence: [] });
+      if (url.includes('/agent-summaries')) return json({ summaries: [] });
+      if (url.includes('/agent-conversations?')) {
+        return json({
+          items: [
+            {
+              ...freeformConversation('conv-secondary', 'Side thread'),
+              scope: { type: 'project', id: 'p1' },
+              isCanonical: false,
+            },
+          ],
+          nextCursor: null,
+          hasMore: false,
+        });
+      }
+      if (url.includes('/agent-conversations/conv-secondary/messages')) {
+        return json({ items: [], nextCursor: null, hasMore: false });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    renderPanel(<CommandAiPanel open onClose={() => undefined} />);
+    fireEvent.click(await screen.findByRole('button', { name: /Side thread/ }));
+    expect(await screen.findByText('Secondary thread')).toBeVisible();
   });
 });

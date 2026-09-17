@@ -42,9 +42,11 @@ const freeformConversation = (id: string, title: string) => ({
   title,
   state: 'ACTIVE' as const,
   scope: { type: 'freeform' as const, id: null },
+  isCanonical: false,
   participants: ['operator'],
   messageCount: 1,
   updatedAt: '2026-09-10T12:00:00.000Z',
+  createdAt: '2026-09-10T12:00:00.000Z',
   isDecision: false,
   decisionOutcome: null,
   decidedAt: null,
@@ -108,10 +110,6 @@ describe('conversation drawer and full-view sync', () => {
     fireEvent.click(within(drawer).getByRole('button', { name: /Thread B/ }));
     expect((await screen.findAllByText('Message B')).length).toBeGreaterThanOrEqual(1);
     expect(within(drawer).getByRole('heading', { level: 3, name: 'Thread B' })).toBeVisible();
-    expect(within(drawer).getByRole('link', { name: 'Open full view' })).toHaveAttribute(
-      'href',
-      '/agents/conversations?open=conv-b',
-    );
   });
 
   it('follows full-view selection in the drawer without closing it', async () => {
@@ -174,7 +172,7 @@ describe('conversation drawer and full-view sync', () => {
     expect(screen.getByRole('complementary', { name: 'Command AI' })).toBeVisible();
   });
 
-  it('shows a scoped-thread explanation in the drawer instead of another thread', async () => {
+  it('shows scoped threads in the drawer instead of substituting another thread', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = String(input);
       if (url.includes('/agents/directory')) return json({ agents: [] });
@@ -191,12 +189,14 @@ describe('conversation drawer and full-view sync', () => {
               title: 'Project thread',
               state: 'ACTIVE',
               scope: { type: 'project', id: 'project-1' },
+              isCanonical: true,
               participants: ['operator'],
               messageCount: 0,
               updatedAt: '2026-09-10T12:00:00.000Z',
               isDecision: false,
               decisionOutcome: null,
               decidedAt: null,
+              createdAt: '2026-09-10T12:00:00.000Z',
             },
           ],
           nextCursor: null,
@@ -215,11 +215,7 @@ describe('conversation drawer and full-view sync', () => {
     render(<ConversationsWithDrawer initialEntry="/agents/conversations?open=conv-scoped" />);
 
     expect(await screen.findByText('Project thread')).toBeVisible();
-    expect(await screen.findByText(/Command AI shows active freeform threads only/i)).toBeVisible();
+    expect(await screen.findByRole('heading', { level: 3, name: 'Project thread' })).toBeVisible();
     expect(screen.queryByRole('heading', { level: 3, name: 'Freeform thread' })).toBeNull();
-    expect(screen.getByRole('link', { name: 'Open full view' })).toHaveAttribute(
-      'href',
-      '/agents/conversations?open=conv-scoped',
-    );
   });
 });

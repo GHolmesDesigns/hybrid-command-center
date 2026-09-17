@@ -71,6 +71,7 @@ describe('ConversationSelectionProvider', () => {
     act(() => {
       result.current.bridge.applySelection('thread-b', 'drawer', {
         scopeType: 'freeform',
+        scopeId: null,
         state: 'ACTIVE',
       });
     });
@@ -94,6 +95,7 @@ describe('ConversationSelectionProvider', () => {
     act(() => {
       result.current.bridge.applySelection('thread-c', 'drawer', {
         scopeType: 'freeform',
+        scopeId: null,
         state: 'ACTIVE',
       });
     });
@@ -102,16 +104,20 @@ describe('ConversationSelectionProvider', () => {
     expect(result.current.bridge.source).toBe('drawer');
   });
 
-  it('explains unsupported drawer selections without substituting another thread', async () => {
+  it('keeps scoped drawer selections available without substituting another thread', async () => {
     const { result } = renderHook(() => useConversationSelection(), {
       wrapper: wrapper('/agents/conversations?open=scoped-thread'),
     });
     await waitFor(() => expect(result.current.conversationId).toBe('scoped-thread'));
     act(() => {
-      result.current.registerHint('scoped-thread', { scopeType: 'project', state: 'ACTIVE' });
+      result.current.registerHint('scoped-thread', {
+        scopeType: 'project',
+        scopeId: 'p1',
+        state: 'ACTIVE',
+      });
     });
     await waitFor(() => {
-      expect(result.current.drawerIssue).toBe('unsupported_scope');
+      expect(result.current.drawerIssue).toBeNull();
       expect(result.current.fullViewIssue).toBeNull();
       expect(result.current.conversationId).toBe('scoped-thread');
     });
@@ -125,6 +131,7 @@ describe('ConversationSelectionProvider', () => {
     act(() => {
       result.current.applySelection('thread-e', 'drawer', {
         scopeType: 'freeform',
+        scopeId: null,
         state: 'ACTIVE',
       });
     });
@@ -132,6 +139,7 @@ describe('ConversationSelectionProvider', () => {
     act(() => {
       result.current.applySelection('thread-e', 'drawer', {
         scopeType: 'freeform',
+        scopeId: null,
         state: 'ACTIVE',
       });
     });
@@ -170,6 +178,7 @@ describe('ConversationSelectionProvider', () => {
     act(() => {
       result.current.bridge.applySelection('thread-c', 'drawer', {
         scopeType: 'freeform',
+        scopeId: null,
         state: 'ACTIVE',
       });
     });

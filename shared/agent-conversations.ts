@@ -29,6 +29,8 @@ export const createConversationSchema = z
     title: z.string().trim().min(1).max(200),
     scope: conversationScopeSchema,
     participantLabels: z.array(agentLabelSchema).max(50).default([]),
+    /** When true on a scoped thread, create a non-canonical sibling instead of the scope default. */
+    secondary: z.boolean().optional(),
   })
   .strict();
 export const messageSchema = z.string().trim().min(1).max(4000);
@@ -46,6 +48,13 @@ export const conversationDecisionSchema = z
   .object({ outcome: z.string().trim().max(500).optional() })
   .strict();
 export type PostMessageInput = z.infer<typeof postMessageInputSchema>;
+export const scopedConversationResolutionSchema = z
+  .object({
+    scopeType: z.enum(['client', 'project', 'task']),
+    scopeId: z.string().trim().min(1).max(200),
+  })
+  .strict();
+
 export const conversationListSchema = z
   .object({
     state: z.enum(CONVERSATION_STATES).optional(),
@@ -75,6 +84,8 @@ export type AgentConversation = {
   title: string;
   scope: { type: ConversationScopeType; id: string | null };
   state: ConversationState;
+  /** True for the one canonical active thread per scoped subject; always false for freeform. */
+  isCanonical: boolean;
   isDecision: boolean;
   decisionOutcome: string | null;
   decidedAt: string | null;
@@ -82,6 +93,12 @@ export type AgentConversation = {
   updatedAt: string;
   participants: string[];
   messageCount: number;
+};
+
+export type ScopedConversationResolution = {
+  scope: { type: Exclude<ConversationScopeType, 'freeform'>; id: string };
+  canonicalId: string | null;
+  secondaryThreads: AgentConversation[];
 };
 export type MessageLinkedHandoff = {
   id: string;
