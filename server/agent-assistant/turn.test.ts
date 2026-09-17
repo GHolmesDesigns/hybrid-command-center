@@ -1,9 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createDb, type Db } from '../db.ts';
 import { createConversation, listMessages, postMessage } from '../agent-conversations.ts';
-import { createAssistantMcpAgentCredential } from '../auth/mcp-agent-credentials.ts';
+import {
+  createAssistantMcpAgentCredential,
+  listMcpAgentCredentials,
+  revokeMcpAgentCredential,
+} from '../auth/mcp-agent-credentials.ts';
 import { setSetting } from '../drive/service.ts';
 import {
+  ASSISTANT_AGENT_LABEL,
   COMMAND_AI_ASSISTANT_SETTING_KEY,
   DEFAULT_COMMAND_AI_ASSISTANT_SETTINGS,
 } from '../../shared/command-ai-assistant.ts';
@@ -16,7 +21,7 @@ import {
   respondToApproval,
   runAssistantTurn,
 } from './turn.ts';
-import { incrementTurn } from './daily-usage.ts';
+import { incrementTokens, incrementTurn } from './daily-usage.ts';
 
 const SECRET = 'test-assistant-encryption-key-32chars!';
 const SESSION = 'operator-session-hash-test';
@@ -474,6 +479,120 @@ describe('assistant turn orchestrator', () => {
     expect(
       listMessages(db, conversation.id, 'operator').items.some((m) =>
         m.body.includes('daily turn limit'),
+      ),
+    ).toBe(true);
+  });
+
+  it('falls back to settings scopes when no assistant credential exists', () => {
+    const credential = listMcpAgentCredentials(db).find(
+      (entry) => entry.label === ASSISTANT_AGENT_LABEL,
+    );
+    expect(credential).toBeDefined();
+    revokeMcpAgentCredential(db, credential!.id);
+    setSetting(
+      db,
+      COMMAND_AI_ASSISTANT_SETTING_KEY,
+      JSON.stringify({
+        ...DEFAULT_COMMAND_AI_ASSISTANT_SETTINGS,
+        enabled: true,
+        scopes: ['coordination:read'],
+      }),
+    );
+    expect(resolveAssistantCredentialScopes(db)).toEqual(['coordination:read']);
+  });
+
+  it('returns false when cancelling a conversation with no active turn', () => {
+    const conversation = createConversation(
+      db,
+      { title: 'Idle', scope: { type: 'freeform' }, participantLabels: [] },
+      'operator',
+    );
+    expect(cancelTurn(db, conversation.id, SESSION)).toBe(false);
+  });
+
+  it('refuses turns when the daily token cap is already reached', async () => {
+    const conversation = createConversation(
+      db,
+      { title: 'Token cap', scope: { type: 'freeform' }, participantLabels: [] },
+      'operator',
+    );
+    incrementTokens(db, DEFAULT_COMMAND_AI_ASSISTANT_SETTINGS.dailyTokenCap + 1);
+    await runAssistantTurn(db, {
+      conversationId: conversation.id,
+      operatorSessionHash: SESSION,
+      encryptionSecret: SECRET,
+      stubMode: true,
+      stubOptions: { proposeTool: false },
+    });
+    expect(
+      listMessages(db, conversation.id, 'operator').items.some((m) =>
+        m.body.includes('daily token limit'),
+      ),
+    ).toBe(true);
+  });
+
+  it('refuses unknown tools by name', async () => {
+    const conversation = createConversation(
+      db,
+      { title: 'Unknown tool', scope: { type: 'freeform' }, participantLabels: [] },
+      'operator',
+    );
+    await runAssistantTurn(db, {
+      conversationId: conversation.id,
+      operatorSessionHash: SESSION,
+      encryptionSecret: SECRET,
+      stubMode: true,
+      stubOptions: {
+        proposeTool: true,
+        toolName: 'not_a_registered_tool',
+        toolArgs: {},
+      },
+    });
+    expect(
+      listMessages(db, conversation.id, 'operator').items.some((m) =>
+        m.body.includes('credential lacks required scope'),
+      ),
+    ).toBe(true);
+  });
+
+  it('exposes pending approval ids while awaiting approval', async () => {
+    const conversation = createConversation(
+      db,
+      { title: 'State', scope: { type: 'freeform' }, participantLabels: [] },
+      'operator',
+    );
+    await runAssistantTurn(db, {
+      conversationId: conversation.id,
+      operatorSessionHash: SESSION,
+      encryptionSecret: SECRET,
+      stubMode: true,
+    });
+    const state = getTurnState(db, conversation.id);
+    expect(state?.state).toBe('awaiting_approval');
+    expect(state?.pendingApprovalIds).toHaveLength(1);
+    expect(state?.cancelRequested).toBe(false);
+  });
+
+  it('records a cancelled message when a running turn is aborted', async () => {
+    const conversation = createConversation(
+      db,
+      { title: 'Abort', scope: { type: 'freeform' }, participantLabels: [] },
+      'operator',
+    );
+    const options = {
+      conversationId: conversation.id,
+      operatorSessionHash: SESSION,
+      encryptionSecret: SECRET,
+      stubMode: true,
+      stubOptions: { proposeTool: false, delayMs: 500 },
+    };
+    const pending = runAssistantTurn(db, options);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    cancelTurn(db, conversation.id, SESSION);
+    await pending;
+    expect(
+      listMessages(db, conversation.id, 'operator').items.some((m) =>
+        m.body.includes('cancelled'),
       ),
     ).toBe(true);
   });

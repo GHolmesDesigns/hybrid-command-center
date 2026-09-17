@@ -82,4 +82,19 @@ describe('command ai assistant settings', () => {
     expect(readCommandAiAssistant(db).enabled).toBe(false);
     db.close();
   });
+
+  it('reports not ready when enabled without an encryption key configured', async () => {
+    delete process.env.ASSISTANT_KEY_ENCRYPTION_KEY;
+    vi.resetModules();
+    const settings = await import('./settings.ts');
+    db = createDb(':memory:');
+    storeKey(db, 'openai', 'sk-test-key-1234567890', SECRET);
+    setSetting(
+      db,
+      COMMAND_AI_ASSISTANT_SETTING_KEY,
+      JSON.stringify({ enabled: true, provider: 'openai' }),
+    );
+    expect(settings.assistantReady(db)).toBe(false);
+    db.close();
+  });
 });

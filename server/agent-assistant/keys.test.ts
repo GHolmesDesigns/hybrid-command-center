@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createDb, type Db } from '../db.ts';
+import { encryptJson } from '../drive/tokens.ts';
 import { hasKeyForProvider, readDecryptedKey, readKeyMetadata, storeKey } from './keys.ts';
 
 const SECRET = 'assistant-key-secret-at-least-thirty-two';
@@ -35,6 +36,15 @@ describe('assistant provider keys', () => {
       'not-valid-ciphertext',
       'openai',
     );
+    expect(readDecryptedKey(db, 'openai', SECRET)).toBeNull();
+  });
+
+  it('returns null when the decrypted payload has no usable key', () => {
+    const encrypted = encryptJson({ key: '   ' }, SECRET);
+    db.prepare(
+      `INSERT INTO assistant_provider_keys(provider, encrypted_key, key_last4, updated_at)
+       VALUES('openai', ?, '0000', ?)`,
+    ).run(encrypted, new Date().toISOString());
     expect(readDecryptedKey(db, 'openai', SECRET)).toBeNull();
   });
 });

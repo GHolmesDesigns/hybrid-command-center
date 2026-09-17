@@ -254,6 +254,49 @@ describe('Agent Hub WebSocket (C236)', () => {
     socketA.close();
   });
 
+  it('routes assistant turn-state frames only to the owning subscribed socket', async () => {
+    const socket = new WebSocket(wsUrl(), { headers: { Cookie: cookie, Origin: APP_ORIGIN } });
+    await new Promise<void>((resolve, reject) => {
+      socket.once('open', () => resolve());
+      socket.once('error', reject);
+    });
+    socket.send(JSON.stringify({ kind: 'subscribe', conversationId: 'conv-turn-state' }));
+    await new Promise((resolve) => setTimeout(resolve, 25));
+
+    const rawToken = readSessionToken(cookie);
+    const session = sessionFromRawToken(db, {
+      rawToken,
+      sessionSecret: SECRET,
+      now: Date.now(),
+    });
+    hub.sendAssistantTurnState(session!.tokenHash, 'conv-turn-state', {
+      kind: 'assistant_turn_state',
+      turnId: 'turn-2',
+      conversationId: 'conv-turn-state',
+      state: 'finished',
+    });
+    hub.sendAssistantTurnState(session!.tokenHash, 'conv-other', {
+      kind: 'assistant_turn_state',
+      turnId: 'turn-2',
+      conversationId: 'conv-other',
+      state: 'finished',
+    });
+
+    const frame = await new Promise<unknown>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('timed out waiting for turn state')), 2_000);
+      socket.once('message', (data) => {
+        clearTimeout(timer);
+        resolve(JSON.parse(String(data)));
+      });
+    });
+    expect(frame).toMatchObject({
+      kind: 'assistant_turn_state',
+      conversationId: 'conv-turn-state',
+      state: 'finished',
+    });
+    socket.close();
+  });
+
   it('accepts ping and subscribe frames and responds with pong', async () => {
     const socket = new WebSocket(wsUrl(), { headers: { Cookie: cookie, Origin: APP_ORIGIN } });
     await new Promise<void>((resolve, reject) => {
