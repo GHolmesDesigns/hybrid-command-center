@@ -119,4 +119,52 @@ describe('Command AI assistant settings', () => {
     });
     expect(screen.getByLabelText('Assistant model')).toHaveValue('claude-sonnet-4-20250514');
   });
+
+  it('shows the missing-key hint and keeps short keys from saving', async () => {
+    testState.commandAiAssistantPayload = {
+      assistant: {
+        enabled: false,
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        dailyTurnCap: 100,
+        dailyTokenCap: 300_000,
+        scopes: ['workspace:read', 'workspace:write'],
+      },
+      key: { provider: 'openai', hasKey: false, keyLast4: null },
+      ready: false,
+    };
+    await renderSettings();
+    expect(screen.getByText(/No key stored yet/)).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Save API key' })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Assistant API key'), { target: { value: 'short' } });
+    expect(screen.getByRole('button', { name: 'Save API key' })).toBeDisabled();
+  });
+
+  it('enables the assistant and locks live updates after save', async () => {
+    testState.commandAiAssistantPayload = {
+      assistant: {
+        enabled: false,
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        dailyTurnCap: 100,
+        dailyTokenCap: 300_000,
+        scopes: ['workspace:read', 'workspace:write'],
+      },
+      key: { provider: 'openai', hasKey: true, keyLast4: '1234' },
+      ready: false,
+    };
+    await renderSettings();
+    fireEvent.click(screen.getByLabelText('Enable Command AI assistant'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save assistant' }));
+    expect(await screen.findByText(/Command AI assistant saved/i)).toBeVisible();
+    expect(screen.getByLabelText('Enable live updates')).toBeDisabled();
+  });
+
+  it('lowers the daily token cap before saving assistant settings', async () => {
+    await renderSettings();
+    fireEvent.change(screen.getByLabelText('Daily token cap'), { target: { value: '250000' } });
+    expect(screen.getByLabelText('Daily token cap')).toHaveValue(250000);
+    fireEvent.click(screen.getByRole('button', { name: 'Save assistant' }));
+    expect(await screen.findByText(/Command AI assistant saved/i)).toBeVisible();
+  });
 });

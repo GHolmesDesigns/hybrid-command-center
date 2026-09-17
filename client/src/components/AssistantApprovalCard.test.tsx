@@ -100,4 +100,15 @@ describe('AssistantApprovalCard', () => {
     expect(screen.getByRole('button', { name: /Approve/i })).toBeDisabled();
     expect(screen.getByRole('button', { name: /Decline/i })).toBeDisabled();
   });
+
+  it('hides the target row when summary fields are unusable', () => {
+    render(
+      <AssistantApprovalCard
+        approval={{ ...approval, summary: { targetName: 123, targetId: null } }}
+        onApprove={vi.fn()}
+        onDecline={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText(/^Target:/)).toBeNull();
+  });
 });
