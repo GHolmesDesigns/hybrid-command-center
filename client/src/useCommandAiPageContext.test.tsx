@@ -33,7 +33,7 @@ describe('useCommandAiPageContext', () => {
           status: 'ACTIVE',
         },
       ],
-      clients: [{ id: 'c1', name: 'Acme Studio', status: 'ACTIVE', mergedInto: null }],
+      clients: [{ id: 'c1', name: 'Acme Studio', status: 'ACTIVE' }],
     };
     const { result } = renderPageContext('/projects/p1', data);
     expect(result.current).toMatchObject({
