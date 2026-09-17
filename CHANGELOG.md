@@ -1,5 +1,15 @@
 # Changelog
 
+## [6.10.7] - 2026-09-17
+
+### Changed
+
+- Bumped development dependencies: `@types/node` 26.4.1 → 26.6.1, `typescript-eslint` 8.69.0 →
+  8.70.0, `vite` 8.2.2 → 8.3.0.
+
+### Breaking changes
+
+None.
 ## [6.10.6] - 2026-09-17
 
 ### Changed
