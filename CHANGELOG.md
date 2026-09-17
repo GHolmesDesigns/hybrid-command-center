@@ -1,5 +1,15 @@
 # Changelog
 
+## [6.10.9] - 2026-09-17
+
+### Changed
+
+- Updated the CodeQL security-scanning workflow to `github/codeql-action` 4.38.0 (from 4.37.9).
+  No change to the app itself.
+
+### Breaking changes
+
+None.
 ## [6.10.8] - 2026-09-17
 
 ### Changed
