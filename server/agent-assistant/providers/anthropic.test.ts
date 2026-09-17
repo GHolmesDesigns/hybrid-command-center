@@ -87,6 +87,33 @@ describe('Anthropic assistant provider', () => {
     expect(events).toEqual(['text_delta', 'tool_calls', 'usage']);
   });
 
+  it('ignores non-text blocks and missing usage fields', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          content: [
+            { type: 'image', source: {} },
+            { type: 'text', text: 42 },
+          ],
+        }),
+      })),
+    );
+
+    const provider = createAnthropicAssistantProvider('sk-ant-test');
+    const result = await provider.streamTurn({
+      model: 'claude-3-5-haiku-20241022',
+      systemPrompt: 'system',
+      messages: [{ role: 'user', content: 'hello' }],
+      tools: [],
+      maxOutputTokens: 100,
+    });
+
+    expect(result.text).toBe('');
+    expect(result.usage).toEqual({ inputTokens: 0, outputTokens: 0, totalTokens: 0 });
+  });
+
   it('throws on provider errors', async () => {
     vi.stubGlobal(
       'fetch',

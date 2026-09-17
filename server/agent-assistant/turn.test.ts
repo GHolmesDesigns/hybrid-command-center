@@ -573,6 +573,68 @@ describe('assistant turn orchestrator', () => {
     expect(state?.cancelRequested).toBe(false);
   });
 
+  it('returns null turn state when no assistant turn is active', () => {
+    const conversation = createConversation(
+      db,
+      { title: 'Idle state', scope: { type: 'freeform' }, participantLabels: [] },
+      'operator',
+    );
+    expect(getTurnState(db, conversation.id)).toBeNull();
+  });
+
+  it('posts a fallback reply when the provider returns no text or tools', async () => {
+    const conversation = createConversation(
+      db,
+      { title: 'Empty reply', scope: { type: 'freeform' }, participantLabels: [] },
+      'operator',
+    );
+    await runAssistantTurn(db, {
+      conversationId: conversation.id,
+      operatorSessionHash: SESSION,
+      encryptionSecret: SECRET,
+      stubMode: true,
+      stubOptions: { proposeTool: false, textChunks: [] },
+    });
+    expect(
+      listMessages(db, conversation.id, 'operator').items.some((m) =>
+        m.body.includes('nothing to add'),
+      ),
+    ).toBe(true);
+  });
+
+  it('records the tool error when an approved write fails at execution', async () => {
+    const conversation = createConversation(
+      db,
+      { title: 'Approve failure', scope: { type: 'freeform' }, participantLabels: [] },
+      'operator',
+    );
+    await runAssistantTurn(db, {
+      conversationId: conversation.id,
+      operatorSessionHash: SESSION,
+      encryptionSecret: SECRET,
+      stubMode: true,
+      stubOptions: {
+        proposeTool: true,
+        toolName: 'workspace_update_task',
+        toolArgs: { taskId: 'missing-task', title: 'Still missing' },
+      },
+    });
+    const approval = listPendingApprovals(db, conversation.id)[0]!;
+    await respondToApproval(db, {
+      conversationId: conversation.id,
+      approvalId: approval.id,
+      approved: true,
+      operatorSessionHash: SESSION,
+      encryptionSecret: SECRET,
+      stubMode: true,
+    });
+    expect(
+      listMessages(db, conversation.id, 'operator').items.some((m) =>
+        m.body.startsWith('Approved workspace_update_task:'),
+      ),
+    ).toBe(true);
+  });
+
   it('records a cancelled message when a running turn is aborted', async () => {
     const conversation = createConversation(
       db,

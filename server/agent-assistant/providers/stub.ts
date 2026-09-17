@@ -10,6 +10,7 @@ export type StubAssistantOptions = {
   toolName?: string;
   toolArgs?: Record<string, unknown>;
   delayMs?: number;
+  textChunks?: string[];
 };
 
 const sleep = (ms: number, signal?: AbortSignal) =>
@@ -32,7 +33,7 @@ const sleep = (ms: number, signal?: AbortSignal) =>
 export function createStubAssistantProvider(options: StubAssistantOptions = {}): AssistantProvider {
   return {
     async streamTurn(request: AssistantTurnRequest): Promise<AssistantTurnResult> {
-      const chunks = ['Hello', ' from', ' Command', ' AI.'];
+      const chunks = options.textChunks ?? ['Hello', ' from', ' Command', ' AI.'];
       let text = '';
       for (const chunk of chunks) {
         await sleep(options.delayMs ?? 0, request.signal);

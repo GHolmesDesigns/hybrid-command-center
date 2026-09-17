@@ -13,6 +13,7 @@ const SECRET = 'test-assistant-encryption-key-32chars!';
 describe('assistant service', () => {
   let db: Db;
   let startTurnAfterOperatorMessage: typeof import('./service.ts').startTurnAfterOperatorMessage;
+  let assistantSettingsSummary: typeof import('./service.ts').assistantSettingsSummary;
   let storeKey: typeof import('./keys.ts').storeKey;
 
   beforeEach(async () => {
@@ -26,6 +27,7 @@ describe('assistant service', () => {
     db = createDb(':memory:');
     storeKey = keys.storeKey;
     startTurnAfterOperatorMessage = service.startTurnAfterOperatorMessage;
+    assistantSettingsSummary = service.assistantSettingsSummary;
     storeKey(db, 'openai', 'sk-test-key-1234567890', SECRET);
     setSetting(
       db,
@@ -85,6 +87,13 @@ describe('assistant service', () => {
     expect(
       listMessages(db, conversation.id, 'operator').items.some((m) => m.senderKind === 'assistant'),
     ).toBe(false);
+  });
+
+  it('reports assistant settings and readiness together', () => {
+    expect(assistantSettingsSummary(db)).toMatchObject({
+      assistant: { enabled: true },
+      ready: true,
+    });
   });
 
   it('ignores duplicate queue requests for the same conversation', async () => {
