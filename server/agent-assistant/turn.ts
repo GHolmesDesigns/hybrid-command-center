@@ -4,7 +4,11 @@ import { transaction } from '../db.ts';
 import { listMcpAgentCredentials } from '../auth/mcp-agent-credentials.ts';
 import { callMcpTool } from '../mcp/dispatch.ts';
 import { MCP_TOOL_REGISTRY, mcpToolAvailable, mcpToolRegistryEntry } from '../mcp/registry.ts';
-import { createMcpSession, setMcpSessionAgentLabel, setMcpSessionIdentityProvenance } from '../mcp/session.ts';
+import {
+  createMcpSession,
+  setMcpSessionAgentLabel,
+  setMcpSessionIdentityProvenance,
+} from '../mcp/session.ts';
 import {
   APPROVAL_EXPIRY_MS,
   ASSISTANT_AGENT_LABEL,
@@ -23,10 +27,7 @@ import type { StubAssistantOptions } from './providers/stub.ts';
 import type { AssistantChatMessage, AssistantToolDefinition } from './providers/types.ts';
 import { readCommandAiAssistant } from './settings.ts';
 import { approvalTierFor, isWriteTool } from './tiers.ts';
-import {
-  sendAssistantDelta,
-  sendAssistantTurnState,
-} from '../agent-hub/ws.ts';
+import { sendAssistantDelta, sendAssistantTurnState } from '../agent-hub/ws.ts';
 
 const ASSISTANT_SYSTEM_PROMPT =
   'You are Command AI, an in-app assistant for Hybrid Command Center. ' +
@@ -93,12 +94,10 @@ function loadRecentMessages(db: Db, conversationId: string, limit = 20): Assista
     sender_kind: string;
     body: string;
   }[];
-  return rows
-    .reverse()
-    .map((row) => ({
-      role: row.sender_kind === 'assistant' ? ('assistant' as const) : ('user' as const),
-      content: redactAssistantContext(row.body) as string,
-    }));
+  return rows.reverse().map((row) => ({
+    role: row.sender_kind === 'assistant' ? ('assistant' as const) : ('user' as const),
+    content: redactAssistantContext(row.body) as string,
+  }));
 }
 
 function toPendingApproval(row: PendingRow): AssistantPendingApproval {
@@ -273,9 +272,7 @@ export async function runAssistantTurn(db: Db, options: RunTurnOptions): Promise
   }
   incrementTurn(db);
   const turnId = crypto.randomUUID();
-  if (
-    !acquireTurnLock(db, options.conversationId, turnId, options.operatorSessionHash, now)
-  ) {
+  if (!acquireTurnLock(db, options.conversationId, turnId, options.operatorSessionHash, now)) {
     return;
   }
   const abort = new AbortController();
@@ -342,7 +339,12 @@ export async function runAssistantTurn(db: Db, options: RunTurnOptions): Promise
     for (const call of providerResult.toolCalls) {
       if (abort.signal.aborted) throw new Error('cancelled');
       if (Date.now() - startedMs > limits.wallClockMs) {
-        insertAssistantMessage(db, options.conversationId, limitMessage('60-second wall-clock'), now);
+        insertAssistantMessage(
+          db,
+          options.conversationId,
+          limitMessage('60-second wall-clock'),
+          now,
+        );
         return;
       }
       if (toolCallCount >= limits.maxToolCalls) {
@@ -431,7 +433,12 @@ export async function runAssistantTurn(db: Db, options: RunTurnOptions): Promise
     } else if (!providerResult.toolCalls.length) {
       insertAssistantMessage(db, options.conversationId, 'I had nothing to add.', now);
     }
-    updateTurnRow(db, options.conversationId, { state: 'finished', outputTokenCount: outputTokens }, now);
+    updateTurnRow(
+      db,
+      options.conversationId,
+      { state: 'finished', outputTokenCount: outputTokens },
+      now,
+    );
     sendAssistantTurnState(options.operatorSessionHash, options.conversationId, {
       kind: 'assistant_turn_state',
       turnId,
@@ -501,12 +508,7 @@ export async function respondToApproval(
     db.prepare(
       `UPDATE assistant_pending_approvals SET status='expired', decided_at=? WHERE id=?`,
     ).run(now.toISOString(), row.id);
-    insertAssistantMessage(
-      db,
-      options.conversationId,
-      'Approval expired after 15 minutes.',
-      now,
-    );
+    insertAssistantMessage(db, options.conversationId, 'Approval expired after 15 minutes.', now);
     clearTurn(db, options.conversationId);
     return toPendingApproval({ ...row, status: 'expired', decided_at: now.toISOString() });
   }
@@ -530,10 +532,9 @@ export async function respondToApproval(
   }
 
   transaction(db, () => {
-    db.prepare(`UPDATE assistant_pending_approvals SET status='approved', decided_at=? WHERE id=?`).run(
-      decidedAt,
-      row.id,
-    );
+    db.prepare(
+      `UPDATE assistant_pending_approvals SET status='approved', decided_at=? WHERE id=?`,
+    ).run(decidedAt, row.id);
     updateTurnRow(db, options.conversationId, { state: 'running' }, now);
   });
 
@@ -546,12 +547,7 @@ export async function respondToApproval(
   } catch (error) {
     outcome = error instanceof Error ? error.message : 'Tool execution failed.';
   }
-  insertAssistantMessage(
-    db,
-    options.conversationId,
-    `Approved ${row.tool_name}: ${outcome}`,
-    now,
-  );
+  insertAssistantMessage(db, options.conversationId, `Approved ${row.tool_name}: ${outcome}`, now);
   updateTurnRow(db, options.conversationId, { state: 'finished' }, now);
   clearTurn(db, options.conversationId);
   return toPendingApproval({ ...row, status: 'approved', decided_at: decidedAt });

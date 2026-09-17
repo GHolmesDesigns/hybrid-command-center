@@ -49,9 +49,10 @@ describe('command ai assistant routes', () => {
       .expect(200);
     expect(saved.body.assistant.dailyTurnCap).toBe(50);
     expect(saved.body.assistant.provider).toBe('anthropic');
-    expect((await request(app).put('/api/settings/command-ai-assistant').send({ dailyTurnCap: 200 })).status).toBe(
-      400,
-    );
+    expect(
+      (await request(app).put('/api/settings/command-ai-assistant').send({ dailyTurnCap: 200 }))
+        .status,
+    ).toBe(400);
   });
 
   it('returns assistant settings metadata without exposing keys', async () => {
@@ -135,8 +136,11 @@ describe('command ai assistant routes', () => {
       .expect(200);
     expect(turn.body.turn).toBeNull();
     expect(
-      (await request(app).get(`/api/agent-conversations/${conversation.body.id}/assistant/approvals`))
-        .body.approvals,
+      (
+        await request(app).get(
+          `/api/agent-conversations/${conversation.body.id}/assistant/approvals`,
+        )
+      ).body.approvals,
     ).toEqual([]);
   });
 

@@ -7,7 +7,11 @@ describe('AgentHubTipsContext', () => {
     expect(renderHook(() => useAgentHubTipsSubscribe()).result.current).toBeNull();
 
     const subscribe = () => () => undefined;
-    const connection = { subscribe, subscribeConversation: () => () => undefined, reconnecting: false };
+    const connection = {
+      subscribe,
+      subscribeConversation: () => () => undefined,
+      reconnecting: false,
+    };
     const { result } = renderHook(() => useAgentHubTipsSubscribe(), {
       wrapper: ({ children }) => (
         <AgentHubTipsContext.Provider value={connection}>{children}</AgentHubTipsContext.Provider>

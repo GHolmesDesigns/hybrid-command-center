@@ -1,7 +1,8 @@
 import { redactSecrets } from '../integration-log.ts';
 
 const CLIENT_SENSITIVE_FIELDS = new Set(['email', 'phone', 'notes']);
-const PATH_PATTERN = /(?:^|[\s"'`])(?:[A-Za-z]:\\|\/(?:Users|home|var|tmp|opt|data|mnt)[\\/][^\s"'`]+)/g;
+const PATH_PATTERN =
+  /(?:^|[\s"'`])(?:[A-Za-z]:\\|\/(?:Users|home|var|tmp|opt|data|mnt)[\\/][^\s"'`]+)/g;
 const SSM_PATTERN = /\/hcc\/(?:production|staging)\/[A-Za-z0-9_./-]+/g;
 const INTEGRATION_PAYLOAD_KEYS = new Set([
   'entities',

@@ -64,10 +64,7 @@ import {
   type AssistantKeyMetadata,
   type CommandAiAssistantSettings,
 } from '../../../shared/command-ai-assistant';
-import {
-  MCP_AGENT_SCOPES,
-  type McpAgentScope,
-} from '../../../shared/mcp-agent-registry';
+import { MCP_AGENT_SCOPES, type McpAgentScope } from '../../../shared/mcp-agent-registry';
 import type { CommandAiAssistantBundle } from './CommandAiPanel';
 
 const COLOR_LABEL: Record<BrandingColorField, string> = {
@@ -438,7 +435,9 @@ export function SettingsView({
                       setAssistantForm({
                         ...assistantForm,
                         provider,
-                        model: models.includes(assistantForm.model) ? assistantForm.model : models[0]!,
+                        model: models.includes(assistantForm.model)
+                          ? assistantForm.model
+                          : models[0]!,
                       });
                     }}
                   >
@@ -584,7 +583,10 @@ export function SettingsView({
                 >
                   <RotateCcw /> Reset to defaults
                 </button>
-                <button className="submit" disabled={assistantBusy || assistantForm.scopes.length === 0}>
+                <button
+                  className="submit"
+                  disabled={assistantBusy || assistantForm.scopes.length === 0}
+                >
                   {assistantBusy ? (
                     <>
                       <RefreshCw className="spin" /> Saving…

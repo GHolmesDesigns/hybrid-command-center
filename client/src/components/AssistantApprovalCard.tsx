@@ -53,12 +53,7 @@ export function AssistantApprovalCard({
       )}
       <pre className="assistant-approval-args">{JSON.stringify(approval.toolArgs, null, 2)}</pre>
       <div className="assistant-approval-actions">
-        <button
-          type="button"
-          className="secondary-btn"
-          disabled={busy}
-          onClick={onDecline}
-        >
+        <button type="button" className="secondary-btn" disabled={busy} onClick={onDecline}>
           <X aria-hidden="true" /> Decline
         </button>
         <button

@@ -218,37 +218,43 @@ export function CommandAiPanel({
     setApprovals([]);
   }, []);
 
-  const loadTurnState = useCallback(async (conversationId: string) => {
-    if (!assistantEnabled || !assistantReady) {
-      clearAssistantUi();
-      return;
-    }
-    try {
-      const result = await api<{ turn: AssistantTurnState | null }>(
-        `/agent-conversations/${conversationId}/assistant/turn`,
-      );
-      setTurnState(result.turn);
-      if (result.turn?.state === 'awaiting_approval') {
-        const pending = await api<{ approvals: AssistantPendingApproval[] }>(
-          `/agent-conversations/${conversationId}/assistant/approvals`,
-        );
-        setApprovals(pending.approvals ?? []);
-      } else {
-        setApprovals([]);
+  const loadTurnState = useCallback(
+    async (conversationId: string) => {
+      if (!assistantEnabled || !assistantReady) {
+        clearAssistantUi();
+        return;
       }
-    } catch {
-      clearAssistantUi();
-    }
-  }, [assistantEnabled, assistantReady, clearAssistantUi]);
+      try {
+        const result = await api<{ turn: AssistantTurnState | null }>(
+          `/agent-conversations/${conversationId}/assistant/turn`,
+        );
+        setTurnState(result.turn);
+        if (result.turn?.state === 'awaiting_approval') {
+          const pending = await api<{ approvals: AssistantPendingApproval[] }>(
+            `/agent-conversations/${conversationId}/assistant/approvals`,
+          );
+          setApprovals(pending.approvals ?? []);
+        } else {
+          setApprovals([]);
+        }
+      } catch {
+        clearAssistantUi();
+      }
+    },
+    [assistantEnabled, assistantReady, clearAssistantUi],
+  );
 
-  const reloadThreadMessages = useCallback(async (conversation: Conversation) => {
-    const page = await api<Page<Message>>(
-      `/agent-conversations/${conversation.id}/messages?limit=50&direction=before`,
-    );
-    setMessages(page.items);
-    clearAssistantUi();
-    await loadTurnState(conversation.id);
-  }, [clearAssistantUi, loadTurnState]);
+  const reloadThreadMessages = useCallback(
+    async (conversation: Conversation) => {
+      const page = await api<Page<Message>>(
+        `/agent-conversations/${conversation.id}/messages?limit=50&direction=before`,
+      );
+      setMessages(page.items);
+      clearAssistantUi();
+      await loadTurnState(conversation.id);
+    },
+    [clearAssistantUi, loadTurnState],
+  );
 
   const openThread = useCallback(
     async (conversation: Conversation, options?: { fromBridge?: boolean }) => {
@@ -328,12 +334,15 @@ export function CommandAiPanel({
     handleConversationTip,
   );
 
-  const handleAssistantDelta = useCallback((frame: Parameters<NonNullable<AssistantStreamCallbacks['onDelta']>>[0]) => {
-    const current = selectedRef.current;
-    if (!current || frame.conversationId !== current.id) return;
-    setStreamingTurnId(frame.turnId);
-    setStreamingText((text) => text + frame.delta);
-  }, []);
+  const handleAssistantDelta = useCallback(
+    (frame: Parameters<NonNullable<AssistantStreamCallbacks['onDelta']>>[0]) => {
+      const current = selectedRef.current;
+      if (!current || frame.conversationId !== current.id) return;
+      setStreamingTurnId(frame.turnId);
+      setStreamingText((text) => text + frame.delta);
+    },
+    [],
+  );
 
   const handleAssistantTurnState = useCallback(
     (frame: Parameters<NonNullable<AssistantStreamCallbacks['onTurnState']>>[0]) => {

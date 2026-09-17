@@ -2264,7 +2264,10 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   });
   app.put('/api/settings/command-ai-assistant', (req, res, next) => {
     try {
-      const result = updateCommandAiAssistant(db, commandAiAssistantSettingsInputSchema.parse(req.body));
+      const result = updateCommandAiAssistant(
+        db,
+        commandAiAssistantSettingsInputSchema.parse(req.body),
+      );
       res.json({
         ...result,
         key: readKeyMetadata(db, result.assistant.provider),
@@ -3373,38 +3376,44 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       next(error);
     }
   });
-  app.post('/api/agent-conversations/:id/assistant/approvals/:approvalId/respond', (req, res, next) => {
-    try {
-      getConversation(db, req.params.id, 'operator');
-      const session = (req as unknown as AuthedRequest).operatorSession;
-      if (authRequired && !session) {
-        res.status(401).json({ error: 'Authentication required.' });
-        return;
-      }
-      const approved = Boolean((req.body as { approved?: boolean })?.approved);
-      const secret = assistantKeyEncryptionKey() || (assistantStubMode() ? assistantEncryptionSecret() : '');
-      if (!secret) {
-        res.status(400).json({ error: 'Assistant encryption is not configured.' });
-        return;
-      }
-      void respondToApproval(db, {
-        conversationId: req.params.id,
-        approvalId: req.params.approvalId,
-        approved,
-        operatorSessionHash: session?.tokenHash ?? '',
-        encryptionSecret: secret,
-        stubMode: assistantStubMode(),
-      }).then((approval) => {
-        if (!approval) {
-          res.status(404).json({ error: 'Pending approval not found.' });
+  app.post(
+    '/api/agent-conversations/:id/assistant/approvals/:approvalId/respond',
+    (req, res, next) => {
+      try {
+        getConversation(db, req.params.id, 'operator');
+        const session = (req as unknown as AuthedRequest).operatorSession;
+        if (authRequired && !session) {
+          res.status(401).json({ error: 'Authentication required.' });
           return;
         }
-        res.json({ approval });
-      }).catch(next);
-    } catch (error) {
-      next(error);
-    }
-  });
+        const approved = Boolean((req.body as { approved?: boolean })?.approved);
+        const secret =
+          assistantKeyEncryptionKey() || (assistantStubMode() ? assistantEncryptionSecret() : '');
+        if (!secret) {
+          res.status(400).json({ error: 'Assistant encryption is not configured.' });
+          return;
+        }
+        void respondToApproval(db, {
+          conversationId: req.params.id,
+          approvalId: req.params.approvalId,
+          approved,
+          operatorSessionHash: session?.tokenHash ?? '',
+          encryptionSecret: secret,
+          stubMode: assistantStubMode(),
+        })
+          .then((approval) => {
+            if (!approval) {
+              res.status(404).json({ error: 'Pending approval not found.' });
+              return;
+            }
+            res.json({ approval });
+          })
+          .catch(next);
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
   app.post('/api/agent-conversations/:id/archive', (req, res, next) => {
     try {
       res.json(setConversationState(db, req.params.id, 'operator', 'ARCHIVED', clock()));

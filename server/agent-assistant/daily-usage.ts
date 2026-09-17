@@ -12,7 +12,9 @@ const dayKey = (now = new Date()) => now.toISOString().slice(0, 10);
 
 export function getUsageForDay(db: Db, day = dayKey()): DailyUsage {
   const row = db
-    .prepare('SELECT usage_day, turn_count, token_count FROM assistant_daily_usage WHERE usage_day=?')
+    .prepare(
+      'SELECT usage_day, turn_count, token_count FROM assistant_daily_usage WHERE usage_day=?',
+    )
     .get(day) as { usage_day: string; turn_count: number; token_count: number } | undefined;
   return row
     ? { day: row.usage_day, turnCount: row.turn_count, tokenCount: row.token_count }
@@ -43,8 +45,7 @@ export function incrementTokens(db: Db, tokens: number, day = dayKey()): DailyUs
 }
 
 export type CapCheckResult =
-  | { ok: true }
-  | { ok: false; reason: 'turn_cap' | 'token_cap'; message: string };
+  { ok: true } | { ok: false; reason: 'turn_cap' | 'token_cap'; message: string };
 
 export function checkCaps(
   db: Db,

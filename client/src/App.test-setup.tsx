@@ -1801,22 +1801,22 @@ const respondTo = (url: string, init?: RequestInit) => {
       keyLast4: input.key.slice(-4),
     };
     testState.commandAiAssistantPayload = {
-      assistant:
-        testState.commandAiAssistantPayload?.assistant ?? {
-          enabled: false,
-          provider: input.provider,
-          model: 'gpt-4o-mini',
-          dailyTurnCap: 100,
-          dailyTokenCap: 300_000,
-          scopes: ['workspace:read', 'workspace:write'],
-        },
+      assistant: testState.commandAiAssistantPayload?.assistant ?? {
+        enabled: false,
+        provider: input.provider,
+        model: 'gpt-4o-mini',
+        dailyTurnCap: 100,
+        dailyTokenCap: 300_000,
+        scopes: ['workspace:read', 'workspace:write'],
+      },
       key: keyMeta,
       ready: Boolean(testState.commandAiAssistantPayload?.assistant.enabled),
     };
     return { key: keyMeta };
   }
   if (url.endsWith('/api/settings/command-ai-assistant') && method === 'PUT') {
-    const assistant = body as import('../../shared/command-ai-assistant').CommandAiAssistantSettings;
+    const assistant =
+      body as import('../../shared/command-ai-assistant').CommandAiAssistantSettings;
     const key =
       testState.commandAiAssistantPayload?.key ??
       ({ provider: assistant.provider, hasKey: false, keyLast4: null } as const);

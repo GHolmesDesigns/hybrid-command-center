@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { Lightbulb, Sparkles } from 'lucide-react';
 import { ASSISTANT_AGENT_LABEL } from '../../../shared/mcp-agent-registry';
-import type { ConversationSenderKind, MessageLinkedHandoff } from '../../../shared/agent-conversations';
+import type {
+  ConversationSenderKind,
+  MessageLinkedHandoff,
+} from '../../../shared/agent-conversations';
 import type { AgentIdentityProvenance } from '../../../shared/agent-coordination';
 import { AgentBadge, type AgentBadgePresence, type AgentBadgeProfile } from './AgentBadge';
 import { MessageLinkedHandoffs } from './MentionHandoffCompose';

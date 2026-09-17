@@ -62,7 +62,11 @@ export function createAnthropicAssistantProvider(apiKey: string): AssistantProvi
       let text = '';
       if (Array.isArray(content)) {
         for (const block of content) {
-          if (block && typeof block === 'object' && (block as Record<string, unknown>).type === 'text') {
+          if (
+            block &&
+            typeof block === 'object' &&
+            (block as Record<string, unknown>).type === 'text'
+          ) {
             const piece = (block as Record<string, unknown>).text;
             if (typeof piece === 'string') text += piece;
           }

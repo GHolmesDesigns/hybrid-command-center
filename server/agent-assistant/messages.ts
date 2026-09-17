@@ -32,7 +32,10 @@ export function insertAssistantMessage(
         'VERIFIED',
         'assistant',
       );
-      db.prepare('UPDATE agent_conversations SET updated_at=? WHERE id=?').run(instant, conversationId);
+      db.prepare('UPDATE agent_conversations SET updated_at=? WHERE id=?').run(
+        instant,
+        conversationId,
+      );
     } finally {
       db.prepare('DELETE FROM settings WHERE key=?').run(PIPELINE_INSERT_KEY);
     }

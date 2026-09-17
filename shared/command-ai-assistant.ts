@@ -24,10 +24,7 @@ export const ANTHROPIC_ASSISTANT_MODELS = [
 export type OpenAiAssistantModel = (typeof OPENAI_ASSISTANT_MODELS)[number];
 export type AnthropicAssistantModel = (typeof ANTHROPIC_ASSISTANT_MODELS)[number];
 
-export const ASSISTANT_MODELS_BY_PROVIDER: Record<
-  AssistantProviderName,
-  readonly string[]
-> = {
+export const ASSISTANT_MODELS_BY_PROVIDER: Record<AssistantProviderName, readonly string[]> = {
   openai: OPENAI_ASSISTANT_MODELS,
   anthropic: ANTHROPIC_ASSISTANT_MODELS,
 };
@@ -148,10 +145,7 @@ export function isAssistantModelForProvider(
   return (ASSISTANT_MODELS_BY_PROVIDER[provider] as readonly string[]).includes(model);
 }
 
-export function normalizeAssistantModel(
-  provider: AssistantProviderName,
-  model: string,
-): string {
+export function normalizeAssistantModel(provider: AssistantProviderName, model: string): string {
   const list = ASSISTANT_MODELS_BY_PROVIDER[provider];
   if ((list as readonly string[]).includes(model)) return model;
   return list[0]!;

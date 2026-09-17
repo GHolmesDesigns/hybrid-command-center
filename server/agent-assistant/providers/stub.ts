@@ -29,9 +29,7 @@ const sleep = (ms: number, signal?: AbortSignal) =>
     );
   });
 
-export function createStubAssistantProvider(
-  options: StubAssistantOptions = {},
-): AssistantProvider {
+export function createStubAssistantProvider(options: StubAssistantOptions = {}): AssistantProvider {
   return {
     async streamTurn(request: AssistantTurnRequest): Promise<AssistantTurnResult> {
       const chunks = ['Hello', ' from', ' Command', ' AI.'];

@@ -103,9 +103,7 @@ describe('assistant turn orchestrator', () => {
     });
     const approvals = listPendingApprovals(db, conversation.id);
     expect(approvals[0]?.toolName).toBe('workspace_delete_project');
-    expect(
-      db.prepare('SELECT 1 FROM projects WHERE id=?').get('proj-1'),
-    ).toBeUndefined();
+    expect(db.prepare('SELECT 1 FROM projects WHERE id=?').get('proj-1')).toBeUndefined();
   });
 
   it('refuses cancel from a different operator session', async () => {
@@ -263,10 +261,7 @@ describe('assistant turn orchestrator', () => {
         scopes: ['signal:read'],
       }),
     );
-    expect(resolveAssistantCredentialScopes(db)).toEqual([
-      'workspace:read',
-      'workspace:write',
-    ]);
+    expect(resolveAssistantCredentialScopes(db)).toEqual(['workspace:read', 'workspace:write']);
   });
 
   it('executes read tools without operator approval', async () => {

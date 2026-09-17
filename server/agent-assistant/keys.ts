@@ -41,10 +41,7 @@ export function storeKey(
   return { provider, hasKey: true, keyLast4 };
 }
 
-export function readKeyMetadata(
-  db: Db,
-  provider: AssistantProviderName,
-): AssistantKeyMetadata {
+export function readKeyMetadata(db: Db, provider: AssistantProviderName): AssistantKeyMetadata {
   const row = db.prepare(`${SELECT_KEY} WHERE provider=?`).get(provider) as KeyRow | undefined;
   if (!row) return assistantKeyMetadataSchema.parse({ provider, hasKey: false, keyLast4: null });
   return assistantKeyMetadataSchema.parse({

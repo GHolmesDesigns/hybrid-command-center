@@ -103,7 +103,9 @@ describe('assistant service', () => {
     startTurnAfterOperatorMessage(db, conversation.id, options);
     await vi.waitFor(() => {
       expect(
-        listMessages(db, conversation.id, 'operator').items.filter((m) => m.senderKind === 'assistant'),
+        listMessages(db, conversation.id, 'operator').items.filter(
+          (m) => m.senderKind === 'assistant',
+        ),
       ).toHaveLength(1);
     });
   });

@@ -78,7 +78,7 @@ const cardBoxes = (page: Page): Promise<CardBox[]> =>
 const openSettings = async (page: Page) => {
   await page.goto('/settings');
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
-  await expect(page.locator('.settings-layout .settings-card')).toHaveCount(11);
+  await expect(page.locator('.settings-layout .settings-card')).toHaveCount(12);
   // Every measurement below is taken across two separate renders and compared to the pixel, so the
   // two have to be laid out in the same font. `client/src/styles.css` fetches DM Sans and Manrope
   // with `display=swap`, which means one render can be measured in the fallback face and its

@@ -102,5 +102,9 @@ export function assistantReady(db: Db): boolean {
 
 /** Test helper — encryption secret from config. */
 export function assistantEncryptionSecret(): string {
-  return assistantKeyEncryptionKey() || config.google.encryptionKey || 'test-assistant-key-32-chars-min!!';
+  return (
+    assistantKeyEncryptionKey() ||
+    config.google.encryptionKey ||
+    'test-assistant-key-32-chars-min!!'
+  );
 }

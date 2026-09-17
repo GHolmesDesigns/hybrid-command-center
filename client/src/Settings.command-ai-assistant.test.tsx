@@ -79,7 +79,9 @@ describe('Command AI assistant settings', () => {
 
   it('resets assistant settings to defaults', async () => {
     await renderSettings();
-    const section = screen.getByRole('heading', { name: 'Command AI assistant' }).closest('section');
+    const section = screen
+      .getByRole('heading', { name: 'Command AI assistant' })
+      .closest('section');
     expect(section).toBeTruthy();
     fireEvent.change(within(section!).getByLabelText('Daily turn cap'), {
       target: { value: '25' },

@@ -14,9 +14,9 @@ describe('command ai assistant settings', () => {
   it('defaults off and rejects raising daily caps', () => {
     db = createDb(':memory:');
     expect(readCommandAiAssistant(db)).toMatchObject({ enabled: false, dailyTurnCap: 100 });
-    expect(() =>
-      updateCommandAiAssistant(db, { dailyTurnCap: 200 }),
-    ).toThrow(/cannot exceed the server default/i);
+    expect(() => updateCommandAiAssistant(db, { dailyTurnCap: 200 })).toThrow(
+      /cannot exceed the server default/i,
+    );
     db.close();
   });
 
@@ -49,9 +49,9 @@ describe('command ai assistant settings', () => {
     vi.resetModules();
     const settings = await import('./settings.ts');
     db = createDb(':memory:');
-    expect(() =>
-      settings.updateCommandAiAssistant(db, { dailyTokenCap: 400_000 }),
-    ).toThrow(/token cap cannot exceed/i);
+    expect(() => settings.updateCommandAiAssistant(db, { dailyTokenCap: 400_000 })).toThrow(
+      /token cap cannot exceed/i,
+    );
     expect(() => settings.updateCommandAiAssistant(db, { enabled: true })).toThrow(
       /add an api key/i,
     );

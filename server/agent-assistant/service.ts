@@ -7,7 +7,10 @@ import {
   respondToApproval,
   runAssistantTurn,
 } from './turn.ts';
-import type { AssistantPendingApproval, AssistantTurnState } from '../../shared/command-ai-assistant.ts';
+import type {
+  AssistantPendingApproval,
+  AssistantTurnState,
+} from '../../shared/command-ai-assistant.ts';
 import type { CommandAiPageContext } from '../../shared/agent-conversations.ts';
 import type { StubAssistantOptions } from './providers/stub.ts';
 
@@ -48,12 +51,7 @@ export function startTurnAfterOperatorMessage(
     });
 }
 
-export {
-  cancelTurn,
-  getTurnState,
-  listPendingApprovals,
-  respondToApproval,
-};
+export { cancelTurn, getTurnState, listPendingApprovals, respondToApproval };
 
 export function assistantSettingsSummary(db: Db) {
   const assistant = readCommandAiAssistant(db);

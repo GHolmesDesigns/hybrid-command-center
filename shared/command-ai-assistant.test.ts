@@ -25,7 +25,9 @@ describe('command-ai-assistant shared helpers', () => {
   });
 
   it('returns a model ceiling or falls back to the light-touch output cap', () => {
-    expect(modelOutputTokenCeiling('gpt-4o-mini')).toBeGreaterThan(LIGHT_TOUCH_LIMITS.maxOutputTokens);
+    expect(modelOutputTokenCeiling('gpt-4o-mini')).toBeGreaterThan(
+      LIGHT_TOUCH_LIMITS.maxOutputTokens,
+    );
     expect(modelOutputTokenCeiling('unknown-model')).toBe(LIGHT_TOUCH_LIMITS.maxOutputTokens);
   });
 
@@ -46,11 +48,12 @@ describe('command-ai-assistant shared helpers', () => {
     expect(commandAiAssistantSettingsSchema.parse(DEFAULT_COMMAND_AI_ASSISTANT_SETTINGS)).toEqual(
       DEFAULT_COMMAND_AI_ASSISTANT_SETTINGS,
     );
-    expect(storeAssistantKeyInputSchema.parse({ provider: 'openai', key: 'sk-test-key' }).provider).toBe(
-      'openai',
-    );
     expect(
-      assistantKeyMetadataSchema.parse({ provider: 'anthropic', hasKey: true, keyLast4: '1234' }).hasKey,
+      storeAssistantKeyInputSchema.parse({ provider: 'openai', key: 'sk-test-key' }).provider,
+    ).toBe('openai');
+    expect(
+      assistantKeyMetadataSchema.parse({ provider: 'anthropic', hasKey: true, keyLast4: '1234' })
+        .hasKey,
     ).toBe(true);
     expect(
       assistantPendingApprovalSchema.parse({

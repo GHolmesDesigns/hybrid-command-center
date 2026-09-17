@@ -30,17 +30,17 @@ describe('resolveProvider', () => {
   });
 
   it('throws when a live provider is requested without a stored key', () => {
-    expect(() =>
-      resolveProvider({ db, provider: 'openai', encryptionSecret: SECRET }),
-    ).toThrow(/no api key/i);
+    expect(() => resolveProvider({ db, provider: 'openai', encryptionSecret: SECRET })).toThrow(
+      /no api key/i,
+    );
   });
 
   it('returns provider adapters when keys are stored', () => {
     storeKey(db, 'openai', 'sk-openai-test-key-1234567890', SECRET);
     storeKey(db, 'anthropic', 'sk-ant-test-key-1234567890', SECRET);
-    expect(typeof resolveProvider({ db, provider: 'openai', encryptionSecret: SECRET }).streamTurn).toBe(
-      'function',
-    );
+    expect(
+      typeof resolveProvider({ db, provider: 'openai', encryptionSecret: SECRET }).streamTurn,
+    ).toBe('function');
     expect(
       typeof resolveProvider({ db, provider: 'anthropic', encryptionSecret: SECRET }).streamTurn,
     ).toBe('function');
