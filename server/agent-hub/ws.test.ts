@@ -199,6 +199,104 @@ describe('Agent Hub WebSocket (C236)', () => {
     expect(await closed).toBe(1008);
   });
 
+  it('routes assistant deltas only to the owning subscribed socket', async () => {
+    const loginB = await request(app).post('/api/auth/login').send({ password: PASSWORD });
+    const cookieB = loginB.headers['set-cookie']?.[0] as string;
+
+    const socketA = new WebSocket(wsUrl(), { headers: { Cookie: cookie, Origin: APP_ORIGIN } });
+    const socketB = new WebSocket(wsUrl(), { headers: { Cookie: cookieB, Origin: APP_ORIGIN } });
+    await Promise.all([
+      new Promise<void>((resolve, reject) => {
+        socketA.once('open', () => resolve());
+        socketA.once('error', reject);
+      }),
+      new Promise<void>((resolve, reject) => {
+        socketB.once('open', () => resolve());
+        socketB.once('error', reject);
+      }),
+    ]);
+    socketA.send(JSON.stringify({ kind: 'subscribe', conversationId: 'conv-assistant' }));
+    await new Promise((resolve) => setTimeout(resolve, 25));
+
+    const rawToken = readSessionToken(cookie);
+    const sessionA = sessionFromRawToken(db, {
+      rawToken,
+      sessionSecret: SECRET,
+      now: Date.now(),
+    });
+    hub.sendAssistantDelta(sessionA!.tokenHash, 'conv-assistant', {
+      kind: 'assistant_delta',
+      turnId: 'turn-1',
+      conversationId: 'conv-assistant',
+      delta: 'Hi',
+    });
+    hub.sendAssistantDelta(sessionA!.tokenHash, 'conv-other', {
+      kind: 'assistant_delta',
+      turnId: 'turn-1',
+      conversationId: 'conv-other',
+      delta: 'Hidden',
+    });
+
+    const delta = await new Promise<unknown>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('timed out waiting for delta')), 2_000);
+      socketA.once('message', (data) => {
+        clearTimeout(timer);
+        resolve(JSON.parse(String(data)));
+      });
+    });
+    expect(delta).toMatchObject({
+      kind: 'assistant_delta',
+      conversationId: 'conv-assistant',
+      delta: 'Hi',
+    });
+
+    socketB.close();
+    socketA.close();
+  });
+
+  it('routes assistant turn-state frames only to the owning subscribed socket', async () => {
+    const socket = new WebSocket(wsUrl(), { headers: { Cookie: cookie, Origin: APP_ORIGIN } });
+    await new Promise<void>((resolve, reject) => {
+      socket.once('open', () => resolve());
+      socket.once('error', reject);
+    });
+    socket.send(JSON.stringify({ kind: 'subscribe', conversationId: 'conv-turn-state' }));
+    await new Promise((resolve) => setTimeout(resolve, 25));
+
+    const rawToken = readSessionToken(cookie);
+    const session = sessionFromRawToken(db, {
+      rawToken,
+      sessionSecret: SECRET,
+      now: Date.now(),
+    });
+    hub.sendAssistantTurnState(session!.tokenHash, 'conv-turn-state', {
+      kind: 'assistant_turn_state',
+      turnId: 'turn-2',
+      conversationId: 'conv-turn-state',
+      state: 'finished',
+    });
+    hub.sendAssistantTurnState(session!.tokenHash, 'conv-other', {
+      kind: 'assistant_turn_state',
+      turnId: 'turn-2',
+      conversationId: 'conv-other',
+      state: 'finished',
+    });
+
+    const frame = await new Promise<unknown>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('timed out waiting for turn state')), 2_000);
+      socket.once('message', (data) => {
+        clearTimeout(timer);
+        resolve(JSON.parse(String(data)));
+      });
+    });
+    expect(frame).toMatchObject({
+      kind: 'assistant_turn_state',
+      conversationId: 'conv-turn-state',
+      state: 'finished',
+    });
+    socket.close();
+  });
+
   it('accepts ping and subscribe frames and responds with pong', async () => {
     const socket = new WebSocket(wsUrl(), { headers: { Cookie: cookie, Origin: APP_ORIGIN } });
     await new Promise<void>((resolve, reject) => {

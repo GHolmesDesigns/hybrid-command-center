@@ -227,6 +227,11 @@ export const testState = {
   brandingPayload: null as Branding | null,
   viewDefaultsPayload: null as ViewDefaults | null,
   liveTipsPayload: null as AgentHubLiveTipsSettings | null,
+  commandAiAssistantPayload: null as {
+    assistant: import('../../shared/command-ai-assistant').CommandAiAssistantSettings;
+    key: import('../../shared/command-ai-assistant').AssistantKeyMetadata;
+    ready: boolean;
+  } | null,
   manualPayload: null as { version: string; available: boolean; url: string | null } | null,
   taskPatchError: null as string | null,
   taskReorderError: null as string | null,
@@ -802,7 +807,7 @@ export const calendarRange = (overrides: Partial<CalendarRange> = {}): CalendarR
   ...overrides,
 });
 
-/** Serves the seven endpoints App() requests on mount. */
+/** Serves the endpoints App() requests on mount. */
 const payloadFor = (url: string) => {
   if (url.endsWith('/api/import/receipts')) return testState.importReceiptsPayload;
   if (url.endsWith('/api/dashboard')) return testState.dashboardPayload;
@@ -812,6 +817,21 @@ const payloadFor = (url: string) => {
     return { viewDefaults: testState.viewDefaultsPayload ?? CANONICAL_VIEW_DEFAULTS };
   if (url.endsWith('/api/settings/agent-hub-live-tips'))
     return { liveTips: testState.liveTipsPayload ?? DEFAULT_AGENT_HUB_LIVE_TIPS_SETTINGS };
+  if (url.endsWith('/api/settings/command-ai-assistant'))
+    return (
+      testState.commandAiAssistantPayload ?? {
+        assistant: {
+          enabled: false,
+          provider: 'openai',
+          model: 'gpt-4o-mini',
+          dailyTurnCap: 100,
+          dailyTokenCap: 300_000,
+          scopes: ['workspace:read', 'workspace:write'],
+        },
+        key: { provider: 'openai', hasKey: false, keyLast4: null },
+        ready: false,
+      }
+    );
   if (url.endsWith('/api/settings/manual'))
     return (
       testState.manualPayload ?? {
@@ -1773,6 +1793,41 @@ const respondTo = (url: string, init?: RequestInit) => {
     testState.liveTipsPayload = body as AgentHubLiveTipsSettings;
     return { liveTips: testState.liveTipsPayload };
   }
+  if (url.endsWith('/api/settings/command-ai-assistant/key') && method === 'PUT') {
+    const input = body as { provider: 'openai' | 'anthropic'; key: string };
+    const keyMeta = {
+      provider: input.provider,
+      hasKey: true,
+      keyLast4: input.key.slice(-4),
+    };
+    testState.commandAiAssistantPayload = {
+      assistant: testState.commandAiAssistantPayload?.assistant ?? {
+        enabled: false,
+        provider: input.provider,
+        model: 'gpt-4o-mini',
+        dailyTurnCap: 100,
+        dailyTokenCap: 300_000,
+        scopes: ['workspace:read', 'workspace:write'],
+      },
+      key: keyMeta,
+      ready: Boolean(testState.commandAiAssistantPayload?.assistant.enabled),
+    };
+    return { key: keyMeta };
+  }
+  if (url.endsWith('/api/settings/command-ai-assistant') && method === 'PUT') {
+    const assistant =
+      body as import('../../shared/command-ai-assistant').CommandAiAssistantSettings;
+    const key =
+      testState.commandAiAssistantPayload?.key ??
+      ({ provider: assistant.provider, hasKey: false, keyLast4: null } as const);
+    testState.commandAiAssistantPayload = {
+      assistant,
+      key,
+      ready: assistant.enabled && key.hasKey,
+    };
+    if (assistant.enabled) testState.liveTipsPayload = { enabled: true };
+    return { assistant, key };
+  }
   if (url.endsWith('/api/settings/branding') && method === 'PUT') {
     testState.brandingPayload = body as Branding;
     return { branding: testState.brandingPayload };
@@ -1934,6 +1989,7 @@ beforeEach(() => {
   testState.brandingPayload = null;
   testState.viewDefaultsPayload = null;
   testState.liveTipsPayload = null;
+  testState.commandAiAssistantPayload = null;
   testState.manualPayload = null;
   testState.taskPatchError = null;
   testState.taskReorderError = null;

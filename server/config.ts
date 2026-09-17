@@ -166,6 +166,12 @@ const environment = z.object({
     .string()
     .min(ENCRYPTION_KEY_MIN_LENGTH, `must be at least ${ENCRYPTION_KEY_MIN_LENGTH} characters`)
     .optional(),
+  ASSISTANT_KEY_ENCRYPTION_KEY: z
+    .string()
+    .min(ENCRYPTION_KEY_MIN_LENGTH, `must be at least ${ENCRYPTION_KEY_MIN_LENGTH} characters`)
+    .optional(),
+  /** When `stub`, the assistant uses the deterministic test provider and skips live API keys. */
+  HCC_ASSISTANT_PROVIDER: z.enum(['stub']).optional(),
   // Browser Picker developer key and Cloud project number (C52). Optional with Drive; required
   // together before Settings can open Picker. Never a secret with Drive scopes — restrict by
   // HTTP referrer in Cloud Console.
@@ -221,6 +227,8 @@ const parsed = environment.safeParse({
   GOOGLE_CLIENT_SECRET: read('GOOGLE_CLIENT_SECRET'),
   GOOGLE_REDIRECT_URI: read('GOOGLE_REDIRECT_URI') ?? ENVIRONMENT_DEFAULTS.GOOGLE_REDIRECT_URI,
   GOOGLE_TOKEN_ENCRYPTION_KEY: read('GOOGLE_TOKEN_ENCRYPTION_KEY'),
+  ASSISTANT_KEY_ENCRYPTION_KEY: read('ASSISTANT_KEY_ENCRYPTION_KEY'),
+  HCC_ASSISTANT_PROVIDER: read('HCC_ASSISTANT_PROVIDER'),
   GOOGLE_API_KEY: read('GOOGLE_API_KEY'),
   GOOGLE_APP_ID: read('GOOGLE_APP_ID'),
   POST_BRIDGE_API_KEY: read('POST_BRIDGE_API_KEY'),
@@ -280,6 +288,10 @@ export const config = {
     apiKey: env.CURSOR_ADMIN_API_KEY ?? '',
     baseUrl: env.CURSOR_ADMIN_API_BASE_URL ?? '',
   },
+  assistant: {
+    keyEncryptionKey: env.ASSISTANT_KEY_ENCRYPTION_KEY ?? '',
+    stubMode: env.HCC_ASSISTANT_PROVIDER === 'stub',
+  },
   auth: {
     sessionSecret: env.SESSION_SECRET ?? '',
     operatorPasswordHash: env.OPERATOR_PASSWORD_HASH ?? '',
@@ -298,6 +310,12 @@ export const bufferConfigured = () => Boolean(config.buffer.apiKey);
 
 /** Agent cost reads are optional and independent of every other integration. */
 export const agentCostConfigured = () => Boolean(config.agentCost.apiKey);
+
+/** Deterministic assistant provider for tests and E2E — never contacts OpenAI or Anthropic. */
+export const assistantStubMode = () => config.assistant.stubMode;
+
+/** Command AI provider key encryption — required when the assistant is enabled. */
+export const assistantKeyEncryptionKey = () => config.assistant.keyEncryptionKey;
 
 /** Runtime view of the §5.1 checklist against the loaded config. */
 export const authIsConfigured = () =>

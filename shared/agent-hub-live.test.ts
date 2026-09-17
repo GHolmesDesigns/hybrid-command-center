@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   agentHubWakeFromTip,
+  isAgentHubAssistantDeltaFrame,
+  isAgentHubAssistantTurnStateFrame,
   isAgentHubWakeFrame,
   parseAgentHubClientFrame,
 } from './agent-hub-live.ts';
@@ -54,5 +56,27 @@ describe('agent hub live frames', () => {
       isAgentHubWakeFrame({ kind: 'wake', seq: 1, feeds: ['notifications'], conversationId: 3 }),
     ).toBe(false);
     expect(isAgentHubWakeFrame(null)).toBe(false);
+  });
+
+  it('validates assistant streaming frames', () => {
+    const delta = {
+      kind: 'assistant_delta',
+      turnId: 'turn-1',
+      conversationId: 'conv-1',
+      delta: 'Hello',
+    };
+    expect(isAgentHubAssistantDeltaFrame(delta)).toBe(true);
+    expect(isAgentHubAssistantDeltaFrame({ ...delta, delta: 1 })).toBe(false);
+    expect(isAgentHubAssistantDeltaFrame({ ...delta, conversationId: '' })).toBe(false);
+
+    const state = {
+      kind: 'assistant_turn_state',
+      turnId: 'turn-1',
+      conversationId: 'conv-1',
+      state: 'started',
+    };
+    expect(isAgentHubAssistantTurnStateFrame(state)).toBe(true);
+    expect(isAgentHubAssistantTurnStateFrame({ ...state, state: 42 })).toBe(false);
+    expect(isAgentHubAssistantTurnStateFrame(null)).toBe(false);
   });
 });

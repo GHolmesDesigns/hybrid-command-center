@@ -42,6 +42,8 @@ export default defineConfig({
         APP_ORIGIN: e2eWebOrigin,
         BUFFER_API_KEY: 'e2e-buffer-key',
         PUBLISH_NOW_EVIDENCE: '1',
+        HCC_ASSISTANT_PROVIDER: 'stub',
+        ASSISTANT_KEY_ENCRYPTION_KEY: 'e2e-assistant-encryption-key-32chars!!',
       },
       url: `${e2eApiOrigin}/api/health`,
       reuseExistingServer: false,

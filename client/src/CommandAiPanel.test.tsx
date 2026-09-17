@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import type { AgentHubTipPayload } from '../../shared/agent-hub-sse';
 import { CommandAiFab, CommandAiPanel, CommandAiTopbarToggle } from './components/CommandAiPanel';
+import type { AssistantStreamCallbacks } from './useAgentHubTips';
 import type { BreadcrumbData } from './components/breadcrumbs';
 import { AgentHubTipsContext } from './components/AgentHubTipsContext';
 import { ConversationSelectionProvider } from './components/ConversationSelectionProvider';
@@ -380,7 +381,9 @@ describe('CommandAiPanel', () => {
     render(
       <MemoryRouter>
         <ConversationSelectionProvider>
-          <AgentHubTipsContext.Provider value={subscribe}>
+          <AgentHubTipsContext.Provider
+            value={{ subscribe, subscribeConversation: () => () => undefined, reconnecting: false }}
+          >
             <CommandAiPanel open liveTipsEnabled onClose={() => undefined} />
           </AgentHubTipsContext.Provider>
         </ConversationSelectionProvider>
@@ -860,5 +863,408 @@ describe('CommandAiPanel', () => {
     renderPanel(<CommandAiPanel open onClose={() => undefined} />);
     fireEvent.click(await screen.findByRole('button', { name: /Side thread/ }));
     expect(await screen.findByText('Secondary thread')).toBeVisible();
+  });
+
+  it('shows a settings link when the assistant is enabled without a stored key', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/agents/directory')) return json({ agents: [] });
+      if (url.includes('/agents/presence')) return json({ presence: [] });
+      if (url.includes('/agent-summaries')) return json({ summaries: [] });
+      if (url.includes('/agent-conversations?'))
+        return json({ items: [], nextCursor: null, hasMore: false });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    renderPanel(
+      <CommandAiPanel
+        open
+        onClose={() => undefined}
+        assistantBundle={{
+          assistant: {
+            enabled: true,
+            provider: 'openai',
+            model: 'gpt-4o-mini',
+            dailyTurnCap: 100,
+            dailyTokenCap: 300_000,
+            scopes: ['workspace:read', 'workspace:write'],
+          },
+          key: { provider: 'openai', hasKey: false, keyLast4: null },
+          ready: false,
+        }}
+      />,
+    );
+
+    expect(await screen.findByText(/Add an API key in/)).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
+  });
+
+  it('shows pending approvals and turn status when the assistant is ready', async () => {
+    const conversation = freeformConversation('conv-assistant', 'Assistant thread');
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/agents/directory')) return json({ agents: [] });
+      if (url.includes('/agents/presence')) return json({ presence: [] });
+      if (url.includes('/agent-summaries')) return json({ summaries: [] });
+      if (url.includes('/agent-conversations?')) {
+        return json({ items: [conversation], nextCursor: null, hasMore: false });
+      }
+      if (url.includes('/agent-conversations/conv-assistant/messages')) {
+        return json({ items: [], nextCursor: null, hasMore: false });
+      }
+      if (url.includes('/agent-conversations/conv-assistant/assistant/turn')) {
+        return json({
+          turn: {
+            conversationId: 'conv-assistant',
+            turnId: 'turn-1',
+            state: 'awaiting_approval',
+            profile: 'light',
+            toolCallCount: 1,
+            outputTokenCount: 12,
+            startedAt: '2026-09-11T12:00:00.000Z',
+            updatedAt: '2026-09-11T12:00:01.000Z',
+            cancelRequested: false,
+            pendingApprovalIds: ['approval-1'],
+          },
+        });
+      }
+      if (url.includes('/agent-conversations/conv-assistant/assistant/approvals')) {
+        return json({
+          approvals: [
+            {
+              id: 'approval-1',
+              conversationId: 'conv-assistant',
+              turnId: 'turn-1',
+              toolName: 'workspace_add_checklist_item',
+              toolArgs: { taskId: 'task-1', text: 'Review mockups' },
+              tier: 'inline',
+              summary: null,
+              status: 'pending',
+              createdAt: '2026-09-11T12:00:01.000Z',
+              expiresAt: '2026-09-11T12:15:01.000Z',
+              decidedAt: null,
+            },
+          ],
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    renderPanel(
+      <CommandAiPanel
+        open
+        onClose={() => undefined}
+        assistantBundle={{
+          assistant: {
+            enabled: true,
+            provider: 'openai',
+            model: 'gpt-4o-mini',
+            dailyTurnCap: 100,
+            dailyTokenCap: 300_000,
+            scopes: ['workspace:read', 'workspace:write'],
+          },
+          key: { provider: 'openai', hasKey: true, keyLast4: '1234' },
+          ready: true,
+        }}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Assistant thread/ }));
+    expect(await screen.findByText(/Awaiting your approval/)).toBeVisible();
+    expect(screen.getByText('workspace_add_checklist_item')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeVisible();
+  });
+
+  it('renders streaming assistant text from live websocket deltas', async () => {
+    const conversation = freeformConversation('conv-stream', 'Stream thread');
+    let streamCallbacks: AssistantStreamCallbacks = {};
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/agents/directory')) return json({ agents: [] });
+      if (url.includes('/agents/presence')) return json({ presence: [] });
+      if (url.includes('/agent-summaries')) return json({ summaries: [] });
+      if (url.includes('/agent-conversations?')) {
+        return json({ items: [conversation], nextCursor: null, hasMore: false });
+      }
+      if (url.includes('/agent-conversations/conv-stream/messages')) {
+        return json({ items: [], nextCursor: null, hasMore: false });
+      }
+      if (url.includes('/assistant/turn')) return json({ turn: null });
+      if (url.includes('/assistant/approvals')) return json({ approvals: [] });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    render(
+      <MemoryRouter>
+        <ConversationSelectionProvider>
+          <AgentHubTipsContext.Provider
+            value={{
+              subscribe: () => () => undefined,
+              subscribeConversation: (_id, callbacks) => {
+                streamCallbacks = callbacks;
+                return () => undefined;
+              },
+              reconnecting: false,
+            }}
+          >
+            <CommandAiPanel
+              open
+              liveTipsEnabled
+              onClose={() => undefined}
+              assistantBundle={{
+                assistant: {
+                  enabled: true,
+                  provider: 'openai',
+                  model: 'gpt-4o-mini',
+                  dailyTurnCap: 100,
+                  dailyTokenCap: 300_000,
+                  scopes: ['workspace:read', 'workspace:write'],
+                },
+                key: { provider: 'openai', hasKey: true, keyLast4: '1234' },
+                ready: true,
+              }}
+            />
+          </AgentHubTipsContext.Provider>
+        </ConversationSelectionProvider>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Stream thread/ }));
+    act(() => {
+      streamCallbacks.onDelta?.({
+        kind: 'assistant_delta',
+        turnId: 'turn-stream',
+        conversationId: 'conv-stream',
+        delta: 'Streaming ',
+      });
+      streamCallbacks.onDelta?.({
+        kind: 'assistant_delta',
+        turnId: 'turn-stream',
+        conversationId: 'conv-stream',
+        delta: 'reply',
+      });
+    });
+    expect(await screen.findByLabelText('Command AI streaming response')).toHaveTextContent(
+      'Streaming reply',
+    );
+  });
+
+  it('declines a pending approval from the drawer', async () => {
+    const conversation = freeformConversation('conv-decline', 'Decline thread');
+    const approvalFixture = {
+      id: 'approval-decline',
+      conversationId: 'conv-decline',
+      turnId: 'turn-1',
+      toolName: 'workspace_add_checklist_item',
+      toolArgs: { taskId: 'task-1', text: 'Review mockups' },
+      tier: 'inline' as const,
+      summary: null,
+      status: 'pending' as const,
+      createdAt: '2026-09-11T12:00:01.000Z',
+      expiresAt: '2026-09-11T12:15:01.000Z',
+      decidedAt: null,
+    };
+    const respond = vi.fn(async () =>
+      json({ approval: { ...approvalFixture, status: 'declined' } }),
+    );
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes('/agents/directory')) return json({ agents: [] });
+      if (url.includes('/agents/presence')) return json({ presence: [] });
+      if (url.includes('/agent-summaries')) return json({ summaries: [] });
+      if (url.includes('/agent-conversations?')) {
+        return json({ items: [conversation], nextCursor: null, hasMore: false });
+      }
+      if (url.includes('/agent-conversations/conv-decline/messages')) {
+        return json({ items: [], nextCursor: null, hasMore: false });
+      }
+      if (url.includes('/assistant/turn')) {
+        return json({
+          turn: {
+            conversationId: 'conv-decline',
+            turnId: 'turn-1',
+            state: 'awaiting_approval',
+            profile: 'light',
+            toolCallCount: 1,
+            outputTokenCount: 12,
+            startedAt: '2026-09-11T12:00:00.000Z',
+            updatedAt: '2026-09-11T12:00:01.000Z',
+            cancelRequested: false,
+            pendingApprovalIds: ['approval-decline'],
+          },
+        });
+      }
+      if (url.includes('/assistant/approvals') && init?.method !== 'POST') {
+        return json({ approvals: [approvalFixture] });
+      }
+      if (
+        url.includes('/assistant/approvals/approval-decline/respond') &&
+        init?.method === 'POST'
+      ) {
+        return respond();
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    renderPanel(
+      <CommandAiPanel
+        open
+        onClose={() => undefined}
+        assistantBundle={{
+          assistant: {
+            enabled: true,
+            provider: 'openai',
+            model: 'gpt-4o-mini',
+            dailyTurnCap: 100,
+            dailyTokenCap: 300_000,
+            scopes: ['workspace:read', 'workspace:write'],
+          },
+          key: { provider: 'openai', hasKey: true, keyLast4: '1234' },
+          ready: true,
+        }}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Decline thread/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Decline' }));
+    await waitFor(() => expect(respond).toHaveBeenCalled());
+  });
+
+  it('submits an approval decision from the drawer', async () => {
+    const conversation = freeformConversation('conv-approve', 'Approve thread');
+    const approvalFixture = {
+      id: 'approval-1',
+      conversationId: 'conv-approve',
+      turnId: 'turn-1',
+      toolName: 'workspace_add_checklist_item',
+      toolArgs: { taskId: 'task-1', text: 'Review mockups' },
+      tier: 'inline' as const,
+      summary: null,
+      status: 'pending' as const,
+      createdAt: '2026-09-11T12:00:01.000Z',
+      expiresAt: '2026-09-11T12:15:01.000Z',
+      decidedAt: null,
+    };
+    const respond = vi.fn(async () =>
+      json({ approval: { ...approvalFixture, status: 'approved' } }),
+    );
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes('/agents/directory')) return json({ agents: [] });
+      if (url.includes('/agents/presence')) return json({ presence: [] });
+      if (url.includes('/agent-summaries')) return json({ summaries: [] });
+      if (url.includes('/agent-conversations?')) {
+        return json({ items: [conversation], nextCursor: null, hasMore: false });
+      }
+      if (url.includes('/agent-conversations/conv-approve/messages')) {
+        return json({ items: [], nextCursor: null, hasMore: false });
+      }
+      if (url.includes('/assistant/turn')) {
+        return json({
+          turn: {
+            conversationId: 'conv-approve',
+            turnId: 'turn-1',
+            state: 'awaiting_approval',
+            profile: 'light',
+            toolCallCount: 1,
+            outputTokenCount: 12,
+            startedAt: '2026-09-11T12:00:00.000Z',
+            updatedAt: '2026-09-11T12:00:01.000Z',
+            cancelRequested: false,
+            pendingApprovalIds: ['approval-1'],
+          },
+        });
+      }
+      if (url.includes('/assistant/approvals') && init?.method !== 'POST') {
+        return json({ approvals: [approvalFixture] });
+      }
+      if (url.includes('/assistant/approvals/approval-1/respond') && init?.method === 'POST') {
+        return respond();
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    renderPanel(
+      <CommandAiPanel
+        open
+        onClose={() => undefined}
+        assistantBundle={{
+          assistant: {
+            enabled: true,
+            provider: 'openai',
+            model: 'gpt-4o-mini',
+            dailyTurnCap: 100,
+            dailyTokenCap: 300_000,
+            scopes: ['workspace:read', 'workspace:write'],
+          },
+          key: { provider: 'openai', hasKey: true, keyLast4: '1234' },
+          ready: true,
+        }}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Approve thread/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+    await waitFor(() => expect(respond).toHaveBeenCalled());
+  });
+
+  it('cancels a running assistant turn from the drawer', async () => {
+    const conversation = freeformConversation('conv-cancel', 'Cancel thread');
+    const cancel = vi.fn(async () => json({ ok: true }));
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes('/agents/directory')) return json({ agents: [] });
+      if (url.includes('/agents/presence')) return json({ presence: [] });
+      if (url.includes('/agent-summaries')) return json({ summaries: [] });
+      if (url.includes('/agent-conversations?')) {
+        return json({ items: [conversation], nextCursor: null, hasMore: false });
+      }
+      if (url.includes('/agent-conversations/conv-cancel/messages')) {
+        return json({ items: [], nextCursor: null, hasMore: false });
+      }
+      if (url.includes('/assistant/turn')) {
+        return json({
+          turn: {
+            conversationId: 'conv-cancel',
+            turnId: 'turn-cancel',
+            state: 'running',
+            profile: 'light',
+            toolCallCount: 0,
+            outputTokenCount: 0,
+            startedAt: '2026-09-11T12:00:00.000Z',
+            updatedAt: '2026-09-11T12:00:01.000Z',
+            cancelRequested: false,
+            pendingApprovalIds: [],
+          },
+        });
+      }
+      if (url.includes('/assistant/cancel') && init?.method === 'POST') return cancel();
+      if (url.includes('/assistant/approvals')) return json({ approvals: [] });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    renderPanel(
+      <CommandAiPanel
+        open
+        onClose={() => undefined}
+        liveTipsEnabled
+        assistantBundle={{
+          assistant: {
+            enabled: true,
+            provider: 'openai',
+            model: 'gpt-4o-mini',
+            dailyTurnCap: 100,
+            dailyTokenCap: 300_000,
+            scopes: ['workspace:read', 'workspace:write'],
+          },
+          key: { provider: 'openai', hasKey: true, keyLast4: '1234' },
+          ready: true,
+        }}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Cancel thread/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel turn' }));
+    await waitFor(() => expect(cancel).toHaveBeenCalled());
   });
 });

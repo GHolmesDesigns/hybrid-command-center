@@ -115,3 +115,32 @@ export function isAgentHubWakeFrame(value: unknown): value is AgentHubWakeFrame 
     return false;
   return true;
 }
+
+const isAssistantConversationId = (value: unknown): value is string =>
+  typeof value === 'string' && value.length > 0 && value.length <= 128;
+
+export function isAgentHubAssistantDeltaFrame(
+  value: unknown,
+): value is AgentHubAssistantDeltaFrame {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.kind === 'assistant_delta' &&
+    typeof record.turnId === 'string' &&
+    isAssistantConversationId(record.conversationId) &&
+    typeof record.delta === 'string'
+  );
+}
+
+export function isAgentHubAssistantTurnStateFrame(
+  value: unknown,
+): value is AgentHubAssistantTurnStateFrame {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.kind === 'assistant_turn_state' &&
+    typeof record.turnId === 'string' &&
+    isAssistantConversationId(record.conversationId) &&
+    typeof record.state === 'string'
+  );
+}

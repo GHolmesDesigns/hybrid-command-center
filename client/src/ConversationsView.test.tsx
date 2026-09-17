@@ -263,7 +263,9 @@ describe('ConversationsView', () => {
     });
 
     renderConversations(
-      <AgentHubTipsContext.Provider value={subscribe}>
+      <AgentHubTipsContext.Provider
+        value={{ subscribe, subscribeConversation: () => () => undefined, reconnecting: false }}
+      >
         <ConversationsView flash={vi.fn()} liveTipsEnabled />
       </AgentHubTipsContext.Provider>,
     );

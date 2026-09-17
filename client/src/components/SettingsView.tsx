@@ -56,6 +56,16 @@ import {
   type TaskTimerSettings,
 } from '../../../shared/task-timer';
 import type { AgentHubLiveTipsSettings } from '../../../shared/agent-hub-sse';
+import {
+  ASSISTANT_MODELS_BY_PROVIDER,
+  DEFAULT_COMMAND_AI_ASSISTANT_SETTINGS,
+  DEFAULT_DAILY_TOKEN_CAP,
+  DEFAULT_DAILY_TURN_CAP,
+  type AssistantKeyMetadata,
+  type CommandAiAssistantSettings,
+} from '../../../shared/command-ai-assistant';
+import { MCP_AGENT_SCOPES, type McpAgentScope } from '../../../shared/mcp-agent-registry';
+import type { CommandAiAssistantBundle } from './CommandAiPanel';
 
 const COLOR_LABEL: Record<BrandingColorField, string> = {
   background: 'Sidebar background',
@@ -80,6 +90,18 @@ type ManualState = {
 
 type NotificationPermissionState = NotificationPermission | 'unavailable';
 
+const ASSISTANT_SCOPE_LABEL: Record<McpAgentScope, string> = {
+  'coordination:read': 'Read coordination',
+  'coordination:write': 'Write coordination',
+  'workspace:read': 'Read workspace and Signal data',
+  'workspace:write': 'Write workspace tasks and projects',
+  'signal:write': 'Write Signal posts and provider refreshes',
+  'settings:write': 'Write workspace settings',
+  'import:write': 'Commit campaign and Signal imports',
+  'drive:sync': 'Provision Drive folders',
+  'drive:write-request': 'Request Drive writes for human approval',
+};
+
 function readNotificationPermission(): NotificationPermissionState {
   return typeof Notification === 'undefined' ? 'unavailable' : Notification.permission;
 }
@@ -89,6 +111,8 @@ export function SettingsView({
   viewDefaults,
   liveTips,
   onLiveTipsSaved,
+  commandAiAssistant,
+  onCommandAiAssistantSaved,
   tags,
   tasks,
   categories,
@@ -101,6 +125,8 @@ export function SettingsView({
   viewDefaults: ViewDefaults;
   liveTips: AgentHubLiveTipsSettings;
   onLiveTipsSaved: (value: AgentHubLiveTipsSettings) => void;
+  commandAiAssistant: CommandAiAssistantBundle;
+  onCommandAiAssistantSaved: (value: CommandAiAssistantBundle) => void;
   tags: Tag[];
   tasks: Task[];
   categories: Category[];
@@ -127,6 +153,18 @@ export function SettingsView({
   const [liveTipsForm, setLiveTipsForm, markLiveTipsSaved] =
     useServerSeeded<AgentHubLiveTipsSettings>(liveTips);
   const [liveTipsBusy, setLiveTipsBusy] = useState(false);
+  const [assistantForm, setAssistantForm, markAssistantSaved] =
+    useServerSeeded<CommandAiAssistantSettings>(commandAiAssistant.assistant);
+  const [assistantKeyMeta, setAssistantKeyMeta] = useState<AssistantKeyMetadata>(
+    commandAiAssistant.key,
+  );
+  const [assistantKeyInput, setAssistantKeyInput] = useState('');
+  const [assistantBusy, setAssistantBusy] = useState(false);
+  const [assistantKeyBusy, setAssistantKeyBusy] = useState(false);
+  useEffect(() => {
+    setAssistantForm(commandAiAssistant.assistant);
+    setAssistantKeyMeta(commandAiAssistant.key);
+  }, [commandAiAssistant, setAssistantForm]);
   const load = useCallback(async () => {
     const next = await api<DriveSettingsState>('/settings/drive');
     setState(next);
@@ -275,6 +313,7 @@ export function SettingsView({
               Keep conversation messages and notifications current while you work. Wake frames name
               which feeds changed — never message bodies or counts. If the live channel disconnects,
               navigation and manual refresh still work.
+              {assistantForm.enabled ? ' Required while Command AI is on.' : ''}
             </p>
             <form
               onSubmit={async (event) => {
@@ -301,6 +340,7 @@ export function SettingsView({
                 <input
                   type="checkbox"
                   checked={liveTipsForm.enabled}
+                  disabled={assistantForm.enabled}
                   onChange={(event) =>
                     setLiveTipsForm({ ...liveTipsForm, enabled: event.target.checked })
                   }
@@ -312,17 +352,247 @@ export function SettingsView({
                   type="button"
                   className="secondary"
                   onClick={() => setLiveTipsForm({ enabled: false })}
-                  disabled={liveTipsBusy}
+                  disabled={liveTipsBusy || assistantForm.enabled}
                 >
                   <RotateCcw /> Turn off
                 </button>
-                <button className="submit" disabled={liveTipsBusy}>
+                <button className="submit" disabled={liveTipsBusy || assistantForm.enabled}>
                   {liveTipsBusy ? (
                     <>
                       <RefreshCw className="spin" /> Saving…
                     </>
                   ) : (
                     'Save live updates'
+                  )}
+                </button>
+              </div>
+            </form>
+          </section>
+          <section className="panel settings-card" aria-labelledby="command-ai-assistant-heading">
+            <div className="section-title">
+              <div>
+                <span className="eyebrow">Agents</span>
+                <h2 id="command-ai-assistant-heading">Command AI assistant</h2>
+              </div>
+            </div>
+            <p>
+              Run an in-app assistant on operator messages in Command AI threads. Enabling turns on
+              live updates and stores provider keys encrypted on the server — never in the browser.
+            </p>
+            <form
+              className="form brand-form"
+              aria-label="Command AI assistant settings"
+              onSubmit={async (event) => {
+                event.preventDefault();
+                setAssistantBusy(true);
+                try {
+                  const saved = await send<{
+                    assistant: CommandAiAssistantSettings;
+                    key: AssistantKeyMetadata;
+                  }>('/settings/command-ai-assistant', 'PUT', assistantForm);
+                  onCommandAiAssistantSaved({
+                    assistant: saved.assistant,
+                    key: saved.key,
+                    ready: saved.key.hasKey && saved.assistant.enabled,
+                  });
+                  setAssistantForm(saved.assistant);
+                  setAssistantKeyMeta(saved.key);
+                  markAssistantSaved();
+                  if (saved.assistant.enabled) {
+                    onLiveTipsSaved({ enabled: true });
+                    setLiveTipsForm({ enabled: true });
+                    markLiveTipsSaved();
+                  }
+                  flash('Command AI assistant saved.');
+                } catch (error) {
+                  flash((error as Error).message, 'error');
+                } finally {
+                  setAssistantBusy(false);
+                }
+              }}
+            >
+              <label>
+                <input
+                  type="checkbox"
+                  checked={assistantForm.enabled}
+                  onChange={(event) => {
+                    const enabled = event.target.checked;
+                    setAssistantForm({ ...assistantForm, enabled });
+                    if (enabled) setLiveTipsForm({ enabled: true });
+                  }}
+                />{' '}
+                Enable Command AI assistant
+              </label>
+              <div className="form-row">
+                <label>
+                  Provider
+                  <select
+                    aria-label="Assistant provider"
+                    value={assistantForm.provider}
+                    onChange={(event) => {
+                      const provider = event.target.value as CommandAiAssistantSettings['provider'];
+                      const models = ASSISTANT_MODELS_BY_PROVIDER[provider];
+                      setAssistantForm({
+                        ...assistantForm,
+                        provider,
+                        model: models.includes(assistantForm.model)
+                          ? assistantForm.model
+                          : models[0]!,
+                      });
+                    }}
+                  >
+                    <option value="openai">OpenAI</option>
+                    <option value="anthropic">Anthropic</option>
+                  </select>
+                </label>
+                <label>
+                  Model
+                  <select
+                    aria-label="Assistant model"
+                    value={assistantForm.model}
+                    onChange={(event) =>
+                      setAssistantForm({ ...assistantForm, model: event.target.value })
+                    }
+                  >
+                    {ASSISTANT_MODELS_BY_PROVIDER[assistantForm.provider].map((model) => (
+                      <option key={model} value={model}>
+                        {model}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <label>
+                API key
+                <input
+                  type="password"
+                  autoComplete="off"
+                  aria-label="Assistant API key"
+                  placeholder={
+                    assistantKeyMeta.hasKey
+                      ? `Stored key ending in ${assistantKeyMeta.keyLast4 ?? '????'}`
+                      : 'Paste provider API key'
+                  }
+                  value={assistantKeyInput}
+                  onChange={(event) => setAssistantKeyInput(event.target.value)}
+                />
+              </label>
+              <p className="field-hint">
+                {assistantKeyMeta.hasKey
+                  ? `A ${assistantKeyMeta.provider} key is stored (…${assistantKeyMeta.keyLast4 ?? '????'}). Enter a new key only to replace it.`
+                  : 'No key stored yet. Save a key before enabling the assistant.'}
+              </p>
+              <button
+                type="button"
+                className="secondary"
+                disabled={assistantKeyBusy || assistantKeyInput.trim().length < 8}
+                onClick={async () => {
+                  setAssistantKeyBusy(true);
+                  try {
+                    const saved = await send<{ key: AssistantKeyMetadata }>(
+                      '/settings/command-ai-assistant/key',
+                      'PUT',
+                      { provider: assistantForm.provider, key: assistantKeyInput.trim() },
+                    );
+                    setAssistantKeyMeta(saved.key);
+                    setAssistantKeyInput('');
+                    onCommandAiAssistantSaved({
+                      ...commandAiAssistant,
+                      key: saved.key,
+                      ready: saved.key.hasKey && commandAiAssistant.assistant.enabled,
+                    });
+                    flash('Assistant API key saved.');
+                  } catch (error) {
+                    flash((error as Error).message, 'error');
+                  } finally {
+                    setAssistantKeyBusy(false);
+                  }
+                }}
+              >
+                {assistantKeyBusy ? (
+                  <>
+                    <RefreshCw className="spin" /> Saving key…
+                  </>
+                ) : (
+                  'Save API key'
+                )}
+              </button>
+              <div className="form-row">
+                <label>
+                  Daily turn cap
+                  <input
+                    type="number"
+                    min={1}
+                    max={DEFAULT_DAILY_TURN_CAP}
+                    aria-label="Daily turn cap"
+                    value={assistantForm.dailyTurnCap}
+                    onChange={(event) =>
+                      setAssistantForm({
+                        ...assistantForm,
+                        dailyTurnCap: Number(event.target.value),
+                      })
+                    }
+                  />
+                </label>
+                <label>
+                  Daily token cap
+                  <input
+                    type="number"
+                    min={1000}
+                    max={DEFAULT_DAILY_TOKEN_CAP}
+                    aria-label="Daily token cap"
+                    value={assistantForm.dailyTokenCap}
+                    onChange={(event) =>
+                      setAssistantForm({
+                        ...assistantForm,
+                        dailyTokenCap: Number(event.target.value),
+                      })
+                    }
+                  />
+                </label>
+              </div>
+              <p className="field-hint">
+                Caps may be lowered only — server defaults are {DEFAULT_DAILY_TURN_CAP} turns and{' '}
+                {DEFAULT_DAILY_TOKEN_CAP.toLocaleString()} tokens per day.
+              </p>
+              <fieldset>
+                <legend>Assistant credential scopes</legend>
+                {MCP_AGENT_SCOPES.map((scope) => (
+                  <label className="checkbox-row" key={`assistant-scope-${scope}`}>
+                    <input
+                      type="checkbox"
+                      checked={assistantForm.scopes.includes(scope)}
+                      onChange={() => {
+                        const next = assistantForm.scopes.includes(scope)
+                          ? assistantForm.scopes.filter((value) => value !== scope)
+                          : [...assistantForm.scopes, scope];
+                        if (!next.length) return;
+                        setAssistantForm({ ...assistantForm, scopes: next });
+                      }}
+                    />
+                    {ASSISTANT_SCOPE_LABEL[scope]}
+                  </label>
+                ))}
+              </fieldset>
+              <div className="brand-actions">
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setAssistantForm({ ...DEFAULT_COMMAND_AI_ASSISTANT_SETTINGS })}
+                  disabled={assistantBusy}
+                >
+                  <RotateCcw /> Reset to defaults
+                </button>
+                <button
+                  className="submit"
+                  disabled={assistantBusy || assistantForm.scopes.length === 0}
+                >
+                  {assistantBusy ? (
+                    <>
+                      <RefreshCw className="spin" /> Saving…
+                    </>
+                  ) : (
+                    'Save assistant'
                   )}
                 </button>
               </div>

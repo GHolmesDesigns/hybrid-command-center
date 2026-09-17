@@ -5,6 +5,10 @@ import {
   type AgentHandoffState,
   type AgentIdentityProvenance,
 } from './agent-coordination.ts';
+import {
+  COMMAND_AI_PAGE_CONTEXT_SUBJECT_TYPES,
+  type CommandAiPageContext,
+} from './command-ai-page-context.ts';
 
 export const CONVERSATION_SCOPE_TYPES = ['client', 'project', 'task', 'freeform'] as const;
 export type ConversationScopeType = (typeof CONVERSATION_SCOPE_TYPES)[number];
@@ -38,18 +42,31 @@ export const createConversationSchema = z
 export const messageSchema = z.string().trim().min(1).max(4000);
 export const thoughtSummarySchema = z.string().trim().min(1).max(4000);
 
+export const commandAiPageContextSchema = z
+  .object({
+    pathname: z.string().max(500),
+    search: z.string().max(2000),
+    label: z.string().max(500),
+    subjectType: z.enum(COMMAND_AI_PAGE_CONTEXT_SUBJECT_TYPES).nullable(),
+    subjectId: z.string().max(200).nullable(),
+    capturedAt: z.string().datetime(),
+  })
+  .strict();
+
 export const postMessageInputSchema = z
   .object({
     body: messageSchema,
     thoughtSummary: thoughtSummarySchema.optional(),
     confirmHandoffs: z.array(agentLabelSchema).max(50).default([]),
     clientRequestId: agentHandoffClientRequestIdSchema.optional(),
+    pageContext: commandAiPageContextSchema.optional(),
   })
   .strict();
 export const conversationDecisionSchema = z
   .object({ outcome: z.string().trim().max(500).optional() })
   .strict();
 export type PostMessageInput = z.infer<typeof postMessageInputSchema>;
+export type { CommandAiPageContext };
 export const scopedConversationResolutionSchema = z
   .object({
     scopeType: z.enum(['client', 'project', 'task']),

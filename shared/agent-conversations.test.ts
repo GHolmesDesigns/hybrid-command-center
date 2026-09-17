@@ -4,6 +4,7 @@ import {
   conversationListSchema,
   conversationScopeSchema,
   createConversationSchema,
+  postMessageInputSchema,
 } from './agent-conversations.ts';
 
 describe('agent conversation schemas', () => {
@@ -45,5 +46,21 @@ describe('agent conversation schemas', () => {
     });
     expect(conversationDecisionSchema.parse({ outcome: '' })).toEqual({ outcome: '' });
     expect(() => conversationDecisionSchema.parse({ outcome: 'x'.repeat(501) })).toThrow();
+  });
+
+  it('accepts optional ephemeral page context on operator sends', () => {
+    expect(
+      postMessageInputSchema.parse({
+        body: 'Hello',
+        pageContext: {
+          pathname: '/projects/proj-1',
+          search: '',
+          subjectType: 'project',
+          subjectId: 'proj-1',
+          label: 'Acme launch',
+          capturedAt: '2026-09-17T12:00:00.000Z',
+        },
+      }).pageContext?.label,
+    ).toBe('Acme launch');
   });
 });
