@@ -1,7 +1,7 @@
 # Live chat conversation platform — planning study
 
-**Status:** **Decisions recorded** — Q1–Q16 answered 16 September 2026; review amendments A1–A4 (§4.10), Appendix B recommendations, and second-review decisions R1–R9 (§4.12) resolved 17 September 2026; ready for card filing; no GitHub issues yet  
-**Filing boundary:** This revision updates the planning study only. GitHub issues/cards are not being filed yet.  
+**Status:** **Decisions recorded** — Q1–Q16 answered 16 September 2026; review amendments A1–A4 (§4.10), Appendix B recommendations, and second-review decisions R1–R9 (§4.12) resolved 17 September 2026; **cards filed** 17 September 2026 as issues #669–#676 (see §5 card index)  
+**Filing boundary:** Cards C236–C243 are filed as GitHub issues #669–#676 on project **Command Center v6.0.0**. Only C236 (#669) is on a milestone (**Wave 41 — Live chat platform**); later cards stay unmilestoned until their waves are planned.  
 **Prepared:** 16 September 2026  
 **Revised:** 17 September 2026 — A1–A4 and Appendix B recommendations accepted (auth-key permission matching, light-touch workload, model-aware token forecasting, Live updates copy); R1–R9 recorded (dedicated assistant credential, `workspace:write` scope split prerequisite, approval clock, forecast on overrun, complex and daily caps, `sender_kind` backfill, two-phase copy)  
 **Source:** Operator request to plan a live chat conversation platform; reviewed against `origin/main` at **6.10.5** (Wave 39 conversation sync shipped; Agent Hub C202–C219 filed or landed).  
@@ -26,8 +26,8 @@ Delivery is phased: first establish authenticated WebSocket live updates with an
 | --- | --- |
 | What exists today? | Durable conversation records, operator compose, @mention → confirmed handoff, MCP agent replies as messages, SSE wake-up tips (C219), drawer/full-page sync (Wave 39). |
 | What is missing for “live chat”? | No in-app assistant that answers in-thread; no typing/presence; agent replies depend on polling/MCP unless SSE tip triggers a reread; Command AI label implies AI but the drawer is compose-only today. |
-| What should this plan produce? | Phased cards from the locked decisions below, beginning with Wave 41. |
-| What is not being filed yet? | GitHub issues, exact card ordering, and semver. |
+| What should this plan produce? | Phased cards from the locked decisions below, beginning with Wave 41 — filed as C236–C243 (#669–#676). |
+| What is not being filed yet? | Wave assignment for cards after C236, and semver. |
 | Owner decisions | Q1–Q16 locked 16 Sep 2026 — see §4 summary table; A1–A4 amendments accepted 17 Sep 2026 — see §4.10 |
 
 ### Terminology
@@ -280,11 +280,26 @@ Raised in the second review of the owner-revised plan; owner accepted every reco
 
 ---
 
-## 5. Proposed phases (draft — not filed)
+## 5. Phases and filed cards
 
-Phases reflect locked decisions, A1–A4, and R1–R9. Each becomes one implementing PR at a time per AGENTS.md. **Order is mandatory** — assistant without WebSocket and scoped drawer will not meet the stated UX.
+Phases reflect locked decisions, A1–A4, and R1–R9. Each card is implemented one PR at a time per AGENTS.md.
+
+### Card index (filed 17 September 2026)
+
+| Card | Issue | Plan section | Milestone | Priority / size |
+| --- | --- | --- | --- | --- |
+| C236 - WebSocket live channel (W41-A) | [#669](https://github.com/GHolmesDesigns/hybrid-command-center/issues/669) | Phase 1 | Wave 41 — Live chat platform | P1 / XL |
+| C237 - Scoped drawer synchronization and canonical threads (LC-P2) | [#670](https://github.com/GHolmesDesigns/hybrid-command-center/issues/670) | Phase 2 | — | P1 / XL |
+| C238 - MCP scope split, assistant credential, and sender kind (LC-P3-PRE) | [#671](https://github.com/GHolmesDesigns/hybrid-command-center/issues/671) | Phase 3 prerequisite | — | P1 / L |
+| C239 - In-app Command AI assistant (LC-P3) | [#672](https://github.com/GHolmesDesigns/hybrid-command-center/issues/672) | Phase 3 | — | P1 / XXL |
+| C240 - Multi-party live chat polish (LC-P4) | [#673](https://github.com/GHolmesDesigns/hybrid-command-center/issues/673) | Phase 4 | — | P2 / M |
+| C241 - Remove C219 SSE live-tip route (LC-SSE) | [#674](https://github.com/GHolmesDesigns/hybrid-command-center/issues/674) | Phase 1 follow-up (Q9/A3) | — | P2 / S |
+| C242 - Agent presence and typing in threads (LC-P5) | [#675](https://github.com/GHolmesDesigns/hybrid-command-center/issues/675) | Phase 5 (optional) | — | P2 / L |
+| C243 - Thread rollups for long conversations (LC-P6) | [#676](https://github.com/GHolmesDesigns/hybrid-command-center/issues/676) | Phase 6 (optional) | — | P2 / L | **Order is mandatory** — assistant without WebSocket and scoped drawer will not meet the stated UX.
 
 ### Phase 1 — WebSocket live channel
+
+**Card:** C236 (#669) · follow-up C241 (#674)
 
 **Goal:** Shell subscribes to one WebSocket when **Live updates** is enabled (A2); wake frames trigger debounced HTTP reread.
 
@@ -293,13 +308,15 @@ Phases reflect locked decisions, A1–A4, and R1–R9. Each becomes one implemen
 - Add `coordination` feed to the tip vocabulary and emit it from handoff write paths.
 - Socket tracking + close on shutdown; frame size/rate limits.
 - Client hook replaces EventSource; Conversations + Command AI + notification badge reread on wake.
-- **SSE parallel (Q9/A3):** SSE route unchanged for one release as fallback; removal filed as a follow-up card after prod verification.
+- **SSE parallel (Q9/A3):** SSE route unchanged for one release as fallback; removal is C241 (#674) after prod verification.
 - Settings copy: “Live update tips” → “Live updates”; same persisted key.
 - Regression: wake for other `conversationId` does not clobber selection; disconnect/reconnect; HTTP fallback on navigation; foreign Origin rejected; unauthenticated upgrade rejected; logout closes socket.
 
 **Likely touch:** new `server/agent-hub/ws*.ts`, `server/index.ts`, `server/agent-hub/tips.ts`, `client/src/useAgentHubLive.ts`, `deploy/aws/` docs, `shared/agent-hub-sse.ts` (rename or extend vocabulary).
 
 ### Phase 2 — Scoped drawer synchronization
+
+**Card:** C237 (#670)
 
 **Goal:** Drawer and full page share selection for **all scopes**; scoped threads appear in drawer history.
 
@@ -314,6 +331,8 @@ Phases reflect locked decisions, A1–A4, and R1–R9. Each becomes one implemen
 
 ### Phase 3 prerequisite — MCP scope split and assistant credential
 
+**Card:** C238 (#671)
+
 **Goal:** The scope vocabulary can express Q2, and the assistant has its own credential before any assistant turn exists (R1, R2).
 
 - Extend `MCP_AGENT_SCOPES` in `shared/mcp-agent-registry.ts` with `signal:write`, `settings:write`, `import:write`, `drive:sync`.
@@ -326,6 +345,8 @@ Phases reflect locked decisions, A1–A4, and R1–R9. Each becomes one implemen
 **Depends on:** none (can land in parallel with Phases 1–2); must merge before Phase 3.
 
 ### Phase 3 — In-app assistant (milestone)
+
+**Card:** C239 (#672)
 
 **Goal:** Operator enables assistant + API key; messages in drawer threads receive assistant replies with scoped writes.
 
@@ -343,6 +364,8 @@ Phases reflect locked decisions, A1–A4, and R1–R9. Each becomes one implemen
 
 ### Phase 4 — Multi-party polish
 
+**Card:** C240 (#673)
+
 **Goal:** MCP **chat peers** (Q15) and handoff state feel live in the same threads.
 
 - Handoff chips update on `coordination` wake (feed added in Phase 1); agent participant messages reread like operator/assistant.
@@ -353,6 +376,8 @@ Phases reflect locked decisions, A1–A4, and R1–R9. Each becomes one implemen
 
 ### Phase 5 — Presence and typing (optional)
 
+**Card:** C242 (#675)
+
 **Goal:** Operators see when a registered agent is online and optionally “typing” in a thread.
 
 - Reuse `agent_list_presence` / presence store; typing is ephemeral server state with TTL, not persisted messages.
@@ -361,6 +386,8 @@ Phases reflect locked decisions, A1–A4, and R1–R9. Each becomes one implemen
 **Depends on:** Phase 1–2; low priority unless operator demand.
 
 ### Phase 6 — Rollups and long-thread UX (optional)
+
+**Card:** C243 (#676)
 
 **Goal:** Implement C216 design when threads exceed threshold.
 
@@ -469,7 +496,7 @@ Wave milestone rule: at least one new `e2e/` spec when a **milestone** closes, n
 | --- | --- |
 | Wave 39 (shipped) | Prerequisite — freeform selection bridge; **extended** in Phase 2 for all scopes |
 | W40-A drawer loop fix | Prerequisite — stale-response guards must survive WebSocket + scoped sync |
-| C219 SSE | Fallback for one release after Phase 1 (A3), then removed |
+| C219 SSE | Fallback for one release after Phase 1 (A3), then removed by C241 (#674) |
 | C216 rollups | Phase 6 or parallel docs-only; no blocker |
 | C215 scheduled agent runs | Orthogonal — scheduled work ≠ live chat |
 | MCP C132 change feeds | Same “tip → cursor” mental model; do not duplicate cursor state in live frames |
@@ -482,7 +509,7 @@ Wave milestone rule: at least one new `e2e/` spec when a **milestone** closes, n
 2. **Engineering spike (Phase 1):** `ws` upgrade on the Node server behind Caddy with Origin + session checks; frame schema; SSE fallback test plan.
 3. **Schema sketch (Phase 2):** `is_canonical` + partial unique index on `agent_conversations` — additive migration.
 4. **Scope split sketch (Phase 3 prerequisite):** new scope names, `requiredScope` reassignment table, and additive credential migration (R2).
-5. **File cards:** Start the epic in **Wave 41** with the Phase 1 issue; file Phase 2, the Phase 3 prerequisite, and later phases in dependency order without pre-assigning their waves. Keep one implementing PR at a time per AGENTS.md.
+5. **Cards filed:** C236–C243 (#669–#676). Start with C236 (#669) in **Wave 41**; C238 (#671) may run in parallel with C236/C237. Assign later cards to waves as they are planned. Keep one implementing PR at a time per AGENTS.md.
 6. **Docs:** Update MCP agent workflow scope table with the Phase 3 prerequisite, and for Q15 chat peers when Phase 4 files.
 
 ---
@@ -558,3 +585,4 @@ _Changelog for this doc:_
 - _2026-09-16 — Review against `main`: A1–A4 amendments proposed (§4.10); named assistant tool allowlist (§7.3, later replaced by owner-revised A1); tier corrections (§7.1); key storage moved from SSM to encrypted SQLite (§4.2); WebSocket Origin/session/routing/shutdown requirements (§4.4); `coordination` feed; assistant identity (§4.11); turn lifecycle (§4.8); canonical index and archive rule (§4.7); prompt injection (§7.4); stub provider for tests (§8)._
 - _2026-09-17 — Owner accepted A1–A4 and the Appendix B recommendations; A1 follows authenticated-key permissions rather than a separate assistant allowlist; sender kind uses a separate column; light-touch workload, model-aware forecasting, and Live updates copy are resolved; ready for card filing._
 - _2026-09-17 — Second review: R1–R9 recorded (§4.12) — dedicated assistant credential; `workspace:write` split as a Phase 3 prerequisite card; tier map as fail-closed safety net; approval wait excluded from clock with 15-minute expiry; forecast on overrun; fixed complex-run ceiling; operator-lowerable daily cap defaults; `sender_kind` backfill then `NOT NULL`; two-phase Live updates copy. Wording fixes: §4.10 intro, A1 marked owner-revised, 16 September changelog entry corrected, duplicate §7.3 paragraph removed, executive summary approval wording._
+- _2026-09-17 — Cards filed: C236–C243 as issues #669–#676 on project Command Center v6.0.0; milestone **Wave 41 — Live chat platform** created for C236 (#669); §5 card index and per-phase card references added._
