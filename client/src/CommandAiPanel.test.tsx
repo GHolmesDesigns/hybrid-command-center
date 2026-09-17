@@ -707,6 +707,9 @@ describe('CommandAiPanel', () => {
           hasMore: false,
         });
       }
+      if (url.endsWith('/agent-conversations/conv-project')) {
+        return json(scopedConversation);
+      }
       if (url.includes('/agent-conversations/conv-free/messages')) {
         return json({ items: [], nextCursor: null, hasMore: false });
       }
@@ -756,9 +759,12 @@ describe('CommandAiPanel', () => {
     );
 
     expect(await screen.findByLabelText('Scope change prompt')).toBeVisible();
+    await waitFor(() => expect(screen.getByRole('button', { name: /Project chat/ })).toBeVisible());
     fireEvent.click(screen.getByRole('button', { name: 'Switch' }));
-    expect(await screen.findByRole('heading', { level: 3, name: 'Project chat' })).toBeVisible();
-    expect(await screen.findByText('Scoped message')).toBeVisible();
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 3, name: 'Project chat' })).toBeVisible();
+      expect(screen.getByText('Scoped message')).toBeVisible();
+    });
   });
 
   it('declines a scope-change prompt for the rest of the browser session', async () => {
