@@ -5,7 +5,7 @@
  * business data. The shell rereads HTTP state after each tip, the same discipline as MCP change
  * feeds.
  */
-export const AGENT_HUB_TIP_FEEDS = ['conversations', 'notifications'] as const;
+export const AGENT_HUB_TIP_FEEDS = ['conversations', 'notifications', 'coordination'] as const;
 export type AgentHubTipFeed = (typeof AGENT_HUB_TIP_FEEDS)[number];
 
 export const AGENT_HUB_TIP_ALLOWED_KEYS = ['feeds', 'conversationId'] as const;

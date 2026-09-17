@@ -391,6 +391,7 @@ import {
 } from './agent-summaries.ts';
 import { AgentHubTipRegistry, setAgentHubTipBridge } from './agent-hub/tips.ts';
 import { handleAgentHubTipsGet } from './agent-hub/sse-route.ts';
+import { closeAgentHubLiveForSession, type AgentHubWsAuth } from './agent-hub/ws.ts';
 import {
   agentHubLiveTipsInput,
   readAgentHubLiveTips,
@@ -573,6 +574,13 @@ export type AppOptions = {
    * is not something reading the configuration can establish.
    */
   logStream?: DestinationStream;
+  /** Called once the Agent Hub live transport can be wired (WebSocket upgrade in `server/index.ts`). */
+  onAgentHubLiveContext?: (ctx: {
+    app: express.Express;
+    registry: AgentHubTipRegistry;
+    auth: AgentHubWsAuth;
+    appOrigin: string;
+  }) => void;
 };
 
 /** Query strings carry authorization codes and tokens, so the path is all a request log keeps. */
@@ -1110,6 +1118,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     // Revoke from the middleware's validated session row, not from a raw Cookie parse — a
     // user-supplied cookie value must not be the condition that gates the revoke.
     const session = (req as AuthedRequest).operatorSession;
+    if (session?.tokenHash) closeAgentHubLiveForSession(session.tokenHash);
     operatorLogout(db, {
       tokenHash: session?.tokenHash ?? null,
       now: authNowMs(),
@@ -3609,6 +3618,12 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
         : {}),
       ...(error instanceof McpAgentLabelTakenError ? { code: 'MCP_AGENT_LABEL_TAKEN' } : {}),
     });
+  });
+  options.onAgentHubLiveContext?.({
+    app,
+    registry: agentHubTips,
+    auth: { authRequired, sessionSecret },
+    appOrigin,
   });
   return app;
 }

@@ -45,23 +45,35 @@ describe('useDebouncedAgentHubTip', () => {
 });
 
 describe('useAgentHubTips', () => {
-  it('dispatches parsed tips and reconnects after stream errors', () => {
+  it('dispatches parsed wake tips, ignores stale seq, and reconnects after close', () => {
     vi.useFakeTimers();
     const instances: Array<{
+      onopen: (() => void) | null;
       onmessage: ((event: MessageEvent) => void) | null;
+      onclose: (() => void) | null;
       onerror: (() => void) | null;
       close: ReturnType<typeof vi.fn>;
+      url: string;
     }> = [];
-    class MockEventSource {
+    class MockWebSocket {
+      static OPEN = 1;
+      readyState = MockWebSocket.OPEN;
+      onopen: (() => void) | null = null;
       onmessage: ((event: MessageEvent) => void) | null = null;
+      onclose: (() => void) | null = null;
       onerror: (() => void) | null = null;
-      close = vi.fn();
+      close = vi.fn(() => {
+        this.readyState = 3;
+        this.onclose?.();
+      });
       constructor(public url: string) {
         instances.push(this);
+        queueMicrotask(() => this.onopen?.());
       }
+      send() {}
     }
-    const Original = globalThis.EventSource;
-    globalThis.EventSource = MockEventSource as unknown as typeof EventSource;
+    const Original = globalThis.WebSocket;
+    globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
 
     function Probe({ enabled }: { enabled: boolean }) {
       const { subscribe } = useAgentHubTips(enabled);
@@ -73,36 +85,41 @@ describe('useAgentHubTips', () => {
     const { result } = renderHook(() => Probe({ enabled: true }));
     act(() => {
       instances[0]?.onmessage?.({
-        data: JSON.stringify({ feeds: ['notifications'] }),
+        data: JSON.stringify({ kind: 'wake', seq: 2, feeds: ['notifications'] }),
+      } as MessageEvent);
+      instances[0]?.onmessage?.({
+        data: JSON.stringify({ kind: 'wake', seq: 1, feeds: ['notifications'] }),
       } as MessageEvent);
       instances[0]?.onmessage?.({ data: '{not-json' } as MessageEvent);
     });
     expect(result.current).toEqual({ feeds: ['notifications'] });
 
     act(() => {
-      instances[0]?.onerror?.();
-      vi.advanceTimersByTime(5000);
+      instances[0]?.onclose?.();
+      vi.advanceTimersByTime(1000);
     });
     expect(instances).toHaveLength(2);
 
-    globalThis.EventSource = Original;
+    globalThis.WebSocket = Original;
     vi.useRealTimers();
   });
 
-  it('does not open EventSource when disabled', () => {
-    const Original = globalThis.EventSource;
+  it('does not open WebSocket when disabled', () => {
+    const Original = globalThis.WebSocket;
     const construct = vi.fn();
-    class MockEventSource {
+    class MockWebSocket {
       constructor(url: string) {
         construct(url);
       }
       close() {}
+      onopen = null;
       onmessage = null;
+      onclose = null;
       onerror = null;
     }
-    globalThis.EventSource = MockEventSource as unknown as typeof EventSource;
+    globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
     renderHook(() => useAgentHubTips(false));
     expect(construct).not.toHaveBeenCalled();
-    globalThis.EventSource = Original;
+    globalThis.WebSocket = Original;
   });
 });

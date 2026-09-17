@@ -23,22 +23,26 @@ function LocationProbe() {
 }
 
 describe('App', () => {
-  it('opens the Agent Hub tip stream when live tips are enabled', async () => {
+  it('opens the Agent Hub WebSocket when live updates are enabled', async () => {
     testState.liveTipsPayload = { enabled: true };
     const opened: string[] = [];
     let onmessage: ((event: MessageEvent) => void) | null = null;
-    class MockEventSource {
+    class MockWebSocket {
       close() {}
-      onerror = null;
+      onerror: (() => void) | null = null;
+      onopen: (() => void) | null = null;
+      onclose: (() => void) | null = null;
       constructor(url: string) {
         opened.push(url);
+        queueMicrotask(() => this.onopen?.());
       }
       set onmessage(fn: ((event: MessageEvent) => void) | null) {
         onmessage = fn;
       }
+      send() {}
     }
-    const original = globalThis.EventSource;
-    globalThis.EventSource = MockEventSource as unknown as typeof EventSource;
+    const original = globalThis.WebSocket;
+    globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
     const notificationReads = () =>
       requests.filter((request) => request.url.includes('/api/agent-notifications'));
 
@@ -49,13 +53,15 @@ describe('App', () => {
     );
 
     expect(await screen.findByText(branding.title)).toBeInTheDocument();
-    await waitFor(() => expect(opened).toContain('/api/agent-hub/tips'));
+    await waitFor(() => expect(opened.some((url) => url.includes('/api/agent-hub/ws'))).toBe(true));
     const initialReads = notificationReads().length;
     act(() => {
-      onmessage?.({ data: JSON.stringify({ feeds: ['notifications'] }) } as MessageEvent);
+      onmessage?.({
+        data: JSON.stringify({ kind: 'wake', seq: 1, feeds: ['notifications'] }),
+      } as MessageEvent);
     });
     await waitFor(() => expect(notificationReads().length).toBeGreaterThan(initialReads));
-    globalThis.EventSource = original;
+    globalThis.WebSocket = original;
   });
 
   it('renders the sidebar with fetched branding once loading resolves', async () => {

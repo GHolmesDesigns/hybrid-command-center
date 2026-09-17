@@ -22,12 +22,18 @@ export function closeOnSignals(
   db: Pick<Db, 'close'>,
   runtime: ShutdownRuntime = process,
   drainMs = HTTP_SHUTDOWN_DRAIN_MS,
+  beforeClose?: () => void,
 ) {
   let stopping = false;
   let finished = false;
   const stop = () => {
     if (stopping) return;
     stopping = true;
+    try {
+      beforeClose?.();
+    } catch (error) {
+      console.error('Command Center pre-shutdown hook failed:', error);
+    }
 
     const finish = (serverError?: Error) => {
       if (finished) return;

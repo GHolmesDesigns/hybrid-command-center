@@ -57,7 +57,7 @@ describe('the Settings layout', () => {
 
     const [connections, appearance] = columns();
     expect(headingsIn(connections)).toEqual([
-      'Live update tips',
+      'Live updates',
       'Timer notifications',
       'Project categories',
       'Task tags',
@@ -77,7 +77,7 @@ describe('the Settings layout', () => {
     // below 1100px the two stacks sit one under the other and the ten cards read straight
     // through. `e2e/settings-column-independence.spec.ts` measures that they really do.
     expect(headingsIn(document.querySelector('.settings-layout')!)).toEqual([
-      'Live update tips',
+      'Live updates',
       'Timer notifications',
       'Project categories',
       'Task tags',

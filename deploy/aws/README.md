@@ -56,6 +56,31 @@ or change Wix DNS as part of a runtime packaging change. Those are cutover actio
 operator; see [`docs/cloud-cutover-rehearsal.md`](../../docs/cloud-cutover-rehearsal.md) for the
 disposable staging column (C55) and the production cutover column (C115).
 
+## WebSocket live updates (C236)
+
+Caddy v2 `reverse_proxy` forwards WebSocket upgrades without extra directives. Caddy does not impose
+a short idle timeout on upgraded connections by default; upstream TCP keepalive and the
+application's own ping interval keep long-lived Agent Hub sockets from going stale behind the proxy.
+
+The Node server sends WebSocket **ping** control frames every **30 seconds**
+(`AGENT_HUB_WS_SERVER_PING_INTERVAL_MS` in `shared/agent-hub-live.ts`). Choose an interval shorter
+than any intermediary idle timeout you introduce later (load balancers often use 60–120 seconds).
+
+After deploy, confirm a WebSocket connect through Caddy succeeds:
+
+```bash
+# Replace the host and session cookie after signing in.
+curl -i -N \
+  -H 'Connection: Upgrade' \
+  -H 'Upgrade: websocket' \
+  -H 'Origin: https://command-center.example.com' \
+  -H 'Cookie: hcc_session=…' \
+  'https://command-center.example.com/api/agent-hub/ws'
+```
+
+Expect `101 Switching Protocols` when the session cookie is valid and the Origin matches
+`APP_ORIGIN` exactly.
+
 # Backup timers
 
 Copy and enable `hcc-offsite-backup.timer`, `hcc-backup-rehearsal.timer`, and
