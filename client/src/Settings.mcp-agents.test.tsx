@@ -146,6 +146,48 @@ describe('Agents connection setup card', () => {
     expect(screen.getByText('No active agent credentials.')).toBeVisible();
   });
 
+  it('issues the assistant credential with chosen scopes and expiry', async () => {
+    testState.mcpAgentRegistryPayload = { enabled: true, credentials: [] };
+
+    render(
+      <MemoryRouter initialEntries={['/agents']}>
+        <App />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('heading', { name: 'Agent connection setup' })).toBeVisible();
+    const assistantForm = screen.getByRole('form', {
+      name: 'Issue Command AI assistant credential',
+    });
+    expect(within(assistantForm).getByLabelText('Read workspace and Signal data')).toBeChecked();
+    expect(
+      within(assistantForm).getByLabelText('Write workspace tasks and projects'),
+    ).toBeChecked();
+    fireEvent.click(
+      within(assistantForm).getByLabelText('Write Signal posts and provider refreshes'),
+    );
+    fireEvent.change(within(assistantForm).getByLabelText('Expires after'), {
+      target: { value: '7' },
+    });
+    fireEvent.click(
+      within(assistantForm).getByRole('button', { name: 'Issue assistant credential' }),
+    );
+
+    await waitFor(() =>
+      expect(
+        requests.some(
+          (request) =>
+            request.method === 'POST' &&
+            request.url.endsWith('/api/auth/mcp-assistant') &&
+            request.body.scopes.includes('signal:write'),
+        ),
+      ).toBe(true),
+    );
+    expect(
+      await screen.findByText(/workspace:read · workspace:write · signal:write/),
+    ).toBeVisible();
+    expect(screen.getAllByText('command-ai').length).toBeGreaterThan(0);
+  });
+
   it('preserves a 90-day lifetime and scopes, confirms the exact expiry, and displays it after rotation', async () => {
     const now = Date.parse('2026-09-01T12:00:00.000Z');
     const expectedExpiry = '2026-11-30T12:00:00.000Z';
