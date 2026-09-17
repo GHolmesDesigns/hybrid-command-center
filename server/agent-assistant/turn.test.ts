@@ -394,6 +394,27 @@ describe('assistant turn orchestrator', () => {
     expect(getTurnState(db, conversation.id)).toBeNull();
   });
 
+  it('creates blocking-tier approvals for destructive writes', async () => {
+    const conversation = createConversation(
+      db,
+      { title: 'Blocking', scope: { type: 'freeform' }, participantLabels: [] },
+      'operator',
+    );
+    await runAssistantTurn(db, {
+      conversationId: conversation.id,
+      operatorSessionHash: SESSION,
+      encryptionSecret: SECRET,
+      stubMode: true,
+      stubOptions: {
+        proposeTool: true,
+        toolName: 'workspace_delete_project',
+        toolArgs: { projectId: 'proj-1' },
+      },
+    });
+    const approval = listPendingApprovals(db, conversation.id)[0]!;
+    expect(approval.tier).toBe('blocking');
+  });
+
   it('returns null when responding to an approval that is no longer pending', async () => {
     const conversation = createConversation(
       db,

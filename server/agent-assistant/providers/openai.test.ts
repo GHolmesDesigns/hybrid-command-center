@@ -98,6 +98,34 @@ describe('OpenAI assistant provider', () => {
     ]);
   });
 
+  it('ignores malformed tool call entries and omits empty assistant text events', async () => {
+    const events: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: null, tool_calls: [{ id: 1, function: null }] } }],
+          usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+        }),
+      })),
+    );
+
+    const provider = createOpenAiAssistantProvider('sk-test');
+    const result = await provider.streamTurn({
+      model: 'gpt-4o-mini',
+      systemPrompt: 'system',
+      messages: [{ role: 'user', content: 'hi' }],
+      tools: [],
+      maxOutputTokens: 100,
+      onEvent: (event) => events.push(event.type),
+    });
+
+    expect(result.text).toBe('');
+    expect(result.toolCalls).toEqual([]);
+    expect(events).toEqual(['usage']);
+  });
+
   it('surfaces provider failures without leaking the full response body', async () => {
     vi.stubGlobal(
       'fetch',
