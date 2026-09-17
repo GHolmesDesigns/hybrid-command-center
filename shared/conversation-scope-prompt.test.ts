@@ -8,10 +8,7 @@ import {
 describe('conversation scope-change prompt', () => {
   it('builds stable dismiss keys', () => {
     expect(
-      scopeChangeDismissKey(
-        { type: 'project', id: 'p1' },
-        { type: 'freeform', id: null },
-      ),
+      scopeChangeDismissKey({ type: 'project', id: 'p1' }, { type: 'freeform', id: null }),
     ).toBe('project:p1|freeform:');
   });
 

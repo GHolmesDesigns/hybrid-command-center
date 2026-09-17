@@ -21,15 +21,21 @@ describe('conversation selection bridge', () => {
   it('flags drawer issues for missing and archived threads without substituting', () => {
     expect(drawerSelectionIssue(null, null)).toBeNull();
     expect(drawerSelectionIssue('c1', null)).toBe('missing');
-    expect(drawerSelectionIssue('c1', { scopeType: 'project', scopeId: 'p1', state: 'ACTIVE' })).toBeNull();
-    expect(drawerSelectionIssue('c1', { scopeType: 'freeform', scopeId: null, state: 'ARCHIVED' })).toBe(
-      'archived_in_drawer',
-    );
-    expect(drawerSelectionIssue('c1', { scopeType: 'freeform', scopeId: null, state: 'ACTIVE' })).toBeNull();
+    expect(
+      drawerSelectionIssue('c1', { scopeType: 'project', scopeId: 'p1', state: 'ACTIVE' }),
+    ).toBeNull();
+    expect(
+      drawerSelectionIssue('c1', { scopeType: 'freeform', scopeId: null, state: 'ARCHIVED' }),
+    ).toBe('archived_in_drawer');
+    expect(
+      drawerSelectionIssue('c1', { scopeType: 'freeform', scopeId: null, state: 'ACTIVE' }),
+    ).toBeNull();
   });
 
   it('flags only missing threads for the full view', () => {
-    expect(fullViewSelectionIssue('c1', { scopeType: 'task', scopeId: 't1', state: 'ARCHIVED' })).toBeNull();
+    expect(
+      fullViewSelectionIssue('c1', { scopeType: 'task', scopeId: 't1', state: 'ARCHIVED' }),
+    ).toBeNull();
     expect(fullViewSelectionIssue('c1', null)).toBe('missing');
   });
 

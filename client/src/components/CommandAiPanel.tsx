@@ -211,9 +211,7 @@ export function CommandAiPanel({
     const threadScope = { type: hint.scopeType, id: hint.scopeId };
     const dismissKey = scopeChangeDismissKey(pageScope, threadScope);
     const dismissed = isScopeChangeDismissed(dismissKey);
-    setScopePromptVisible(
-      shouldOfferScopeChangePrompt({ pageScope, threadScope, dismissed }),
-    );
+    setScopePromptVisible(shouldOfferScopeChangePrompt({ pageScope, threadScope, dismissed }));
   }, [open, bridgeConversationId, hint, pageScope]);
 
   const subscribeAgentHubTips = useAgentHubTipsSubscribe();
@@ -351,7 +349,7 @@ export function CommandAiPanel({
     if (!pageScope) return;
     const threadScope = hint
       ? { type: hint.scopeType, id: hint.scopeId }
-      : selected?.scope ?? { type: 'freeform' as const, id: null };
+      : (selected?.scope ?? { type: 'freeform' as const, id: null });
     dismissScopeChangePair(scopeChangeDismissKey(pageScope, threadScope));
     setScopePromptVisible(false);
   };
@@ -481,10 +479,20 @@ export function CommandAiPanel({
             Switch to <strong>{pageContext.label}</strong> chat?
           </p>
           <div className="command-ai-scope-prompt-actions">
-            <button type="button" className="primary-btn" disabled={busy} onClick={acceptScopeChange}>
+            <button
+              type="button"
+              className="primary-btn"
+              disabled={busy}
+              onClick={acceptScopeChange}
+            >
               Switch
             </button>
-            <button type="button" className="secondary-btn" disabled={busy} onClick={declineScopeChange}>
+            <button
+              type="button"
+              className="secondary-btn"
+              disabled={busy}
+              onClick={declineScopeChange}
+            >
               Keep current thread
             </button>
           </div>
@@ -493,7 +501,10 @@ export function CommandAiPanel({
 
       {canonicalChoice && pageScope && (
         <section className="command-ai-scope-prompt" aria-label="Choose canonical thread">
-          <p>No canonical thread is active for this scope. Promote an existing thread or create a new one.</p>
+          <p>
+            No canonical thread is active for this scope. Promote an existing thread or create a new
+            one.
+          </p>
           <ul className="command-ai-canonical-choice">
             {canonicalChoice.secondaryThreads.map((thread) => (
               <li key={thread.id}>

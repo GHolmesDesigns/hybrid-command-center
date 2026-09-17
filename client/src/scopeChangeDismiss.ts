@@ -5,7 +5,9 @@ function readDismissed(): Set<string> {
     const raw = sessionStorage.getItem(STORAGE_KEY);
     if (!raw) return new Set();
     const parsed = JSON.parse(raw);
-    return new Set(Array.isArray(parsed) ? parsed.filter((entry) => typeof entry === 'string') : []);
+    return new Set(
+      Array.isArray(parsed) ? parsed.filter((entry) => typeof entry === 'string') : [],
+    );
   } catch {
     return new Set();
   }

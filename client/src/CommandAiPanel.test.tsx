@@ -686,7 +686,11 @@ describe('CommandAiPanel', () => {
         });
       }
       if (url.includes('/agent-conversations?')) {
-        return json({ items: [freeformConversation('conv-free', 'Freeform thread'), scopedConversation], nextCursor: null, hasMore: false });
+        return json({
+          items: [freeformConversation('conv-free', 'Freeform thread'), scopedConversation],
+          nextCursor: null,
+          hasMore: false,
+        });
       }
       if (url.includes('/agent-conversations/conv-project/messages')) {
         return json({

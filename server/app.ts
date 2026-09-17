@@ -3222,9 +3222,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   app.get('/api/agent-conversations/scoped-resolution', (req, res, next) => {
     try {
       const input = scopedConversationResolutionSchema.parse(req.query);
-      res.json(
-        resolveScopedConversation(db, input.scopeType, input.scopeId, null),
-      );
+      res.json(resolveScopedConversation(db, input.scopeType, input.scopeId, null));
     } catch (error) {
       next(error);
     }

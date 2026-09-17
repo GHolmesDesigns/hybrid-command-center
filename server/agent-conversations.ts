@@ -273,16 +273,7 @@ export function createConversation(
   transaction(db, () => {
     db.prepare(
       'INSERT INTO agent_conversations(id,title,scope_type,scope_id,state,is_canonical,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)',
-    ).run(
-      id,
-      input.title,
-      input.scope.type,
-      input.scope.id ?? null,
-      'ACTIVE',
-      isCanonical,
-      at,
-      at,
-    );
+    ).run(id, input.title, input.scope.type, input.scope.id ?? null, 'ACTIVE', isCanonical, at, at);
     const insert = db.prepare(
       'INSERT INTO agent_conversation_participants(conversation_id,agent_label) VALUES(?,?)',
     );
@@ -517,11 +508,9 @@ export function setConversationState(
   requireVisible(db, id, actor);
   const isCanonical = state === 'ARCHIVED' ? 0 : undefined;
   if (isCanonical === 0) {
-    db.prepare('UPDATE agent_conversations SET state=?, is_canonical=0, updated_at=? WHERE id=?').run(
-      state,
-      now.toISOString(),
-      id,
-    );
+    db.prepare(
+      'UPDATE agent_conversations SET state=?, is_canonical=0, updated_at=? WHERE id=?',
+    ).run(state, now.toISOString(), id);
   } else {
     db.prepare('UPDATE agent_conversations SET state=?,updated_at=? WHERE id=?').run(
       state,
