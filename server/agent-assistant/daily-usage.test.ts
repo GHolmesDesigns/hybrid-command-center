@@ -28,5 +28,9 @@ describe('assistant daily usage', () => {
       reason: 'token_cap',
     });
     expect(checkCaps(db, { dailyTurnCap: 5, dailyTokenCap: 1000 }).ok).toBe(true);
+    expect(checkCaps(db, { dailyTurnCap: 1, dailyTokenCap: 1000 })).toMatchObject({
+      ok: false,
+      reason: 'turn_cap',
+    });
   });
 });

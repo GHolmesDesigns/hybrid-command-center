@@ -125,6 +125,40 @@ describe('command ai assistant routes', () => {
     expect(turn.body.turn?.state).toBe('cancelled');
   });
 
+  it('approves an inline write through the HTTP approval endpoint', async () => {
+    const app = createApp(db);
+    const conversation = await request(app)
+      .post('/api/agent-conversations')
+      .send({ title: 'Approve route', scope: { type: 'freeform' } })
+      .expect(201);
+    await request(app)
+      .post(`/api/agent-conversations/${conversation.body.id}/messages`)
+      .send({ body: 'Add checklist item' })
+      .expect(201);
+    await vi.waitFor(async () => {
+      const approvals = await request(app)
+        .get(`/api/agent-conversations/${conversation.body.id}/assistant/approvals`)
+        .expect(200);
+      expect(approvals.body.approvals).toHaveLength(1);
+    });
+    const approvalId = (
+      await request(app)
+        .get(`/api/agent-conversations/${conversation.body.id}/assistant/approvals`)
+        .expect(200)
+    ).body.approvals[0].id as string;
+    const approved = await request(app)
+      .post(
+        `/api/agent-conversations/${conversation.body.id}/assistant/approvals/${approvalId}/respond`,
+      )
+      .send({ approved: true })
+      .expect(200);
+    expect(approved.body.approval.status).toBe('approved');
+    expect(
+      (await request(app).get(`/api/agent-conversations/${conversation.body.id}/assistant/turn`))
+        .body.turn,
+    ).toBeNull();
+  });
+
   it('returns null turn state when no assistant turn is active', async () => {
     const app = createApp(db);
     const conversation = await request(app)

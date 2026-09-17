@@ -394,6 +394,39 @@ describe('assistant turn orchestrator', () => {
     expect(getTurnState(db, conversation.id)).toBeNull();
   });
 
+  it('returns null when responding to an approval that is no longer pending', async () => {
+    const conversation = createConversation(
+      db,
+      { title: 'Stale approval', scope: { type: 'freeform' }, participantLabels: [] },
+      'operator',
+    );
+    await runAssistantTurn(db, {
+      conversationId: conversation.id,
+      operatorSessionHash: SESSION,
+      encryptionSecret: SECRET,
+      stubMode: true,
+    });
+    const approval = listPendingApprovals(db, conversation.id)[0]!;
+    await respondToApproval(db, {
+      conversationId: conversation.id,
+      approvalId: approval.id,
+      approved: false,
+      operatorSessionHash: SESSION,
+      encryptionSecret: SECRET,
+      stubMode: true,
+    });
+    expect(
+      await respondToApproval(db, {
+        conversationId: conversation.id,
+        approvalId: approval.id,
+        approved: true,
+        operatorSessionHash: SESSION,
+        encryptionSecret: SECRET,
+        stubMode: true,
+      }),
+    ).toBeNull();
+  });
+
   it('refuses turns when the daily cap is reached', async () => {
     const conversation = createConversation(
       db,
