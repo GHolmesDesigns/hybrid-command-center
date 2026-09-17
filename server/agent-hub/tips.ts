@@ -86,6 +86,10 @@ export function tipAgentHubNotifications(): void {
   tipAgentHubFeeds(['notifications']);
 }
 
+export function tipAgentHubCoordination(): void {
+  tipAgentHubFeeds(['coordination']);
+}
+
 /** Test helper — clears bridge and listeners between suites. */
 export function resetAgentHubTipsForTests(): void {
   bridge = null;

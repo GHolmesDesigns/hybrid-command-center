@@ -11,6 +11,7 @@ describe('agent hub SSE tip payload', () => {
     expect(isAgentHubTipPayload({ feeds: ['conversations'], conversationId: 'thread-1' })).toBe(
       true,
     );
+    expect(isAgentHubTipPayload({ feeds: ['coordination'] })).toBe(true);
   });
 
   it('rejects authoritative or unknown fields', () => {

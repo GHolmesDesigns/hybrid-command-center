@@ -322,7 +322,8 @@ export function App() {
   useEffect(() => {
     refreshUnreadNotifications();
   }, [location.pathname, refreshUnreadNotifications]);
-  const { subscribe: subscribeAgentHubTips } = useAgentHubTips(liveTips.enabled);
+  const { subscribe: subscribeAgentHubTips, reconnecting: liveUpdatesReconnecting } =
+    useAgentHubTips(liveTips.enabled);
   useDebouncedAgentHubTip(
     liveTips.enabled ? subscribeAgentHubTips : null,
     'notifications',
@@ -657,6 +658,12 @@ export function App() {
             breadcrumbData={{ clients, projects, tasks }}
           />
           <CommandAiFab open={commandAiOpen} onClick={() => setCommandAiOpen(true)} />
+          {liveTips.enabled && liveUpdatesReconnecting && (
+            <div className="live-updates-banner" role="status">
+              Live updates disconnected — reconnecting. Navigation and refresh still load current
+              state.
+            </div>
+          )}
           {notice && (
             <div className={`toast ${notice.tone}`} role="status">
               {notice.tone === 'success' ? <CheckCircle2 /> : <CircleAlert />}

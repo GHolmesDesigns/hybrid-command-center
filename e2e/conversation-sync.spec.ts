@@ -10,7 +10,10 @@ const openCommandAiDrawer = async (page: import('@playwright/test').Page) => {
 
 test('Command AI drawer and Conversations full view stay synchronized', async ({ page }) => {
   const run = Date.now();
-  await page.request.put('/api/settings/agent-hub-live-tips', { data: { enabled: true } });
+  const liveTips = await page.request.put('/api/settings/agent-hub-live-tips', {
+    data: { enabled: true },
+  });
+  expect(liveTips.ok()).toBeTruthy();
 
   const titleA = `Sync thread A ${run}`;
   const titleB = `Sync thread B ${run}`;
@@ -40,6 +43,8 @@ test('Command AI drawer and Conversations full view stay synchronized', async ({
 
   // Open conversation A in full view, then show conversation B in the drawer.
   await page.goto(`/agents/conversations?open=${encodeURIComponent(convA.id)}`);
+  await expect(detail.getByRole('heading', { name: titleA })).toBeVisible();
+  await expect(page.locator('.toast.error')).toHaveCount(0);
   await openCommandAiDrawer(page);
   await expect(detail.getByRole('heading', { name: titleA })).toBeVisible();
   await expect(detail.getByText(seedA)).toBeVisible();

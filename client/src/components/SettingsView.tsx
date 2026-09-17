@@ -268,14 +268,13 @@ export function SettingsView({
             <div className="section-title">
               <div>
                 <span className="eyebrow">Agents</span>
-                <h2 id="agent-hub-live-tips-heading">Live update tips</h2>
+                <h2 id="agent-hub-live-tips-heading">Live updates</h2>
               </div>
             </div>
             <p>
-              When enabled, the shell listens for lightweight Server-Sent Events that name which
-              feeds changed — conversations or notifications — and rereads HTTP state. Tips never
-              carry message bodies or counts. If the stream disconnects, navigation and manual
-              refresh still work.
+              Keep conversation messages and notifications current while you work. Wake frames name
+              which feeds changed — never message bodies or counts. If the live channel disconnects,
+              navigation and manual refresh still work.
             </p>
             <form
               onSubmit={async (event) => {
@@ -290,7 +289,7 @@ export function SettingsView({
                   onLiveTipsSaved(saved.liveTips);
                   setLiveTipsForm(saved.liveTips);
                   markLiveTipsSaved();
-                  flash('Live update tips saved.');
+                  flash('Live updates saved.');
                 } catch (error) {
                   flash((error as Error).message, 'error');
                 } finally {
@@ -306,7 +305,7 @@ export function SettingsView({
                     setLiveTipsForm({ ...liveTipsForm, enabled: event.target.checked })
                   }
                 />{' '}
-                Enable live update tips
+                Enable live updates
               </label>
               <div className="brand-actions">
                 <button
@@ -323,7 +322,7 @@ export function SettingsView({
                       <RefreshCw className="spin" /> Saving…
                     </>
                   ) : (
-                    'Save live tips'
+                    'Save live updates'
                   )}
                 </button>
               </div>

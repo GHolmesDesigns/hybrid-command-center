@@ -48,6 +48,7 @@ import {
 } from './mutations.ts';
 import { recordChangeFeedEvent } from '../change-feeds.ts';
 import { applyHandoffSources } from '../agent-conversation-handoffs.ts';
+import { tipAgentHubCoordination } from '../agent-hub/tips.ts';
 
 const id = () => crypto.randomUUID();
 
@@ -295,7 +296,9 @@ export function postHandoff(
   now: Date = new Date(),
 ): AgentHandoff {
   const instant = now.toISOString();
-  return transaction(db, () => insertHandoff(db, raw, instant));
+  const handoff = transaction(db, () => insertHandoff(db, raw, instant));
+  tipAgentHubCoordination();
+  return handoff;
 }
 
 /** Atomic claim: directed label match or open-pool first writer. */
@@ -308,10 +311,10 @@ export function claimHandoff(
 ): AgentHandoff {
   const agentLabel = agentLabelSchema.parse(agentLabelRaw);
   const instant = now.toISOString();
-  return transaction(db, () => {
-    const handoff = requireHandoff(db, handoffId);
-    const decision = decideClaim(handoff, agentLabel);
-    if (decision.kind === 'idempotent') return handoff;
+  const handoff = transaction(db, () => {
+    const current = requireHandoff(db, handoffId);
+    const decision = decideClaim(current, agentLabel);
+    if (decision.kind === 'idempotent') return current;
     if (decision.kind === 'refused') refuse(decision.reason);
     db.prepare(
       `UPDATE agent_handoffs
@@ -325,6 +328,8 @@ export function claimHandoff(
     recordCoordinationChange(db, 'handoff.claimed', handoffId, 'Handoff claimed.', instant);
     return next;
   });
+  tipAgentHubCoordination();
+  return handoff;
 }
 
 export function completeHandoff(
@@ -350,14 +355,14 @@ export function completeHandoff(
   const clientRequestId = options.clientRequestId ?? null;
   const mutationTool = options.mutationTool ?? 'coordination_complete_handoff';
   const instant = now.toISOString();
-  return transaction(db, () => {
+  const handoff = transaction(db, () => {
     if (clientRequestId) {
       const replay = replayHandoffOutcome(db, agentLabel, clientRequestId, mutationTool);
       if (replay) return replay;
     }
 
-    const handoff = requireHandoff(db, handoffId);
-    const decision = decideComplete(handoff, agentLabel);
+    const current = requireHandoff(db, handoffId);
+    const decision = decideComplete(current, agentLabel);
     if (decision.kind === 'idempotent') {
       if (clientRequestId) {
         recordHandoffMutation(db, {
@@ -366,11 +371,11 @@ export function completeHandoff(
           tool: mutationTool,
           handoffId,
           resultKind: 'handoff',
-          resultId: handoff.id,
+          resultId: current.id,
           at: instant,
         });
       }
-      return handoff;
+      return current;
     }
     if (decision.kind === 'refused') refuse(decision.reason);
     db.prepare(
@@ -407,6 +412,8 @@ export function completeHandoff(
     }
     return next;
   });
+  tipAgentHubCoordination();
+  return handoff;
 }
 
 export function cancelHandoffAsAgent(
@@ -423,14 +430,14 @@ export function cancelHandoffAsAgent(
   const clientRequestId = options.clientRequestId ?? null;
   const mutationTool = options.mutationTool ?? 'coordination_cancel_handoff';
   const instant = now.toISOString();
-  return transaction(db, () => {
+  const handoff = transaction(db, () => {
     if (clientRequestId) {
       const replay = replayHandoffOutcome(db, agentLabel, clientRequestId, mutationTool);
       if (replay) return replay;
     }
 
-    const handoff = requireHandoff(db, handoffId);
-    const decision = decideAgentCancel(handoff, agentLabel);
+    const current = requireHandoff(db, handoffId);
+    const decision = decideAgentCancel(current, agentLabel);
     if (decision.kind === 'idempotent') {
       if (clientRequestId) {
         recordHandoffMutation(db, {
@@ -439,11 +446,11 @@ export function cancelHandoffAsAgent(
           tool: mutationTool,
           handoffId,
           resultKind: 'handoff',
-          resultId: handoff.id,
+          resultId: current.id,
           at: instant,
         });
       }
-      return handoff;
+      return current;
     }
     if (decision.kind === 'refused') refuse(decision.reason);
     db.prepare(
@@ -467,6 +474,8 @@ export function cancelHandoffAsAgent(
     }
     return next;
   });
+  tipAgentHubCoordination();
+  return handoff;
 }
 
 /** Operator HTTP cancel: any non-COMPLETED state. */
@@ -479,10 +488,10 @@ export function cancelHandoffAsOperator(
   const { reason } = agentHandoffCancelInputSchema.parse(raw);
   const cancelReason = redactSecrets(reason);
   const instant = now.toISOString();
-  return transaction(db, () => {
-    const handoff = requireHandoff(db, handoffId);
-    const decision = decideOperatorCancel(handoff);
-    if (decision.kind === 'idempotent') return handoff;
+  const handoff = transaction(db, () => {
+    const current = requireHandoff(db, handoffId);
+    const decision = decideOperatorCancel(current);
+    if (decision.kind === 'idempotent') return current;
     if (decision.kind === 'refused') refuse(decision.reason);
     db.prepare(
       `UPDATE agent_handoffs
@@ -494,6 +503,8 @@ export function cancelHandoffAsOperator(
     recordCoordinationChange(db, 'handoff.cancelled', handoffId, 'Handoff cancelled.', instant);
     return next;
   });
+  tipAgentHubCoordination();
+  return handoff;
 }
 
 export function addHandoffNote(

@@ -15,6 +15,7 @@ import {
   resetAgentHubTipsForTests,
   setAgentHubTipBridge,
   tipAgentHubConversation,
+  tipAgentHubCoordination,
 } from './tips.ts';
 import { handleAgentHubTipsGet } from './sse-route.ts';
 
@@ -72,6 +73,10 @@ describe('Agent Hub SSE tips (C219)', () => {
       true,
     );
     expect(tips.some((tip) => (tip as { feeds: string[] }).feeds.includes('notifications'))).toBe(
+      true,
+    );
+    tipAgentHubCoordination();
+    expect(tips.some((tip) => (tip as { feeds: string[] }).feeds.includes('coordination'))).toBe(
       true,
     );
     const messageTip = tips.find(

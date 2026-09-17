@@ -30,7 +30,7 @@ const GAP = 18;
 
 /** The cards in document order, which is the order they are meant to be read in. */
 const READING_ORDER = [
-  'Live update tips',
+  'Live updates',
   'Timer notifications',
   'Project categories',
   'Task tags',
