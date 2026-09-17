@@ -28,6 +28,14 @@ describe('redactAssistantContext', () => {
     expect(redactAssistantContext('password: hunter2')).toContain('[redacted]');
   });
 
+  it('passes numbers through and redacts staging ssm paths', () => {
+    expect(redactAssistantContext(42)).toBe(42);
+    expect(redactAssistantContext('Use /hcc/staging/SESSION_SECRET in env')).toContain(
+      '[ssm redacted]',
+    );
+    expect(redactAssistantContext('SESSION_SECRET=abc')).toContain('[session-secret redacted]');
+  });
+
   it('walks arrays and nested client records', () => {
     const redacted = redactAssistantContext([
       { email: 'a@example.com', nested: { phone: '555' } },

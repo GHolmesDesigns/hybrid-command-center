@@ -1049,6 +1049,87 @@ describe('CommandAiPanel', () => {
     );
   });
 
+  it('declines a pending approval from the drawer', async () => {
+    const conversation = freeformConversation('conv-decline', 'Decline thread');
+    const approvalFixture = {
+      id: 'approval-decline',
+      conversationId: 'conv-decline',
+      turnId: 'turn-1',
+      toolName: 'workspace_add_checklist_item',
+      toolArgs: { taskId: 'task-1', text: 'Review mockups' },
+      tier: 'inline' as const,
+      summary: null,
+      status: 'pending' as const,
+      createdAt: '2026-09-11T12:00:01.000Z',
+      expiresAt: '2026-09-11T12:15:01.000Z',
+      decidedAt: null,
+    };
+    const respond = vi.fn(async () =>
+      json({ approval: { ...approvalFixture, status: 'declined' } }),
+    );
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes('/agents/directory')) return json({ agents: [] });
+      if (url.includes('/agents/presence')) return json({ presence: [] });
+      if (url.includes('/agent-summaries')) return json({ summaries: [] });
+      if (url.includes('/agent-conversations?')) {
+        return json({ items: [conversation], nextCursor: null, hasMore: false });
+      }
+      if (url.includes('/agent-conversations/conv-decline/messages')) {
+        return json({ items: [], nextCursor: null, hasMore: false });
+      }
+      if (url.includes('/assistant/turn')) {
+        return json({
+          turn: {
+            conversationId: 'conv-decline',
+            turnId: 'turn-1',
+            state: 'awaiting_approval',
+            profile: 'light',
+            toolCallCount: 1,
+            outputTokenCount: 12,
+            startedAt: '2026-09-11T12:00:00.000Z',
+            updatedAt: '2026-09-11T12:00:01.000Z',
+            cancelRequested: false,
+            pendingApprovalIds: ['approval-decline'],
+          },
+        });
+      }
+      if (url.includes('/assistant/approvals') && init?.method !== 'POST') {
+        return json({ approvals: [approvalFixture] });
+      }
+      if (
+        url.includes('/assistant/approvals/approval-decline/respond') &&
+        init?.method === 'POST'
+      ) {
+        return respond();
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    renderPanel(
+      <CommandAiPanel
+        open
+        onClose={() => undefined}
+        assistantBundle={{
+          assistant: {
+            enabled: true,
+            provider: 'openai',
+            model: 'gpt-4o-mini',
+            dailyTurnCap: 100,
+            dailyTokenCap: 300_000,
+            scopes: ['workspace:read', 'workspace:write'],
+          },
+          key: { provider: 'openai', hasKey: true, keyLast4: '1234' },
+          ready: true,
+        }}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Decline thread/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Decline' }));
+    await waitFor(() => expect(respond).toHaveBeenCalled());
+  });
+
   it('submits an approval decision from the drawer', async () => {
     const conversation = freeformConversation('conv-approve', 'Approve thread');
     const approvalFixture = {

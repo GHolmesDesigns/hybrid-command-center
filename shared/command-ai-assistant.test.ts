@@ -44,6 +44,15 @@ describe('command-ai-assistant shared helpers', () => {
     expect(normalizeAssistantModel('openai', 'bogus')).toBe(defaultOpenAi);
   });
 
+  it('parses partial settings updates from the API boundary', () => {
+    expect(
+      commandAiAssistantSettingsSchema.parse({
+        ...DEFAULT_COMMAND_AI_ASSISTANT_SETTINGS,
+        dailyTurnCap: 75,
+      }).dailyTurnCap,
+    ).toBe(75);
+  });
+
   it('parses settings, key storage, approvals, and turn state payloads', () => {
     expect(commandAiAssistantSettingsSchema.parse(DEFAULT_COMMAND_AI_ASSISTANT_SETTINGS)).toEqual(
       DEFAULT_COMMAND_AI_ASSISTANT_SETTINGS,
