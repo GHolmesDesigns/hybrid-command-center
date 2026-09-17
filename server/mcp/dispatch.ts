@@ -10,6 +10,8 @@ import type { McpAgentScope } from '../../shared/mcp-agent-registry.ts';
 import {
   mcpCoordinationScopeRequired,
   mcpCoordinationUnknownTool,
+  mcpDriveScopeRequired,
+  mcpScopeRequired,
   mcpWorkspaceScopeRequired,
 } from '../../shared/mcp-coordination-errors.ts';
 import { callCoordinationTool, type McpToolCallResult } from './coordination.ts';
@@ -51,23 +53,15 @@ const refused = (
 
 function scopeRefusal(entry: McpToolRegistryEntry): McpToolCallResult {
   const scope = entry.requiredScope!;
-  if (scope.startsWith('workspace:')) {
-    return refused(
-      `Credential lacks ${scope}.`,
-      mcpWorkspaceScopeRequired(scope as 'workspace:read' | 'workspace:write'),
-    );
+  if (scope === 'workspace:read' || scope === 'workspace:write') {
+    return refused(`Credential lacks ${scope}.`, mcpWorkspaceScopeRequired(scope));
   }
-  if (scope === 'drive:write-request') {
-    return refused(`Credential lacks ${scope}.`, {
-      code: 'DRIVE_SCOPE_REQUIRED',
-      retryable: false,
-      requiredAction: 'Ask the operator to issue a credential with drive:write-request.',
-    });
+  if (scope === 'drive:write-request')
+    return refused(`Credential lacks ${scope}.`, mcpDriveScopeRequired());
+  if (scope === 'coordination:read' || scope === 'coordination:write') {
+    return refused(`Credential lacks ${scope}.`, mcpCoordinationScopeRequired(scope));
   }
-  return refused(
-    `Credential lacks ${scope}.`,
-    mcpCoordinationScopeRequired(scope as 'coordination:read' | 'coordination:write'),
-  );
+  return refused(`Credential lacks ${scope}.`, mcpScopeRequired(scope));
 }
 
 export async function callMcpTool(

@@ -28,6 +28,7 @@ import { clientAddress, type AddressRequest } from './auth/client-address.ts';
 import { purgeExpiredSessions } from './auth/sessions.ts';
 import { createMcpBearer } from './auth/mcp-bearers.ts';
 import {
+  createAssistantMcpAgentCredential,
   createMcpAgentCredential,
   getMcpAgentCredential,
   listMcpAgentCredentials,
@@ -38,6 +39,7 @@ import {
 } from './auth/mcp-agent-credentials.ts';
 import { MCP_BEARER_ISSUE_PATH, MCP_HTTP_PATH } from '../shared/mcp-network.ts';
 import {
+  createAssistantMcpCredentialSchema,
   createMcpAgentCredentialSchema,
   updateMcpAgentRegistrationSchema,
 } from '../shared/mcp-agent-registry.ts';
@@ -1163,6 +1165,28 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       }
       const input = createMcpAgentCredentialSchema.parse(req.body);
       const issued = createMcpAgentCredential(db, {
+        ...input,
+        sessionSecret,
+        now: authNowMs(),
+      });
+      res.status(201).json({
+        ok: true,
+        bearerToken: issued.rawToken,
+        credential: issued.credential,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post('/api/auth/mcp-assistant', (req, res, next) => {
+    try {
+      if (!authRequired) {
+        res.status(400).json({ error: 'Authentication is not required on this host.' });
+        return;
+      }
+      const input = createAssistantMcpCredentialSchema.parse(req.body);
+      const issued = createAssistantMcpAgentCredential(db, {
         ...input,
         sessionSecret,
         now: authNowMs(),

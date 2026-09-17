@@ -930,6 +930,24 @@ const respondTo = (url: string, init?: RequestInit) => {
     ];
     return { ok: true, bearerToken: 'hcc_mcp_shown-once', credential };
   }
+  if (url.endsWith('/api/auth/mcp-assistant') && method === 'POST') {
+    const credential = {
+      id: 'assistant-credential-issued',
+      agentId: 'agent-command-ai',
+      label: 'command-ai',
+      scopes: body.scopes,
+      issuedAt: '2026-08-28T12:00:00.000Z',
+      expiresAt: body.expiresAt,
+      lastUsedAt: null,
+      lastOrigin: null,
+      revokedAt: null,
+    };
+    testState.mcpAgentRegistryPayload.credentials = [
+      ...testState.mcpAgentRegistryPayload.credentials,
+      credential,
+    ];
+    return { ok: true, bearerToken: 'hcc_mcp_assistant-once', credential };
+  }
   const driveWriteDecision = url.match(/\/api\/drive-write-requests\/([^/]+)\/(approve|deny)$/);
   if (driveWriteDecision && method === 'POST') {
     const request = testState.driveWriteRequestsPayload.find(

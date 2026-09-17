@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   applyAdditiveMigrations,
   backfillConversationCanonical,
+  backfillConversationMessageSenderKind,
   backfillProjectActivity,
   createDb,
   getStoreId,
@@ -556,6 +557,52 @@ describe('additive schema migration', () => {
       { id: 'c-new', is_canonical: 0 },
     ]);
     expect(backfillConversationCanonical(db)).toBe(0);
+  });
+
+  it('backfills sender_kind for operator and agent rows and refuses assistant writes', () => {
+    const db = createDb(':memory:');
+    const at = '2026-09-01T12:00:00.000Z';
+    db.prepare(
+      `INSERT INTO agent_conversations(
+         id, title, scope_type, scope_id, state, is_canonical, created_at, updated_at
+       ) VALUES ('conv-1', 'Test', 'freeform', NULL, 'ACTIVE', 0, ?, ?)`,
+    ).run(at, at);
+    db.prepare(
+      `INSERT INTO agent_conversation_messages(
+         id, conversation_id, sender_label, sent_at, body, sender_provenance, sender_kind
+       ) VALUES ('m-op', 'conv-1', 'operator', ?, 'Operator wrote', 'VERIFIED', 'agent'),
+              ('m-ag', 'conv-1', 'cursor', ?, 'Agent wrote', 'ASSERTED', 'agent')`,
+    ).run(at, at);
+
+    expect(backfillConversationMessageSenderKind(db)).toBe(1);
+    expect(
+      rows(
+        db,
+        'SELECT sender_label, sender_kind FROM agent_conversation_messages ORDER BY sender_label',
+      ),
+    ).toEqual([
+      { sender_label: 'cursor', sender_kind: 'agent' },
+      { sender_label: 'operator', sender_kind: 'operator' },
+    ]);
+
+    expect(() =>
+      db
+        .prepare(
+          `INSERT INTO agent_conversation_messages(
+           id, conversation_id, sender_label, sent_at, body, sender_provenance, sender_kind
+         ) VALUES ('m-null', 'conv-1', 'cursor', ?, 'Missing kind', 'ASSERTED', NULL)`,
+        )
+        .run(at),
+    ).toThrow();
+    expect(() =>
+      db
+        .prepare(
+          `INSERT INTO agent_conversation_messages(
+           id, conversation_id, sender_label, sent_at, body, sender_provenance, sender_kind
+         ) VALUES ('m-ai', 'conv-1', 'command-ai', ?, 'Assistant', 'VERIFIED', 'assistant')`,
+        )
+        .run(at),
+    ).toThrow(/assistant sender_kind/i);
   });
 
   it('never overwrites an activity stamp that is already there', () => {

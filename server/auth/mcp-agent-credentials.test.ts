@@ -1,14 +1,20 @@
+import crypto from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createDb, type Db } from '../db.ts';
 import {
+  createAssistantMcpAgentCredential,
   createMcpAgentCredential,
   listMcpAgentCredentials,
   McpAgentLabelTakenError,
   renameMcpAgentRegistration,
+  ReservedAssistantLabelError,
   resolveMcpAgentCredential,
   revokeMcpAgentCredential,
   rotateMcpAgentCredential,
 } from './mcp-agent-credentials.ts';
+import { mcpToolAvailable, MCP_TOOL_REGISTRY } from '../mcp/registry.ts';
+import type { McpAgentScope } from '../../shared/mcp-agent-registry.ts';
+import { migrateMcpCredentialWorkspaceWriteScopes } from '../db.ts';
 import { hashMcpBearerToken } from './mcp-bearers.ts';
 
 const SECRET = 'session-secret-at-least-thirty-two-chars!!';
@@ -248,6 +254,82 @@ describe('scoped MCP agent credentials', () => {
         now: 2_001,
       }),
     ).not.toBeNull();
+  });
+
+  it('refuses the reserved command-ai label for ordinary agent credentials', () => {
+    for (const label of ['command-ai', ' Command-AI ']) {
+      expect(() => issue(label)).toThrow(ReservedAssistantLabelError);
+    }
+  });
+
+  it('issues the assistant credential on the reserved label', () => {
+    const issued = createAssistantMcpAgentCredential(db, {
+      scopes: ['workspace:read', 'workspace:write'],
+      expiresAt: new Date(60_000).toISOString(),
+      sessionSecret: SECRET,
+      now: 1_000,
+    });
+    expect(issued.credential.label).toBe('command-ai');
+    expect(
+      resolveMcpAgentCredential(db, {
+        rawToken: issued.rawToken,
+        sessionSecret: SECRET,
+        origin: null,
+        now: 2_000,
+      }),
+    ).toMatchObject({ agentLabel: 'command-ai' });
+  });
+
+  it('refuses renaming a registration to the reserved assistant label', () => {
+    const issued = issue('cursor');
+    expect(() => renameMcpAgentRegistration(db, issued.credential.agentId, 'command-ai')).toThrow(
+      ReservedAssistantLabelError,
+    );
+  });
+
+  it('keeps an identical tool-access matrix after migrating workspace:write credentials', () => {
+    const toolMatrix = (scopes: readonly McpAgentScope[]) =>
+      MCP_TOOL_REGISTRY.filter((tool) => mcpToolAvailable(tool, scopes))
+        .map((tool) => tool.name)
+        .sort();
+    const legacyScopes = ['workspace:read', 'workspace:write'] as const;
+    const expandedScopes = [
+      'workspace:read',
+      'workspace:write',
+      'signal:write',
+      'settings:write',
+      'import:write',
+      'drive:sync',
+    ] as const;
+    const expected = toolMatrix(expandedScopes);
+    expect(toolMatrix(legacyScopes)).not.toEqual(expected);
+
+    const agentId = crypto.randomUUID();
+    const credentialId = crypto.randomUUID();
+    db.prepare(
+      `INSERT INTO agent_registrations(id, display_label, created_at, last_used_at, last_origin)
+       VALUES(?,?,?,NULL,NULL)`,
+    ).run(agentId, 'legacy-agent', new Date(1_000).toISOString());
+    db.prepare(
+      `INSERT INTO agent_credentials(id, agent_id, token_hash, scopes, issued_at, expires_at, last_used_at, revoked_at)
+       VALUES(?,?,?,?,?,?,NULL,NULL)`,
+    ).run(
+      credentialId,
+      agentId,
+      'legacy-hash',
+      JSON.stringify(legacyScopes),
+      new Date(1_000).toISOString(),
+      new Date(120_000).toISOString(),
+    );
+
+    expect(migrateMcpCredentialWorkspaceWriteScopes(db)).toBe(1);
+    expect(migrateMcpCredentialWorkspaceWriteScopes(db)).toBe(0);
+    const stored = db
+      .prepare('SELECT scopes FROM agent_credentials WHERE id=?')
+      .get(credentialId) as {
+      scopes: string;
+    };
+    expect(toolMatrix(JSON.parse(stored.scopes) as McpAgentScope[])).toEqual(expected);
   });
 
   it('keeps the old credential when replacement issuance fails', () => {

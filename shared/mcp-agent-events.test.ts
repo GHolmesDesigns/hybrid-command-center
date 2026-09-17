@@ -12,4 +12,10 @@ describe('normalizeOptionalAgentLabel', () => {
   it('rejects an invalid label charset', () => {
     expect(() => normalizeOptionalAgentLabel('bad label!')).toThrow();
   });
+
+  it('rejects the reserved command-ai assistant label', () => {
+    for (const label of ['command-ai', ' Command-AI ', 'COMMAND-AI']) {
+      expect(() => normalizeOptionalAgentLabel(label)).toThrow(/reserved/i);
+    }
+  });
 });

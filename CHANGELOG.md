@@ -1,5 +1,21 @@
 # Changelog
 
+## [6.10.13] - 2026-09-17
+
+## Added
+
+- MCP capability scopes `signal:write`, `settings:write`, `import:write`, and `drive:sync`, split from the former all-in-one `workspace:write` grant so operators can scope Signal, settings, import, and Drive sync separately.
+- Command AI assistant credential issuance on **Agents**, bound to the reserved `command-ai` identity with operator-chosen scopes (default read + workspace write).
+- Trusted `sender_kind` on conversation messages (`operator`, `agent`, `assistant`) with migration backfill for existing rows.
+
+## Changed
+
+- Existing MCP credentials that held `workspace:write` automatically receive the four new write scopes so no connected agent loses access.
+- MCP tool registry `requiredScope` values now map Signal, settings, import, and Drive sync tools to their dedicated scopes.
+
+## Breaking changes
+
+None.
 ## [6.10.12] - 2026-09-17
 
 ## Added

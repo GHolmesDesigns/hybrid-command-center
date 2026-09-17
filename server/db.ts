@@ -163,6 +163,7 @@ CREATE TABLE IF NOT EXISTS agent_conversation_messages (
   id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES agent_conversations(id) ON DELETE CASCADE,
   sender_label TEXT NOT NULL, sent_at TEXT NOT NULL, body TEXT NOT NULL CHECK(length(body) BETWEEN 1 AND 4000),
   sender_provenance TEXT NOT NULL DEFAULT 'UNKNOWN' CHECK(sender_provenance IN ('UNKNOWN','ASSERTED','VERIFIED')),
+  sender_kind TEXT NOT NULL DEFAULT 'agent' CHECK(sender_kind IN ('operator','agent','assistant')),
   thought_summary TEXT CHECK(thought_summary IS NULL OR length(thought_summary) BETWEEN 1 AND 4000)
 );
 CREATE TABLE IF NOT EXISTS agent_conversation_post_requests (
@@ -1070,6 +1071,27 @@ export const triggerSchema = `${mediaSourceTriggers('signal_post_media')}${media
 )}
 `;
 
+const conversationMessageTriggers = `
+CREATE TRIGGER IF NOT EXISTS agent_conversation_messages_sender_kind_insert
+BEFORE INSERT ON agent_conversation_messages FOR EACH ROW
+WHEN NEW.sender_kind IS NULL
+BEGIN
+  SELECT RAISE(ABORT, 'agent_conversation_messages: sender_kind is required.');
+END;
+CREATE TRIGGER IF NOT EXISTS agent_conversation_messages_sender_kind_assistant_insert
+BEFORE INSERT ON agent_conversation_messages FOR EACH ROW
+WHEN NEW.sender_kind = 'assistant'
+BEGIN
+  SELECT RAISE(ABORT, 'agent_conversation_messages: assistant sender_kind is reserved for the server assistant pipeline.');
+END;
+CREATE TRIGGER IF NOT EXISTS agent_conversation_messages_sender_kind_assistant_update
+BEFORE UPDATE OF sender_kind ON agent_conversation_messages FOR EACH ROW
+WHEN NEW.sender_kind = 'assistant'
+BEGIN
+  SELECT RAISE(ABORT, 'agent_conversation_messages: assistant sender_kind is reserved for the server assistant pipeline.');
+END;
+`;
+
 const handoffLengthTriggers = `
 CREATE TRIGGER IF NOT EXISTS agent_handoffs_completion_evidence_insert
 BEFORE INSERT ON agent_handoffs FOR EACH ROW
@@ -1413,6 +1435,50 @@ export function backfillProjectActivity(db: Db): number {
  * Marks one active scoped thread per subject as canonical when the column is new and every row
  * still reads false. The earliest created thread wins; later boots write nothing.
  */
+/** Split scopes granted to every credential that already held `workspace:write` (see shared/mcp-agent-registry.ts). */
+const WORKSPACE_WRITE_SPLIT_SCOPES = [
+  'signal:write',
+  'settings:write',
+  'import:write',
+  'drive:sync',
+] as const;
+
+/** Every credential that held `workspace:write` before the split also receives the four new scopes. */
+export function migrateMcpCredentialWorkspaceWriteScopes(db: Db): number {
+  const rows = db
+    .prepare('SELECT id, scopes FROM agent_credentials WHERE revoked_at IS NULL')
+    .all() as { id: string; scopes: string }[];
+  let updated = 0;
+  transaction(db, () => {
+    for (const row of rows) {
+      const parsed = JSON.parse(row.scopes) as unknown;
+      if (!Array.isArray(parsed) || !parsed.every((item) => typeof item === 'string')) continue;
+      const scopes = parsed as string[];
+      if (!scopes.includes('workspace:write')) continue;
+      const expanded = [...new Set([...scopes, ...WORKSPACE_WRITE_SPLIT_SCOPES])];
+      if (expanded.length === scopes.length) continue;
+      db.prepare('UPDATE agent_credentials SET scopes=? WHERE id=?').run(
+        JSON.stringify(expanded),
+        row.id,
+      );
+      updated += 1;
+    }
+  });
+  return updated;
+}
+
+/** Operator-authored rows carry sender_kind operator; every other existing row stays agent. */
+export function backfillConversationMessageSenderKind(db: Db): number {
+  const result = db
+    .prepare(
+      `UPDATE agent_conversation_messages
+       SET sender_kind = 'operator'
+       WHERE sender_label = 'operator' AND sender_kind <> 'operator'`,
+    )
+    .run();
+  return Number(result.changes);
+}
+
 export function backfillConversationCanonical(db: Db): number {
   return transaction(db, () => {
     const scopes = db
@@ -1794,6 +1860,8 @@ export function createDb(
     new Date().toISOString(),
   );
   const applied = applyAdditiveMigrations(db);
+  backfillConversationMessageSenderKind(db);
+  migrateMcpCredentialWorkspaceWriteScopes(db);
   migrateDriveWriteRequestStatuses(db);
   purgeDriveWriteRequestPayloads(db);
   relaxPublicationScheduledInstant(db);
@@ -1806,6 +1874,7 @@ export function createDb(
   db.exec(triggerSchema);
   db.exec(providerAccountTriggers);
   db.exec(handoffLengthTriggers);
+  db.exec(conversationMessageTriggers);
   // After the index and the triggers, and deliberately: the role rows it writes go through the
   // same uniqueness and the same cross-field rule every later write does, so the migration cannot
   // put a row in that an ordinary INSERT would have been refused.

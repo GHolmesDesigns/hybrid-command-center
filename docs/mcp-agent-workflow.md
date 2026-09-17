@@ -16,6 +16,30 @@ they do not restate this policy.
 Network MCP requires operator authentication on the host. The authoritative coordination store is
 the hosted HTTPS origin — see store identity below.
 
+### Capability scopes
+
+Each MCP tool declares one `requiredScope`. The operator chooses which scopes a credential
+carries; a tool call succeeds only when the credential grants that scope.
+
+| Scope | Grants |
+| --- | --- |
+| `coordination:read` | List and read handoffs, work-session resume context |
+| `coordination:write` | Post, claim, complete, cancel handoffs; work-session lifecycle |
+| `workspace:read` | Read workspace, Signal schedule, queue health, files browse, integration activity |
+| `workspace:write` | Create and update tasks, projects, checklists, dependencies; merge clients; agent conversation writes |
+| `signal:write` | Create and update Signal posts, slots, variants, targets; provider inventory and analytics refresh |
+| `settings:write` | Update branding and view defaults |
+| `import:write` | Commit campaign playbook and Signal schedule imports |
+| `drive:sync` | Provision Drive folders for clients and projects |
+| `drive:write-request` | Request Drive folder creation or upload for human approval (never writes Drive directly) |
+
+Credentials issued before the scope split that held `workspace:write` also receive
+`signal:write`, `settings:write`, `import:write`, and `drive:sync` automatically.
+
+The reserved label `command-ai` names the in-app Command AI assistant. It cannot register as an
+ordinary MCP agent. Issue an **assistant credential** on **Agents** when Phase 3 assistant turns
+need a server-bound identity.
+
 ### Which connection is authoritative (C135, #410)
 
 Stdio and hosted HTTPS can expose the same tools, labels, and capability version while answering
