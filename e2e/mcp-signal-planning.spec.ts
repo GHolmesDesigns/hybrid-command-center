@@ -49,7 +49,7 @@ test('agent creates a Signal draft over MCP and the operator sees it in the plan
       headers: { [CSRF_HEADER_NAME]: csrfToken },
       data: {
         label: 'e2e-signal-planner',
-        scopes: ['workspace:read', 'workspace:write'],
+        scopes: ['workspace:read', 'workspace:write', 'signal:write'],
         expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
       },
     });

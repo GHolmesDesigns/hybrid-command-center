@@ -7,6 +7,7 @@
  */
 import { z } from 'zod';
 import { agentLabelSchema } from './agent-coordination.ts';
+import { isReservedAssistantLabel } from './mcp-agent-registry.ts';
 
 export const MCP_AGENT_EVENT_OUTCOMES = ['SUCCESS', 'REFUSED', 'FAILURE'] as const;
 export type McpAgentEventOutcome = (typeof MCP_AGENT_EVENT_OUTCOMES)[number];
@@ -131,5 +132,11 @@ export function normalizeOptionalAgentLabel(raw: string | null | undefined): str
   if (raw == null) return null;
   const trimmed = raw.trim();
   if (!trimmed) return null;
-  return agentLabelSchema.parse(trimmed);
+  const label = agentLabelSchema.parse(trimmed);
+  if (isReservedAssistantLabel(label)) {
+    throw new Error(
+      'The label “command-ai” is reserved for the in-app assistant and cannot be used as an MCP agent identity.',
+    );
+  }
+  return label;
 }

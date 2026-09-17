@@ -3,7 +3,9 @@ import crypto from 'node:crypto';
 import type { Db } from '../db.ts';
 import { transaction } from '../db.ts';
 import {
+  ASSISTANT_AGENT_LABEL,
   MCP_AGENT_SCOPES,
+  isReservedAssistantLabel,
   mcpAgentScopesSchema,
   type McpAgentCredentialSummary,
   type McpAgentScope,
@@ -44,6 +46,17 @@ export class McpAgentLabelTakenError extends Error {
       `An active MCP agent credential already uses the name “${label}”. Revoke it first, or choose a different name.`,
     );
     this.name = 'McpAgentLabelTakenError';
+  }
+}
+
+/** The reserved Command AI label cannot name an ordinary MCP agent credential. */
+export class ReservedAssistantLabelError extends Error {
+  readonly status = 400 as const;
+  constructor() {
+    super(
+      'The label “command-ai” is reserved for the in-app assistant. Issue an assistant credential instead.',
+    );
+    this.name = 'ReservedAssistantLabelError';
   }
 }
 
@@ -93,11 +106,19 @@ export function createMcpAgentCredential(
     expiresAt: string;
     sessionSecret: string;
     now?: number;
+    /** When true, allows the reserved assistant label; ordinary agent credentials must omit this. */
+    assistant?: boolean;
   },
 ): { rawToken: string; credential: McpAgentCredentialSummary } {
   const now = options.now ?? Date.now();
   if (Date.parse(options.expiresAt) <= now)
     throw new Error('Credential expiry must be in the future.');
+  if (!options.assistant && isReservedAssistantLabel(options.label)) {
+    throw new ReservedAssistantLabelError();
+  }
+  if (options.assistant && options.label !== ASSISTANT_AGENT_LABEL) {
+    throw new Error('Assistant credentials must use the reserved command-ai label.');
+  }
   const scopes = orderedScopes(mcpAgentScopesSchema.parse(options.scopes));
   const rawToken = `${MCP_BEARER_TOKEN_PREFIX}${crypto.randomBytes(32).toString('base64url')}`;
   const tokenHash = hashMcpBearerToken(rawToken, options.sessionSecret);
@@ -152,6 +173,26 @@ export function createMcpAgentCredential(
       revokedAt: null,
     },
   };
+}
+
+/** Issue or rotate the reserved Command AI assistant credential. */
+export function createAssistantMcpAgentCredential(
+  db: Db,
+  options: {
+    scopes: readonly McpAgentScope[];
+    expiresAt: string;
+    sessionSecret: string;
+    now?: number;
+  },
+): { rawToken: string; credential: McpAgentCredentialSummary } {
+  return createMcpAgentCredential(db, {
+    label: ASSISTANT_AGENT_LABEL,
+    scopes: options.scopes,
+    expiresAt: options.expiresAt,
+    sessionSecret: options.sessionSecret,
+    now: options.now,
+    assistant: true,
+  });
 }
 
 export function resolveMcpAgentCredential(
@@ -211,6 +252,7 @@ export function getMcpAgentCredential(
 }
 
 export function renameMcpAgentRegistration(db: Db, agentId: string, label: string): boolean {
+  if (isReservedAssistantLabel(label)) throw new ReservedAssistantLabelError();
   return (
     db.prepare('UPDATE agent_registrations SET display_label=? WHERE id=?').run(label, agentId)
       .changes > 0

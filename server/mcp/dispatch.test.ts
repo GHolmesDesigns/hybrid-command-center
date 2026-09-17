@@ -105,7 +105,7 @@ describe('callMcpTool', () => {
           options,
         )
       ).data,
-    ).toMatchObject({ items: [{ body: 'Hello', provenance: 'ASSERTED' }] });
+    ).toMatchObject({ items: [{ body: 'Hello', provenance: 'ASSERTED', senderKind: 'agent' }] });
     expect((await callMcpTool(db, session, 'conversation_archive', { id }, options)).outcome).toBe(
       'SUCCESS',
     );
@@ -274,6 +274,19 @@ describe('callMcpTool', () => {
     );
     expect(write.outcome).toBe('REFUSED');
     expect(write.errorDetail?.code).toBe('COORDINATION_SCOPE_REQUIRED');
+
+    const signal = await callMcpTool(
+      db,
+      session,
+      'signal_create_post',
+      { clientRequestId: 'scope-split-refusal', text: 'Needs signal scope.' },
+      {
+        grantedScopes: ['workspace:write'],
+        now: NOW,
+      },
+    );
+    expect(signal.outcome).toBe('REFUSED');
+    expect(signal.errorDetail?.code).toBe('MCP_SCOPE_REQUIRED');
   });
 
   it('routes workspace reads when workspace:read is granted', async () => {
@@ -315,7 +328,7 @@ describe('callMcpTool', () => {
       'drive_sync',
       { clientRequestId: 'dispatch-drive-sync' },
       {
-        grantedScopes: ['workspace:write'],
+        grantedScopes: ['drive:sync'],
         now: NOW,
         integrationDeps: { drive },
       },

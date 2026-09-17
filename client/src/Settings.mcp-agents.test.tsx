@@ -3,6 +3,7 @@ import {
   screen,
   waitFor,
   fireEvent,
+  within,
   MemoryRouter,
   afterEach,
   describe,
@@ -27,11 +28,17 @@ describe('Agents connection setup card', () => {
     );
 
     expect(await screen.findByRole('heading', { name: 'Agent connection setup' })).toBeVisible();
-    expect(screen.getByLabelText('Read workspace and Signal data')).not.toBeChecked();
-    expect(screen.getByLabelText('Write workspace and Signal data')).not.toBeChecked();
-    expect(screen.getByLabelText('Read coordination')).toBeChecked();
-    expect(screen.getByLabelText('Write coordination')).toBeChecked();
-    expect(screen.queryByText(/reserved/i)).not.toBeInTheDocument();
+    const agentForm = screen.getByRole('form', { name: 'Register MCP agent credential' });
+    expect(within(agentForm).getByLabelText('Read workspace and Signal data')).not.toBeChecked();
+    expect(
+      within(agentForm).getByLabelText('Write workspace tasks and projects'),
+    ).not.toBeChecked();
+    expect(
+      within(agentForm).getByLabelText('Write Signal posts and provider refreshes'),
+    ).not.toBeChecked();
+    expect(within(agentForm).getByLabelText('Read coordination')).toBeChecked();
+    expect(within(agentForm).getByLabelText('Write coordination')).toBeChecked();
+    expect(within(agentForm).getByText(/command-ai is reserved/i)).toBeVisible();
   });
 
   it('issues a credential, shows client guide steps, runs the diagnostic, and revokes', async () => {
@@ -80,10 +87,11 @@ describe('Agents connection setup card', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Agents' })).toBeVisible();
     expect(await screen.findByRole('heading', { name: 'Agent connection setup' })).toBeVisible();
 
-    fireEvent.change(screen.getByLabelText('Agent label'), {
+    const agentForm = screen.getByRole('form', { name: 'Register MCP agent credential' });
+    fireEvent.change(within(agentForm).getByPlaceholderText('cursor-planning'), {
       target: { value: 'cursor-planning' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Issue credential' }));
+    fireEvent.click(within(agentForm).getByRole('button', { name: 'Issue credential' }));
 
     expect(await screen.findByText(/Open Cursor Settings/)).toBeVisible();
     expect(
@@ -172,7 +180,8 @@ describe('Agents connection setup card', () => {
       </MemoryRouter>,
     );
     expect(await screen.findByRole('button', { name: 'Rotate cursor-planning' })).toBeVisible();
-    expect(screen.getByLabelText('Expires after')).toHaveValue('30');
+    const agentForm = screen.getByRole('form', { name: 'Register MCP agent credential' });
+    expect(within(agentForm).getByLabelText('Expires after')).toHaveValue('30');
     confirmation.mockReturnValueOnce(false);
     fireEvent.click(screen.getByRole('button', { name: 'Rotate cursor-planning' }));
     expect(requests.filter((request) => request.method === 'POST')).toHaveLength(0);

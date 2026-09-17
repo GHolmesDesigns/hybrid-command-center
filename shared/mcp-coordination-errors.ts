@@ -12,6 +12,7 @@ export const MCP_COORDINATION_ERROR_CODES = [
   'COORDINATION_CREDENTIAL_LABEL_MISMATCH',
   'COORDINATION_SCOPE_REQUIRED',
   'WORKSPACE_SCOPE_REQUIRED',
+  'MCP_SCOPE_REQUIRED',
   'DRIVE_SCOPE_REQUIRED',
   'WORKSPACE_REVISION_CONFLICT',
   'WORKSPACE_CONFIRMATION_REQUIRED',
@@ -76,6 +77,13 @@ export const mcpWorkspaceScopeRequired = (
 ): McpCoordinationErrorDetail =>
   mcpCoordinationErrorDetail({
     code: 'WORKSPACE_SCOPE_REQUIRED',
+    retryable: false,
+    requiredAction: `Ask the operator to issue a credential with ${scope}.`,
+  });
+
+export const mcpScopeRequired = (scope: string): McpCoordinationErrorDetail =>
+  mcpCoordinationErrorDetail({
+    code: 'MCP_SCOPE_REQUIRED',
     retryable: false,
     requiredAction: `Ask the operator to issue a credential with ${scope}.`,
   });

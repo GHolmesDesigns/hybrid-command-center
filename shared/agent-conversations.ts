@@ -10,6 +10,8 @@ export const CONVERSATION_SCOPE_TYPES = ['client', 'project', 'task', 'freeform'
 export type ConversationScopeType = (typeof CONVERSATION_SCOPE_TYPES)[number];
 export const CONVERSATION_STATES = ['ACTIVE', 'ARCHIVED'] as const;
 export type ConversationState = (typeof CONVERSATION_STATES)[number];
+export const CONVERSATION_SENDER_KINDS = ['operator', 'agent', 'assistant'] as const;
+export type ConversationSenderKind = (typeof CONVERSATION_SENDER_KINDS)[number];
 const optionalBooleanQuery = z.preprocess(
   (value) => (value === 'true' ? true : value === 'false' ? false : value),
   z.boolean().optional(),
@@ -110,6 +112,7 @@ export type AgentConversationMessage = {
   id: string;
   conversationId: string;
   senderLabel: string;
+  senderKind: ConversationSenderKind;
   sentAt: string;
   body: string;
   thoughtSummary: string | null;

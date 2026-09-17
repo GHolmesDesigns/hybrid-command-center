@@ -16,6 +16,10 @@ export const EVAL_ALL_SCOPES: readonly McpAgentScope[] = [
   'coordination:write',
   'workspace:read',
   'workspace:write',
+  'signal:write',
+  'settings:write',
+  'import:write',
+  'drive:sync',
 ];
 
 export type EvalContext = {

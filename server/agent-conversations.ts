@@ -231,6 +231,7 @@ type MessageRow = {
   sent_at: string;
   body: string;
   sender_provenance: AgentIdentityProvenance;
+  sender_kind: 'operator' | 'agent' | 'assistant';
   thought_summary?: string | null;
 };
 
@@ -238,6 +239,7 @@ const toMessage = (row: MessageRow, linked: MessageLinkedHandoff[]): AgentConver
   id: row.id,
   conversationId: row.conversation_id,
   senderLabel: row.sender_label,
+  senderKind: row.sender_kind,
   sentAt: row.sent_at,
   body: row.body,
   thoughtSummary: row.thought_summary ?? null,
@@ -394,9 +396,10 @@ export function postMessage(
     const messageId = crypto.randomUUID();
     const thoughtSummary =
       actor === 'operator' ? null : (input.thoughtSummary?.trim() ?? null) || null;
+    const senderKind = actor === 'operator' ? 'operator' : 'agent';
     db.prepare(
-      'INSERT INTO agent_conversation_messages(id,conversation_id,sender_label,sent_at,body,sender_provenance,thought_summary) VALUES(?,?,?,?,?,?,?)',
-    ).run(messageId, id, actor, instant, body, provenance, thoughtSummary);
+      'INSERT INTO agent_conversation_messages(id,conversation_id,sender_label,sent_at,body,sender_provenance,sender_kind,thought_summary) VALUES(?,?,?,?,?,?,?,?)',
+    ).run(messageId, id, actor, instant, body, provenance, senderKind, thoughtSummary);
     if (input.clientRequestId) {
       db.prepare(
         'INSERT INTO agent_conversation_post_requests(conversation_id,client_request_id,message_id) VALUES(?,?,?)',
@@ -456,6 +459,7 @@ export function postMessage(
         sent_at: instant,
         body,
         sender_provenance: provenance,
+        sender_kind: senderKind,
         thought_summary: thoughtSummary,
       },
       linked,

@@ -11,6 +11,8 @@ import {
 } from 'lucide-react';
 import { api, send } from '../api';
 import {
+  ASSISTANT_AGENT_LABEL,
+  ASSISTANT_DEFAULT_SCOPES,
   MCP_AGENT_SCOPES,
   rotatedCredentialExpiryIso,
   type McpAgentCredentialList,
@@ -50,7 +52,11 @@ const SCOPE_LABEL: Record<McpAgentScope, string> = {
   'coordination:read': 'Read coordination',
   'coordination:write': 'Write coordination',
   'workspace:read': 'Read workspace and Signal data',
-  'workspace:write': 'Write workspace and Signal data',
+  'workspace:write': 'Write workspace tasks and projects',
+  'signal:write': 'Write Signal posts and provider refreshes',
+  'settings:write': 'Write workspace settings',
+  'import:write': 'Commit campaign and Signal imports',
+  'drive:sync': 'Provision Drive folders',
   'drive:write-request': 'Request Drive writes for human approval',
 };
 
@@ -67,6 +73,8 @@ export function McpConnectionSetupCard({
   const [registry, setRegistry] = useState<RegistryResponse | null>(null);
   const [label, setLabel] = useState('');
   const [scopes, setScopes] = useState<McpAgentScope[]>(DEFAULT_SCOPES);
+  const [assistantScopes, setAssistantScopes] = useState<McpAgentScope[]>(ASSISTANT_DEFAULT_SCOPES);
+  const [assistantDays, setAssistantDays] = useState(90);
   const [days, setDays] = useState(30);
   const [issued, setIssued] = useState<IssuedResponse | null>(null);
   const [platform, setPlatform] = useState<McpClientPlatform>('cursor');
@@ -91,6 +99,39 @@ export function McpConnectionSetupCard({
     setScopes((current) =>
       current.includes(scope) ? current.filter((item) => item !== scope) : [...current, scope],
     );
+  };
+
+  const toggleAssistantScope = (scope: McpAgentScope) => {
+    setAssistantScopes((current) =>
+      current.includes(scope) ? current.filter((item) => item !== scope) : [...current, scope],
+    );
+  };
+
+  const issueAssistant = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!assistantScopes.length) return flash('Choose at least one capability scope.', 'error');
+    setBusy(true);
+    try {
+      const result = await send<IssuedResponse>('/auth/mcp-assistant', 'POST', {
+        scopes: assistantScopes,
+        expiresAt: credentialExpiryIso(assistantDays, Date.now()),
+      });
+      setIssued(result);
+      setVerification({
+        credentialId: result.credential.id,
+        agentLabel: result.credential.label,
+        storeId: '',
+        status: 'pending',
+        verifiedAt: null,
+      });
+      setTestResult(null);
+      await load();
+      flash('Assistant credential issued. It is server-bound to Command AI and shown once.');
+    } catch (caught) {
+      flash((caught as Error).message, 'error');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const issue = async (event: FormEvent) => {
@@ -267,7 +308,11 @@ export function McpConnectionSetupCard({
           <ol className="mcp-setup-steps">
             <li>
               <strong>1. Register and issue</strong>
-              <form className="form agent-credential-form" onSubmit={issue}>
+              <form
+                className="form agent-credential-form"
+                aria-label="Register MCP agent credential"
+                onSubmit={issue}
+              >
                 <label>
                   Agent label
                   <input
@@ -278,6 +323,9 @@ export function McpConnectionSetupCard({
                     pattern="[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?"
                     required
                   />
+                  <span className="field-hint">
+                    The label {ASSISTANT_AGENT_LABEL} is reserved for the in-app assistant.
+                  </span>
                 </label>
                 <fieldset>
                   <legend>Capability scopes</legend>
@@ -302,6 +350,47 @@ export function McpConnectionSetupCard({
                 </label>
                 <button className="submit" disabled={busy || !scopes.length}>
                   {busy ? <RefreshCw className="spin" /> : <ShieldCheck />} Issue credential
+                </button>
+              </form>
+            </li>
+            <li>
+              <strong>Command AI assistant credential</strong>
+              <p className="field-hint">
+                Issue the server-bound credential for Command AI. It uses the reserved label{' '}
+                {ASSISTANT_AGENT_LABEL} and appears in the audit list below.
+              </p>
+              <form
+                className="form agent-credential-form"
+                aria-label="Issue Command AI assistant credential"
+                onSubmit={issueAssistant}
+              >
+                <fieldset>
+                  <legend>Assistant capability scopes</legend>
+                  {MCP_AGENT_SCOPES.map((scope) => (
+                    <label className="checkbox-row" key={`assistant-${scope}`}>
+                      <input
+                        type="checkbox"
+                        checked={assistantScopes.includes(scope)}
+                        onChange={() => toggleAssistantScope(scope)}
+                      />
+                      {SCOPE_LABEL[scope]}
+                    </label>
+                  ))}
+                </fieldset>
+                <label>
+                  Expires after
+                  <select
+                    value={assistantDays}
+                    onChange={(event) => setAssistantDays(Number(event.target.value))}
+                  >
+                    <option value={7}>7 days</option>
+                    <option value={30}>30 days</option>
+                    <option value={90}>90 days</option>
+                  </select>
+                </label>
+                <button className="submit" disabled={busy || !assistantScopes.length}>
+                  {busy ? <RefreshCw className="spin" /> : <ShieldCheck />} Issue assistant
+                  credential
                 </button>
               </form>
             </li>
