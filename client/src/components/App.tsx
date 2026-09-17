@@ -41,6 +41,12 @@ import {
   DEFAULT_AGENT_HUB_LIVE_TIPS_SETTINGS,
   type AgentHubLiveTipsSettings,
 } from '../../../shared/agent-hub-sse';
+import {
+  DEFAULT_COMMAND_AI_ASSISTANT_SETTINGS,
+  type AssistantKeyMetadata,
+  type CommandAiAssistantSettings,
+} from '../../../shared/command-ai-assistant';
+import type { CommandAiAssistantBundle } from './CommandAiPanel';
 import { useAgentHubTips, useDebouncedAgentHubTip } from '../useAgentHubTips';
 import { AgentHubTipsContext } from './AgentHubTipsContext';
 import { BreadcrumbTrail } from './BreadcrumbTrail';
@@ -273,6 +279,11 @@ export function App() {
   const [liveTips, setLiveTips] = useState<AgentHubLiveTipsSettings>(
     DEFAULT_AGENT_HUB_LIVE_TIPS_SETTINGS,
   );
+  const [commandAiAssistant, setCommandAiAssistant] = useState<CommandAiAssistantBundle>({
+    assistant: DEFAULT_COMMAND_AI_ASSISTANT_SETTINGS,
+    key: { provider: 'openai', hasKey: false, keyLast4: null },
+    ready: false,
+  });
   // When the last import wrote its receipt. The Import page reloads its receipts on it, so a
   // modal that finished in front of the page does not leave a stale list behind it.
   const [importedAt, setImportedAt] = useState(0);
@@ -280,7 +291,7 @@ export function App() {
   const refresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      const [c, p, t, d, b, g, k, v, tips] = await Promise.all([
+      const [c, p, t, d, b, g, k, v, tips, assistant] = await Promise.all([
         api<Client[]>('/clients'),
         api<Project[]>('/projects'),
         api<Task[]>('/tasks'),
@@ -290,6 +301,11 @@ export function App() {
         api<Category[]>('/categories'),
         api<{ viewDefaults: ViewDefaults }>('/settings/view-defaults'),
         api<{ liveTips: AgentHubLiveTipsSettings }>('/settings/agent-hub-live-tips'),
+        api<{
+          assistant: CommandAiAssistantSettings;
+          key: AssistantKeyMetadata;
+          ready: boolean;
+        }>('/settings/command-ai-assistant'),
       ]);
       setClients(c);
       setProjects(p);
@@ -302,6 +318,11 @@ export function App() {
       setCategories(k);
       setViewDefaults(v.viewDefaults);
       setLiveTips(tips.liveTips);
+      setCommandAiAssistant({
+        assistant: assistant.assistant,
+        key: assistant.key,
+        ready: assistant.ready,
+      });
     } catch (e) {
       const message = (e as Error).message;
       setDashboardRefreshError(message);
@@ -322,8 +343,8 @@ export function App() {
   useEffect(() => {
     refreshUnreadNotifications();
   }, [location.pathname, refreshUnreadNotifications]);
-  const { subscribe: subscribeAgentHubTips, reconnecting: liveUpdatesReconnecting } =
-    useAgentHubTips(liveTips.enabled);
+  const agentHubLive = useAgentHubTips(liveTips.enabled);
+  const { subscribe: subscribeAgentHubTips, reconnecting: liveUpdatesReconnecting } = agentHubLive;
   useDebouncedAgentHubTip(
     liveTips.enabled ? subscribeAgentHubTips : null,
     'notifications',
@@ -364,7 +385,7 @@ export function App() {
       </div>
     );
   return (
-    <AgentHubTipsContext.Provider value={liveTips.enabled ? subscribeAgentHubTips : null}>
+    <AgentHubTipsContext.Provider value={liveTips.enabled ? agentHubLive : null}>
       <ConversationSelectionProvider>
         <div
           className={`app-shell ${collapsed ? 'sidebar-collapsed' : ''} ${commandAiOpen ? 'command-ai-open' : ''}`}
@@ -622,6 +643,8 @@ export function App() {
                       viewDefaults={viewDefaults}
                       liveTips={liveTips}
                       onLiveTipsSaved={setLiveTips}
+                      commandAiAssistant={commandAiAssistant}
+                      onCommandAiAssistantSaved={setCommandAiAssistant}
                       tags={tags}
                       tasks={tasks}
                       categories={categories}
@@ -655,6 +678,7 @@ export function App() {
             open={commandAiOpen}
             onClose={() => setCommandAiOpen(false)}
             liveTipsEnabled={liveTips.enabled}
+            assistantBundle={commandAiAssistant}
             breadcrumbData={{ clients, projects, tasks }}
           />
           <CommandAiFab open={commandAiOpen} onClick={() => setCommandAiOpen(true)} />

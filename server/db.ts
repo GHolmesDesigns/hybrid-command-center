@@ -883,6 +883,47 @@ CREATE TABLE IF NOT EXISTS mcp_change_feed (
   summary TEXT NOT NULL,
   PRIMARY KEY (feed, seq)
 );
+-- Command AI assistant provider keys (C239): encrypted at rest; one row per provider.
+CREATE TABLE IF NOT EXISTS assistant_provider_keys (
+  provider TEXT PRIMARY KEY CHECK(provider IN ('openai','anthropic')),
+  encrypted_key TEXT NOT NULL,
+  key_last4 TEXT NOT NULL CHECK(length(key_last4) BETWEEN 1 AND 4),
+  updated_at TEXT NOT NULL
+);
+-- Per-day assistant usage caps (turns + provider-reported tokens).
+CREATE TABLE IF NOT EXISTS assistant_daily_usage (
+  usage_day TEXT PRIMARY KEY,
+  turn_count INTEGER NOT NULL DEFAULT 0 CHECK(turn_count >= 0),
+  token_count INTEGER NOT NULL DEFAULT 0 CHECK(token_count >= 0)
+);
+-- One active assistant turn per conversation thread.
+CREATE TABLE IF NOT EXISTS assistant_active_turns (
+  conversation_id TEXT PRIMARY KEY REFERENCES agent_conversations(id) ON DELETE CASCADE,
+  turn_id TEXT NOT NULL,
+  operator_session_hash TEXT NOT NULL,
+  state TEXT NOT NULL CHECK(state IN ('running','awaiting_approval','finished','failed','cancelled')),
+  profile TEXT NOT NULL CHECK(profile IN ('light','complex')) DEFAULT 'light',
+  tool_call_count INTEGER NOT NULL DEFAULT 0 CHECK(tool_call_count >= 0),
+  output_token_count INTEGER NOT NULL DEFAULT 0 CHECK(output_token_count >= 0),
+  started_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  cancel_requested INTEGER NOT NULL DEFAULT 0 CHECK(cancel_requested IN (0,1))
+);
+CREATE TABLE IF NOT EXISTS assistant_pending_approvals (
+  id TEXT PRIMARY KEY,
+  conversation_id TEXT NOT NULL REFERENCES agent_conversations(id) ON DELETE CASCADE,
+  turn_id TEXT NOT NULL,
+  tool_name TEXT NOT NULL,
+  tool_args_json TEXT NOT NULL,
+  tier TEXT NOT NULL CHECK(tier IN ('blocking','inline')),
+  summary_json TEXT,
+  status TEXT NOT NULL CHECK(status IN ('pending','approved','declined','expired','withdrawn')),
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  decided_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_assistant_pending_approvals_conversation
+  ON assistant_pending_approvals(conversation_id, status, created_at);
 `;
 /**
  * Indexes, applied after the additive migration so that an index over a
@@ -1081,6 +1122,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS agent_conversation_messages_sender_kind_assistant_insert
 BEFORE INSERT ON agent_conversation_messages FOR EACH ROW
 WHEN NEW.sender_kind = 'assistant'
+  AND COALESCE((SELECT value FROM settings WHERE key = 'assistant_pipeline_insert'), '') <> '1'
 BEGIN
   SELECT RAISE(ABORT, 'agent_conversation_messages: assistant sender_kind is reserved for the server assistant pipeline.');
 END;
@@ -1830,6 +1872,20 @@ export function backfillProviderInventory(db: Db): number {
   });
 }
 
+/** Replace the assistant sender_kind guard so the server pipeline can insert messages. */
+export function migrateAssistantMessageInsertTrigger(db: Db): void {
+  db.exec(`
+    DROP TRIGGER IF EXISTS agent_conversation_messages_sender_kind_assistant_insert;
+    CREATE TRIGGER agent_conversation_messages_sender_kind_assistant_insert
+    BEFORE INSERT ON agent_conversation_messages FOR EACH ROW
+    WHEN NEW.sender_kind = 'assistant'
+      AND COALESCE((SELECT value FROM settings WHERE key = 'assistant_pipeline_insert'), '') <> '1'
+    BEGIN
+      SELECT RAISE(ABORT, 'agent_conversation_messages: assistant sender_kind is reserved for the server assistant pipeline.');
+    END;
+  `);
+}
+
 export function createDb(
   filename = config.databasePath,
   onMigration?: (statements: readonly string[]) => void,
@@ -1874,6 +1930,7 @@ export function createDb(
   db.exec(triggerSchema);
   db.exec(providerAccountTriggers);
   db.exec(handoffLengthTriggers);
+  migrateAssistantMessageInsertTrigger(db);
   db.exec(conversationMessageTriggers);
   // After the index and the triggers, and deliberately: the role rows it writes go through the
   // same uniqueness and the same cross-field rule every later write does, so the migration cannot

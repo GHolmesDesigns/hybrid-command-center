@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Lightbulb } from 'lucide-react';
-import type { MessageLinkedHandoff } from '../../../shared/agent-conversations';
+import { Lightbulb, Sparkles } from 'lucide-react';
+import { ASSISTANT_AGENT_LABEL } from '../../../shared/mcp-agent-registry';
+import type { ConversationSenderKind, MessageLinkedHandoff } from '../../../shared/agent-conversations';
 import type { AgentIdentityProvenance } from '../../../shared/agent-coordination';
 import { AgentBadge, type AgentBadgePresence, type AgentBadgeProfile } from './AgentBadge';
 import { MessageLinkedHandoffs } from './MentionHandoffCompose';
@@ -9,6 +10,7 @@ import { formatDateTime } from './formatting';
 export type ConversationTurnMessage = {
   id: string;
   senderLabel: string;
+  senderKind?: ConversationSenderKind;
   sentAt: string;
   body: string;
   thoughtSummary?: string | null;
@@ -29,30 +31,45 @@ export function ConversationTurn({
   fallbackThought?: string | null;
 }) {
   const operator = message.senderLabel === 'operator';
+  const assistant =
+    message.senderKind === 'assistant' ||
+    message.senderLabel.toLowerCase() === ASSISTANT_AGENT_LABEL;
   const profileKey = message.senderLabel.toLowerCase();
-  const profile = operator ? null : (agentProfiles[profileKey] ?? null);
-  const presence = operator ? null : (presenceByLabel[profileKey] ?? null);
+  const profile = operator || assistant ? null : (agentProfiles[profileKey] ?? null);
+  const presence = operator || assistant ? null : (presenceByLabel[profileKey] ?? null);
   const thought = message.thoughtSummary?.trim() || fallbackThought?.trim() || null;
   const [thoughtOpen, setThoughtOpen] = useState(false);
 
   return (
     <article
-      className={`conversation-turn ${operator ? 'operator-turn' : 'agent-turn'}`}
-      aria-label={`Message from ${operator ? 'you' : message.senderLabel}`}
+      className={`conversation-turn ${operator ? 'operator-turn' : assistant ? 'assistant-turn' : 'agent-turn'}`}
+      aria-label={`Message from ${operator ? 'you' : assistant ? 'Command AI' : message.senderLabel}`}
     >
-      <AgentBadge
-        operator={operator}
-        profile={
-          profile ?? {
-            label: message.senderLabel,
-            displayName: message.senderLabel,
-            trustLevel: 'UNVERIFIED',
+      {assistant ? (
+        <div className="agent-badge assistant-badge">
+          <span className="agent-badge-mark assistant" aria-hidden="true">
+            <Sparkles />
+          </span>
+          <div className="agent-badge-copy">
+            <strong>Command AI</strong>
+            <span className="agent-badge-meta">In-app assistant · VERIFIED</span>
+          </div>
+        </div>
+      ) : (
+        <AgentBadge
+          operator={operator}
+          profile={
+            profile ?? {
+              label: message.senderLabel,
+              displayName: message.senderLabel,
+              trustLevel: 'UNVERIFIED',
+            }
           }
-        }
-        presence={presence}
-        provenance={message.provenance}
-      />
-      {thought && !operator && (
+          presence={presence}
+          provenance={message.provenance}
+        />
+      )}
+      {thought && !operator && !assistant && (
         <div className="conversation-thought">
           <button
             type="button"
@@ -68,7 +85,7 @@ export function ConversationTurn({
       )}
       <div className="conversation-turn-body">
         <p>{message.body}</p>
-        {message.provenance && !operator && (
+        {message.provenance && !operator && !assistant && (
           <span className={`provenance ${message.provenance.toLowerCase()}`}>
             {message.provenance}
           </span>

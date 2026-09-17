@@ -1,4 +1,5 @@
 import { AGENT_LABEL_PATTERN } from './agent-coordination.ts';
+import { isReservedAssistantLabel } from './mcp-agent-registry.ts';
 
 export type ParsedAgentMention = {
   label: string;
@@ -15,7 +16,10 @@ export function parseAgentMentions(
   registeredLabels: ReadonlySet<string> | readonly string[],
 ): ParsedAgentMention[] {
   const directory = new Map<string, string>();
-  for (const label of registeredLabels) directory.set(label.toLowerCase(), label);
+  for (const label of registeredLabels) {
+    if (isReservedAssistantLabel(label)) continue;
+    directory.set(label.toLowerCase(), label);
+  }
 
   const results: ParsedAgentMention[] = [];
   const seen = new Set<string>();

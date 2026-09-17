@@ -1,7 +1,23 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { Clock3, Lightbulb, MessageSquare, PlusSquare, Send, Sparkles, X } from 'lucide-react';
+import {
+  Clock3,
+  Lightbulb,
+  Loader2,
+  MessageSquare,
+  PlusSquare,
+  Send,
+  Sparkles,
+  X,
+} from 'lucide-react';
 import type { AgentHubTipPayload } from '../../../shared/agent-hub-sse';
+import type {
+  AssistantPendingApproval,
+  AssistantTurnState,
+  CommandAiAssistantSettings,
+  AssistantKeyMetadata,
+} from '../../../shared/command-ai-assistant';
+import { ASSISTANT_AGENT_LABEL } from '../../../shared/mcp-agent-registry';
 import type {
   AgentConversation,
   MessageLinkedHandoff,
@@ -14,10 +30,11 @@ import {
   type ConversationPageScope,
 } from '../../../shared/conversation-scope-prompt.ts';
 import { api, send } from '../api';
-import { useDebouncedAgentHubTip } from '../useAgentHubTips';
+import { useDebouncedAgentHubTip, type AssistantStreamCallbacks } from '../useAgentHubTips';
 import { useConversationSelection } from '../useConversationSelection';
 import { dismissScopeChangePair, isScopeChangeDismissed } from '../scopeChangeDismiss';
-import { useAgentHubTipsSubscribe } from './AgentHubTipsContext';
+import { useAgentHubLiveConnection, useAgentHubTipsSubscribe } from './AgentHubTipsContext';
+import { AssistantApprovalCard } from './AssistantApprovalCard';
 import { ConversationTurn } from './ConversationTurn';
 import { shortConversationId } from './formatting';
 import type { AgentBadgePresence, AgentBadgeProfile } from './AgentBadge';
@@ -32,11 +49,27 @@ type Conversation = AgentConversation;
 type Message = {
   id: string;
   senderLabel: string;
+  senderKind?: 'operator' | 'agent' | 'assistant';
   sentAt: string;
   body: string;
   thoughtSummary?: string | null;
   provenance?: 'UNKNOWN' | 'ASSERTED' | 'VERIFIED';
   linkedHandoffs?: MessageLinkedHandoff[];
+};
+
+export type CommandAiAssistantBundle = {
+  assistant: CommandAiAssistantSettings;
+  key: AssistantKeyMetadata;
+  ready: boolean;
+};
+
+const TURN_STATE_LABEL: Record<string, string> = {
+  running: 'Assistant running…',
+  started: 'Assistant running…',
+  awaiting_approval: 'Awaiting your approval',
+  finished: 'Assistant finished',
+  failed: 'Assistant failed',
+  cancelled: 'Assistant cancelled',
 };
 type Page<T> = { items: T[]; nextCursor: string | null; hasMore: boolean };
 type PanelView = 'home' | 'history' | 'thread';
@@ -66,13 +99,29 @@ export function CommandAiPanel({
   open,
   onClose,
   liveTipsEnabled = false,
+  assistantBundle = {
+    assistant: {
+      enabled: false,
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+      dailyTurnCap: 100,
+      dailyTokenCap: 300_000,
+      scopes: ['workspace:read', 'workspace:write'],
+    },
+    key: { provider: 'openai', hasKey: false, keyLast4: null },
+    ready: false,
+  },
   breadcrumbData = { clients: [], projects: [] },
 }: {
   open: boolean;
   onClose: () => void;
   liveTipsEnabled?: boolean;
+  assistantBundle?: CommandAiAssistantBundle;
   breadcrumbData?: BreadcrumbData;
 }) {
+  const assistantEnabled = assistantBundle.assistant.enabled;
+  const assistantReady = assistantBundle.ready;
+  const assistantKeyed = assistantBundle.key.hasKey || assistantReady;
   const {
     conversationId: bridgeConversationId,
     drawerIssue,
@@ -102,10 +151,15 @@ export function CommandAiPanel({
   const [summariesByLabel, setSummariesByLabel] = useState<Record<string, string>>({});
   const [registeredLabels, setRegisteredLabels] = useState<string[]>([]);
   const { offered, confirmed, toggle } = useMentionHandoffCompose(compose, registeredLabels);
+  const [turnState, setTurnState] = useState<AssistantTurnState | null>(null);
+  const [streamingText, setStreamingText] = useState('');
+  const [streamingTurnId, setStreamingTurnId] = useState<string | null>(null);
+  const [approvals, setApprovals] = useState<AssistantPendingApproval[]>([]);
+  const [approvalBusy, setApprovalBusy] = useState(false);
+  const [turnBusy, setTurnBusy] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedRef = useRef<Conversation | null>(null);
   const threadRequestRef = useRef(0);
-
   useEffect(() => {
     selectedRef.current = selected;
   }, [selected]);
@@ -157,6 +211,45 @@ export function CommandAiPanel({
     return items;
   }, []);
 
+  const clearAssistantUi = useCallback(() => {
+    setTurnState(null);
+    setStreamingText('');
+    setStreamingTurnId(null);
+    setApprovals([]);
+  }, []);
+
+  const loadTurnState = useCallback(async (conversationId: string) => {
+    if (!assistantEnabled || !assistantReady) {
+      clearAssistantUi();
+      return;
+    }
+    try {
+      const result = await api<{ turn: AssistantTurnState | null }>(
+        `/agent-conversations/${conversationId}/assistant/turn`,
+      );
+      setTurnState(result.turn);
+      if (result.turn?.state === 'awaiting_approval') {
+        const pending = await api<{ approvals: AssistantPendingApproval[] }>(
+          `/agent-conversations/${conversationId}/assistant/approvals`,
+        );
+        setApprovals(pending.approvals ?? []);
+      } else {
+        setApprovals([]);
+      }
+    } catch {
+      clearAssistantUi();
+    }
+  }, [assistantEnabled, assistantReady, clearAssistantUi]);
+
+  const reloadThreadMessages = useCallback(async (conversation: Conversation) => {
+    const page = await api<Page<Message>>(
+      `/agent-conversations/${conversation.id}/messages?limit=50&direction=before`,
+    );
+    setMessages(page.items);
+    clearAssistantUi();
+    await loadTurnState(conversation.id);
+  }, [clearAssistantUi, loadTurnState]);
+
   const openThread = useCallback(
     async (conversation: Conversation, options?: { fromBridge?: boolean }) => {
       const requestId = ++threadRequestRef.current;
@@ -170,13 +263,16 @@ export function CommandAiPanel({
       setSelected(conversation);
       setView('thread');
       setError('');
+      clearAssistantUi();
       const page = await api<Page<Message>>(
         `/agent-conversations/${conversation.id}/messages?limit=50&direction=before`,
       );
       if (requestId !== threadRequestRef.current) return;
       setMessages(page.items);
+      if (requestId !== threadRequestRef.current) return;
+      await loadTurnState(conversation.id);
     },
-    [applySelection],
+    [applySelection, clearAssistantUi, loadTurnState],
   );
 
   const refresh = useCallback(async () => {
@@ -214,6 +310,7 @@ export function CommandAiPanel({
     setScopePromptVisible(shouldOfferScopeChangePrompt({ pageScope, threadScope, dismissed }));
   }, [open, bridgeConversationId, hint, pageScope]);
 
+  const agentHubLive = useAgentHubLiveConnection();
   const subscribeAgentHubTips = useAgentHubTipsSubscribe();
   const handleConversationTip = useCallback(
     (tip: AgentHubTipPayload) => {
@@ -221,15 +318,77 @@ export function CommandAiPanel({
       const current = selectedRef.current;
       if (!current) return;
       if (tip.conversationId && tip.conversationId !== current.id) return;
-      void openThread(current, { fromBridge: true });
+      void reloadThreadMessages(current);
     },
-    [loadConversations, openThread],
+    [loadConversations, reloadThreadMessages],
   );
   useDebouncedAgentHubTip(
     liveTipsEnabled ? subscribeAgentHubTips : null,
     'conversations',
     handleConversationTip,
   );
+
+  const handleAssistantDelta = useCallback((frame: Parameters<NonNullable<AssistantStreamCallbacks['onDelta']>>[0]) => {
+    const current = selectedRef.current;
+    if (!current || frame.conversationId !== current.id) return;
+    setStreamingTurnId(frame.turnId);
+    setStreamingText((text) => text + frame.delta);
+  }, []);
+
+  const handleAssistantTurnState = useCallback(
+    (frame: Parameters<NonNullable<AssistantStreamCallbacks['onTurnState']>>[0]) => {
+      const current = selectedRef.current;
+      if (!current || frame.conversationId !== current.id) return;
+      if (frame.state === 'finished' || frame.state === 'failed' || frame.state === 'cancelled') {
+        void reloadThreadMessages(current);
+        return;
+      }
+      if (frame.state === 'awaiting_approval') {
+        void loadTurnState(current.id);
+        return;
+      }
+      setTurnState((prev) =>
+        prev
+          ? { ...prev, state: frame.state === 'started' ? 'running' : prev.state }
+          : {
+              conversationId: current.id,
+              turnId: frame.turnId,
+              state: 'running',
+              profile: 'light',
+              toolCallCount: 0,
+              outputTokenCount: 0,
+              startedAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              cancelRequested: false,
+              pendingApprovalIds: [],
+            },
+      );
+    },
+    [loadTurnState, reloadThreadMessages],
+  );
+
+  const streamCallbacks = useMemo(
+    (): AssistantStreamCallbacks => ({
+      onDelta: handleAssistantDelta,
+      onTurnState: handleAssistantTurnState,
+    }),
+    [handleAssistantDelta, handleAssistantTurnState],
+  );
+
+  useEffect(() => {
+    if (!open || !liveTipsEnabled || !assistantEnabled || !assistantReady) return;
+    const conversationId = selected?.id;
+    if (!conversationId || !agentHubLive) return;
+    return agentHubLive.subscribeConversation(conversationId, streamCallbacks);
+  }, [
+    open,
+    liveTipsEnabled,
+    assistantEnabled,
+    assistantReady,
+    selected?.id,
+    agentHubLive,
+    streamCallbacks,
+  ]);
 
   useEffect(() => {
     if (!open) return;
@@ -382,6 +541,38 @@ export function CommandAiPanel({
     setView(selected ? 'thread' : 'home');
   };
 
+  const cancelTurn = async () => {
+    if (!selected || turnBusy) return;
+    setTurnBusy(true);
+    setError('');
+    try {
+      await send(`/agent-conversations/${selected.id}/assistant/cancel`, 'POST', {});
+      await reloadThreadMessages(selected);
+    } catch (problem) {
+      setError((problem as Error).message);
+    } finally {
+      setTurnBusy(false);
+    }
+  };
+
+  const respondToApproval = async (approvalId: string, approved: boolean) => {
+    if (!selected || approvalBusy) return;
+    setApprovalBusy(true);
+    setError('');
+    try {
+      await send(
+        `/agent-conversations/${selected.id}/assistant/approvals/${approvalId}/respond`,
+        'POST',
+        { approved },
+      );
+      await reloadThreadMessages(selected);
+    } catch (problem) {
+      setError((problem as Error).message);
+    } finally {
+      setApprovalBusy(false);
+    }
+  };
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const trimmed = compose.trim();
@@ -403,6 +594,10 @@ export function CommandAiPanel({
         setSelected(conversation);
         setView('thread');
       }
+      if (assistantEnabled && assistantReady) {
+        setStreamingText('');
+        setStreamingTurnId(null);
+      }
       const message = await send<Message>(
         `/agent-conversations/${conversation.id}/messages`,
         'POST',
@@ -410,11 +605,15 @@ export function CommandAiPanel({
           body: trimmed,
           confirmHandoffs: confirmed,
           clientRequestId: crypto.randomUUID(),
+          ...(pageContext ? { pageContext } : {}),
         },
       );
       setMessages((current) => [...current, message]);
       setCompose('');
       await loadConversations();
+      if (assistantEnabled && assistantReady) {
+        await loadTurnState(conversation.id);
+      }
     } catch (problem) {
       setError((problem as Error).message);
     } finally {
@@ -628,6 +827,38 @@ export function CommandAiPanel({
                 )}
               </p>
             </div>
+            {assistantEnabled && assistantReady && turnState && (
+              <div className="command-ai-turn-status" role="status" aria-live="polite">
+                <Loader2 className="spin" aria-hidden="true" />
+                <span>
+                  {TURN_STATE_LABEL[turnState.state] ?? 'Assistant active'}
+                  {streamingTurnId ? ` · turn ${streamingTurnId.slice(0, 8)}` : ''}
+                </span>
+                {(turnState.state === 'running' || turnState.state === 'awaiting_approval') && (
+                  <button
+                    type="button"
+                    className="text-btn"
+                    disabled={turnBusy}
+                    onClick={() => void cancelTurn()}
+                  >
+                    Cancel turn
+                  </button>
+                )}
+              </div>
+            )}
+            {approvals.length > 0 && (
+              <div className="command-ai-approvals" aria-label="Pending assistant approvals">
+                {approvals.map((approval) => (
+                  <AssistantApprovalCard
+                    key={approval.id}
+                    approval={approval}
+                    busy={approvalBusy}
+                    onApprove={() => void respondToApproval(approval.id, true)}
+                    onDecline={() => void respondToApproval(approval.id, false)}
+                  />
+                ))}
+              </div>
+            )}
             <div className="command-ai-messages">
               {messages.map((message) => (
                 <ConversationTurn
@@ -636,12 +867,33 @@ export function CommandAiPanel({
                   agentProfiles={agentProfiles}
                   presenceByLabel={presenceByLabel}
                   fallbackThought={
-                    message.senderLabel === 'operator'
+                    message.senderLabel === 'operator' ||
+                    message.senderKind === 'assistant' ||
+                    message.senderLabel.toLowerCase() === ASSISTANT_AGENT_LABEL
                       ? null
                       : (summariesByLabel[message.senderLabel.toLowerCase()] ?? null)
                   }
                 />
               ))}
+              {streamingText && (
+                <article
+                  className="conversation-turn assistant-turn command-ai-streaming-bubble"
+                  aria-label="Command AI streaming response"
+                >
+                  <div className="agent-badge assistant-badge">
+                    <span className="agent-badge-mark assistant" aria-hidden="true">
+                      <Sparkles />
+                    </span>
+                    <div className="agent-badge-copy">
+                      <strong>Command AI</strong>
+                      <span className="agent-badge-meta">Streaming…</span>
+                    </div>
+                  </div>
+                  <div className="conversation-turn-body">
+                    <p>{streamingText}</p>
+                  </div>
+                </article>
+              )}
               <div ref={messagesEndRef} />
             </div>
           </section>
@@ -649,6 +901,12 @@ export function CommandAiPanel({
       </div>
 
       <footer className="command-ai-foot">
+        {assistantEnabled && !assistantKeyed && (
+          <p className="command-ai-assistant-notice" role="status">
+            Add an API key in <Link to="/settings">Settings</Link> to run Command AI assistant
+            turns.
+          </p>
+        )}
         {pageContext && (
           <div className="command-ai-page-context" aria-label="Current page context">
             <p className="command-ai-page-context-label">

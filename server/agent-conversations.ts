@@ -7,6 +7,7 @@ import { insertHandoff } from './agent-coordination/service.ts';
 import { tipAgentHubConversation } from './agent-hub/tips.ts';
 import { notify } from './agent-summaries.ts';
 import { knownAgentMentionLabels } from '../shared/agent-mentions.ts';
+import { startTurnAfterOperatorMessage } from './agent-assistant/service.ts';
 import { handoffMessageExcerpt } from '../shared/agent-coordination.ts';
 import type { AgentIdentityProvenance } from '../shared/agent-coordination.ts';
 import {
@@ -351,12 +352,19 @@ export function getConversation(db: Db, id: string, actor: string | null) {
     participants(db, id),
   );
 }
+export type PostMessageOptions = {
+  operatorSessionHash?: string | null;
+  assistantStubMode?: boolean;
+  assistantEncryptionSecret?: string;
+};
+
 export function postMessage(
   db: Db,
   id: string,
   actor: string,
   raw: unknown,
   now = new Date(),
+  options?: PostMessageOptions,
 ): AgentConversationMessage {
   const conversation = requireVisible(db, id, actor);
   const input = parsePostInput(raw);
@@ -382,7 +390,7 @@ export function postMessage(
         ? 'VERIFIED'
         : 'ASSERTED';
 
-  return transaction(db, () => {
+  const message = transaction(db, () => {
     if (input.clientRequestId) {
       const replay = db
         .prepare(
@@ -465,6 +473,15 @@ export function postMessage(
       linked,
     );
   });
+  if (actor === 'operator' && options?.operatorSessionHash !== undefined) {
+    startTurnAfterOperatorMessage(db, id, {
+      operatorSessionHash: options.operatorSessionHash ?? '',
+      stubMode: options.assistantStubMode,
+      encryptionSecret: options.assistantEncryptionSecret,
+      pageContext: input.pageContext,
+    });
+  }
+  return message;
 }
 export function listMessages(
   db: Db,

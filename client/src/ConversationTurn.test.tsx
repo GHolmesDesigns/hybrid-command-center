@@ -51,6 +51,28 @@ describe('ConversationTurn', () => {
     expect(screen.getByText('I checked stale handoffs first.')).toBeVisible();
   });
 
+  it('renders a distinct Command AI badge for assistant messages', () => {
+    render(
+      <MemoryRouter>
+        <ConversationTurn
+          message={{
+            id: 'm-assistant',
+            senderLabel: 'command-ai',
+            senderKind: 'assistant',
+            sentAt: '2026-09-11T12:03:00.000Z',
+            body: 'Hello from Command AI.',
+            provenance: 'VERIFIED',
+          }}
+          agentProfiles={{}}
+          presenceByLabel={{}}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText('Command AI')).toBeVisible();
+    expect(screen.getByText('Hello from Command AI.')).toBeVisible();
+    expect(screen.queryByText('VERIFIED')).toBeNull();
+  });
+
   it('uses fallback thought text when no stored summary exists', () => {
     render(
       <MemoryRouter>

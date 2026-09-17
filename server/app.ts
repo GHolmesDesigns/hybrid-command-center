@@ -402,6 +402,24 @@ import {
   readAgentHubLiveTips,
   updateAgentHubLiveTips,
 } from './agent-hub/settings.ts';
+import {
+  assistantSettingsSummary,
+  cancelTurn,
+  getTurnState,
+  listPendingApprovals,
+  respondToApproval,
+} from './agent-assistant/service.ts';
+import {
+  assistantEncryptionSecret,
+  readCommandAiAssistant,
+  updateCommandAiAssistant,
+} from './agent-assistant/settings.ts';
+import { readKeyMetadata, storeKey } from './agent-assistant/keys.ts';
+import { assistantKeyEncryptionKey, assistantStubMode } from './config.ts';
+import {
+  commandAiAssistantSettingsInputSchema,
+  storeAssistantKeyInputSchema,
+} from '../shared/command-ai-assistant.ts';
 
 const id = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
@@ -2236,6 +2254,42 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       next(error);
     }
   });
+  app.get('/api/settings/command-ai-assistant', (_req, res) => {
+    const assistant = readCommandAiAssistant(db);
+    res.json({
+      assistant,
+      key: readKeyMetadata(db, assistant.provider),
+      ready: assistantSettingsSummary(db).ready,
+    });
+  });
+  app.put('/api/settings/command-ai-assistant', (req, res, next) => {
+    try {
+      const result = updateCommandAiAssistant(db, commandAiAssistantSettingsInputSchema.parse(req.body));
+      res.json({
+        ...result,
+        key: readKeyMetadata(db, result.assistant.provider),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.put('/api/settings/command-ai-assistant/key', (req, res, next) => {
+    try {
+      const input = storeAssistantKeyInputSchema.parse(req.body);
+      const secret = assistantKeyEncryptionKey();
+      if (!secret || secret.length < 32) {
+        res.status(400).json({
+          error:
+            'ASSISTANT_KEY_ENCRYPTION_KEY must be at least 32 characters before storing a provider key.',
+        });
+        return;
+      }
+      const key = storeKey(db, input.provider, input.key, secret);
+      res.json({ key });
+    } catch (error) {
+      next(error);
+    }
+  });
   /**
    * The sample workbook, downloaded rather than looked up in the repository. One fixed file: the
    * name comes from a constant and never from the request, so the route cannot be asked for a
@@ -3277,7 +3331,76 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   });
   app.post('/api/agent-conversations/:id/messages', (req, res, next) => {
     try {
-      res.status(201).json(postMessage(db, req.params.id, 'operator', req.body, clock()));
+      const session = (req as unknown as AuthedRequest).operatorSession;
+      res.status(201).json(
+        postMessage(db, req.params.id, 'operator', req.body, clock(), {
+          operatorSessionHash: session?.tokenHash ?? '',
+          assistantEncryptionSecret: assistantKeyEncryptionKey() || undefined,
+          assistantStubMode: assistantStubMode(),
+        }),
+      );
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.get('/api/agent-conversations/:id/assistant/turn', (req, res, next) => {
+    try {
+      getConversation(db, req.params.id, 'operator');
+      res.json({ turn: getTurnState(db, req.params.id) });
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/agent-conversations/:id/assistant/cancel', (req, res, next) => {
+    try {
+      getConversation(db, req.params.id, 'operator');
+      const session = (req as unknown as AuthedRequest).operatorSession;
+      if (authRequired && !session) {
+        res.status(401).json({ error: 'Authentication required.' });
+        return;
+      }
+      const cancelled = cancelTurn(db, req.params.id, session?.tokenHash ?? '');
+      res.json({ ok: cancelled });
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.get('/api/agent-conversations/:id/assistant/approvals', (req, res, next) => {
+    try {
+      getConversation(db, req.params.id, 'operator');
+      res.json({ approvals: listPendingApprovals(db, req.params.id) });
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/agent-conversations/:id/assistant/approvals/:approvalId/respond', (req, res, next) => {
+    try {
+      getConversation(db, req.params.id, 'operator');
+      const session = (req as unknown as AuthedRequest).operatorSession;
+      if (authRequired && !session) {
+        res.status(401).json({ error: 'Authentication required.' });
+        return;
+      }
+      const approved = Boolean((req.body as { approved?: boolean })?.approved);
+      const secret = assistantKeyEncryptionKey() || (assistantStubMode() ? assistantEncryptionSecret() : '');
+      if (!secret) {
+        res.status(400).json({ error: 'Assistant encryption is not configured.' });
+        return;
+      }
+      void respondToApproval(db, {
+        conversationId: req.params.id,
+        approvalId: req.params.approvalId,
+        approved,
+        operatorSessionHash: session?.tokenHash ?? '',
+        encryptionSecret: secret,
+        stubMode: assistantStubMode(),
+      }).then((approval) => {
+        if (!approval) {
+          res.status(404).json({ error: 'Pending approval not found.' });
+          return;
+        }
+        res.json({ approval });
+      }).catch(next);
     } catch (error) {
       next(error);
     }

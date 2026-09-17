@@ -148,7 +148,7 @@ export default defineConfig({
           ...testIntegrity,
           name: 'client',
           environment: 'jsdom',
-          include: ['client/**/*.test.tsx'],
+          include: ['client/**/*.test.ts', 'client/**/*.test.tsx'],
           setupFiles: ['./client/src/test-setup.ts'],
         },
       },

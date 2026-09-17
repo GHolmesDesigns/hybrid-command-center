@@ -20,6 +20,8 @@ import {
   AGENT_HUB_WS_SERVER_PING_INTERVAL_MS,
   agentHubWakeFromTip,
   parseAgentHubClientFrame,
+  type AgentHubAssistantDeltaFrame,
+  type AgentHubAssistantTurnStateFrame,
   type AgentHubClientFrame,
 } from '../../shared/agent-hub-live.ts';
 
@@ -229,6 +231,35 @@ export class AgentHubLiveHub {
   openSocketCount(): number {
     return this.sockets.size;
   }
+
+  sendAssistantDelta(
+    tokenHash: string,
+    conversationId: string,
+    frame: AgentHubAssistantDeltaFrame,
+  ): void {
+    this.sendAssistantFrame(tokenHash, conversationId, frame);
+  }
+
+  sendAssistantTurnState(
+    tokenHash: string,
+    conversationId: string,
+    frame: AgentHubAssistantTurnStateFrame,
+  ): void {
+    this.sendAssistantFrame(tokenHash, conversationId, frame);
+  }
+
+  private sendAssistantFrame(
+    tokenHash: string,
+    conversationId: string,
+    frame: AgentHubAssistantDeltaFrame | AgentHubAssistantTurnStateFrame,
+  ): void {
+    const payload = JSON.stringify(frame);
+    for (const tracked of this.sockets) {
+      if ((tracked.tokenHash ?? '') !== (tokenHash ?? '')) continue;
+      if (!tracked.subscribedConversationIds.has(conversationId)) continue;
+      if (tracked.ws.readyState === tracked.ws.OPEN) tracked.ws.send(payload);
+    }
+  }
 }
 
 let registeredHub: AgentHubLiveHub | null = null;
@@ -239,6 +270,22 @@ export function registerAgentHubLiveHub(hub: AgentHubLiveHub | null): void {
 
 export function closeAgentHubLiveForSession(tokenHash: string): void {
   registeredHub?.closeForSession(tokenHash);
+}
+
+export function sendAssistantDelta(
+  tokenHash: string,
+  conversationId: string,
+  frame: AgentHubAssistantDeltaFrame,
+): void {
+  registeredHub?.sendAssistantDelta(tokenHash, conversationId, frame);
+}
+
+export function sendAssistantTurnState(
+  tokenHash: string,
+  conversationId: string,
+  frame: AgentHubAssistantTurnStateFrame,
+): void {
+  registeredHub?.sendAssistantTurnState(tokenHash, conversationId, frame);
 }
 
 export function attachAgentHubWebSocket(
