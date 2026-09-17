@@ -17,8 +17,18 @@ const stop = stopWhenTheRunEnds('web server', () => server.close());
 
 // `strictPort` so a busy port fails here and says so, rather than moving to 5175 and
 // leaving Playwright to wait out its timeout on a port nothing will ever answer.
+const apiPort = process.env.API_PORT || '8788';
+
 const server: ViteDevServer = await createServer({
   server: { host, port, strictPort: true },
+  // Repeat the dev proxy here so Playwright's web process always forwards WebSocket
+  // upgrades to the E2E API, even if config resolution differs on CI runners.
+  proxy: {
+    '/api': {
+      target: `http://127.0.0.1:${apiPort}`,
+      ws: true,
+    },
+  },
   plugins: [
     {
       name: 'e2e-stop',
