@@ -185,7 +185,9 @@ describe('Agent Hub WebSocket (C236)', () => {
     socket.send('{');
     expect(await closed).toBe(1008);
 
-    const binarySocket = new WebSocket(wsUrl(), { headers: { Cookie: cookie, Origin: APP_ORIGIN } });
+    const binarySocket = new WebSocket(wsUrl(), {
+      headers: { Cookie: cookie, Origin: APP_ORIGIN },
+    });
     await new Promise<void>((resolve, reject) => {
       binarySocket.once('open', () => resolve());
       binarySocket.once('error', reject);

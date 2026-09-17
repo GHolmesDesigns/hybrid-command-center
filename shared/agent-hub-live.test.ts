@@ -23,7 +23,9 @@ describe('agent hub live frames', () => {
     expect(parseAgentHubClientFrame({ kind: 'assistant_delta', turnId: 't' })).toBeNull();
     expect(parseAgentHubClientFrame({ kind: 'subscribe' })).toBeNull();
     expect(parseAgentHubClientFrame({ kind: 'subscribe', conversationId: '' })).toBeNull();
-    expect(parseAgentHubClientFrame({ kind: 'subscribe', conversationId: 'x'.repeat(129) })).toBeNull();
+    expect(
+      parseAgentHubClientFrame({ kind: 'subscribe', conversationId: 'x'.repeat(129) }),
+    ).toBeNull();
     expect(parseAgentHubClientFrame(null)).toBeNull();
     expect(parseAgentHubClientFrame([])).toBeNull();
   });
