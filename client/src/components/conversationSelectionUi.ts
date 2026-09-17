@@ -3,9 +3,9 @@ import type { ConversationSelectionIssue } from '../../../shared/conversation-se
 export function drawerSelectionIssueMessage(issue: ConversationSelectionIssue): string {
   switch (issue) {
     case 'unsupported_scope':
-      return 'Command AI shows active freeform threads only. Scoped project, client, and task discussions open in the full Conversations view.';
+      return 'This scoped thread cannot be shown in Command AI right now. Open the full Conversations view instead.';
     case 'archived_in_drawer':
-      return 'This thread is archived. Command AI lists active freeform threads only.';
+      return 'This thread is archived. Command AI lists active threads only.';
     case 'missing':
       return 'This conversation could not be found, may be archived under another filter, or you may not have access.';
   }

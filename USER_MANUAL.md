@@ -1277,13 +1277,13 @@ them, and watch their handoffs:
 task), archive, decision marks, linked handoffs, and reloadable deep links such as
 `/agents/conversations?open=<id>`. Open it from **Agents** → **Open Conversations**.
 
-**Command AI** is the drawer that stays open while you work elsewhere. It lists **active freeform
-threads only** and is meant as a convenient side panel, not a second chat client.
+**Command AI** is the drawer that stays open while you work elsewhere. It lists **active threads
+for every scope** you can access and is meant as a convenient side panel, not a second chat client.
 
 The drawer and full page are **synchronized views of one conversation**, not two independent
 clients:
 
-- When both are open, selecting a freeform thread in either surface selects the same thread in the
+- When both are open, selecting any active thread in either surface selects the same thread in the
   other.
 - **Open full view** navigates to the Conversations page and preserves the thread you had selected
   in the drawer.
@@ -1291,10 +1291,20 @@ clients:
 - The browser address bar `?open=` link is the reloadable record of which thread the full page
   shows.
 
+Each scoped client, project, or task subject keeps **one canonical thread**. Additional scoped
+threads are labelled **Secondary thread**. Archiving the canonical thread clears that mark without
+promoting another thread automatically; the next time you open that scope's chat you can promote an
+existing secondary thread or create a new canonical one.
+
+When your page scope differs from the selected thread, opening the drawer may ask **Switch to
+[scope label] chat?** Accept selects or creates the canonical thread for that page and syncs the
+Conversations URL when you are on that page. Decline keeps your current selection and suppresses the
+same prompt for the rest of the browser session.
+
 When the drawer cannot represent your current selection, it shows a short explanation and an **Open
-full view** link rather than substituting a different thread. That happens for scoped project,
-client, or task discussions; for archived threads while the drawer lists active threads only; and
-when a conversation cannot be found or you lack access.
+full view** link rather than substituting a different thread. That happens for archived threads
+while the drawer lists active threads only, and when a conversation cannot be found or you lack
+access.
 
 Type `@agent-label` in either composer to mention a registered agent. Before you send, a **Confirm
 handoffs** preview appears: only **checked** mentions open handoffs. Unchecked mentions are still

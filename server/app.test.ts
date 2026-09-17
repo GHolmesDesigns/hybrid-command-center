@@ -2567,6 +2567,45 @@ describe('request budgets', () => {
     expect(response.status).toBe(413);
   });
 
+  it('resolves scoped canonical threads and promotes a secondary thread over HTTP', async () => {
+    const app = createApp(db);
+    const primary = await request(app)
+      .post('/api/agent-conversations')
+      .send({ title: 'Primary project chat', scope: { type: 'project', id: 'p-http' } })
+      .expect(201);
+    const secondary = await request(app)
+      .post('/api/agent-conversations')
+      .send({
+        title: 'Secondary project chat',
+        scope: { type: 'project', id: 'p-http' },
+        secondary: true,
+      })
+      .expect(201);
+    expect(primary.body.isCanonical).toBe(true);
+    expect(secondary.body.isCanonical).toBe(false);
+
+    const resolution = await request(app)
+      .get('/api/agent-conversations/scoped-resolution')
+      .query({ scopeType: 'project', scopeId: 'p-http' })
+      .expect(200);
+    expect(resolution.body).toMatchObject({
+      canonicalId: primary.body.id,
+      secondaryThreads: [{ id: secondary.body.id }],
+    });
+
+    const promoted = await request(app)
+      .post(`/api/agent-conversations/${secondary.body.id}/promote-canonical`)
+      .expect(200);
+    expect(promoted.body.isCanonical).toBe(true);
+    expect(
+      (
+        await request(app)
+          .get('/api/agent-conversations/scoped-resolution')
+          .query({ scopeType: 'project', scopeId: 'p-http' })
+      ).body.canonicalId,
+    ).toBe(secondary.body.id);
+  });
+
   it('supports the operator decision lifecycle and its list filter over HTTP', async () => {
     const app = createApp(db);
     const created = await request(app)

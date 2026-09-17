@@ -18,20 +18,24 @@ describe('conversation selection bridge', () => {
     expect(conversationsPathWithOpen('thread-1')).toBe('/agents/conversations?open=thread-1');
   });
 
-  it('flags drawer issues for missing, scoped, and archived threads without substituting', () => {
+  it('flags drawer issues for missing and archived threads without substituting', () => {
     expect(drawerSelectionIssue(null, null)).toBeNull();
     expect(drawerSelectionIssue('c1', null)).toBe('missing');
-    expect(drawerSelectionIssue('c1', { scopeType: 'project', state: 'ACTIVE' })).toBe(
-      'unsupported_scope',
-    );
-    expect(drawerSelectionIssue('c1', { scopeType: 'freeform', state: 'ARCHIVED' })).toBe(
-      'archived_in_drawer',
-    );
-    expect(drawerSelectionIssue('c1', { scopeType: 'freeform', state: 'ACTIVE' })).toBeNull();
+    expect(
+      drawerSelectionIssue('c1', { scopeType: 'project', scopeId: 'p1', state: 'ACTIVE' }),
+    ).toBeNull();
+    expect(
+      drawerSelectionIssue('c1', { scopeType: 'freeform', scopeId: null, state: 'ARCHIVED' }),
+    ).toBe('archived_in_drawer');
+    expect(
+      drawerSelectionIssue('c1', { scopeType: 'freeform', scopeId: null, state: 'ACTIVE' }),
+    ).toBeNull();
   });
 
   it('flags only missing threads for the full view', () => {
-    expect(fullViewSelectionIssue('c1', { scopeType: 'task', state: 'ARCHIVED' })).toBeNull();
+    expect(
+      fullViewSelectionIssue('c1', { scopeType: 'task', scopeId: 't1', state: 'ARCHIVED' }),
+    ).toBeNull();
     expect(fullViewSelectionIssue('c1', null)).toBe('missing');
   });
 
@@ -43,13 +47,18 @@ describe('conversation selection bridge', () => {
 
   it('merges selection snapshots per surface', () => {
     expect(
-      mergeSelectionSnapshot('c1', 'url', { scopeType: 'freeform', state: 'ACTIVE' }, 'drawer'),
+      mergeSelectionSnapshot(
+        'c1',
+        'url',
+        { scopeType: 'freeform', scopeId: null, state: 'ACTIVE' },
+        'drawer',
+      ),
     ).toEqual({ conversationId: 'c1', source: 'url', issue: null });
     expect(
       mergeSelectionSnapshot(
         'c1',
         'full-view',
-        { scopeType: 'project', state: 'ACTIVE' },
+        { scopeType: 'project', scopeId: 'p1', state: 'ACTIVE' },
         'full-view',
       ),
     ).toEqual({ conversationId: 'c1', source: 'full-view', issue: null });

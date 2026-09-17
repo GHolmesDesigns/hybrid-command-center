@@ -4,8 +4,15 @@ import { test, expect } from '@playwright/test';
 // writes it back from an effect once it mounts behind `AuthGate`, so a test that writes the key
 // and reloads races the app's own persistence (#678).
 const openCommandAiDrawer = async (page: import('@playwright/test').Page) => {
-  await page.getByRole('button', { name: 'Open Command AI' }).click();
-  await expect(page.getByRole('complementary', { name: 'Command AI' })).toBeVisible();
+  const drawer = page.getByRole('complementary', { name: 'Command AI' });
+  if (await drawer.isVisible()) return;
+  const fab = page.getByRole('button', { name: 'Open Command AI' });
+  if (await fab.count()) {
+    await fab.click();
+  } else {
+    await page.getByRole('button', { name: 'Command AI' }).click();
+  }
+  await expect(drawer).toBeVisible();
 };
 
 test('Command AI drawer and Conversations full view stay synchronized', async ({ page }) => {
@@ -119,9 +126,23 @@ test('Command AI drawer and Conversations full view stay synchronized', async ({
     })
   ).json();
 
-  await page.goto(`/agents/conversations?open=${encodeURIComponent(scoped.id)}`);
+  const scopedSeed = `Scoped sync send ${run}`;
+  await page.request.post(`/api/agent-conversations/${scoped.id}/messages`, {
+    data: { body: scopedSeed },
+  });
+
+  await page.goto('/agents/conversations');
+  await expect(page.getByRole('heading', { name: 'Conversations' })).toBeVisible();
+  await openCommandAiDrawer(page);
+  await drawer.getByRole('button', { name: 'History' }).click();
+  await drawer.getByRole('button', { name: new RegExp(scopedTitle) }).click();
+  await expect(page).toHaveURL(new RegExp(`open=${scoped.id}`));
   await expect(detail.getByRole('heading', { name: scopedTitle })).toBeVisible();
-  await expect(drawer.getByText(/Command AI shows active freeform threads only/i)).toBeVisible();
-  await expect(drawer.getByRole('heading', { level: 3, name: titleA })).toHaveCount(0);
-  await expect(drawer.getByRole('heading', { level: 3, name: titleB })).toHaveCount(0);
+  await expect(drawer.getByRole('heading', { level: 3, name: scopedTitle })).toBeVisible();
+  await expect(detail.getByText(scopedSeed)).toBeVisible();
+
+  const drawerScopedMessage = `Drawer scoped send ${run}`;
+  await drawer.getByLabel('Command AI message').fill(drawerScopedMessage);
+  await drawer.getByRole('button', { name: 'Send' }).click();
+  await expect(detail.getByText(drawerScopedMessage)).toHaveCount(1);
 });

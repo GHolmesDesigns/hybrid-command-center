@@ -3,10 +3,14 @@ import { createDb } from './db.ts';
 import {
   clearConversationDecision,
   createConversation,
+  getConversation,
   listConversations,
   listMessages,
   markConversationDecision,
   postMessage,
+  promoteConversationToCanonical,
+  resolveCanonicalConversationId,
+  resolveScopedConversation,
   setConversationState,
 } from './agent-conversations.ts';
 
@@ -129,6 +133,88 @@ describe('agent conversations', () => {
     const page = listConversations(db, 'cursor', { scopeType: 'project', scopeId: 'p1', limit: 1 });
     expect(page.items.map((item) => item.title)).toEqual(['Project one']);
     expect(page.hasMore).toBe(false);
+  });
+
+  it('marks the first scoped thread canonical, treats later ones as secondary, and clears canonical on archive', () => {
+    const db = createDb(':memory:');
+    const first = createConversation(
+      db,
+      { title: 'Primary', scope: { type: 'project', id: 'p1' }, participantLabels: [] },
+      'operator',
+    );
+    const second = createConversation(
+      db,
+      { title: 'Secondary', scope: { type: 'project', id: 'p1' }, participantLabels: [] },
+      'operator',
+    );
+    expect(first.isCanonical).toBe(true);
+    expect(second.isCanonical).toBe(false);
+    expect(resolveCanonicalConversationId(db, 'project', 'p1')).toBe(first.id);
+    setConversationState(db, first.id, 'operator', 'ARCHIVED');
+    expect(resolveCanonicalConversationId(db, 'project', 'p1')).toBeNull();
+    const resolution = resolveScopedConversation(db, 'project', 'p1', 'operator');
+    expect(resolution.canonicalId).toBeNull();
+    expect(resolution.secondaryThreads.map((thread) => thread.id)).toEqual([second.id]);
+  });
+
+  it('refuses to promote freeform or archived conversations to canonical', () => {
+    const db = createDb(':memory:');
+    const freeform = createConversation(
+      db,
+      { title: 'Freeform', scope: { type: 'freeform' }, participantLabels: [] },
+      'operator',
+    );
+    expect(() => promoteConversationToCanonical(db, freeform.id, 'operator')).toThrow(
+      /scoped conversations/i,
+    );
+    const archived = createConversation(
+      db,
+      { title: 'Archived scoped', scope: { type: 'task', id: 't1' }, participantLabels: [] },
+      'operator',
+    );
+    setConversationState(db, archived.id, 'operator', 'ARCHIVED');
+    expect(() => promoteConversationToCanonical(db, archived.id, 'operator')).toThrow(
+      /active conversations/i,
+    );
+  });
+
+  it('creates explicit secondary scoped threads when requested', () => {
+    const db = createDb(':memory:');
+    createConversation(
+      db,
+      { title: 'Primary', scope: { type: 'project', id: 'p1' }, participantLabels: [] },
+      'operator',
+    );
+    const secondary = createConversation(
+      db,
+      {
+        title: 'Side thread',
+        scope: { type: 'project', id: 'p1' },
+        participantLabels: [],
+        secondary: true,
+      },
+      'operator',
+    );
+    expect(secondary.isCanonical).toBe(false);
+    expect(resolveCanonicalConversationId(db, 'project', 'p1')).not.toBe(secondary.id);
+  });
+
+  it('promotes a secondary scoped thread to canonical without archiving siblings', () => {
+    const db = createDb(':memory:');
+    const canonical = createConversation(
+      db,
+      { title: 'Primary', scope: { type: 'client', id: 'c1' }, participantLabels: [] },
+      'operator',
+    );
+    const secondary = createConversation(
+      db,
+      { title: 'Side thread', scope: { type: 'client', id: 'c1' }, participantLabels: [] },
+      'operator',
+    );
+    const promoted = promoteConversationToCanonical(db, secondary.id, 'operator');
+    expect(promoted.isCanonical).toBe(true);
+    expect(getConversation(db, canonical.id, 'operator').isCanonical).toBe(false);
+    expect(resolveCanonicalConversationId(db, 'client', 'c1')).toBe(secondary.id);
   });
 
   it('persists decision metadata, filters decided threads, and clears the complete mark', () => {

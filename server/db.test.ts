@@ -7,6 +7,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   applyAdditiveMigrations,
+  backfillConversationCanonical,
   backfillProjectActivity,
   createDb,
   getStoreId,
@@ -525,6 +526,36 @@ describe('additive schema migration', () => {
          WHERE last_activity_at IS NULL OR last_activity_at = ''`,
       ),
     ).toEqual([{ unfilled: 0 }]);
+  });
+
+  it('promotes the earliest active scoped thread when no canonical flag exists yet', () => {
+    const db = track(createDb(':memory:'));
+    const at = '2026-09-17T12:00:00.000Z';
+    db.prepare(
+      `INSERT INTO agent_conversations(
+         id, title, scope_type, scope_id, state, is_canonical, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, 'ACTIVE', 0, ?, ?)`,
+    ).run('c-old', 'Older', 'project', 'p1', '2026-09-17T11:00:00.000Z', at);
+    db.prepare(
+      `INSERT INTO agent_conversations(
+         id, title, scope_type, scope_id, state, is_canonical, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, 'ACTIVE', 0, ?, ?)`,
+    ).run('c-new', 'Newer', 'project', 'p1', at, at);
+    db.prepare(
+      'INSERT INTO agent_conversation_participants(conversation_id, agent_label) VALUES (?, ?)',
+    ).run('c-old', 'operator');
+    db.prepare(
+      'INSERT INTO agent_conversation_participants(conversation_id, agent_label) VALUES (?, ?)',
+    ).run('c-new', 'operator');
+
+    expect(backfillConversationCanonical(db)).toBe(1);
+    expect(
+      rows(db, `SELECT id, is_canonical FROM agent_conversations ORDER BY created_at, id`),
+    ).toEqual([
+      { id: 'c-old', is_canonical: 1 },
+      { id: 'c-new', is_canonical: 0 },
+    ]);
+    expect(backfillConversationCanonical(db)).toBe(0);
   });
 
   it('never overwrites an activity stamp that is already there', () => {

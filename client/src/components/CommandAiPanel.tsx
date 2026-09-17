@@ -2,10 +2,21 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom';
 import { Clock3, Lightbulb, MessageSquare, PlusSquare, Send, Sparkles, X } from 'lucide-react';
 import type { AgentHubTipPayload } from '../../../shared/agent-hub-sse';
+import type {
+  AgentConversation,
+  MessageLinkedHandoff,
+  ScopedConversationResolution,
+} from '../../../shared/agent-conversations';
+import {
+  pageScopeFromSubject,
+  scopeChangeDismissKey,
+  shouldOfferScopeChangePrompt,
+  type ConversationPageScope,
+} from '../../../shared/conversation-scope-prompt.ts';
 import { api, send } from '../api';
-import type { MessageLinkedHandoff } from '../../../shared/agent-conversations';
 import { useDebouncedAgentHubTip } from '../useAgentHubTips';
 import { useConversationSelection } from '../useConversationSelection';
+import { dismissScopeChangePair, isScopeChangeDismissed } from '../scopeChangeDismiss';
 import { useAgentHubTipsSubscribe } from './AgentHubTipsContext';
 import { ConversationTurn } from './ConversationTurn';
 import { shortConversationId } from './formatting';
@@ -17,15 +28,7 @@ import { drawerSelectionIssueMessage } from './conversationSelectionUi';
 import { useCommandAiPageContext } from '../useCommandAiPageContext';
 import type { BreadcrumbData } from './breadcrumbs';
 
-type Conversation = {
-  id: string;
-  title: string;
-  state: 'ACTIVE' | 'ARCHIVED';
-  scope: { type: 'client' | 'project' | 'task' | 'freeform'; id: string | null };
-  participants: string[];
-  messageCount: number;
-  updatedAt: string;
-};
+type Conversation = AgentConversation;
 type Message = {
   id: string;
   senderLabel: string;
@@ -73,12 +76,21 @@ export function CommandAiPanel({
   const {
     conversationId: bridgeConversationId,
     drawerIssue,
+    hint,
     applySelection,
     clearSelection,
     conversationsOpenPath,
+    onConversationsPage,
   } = useConversationSelection();
   const pageContext = useCommandAiPageContext(breadcrumbData);
+  const pageScope = pageScopeFromSubject(
+    pageContext?.subjectType ?? null,
+    pageContext?.subjectId ?? null,
+  );
   const [view, setView] = useState<PanelView>('home');
+  const [scopePromptVisible, setScopePromptVisible] = useState(false);
+  const [canonicalChoice, setCanonicalChoice] = useState<ScopedConversationResolution | null>(null);
+  const scopePromptEvaluatedRef = useRef(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selected, setSelected] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -140,9 +152,9 @@ export function CommandAiPanel({
 
   const loadConversations = useCallback(async () => {
     const page = await api<Page<Conversation>>('/agent-conversations?state=ACTIVE&limit=50');
-    const freeform = (page.items ?? []).filter((item) => item.scope.type === 'freeform');
-    setConversations(freeform);
-    return freeform;
+    const items = page.items ?? [];
+    setConversations(items);
+    return items;
   }, []);
 
   const openThread = useCallback(
@@ -151,6 +163,7 @@ export function CommandAiPanel({
       if (!options?.fromBridge) {
         applySelection(conversation.id, 'drawer', {
           scopeType: conversation.scope.type,
+          scopeId: conversation.scope.id,
           state: conversation.state,
         });
       }
@@ -177,9 +190,29 @@ export function CommandAiPanel({
   }, [loadAgents, loadConversations]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      scopePromptEvaluatedRef.current = false;
+      setScopePromptVisible(false);
+      setCanonicalChoice(null);
+      return;
+    }
     void refresh();
   }, [open, refresh]);
+
+  useEffect(() => {
+    if (!open || scopePromptEvaluatedRef.current) return;
+    if (!pageScope) {
+      scopePromptEvaluatedRef.current = true;
+      return;
+    }
+    if (bridgeConversationId && !hint) return;
+    scopePromptEvaluatedRef.current = true;
+    if (!bridgeConversationId || !hint) return;
+    const threadScope = { type: hint.scopeType, id: hint.scopeId };
+    const dismissKey = scopeChangeDismissKey(pageScope, threadScope);
+    const dismissed = isScopeChangeDismissed(dismissKey);
+    setScopePromptVisible(shouldOfferScopeChangePrompt({ pageScope, threadScope, dismissed }));
+  }, [open, bridgeConversationId, hint, pageScope]);
 
   const subscribeAgentHubTips = useAgentHubTipsSubscribe();
   const handleConversationTip = useCallback(
@@ -234,6 +267,110 @@ export function CommandAiPanel({
     setCompose('');
     setView('home');
     setError('');
+    setScopePromptVisible(false);
+    setCanonicalChoice(null);
+  };
+
+  const openConversationRecord = useCallback(
+    async (conversation: Conversation) => {
+      await openThread(conversation);
+    },
+    [openThread],
+  );
+
+  const openScopedCanonical = useCallback(
+    async (scope: ConversationPageScope) => {
+      setBusy(true);
+      setError('');
+      try {
+        const resolution = await api<ScopedConversationResolution>(
+          `/agent-conversations/scoped-resolution?scopeType=${scope.type}&scopeId=${encodeURIComponent(scope.id)}`,
+        );
+        if (resolution.canonicalId) {
+          const existing = conversations.find((item) => item.id === resolution.canonicalId);
+          if (existing) {
+            await openConversationRecord(existing);
+          } else {
+            const conversation = await api<Conversation>(
+              `/agent-conversations/${resolution.canonicalId}`,
+            );
+            await openConversationRecord(conversation);
+          }
+          setScopePromptVisible(false);
+          setCanonicalChoice(null);
+          return;
+        }
+        if (resolution.secondaryThreads.length > 0) {
+          setCanonicalChoice(resolution);
+          return;
+        }
+        const created = await send<Conversation>('/agent-conversations', 'POST', {
+          title: `${scope.type} chat`,
+          scope: { type: scope.type, id: scope.id },
+        });
+        await openConversationRecord(created);
+        await loadConversations();
+        setScopePromptVisible(false);
+      } catch (problem) {
+        setError((problem as Error).message);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [conversations, loadConversations, openConversationRecord],
+  );
+
+  const startScopedThread = async (scope: ConversationPageScope, secondary = true) => {
+    setBusy(true);
+    setError('');
+    try {
+      const created = await send<Conversation>('/agent-conversations', 'POST', {
+        title: secondary ? `${scope.type} thread` : `${scope.type} chat`,
+        scope: { type: scope.type, id: scope.id },
+        secondary,
+      });
+      await openConversationRecord(created);
+      await loadConversations();
+      setCanonicalChoice(null);
+      setScopePromptVisible(false);
+    } catch (problem) {
+      setError((problem as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const acceptScopeChange = () => {
+    if (!pageScope) return;
+    void openScopedCanonical(pageScope);
+  };
+
+  const declineScopeChange = () => {
+    if (!pageScope) return;
+    const threadScope = hint
+      ? { type: hint.scopeType, id: hint.scopeId }
+      : (selected?.scope ?? { type: 'freeform' as const, id: null });
+    dismissScopeChangePair(scopeChangeDismissKey(pageScope, threadScope));
+    setScopePromptVisible(false);
+  };
+
+  const promoteSecondaryToCanonical = async (conversationId: string) => {
+    setBusy(true);
+    setError('');
+    try {
+      const promoted = await send<Conversation>(
+        `/agent-conversations/${conversationId}/promote-canonical`,
+        'POST',
+      );
+      await openConversationRecord(promoted);
+      await loadConversations();
+      setCanonicalChoice(null);
+      setScopePromptVisible(false);
+    } catch (problem) {
+      setError((problem as Error).message);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const showHistory = () => {
@@ -260,6 +397,7 @@ export function CommandAiPanel({
         });
         applySelection(conversation.id, 'drawer', {
           scopeType: conversation.scope.type,
+          scopeId: conversation.scope.id,
           state: conversation.state,
         });
         setSelected(conversation);
@@ -308,6 +446,16 @@ export function CommandAiPanel({
           <button type="button" className="command-ai-action" onClick={() => startNew()}>
             <PlusSquare aria-hidden="true" /> New
           </button>
+          {pageScope && (
+            <button
+              type="button"
+              className="command-ai-action"
+              disabled={busy}
+              onClick={() => void startScopedThread(pageScope)}
+            >
+              <PlusSquare aria-hidden="true" /> New thread
+            </button>
+          )}
           <button
             type="button"
             className="icon-btn"
@@ -323,6 +471,63 @@ export function CommandAiPanel({
         <p className="command-ai-error" role="alert">
           {error}
         </p>
+      )}
+
+      {scopePromptVisible && pageContext && pageScope && (
+        <section className="command-ai-scope-prompt" aria-label="Scope change prompt">
+          <p>
+            Switch to <strong>{pageContext.label}</strong> chat?
+          </p>
+          <div className="command-ai-scope-prompt-actions">
+            <button
+              type="button"
+              className="primary-btn"
+              disabled={busy}
+              onClick={acceptScopeChange}
+            >
+              Switch
+            </button>
+            <button
+              type="button"
+              className="secondary-btn"
+              disabled={busy}
+              onClick={declineScopeChange}
+            >
+              Keep current thread
+            </button>
+          </div>
+        </section>
+      )}
+
+      {canonicalChoice && pageScope && (
+        <section className="command-ai-scope-prompt" aria-label="Choose canonical thread">
+          <p>
+            No canonical thread is active for this scope. Promote an existing thread or create a new
+            one.
+          </p>
+          <ul className="command-ai-canonical-choice">
+            {canonicalChoice.secondaryThreads.map((thread) => (
+              <li key={thread.id}>
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  disabled={busy}
+                  onClick={() => void promoteSecondaryToCanonical(thread.id)}
+                >
+                  Promote “{thread.title}”
+                </button>
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            className="primary-btn"
+            disabled={busy}
+            onClick={() => void startScopedThread(pageScope, false)}
+          >
+            Create new canonical thread
+          </button>
+        </section>
       )}
 
       <div className="command-ai-body">
@@ -356,8 +561,8 @@ export function CommandAiPanel({
               <h3>What are you curious about?</h3>
               <p>
                 Ask a question, mention an agent with @label, or resume a recent thread. This drawer
-                and the Conversations page show the same selected freeform thread — they are not two
-                separate chats.
+                and the Conversations page show the same selected thread across every scope — they
+                are not two separate chats.
               </p>
             </div>
             {recent.length > 0 && (
@@ -408,10 +613,19 @@ export function CommandAiPanel({
               <button type="button" className="text-btn" onClick={() => startNew()}>
                 ← New chat
               </button>
-              <h3>{selected.title}</h3>
+              <h3>
+                {selected.title}{' '}
+                {selected.scope.type !== 'freeform' && !selected.isCanonical && (
+                  <span className="secondary-thread-badge">Secondary thread</span>
+                )}
+              </h3>
               <p className="field-hint">
-                Conversation {shortConversationId(selected.id)} · synchronized with full view ·{' '}
-                <Link to={conversationsOpenPath(selected.id)}>Open full view</Link>
+                Conversation {shortConversationId(selected.id)} · {selected.scope.type}
+                {selected.scope.id ? ` · ${selected.scope.id}` : ''} · synchronized with full view
+                {onConversationsPage ? '' : ' · '}
+                {!onConversationsPage && (
+                  <Link to={conversationsOpenPath(selected.id)}>Open full view</Link>
+                )}
               </p>
             </div>
             <div className="command-ai-messages">
