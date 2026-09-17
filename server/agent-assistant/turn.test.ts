@@ -591,9 +591,7 @@ describe('assistant turn orchestrator', () => {
     cancelTurn(db, conversation.id, SESSION);
     await pending;
     expect(
-      listMessages(db, conversation.id, 'operator').items.some((m) =>
-        m.body.includes('cancelled'),
-      ),
+      listMessages(db, conversation.id, 'operator').items.some((m) => m.body.includes('cancelled')),
     ).toBe(true);
   });
 });
