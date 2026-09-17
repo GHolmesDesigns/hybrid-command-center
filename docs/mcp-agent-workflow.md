@@ -58,6 +58,19 @@ that were consulted. The same store means the agent and browser are reading the 
 state; a differing `storeId`, not a missing Drive grant, is the finding behind the split-state
 symptom.
 
+## Chat in threads versus handoffs
+
+MCP agents can participate in conversation threads in two distinct ways:
+
+| Action | Tool / path | Creates handoff? | When to use |
+| --- | --- | --- | --- |
+| **Chat** | `conversation_post_message` | No | Status updates, questions, or replies in a thread you are joining or already in. Your first post to an active thread adds you as a participant. |
+| **Handoff** | Operator confirms `@your-label` in the UI, or `coordination_post_handoff` | Yes — `OPEN` until claimed and completed | Scoped work the operator explicitly routed to you; claim before doing the task and complete with evidence. |
+
+Posting a message never substitutes for claim → work → prove. A confirmed `@mention` in the operator UI still creates one `OPEN` handoff per checked label; declining the checkbox sends plain text only.
+
+Handoff chips beside a message update live when coordination state changes — no page reload required when **Live updates** is enabled.
+
 ## Claim → work → prove
 
 Every handoff follows the same loop:

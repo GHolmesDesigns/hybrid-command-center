@@ -3,8 +3,11 @@ import { Link } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CheckCircle2, Handshake, MessageSquare, Send } from 'lucide-react';
 import type { AgentHandoff, AgentHandoffPage } from '../../../shared/agent-coordination';
 import { AGENT_HANDOFF_SUBJECT_TYPE_LABEL } from '../../../shared/agent-coordination';
+import type { AgentHubTipPayload } from '../../../shared/agent-hub-sse';
 import type { MessageLinkedHandoff } from '../../../shared/agent-conversations';
 import { api, send } from '../api';
+import { useDebouncedAgentHubTip } from '../useAgentHubTips';
+import { useAgentHubTipsSubscribe } from './AgentHubTipsContext';
 import { formatDateTime } from './formatting';
 import { MentionHandoffPreview, MessageLinkedHandoffs } from './MentionHandoffCompose';
 import { useMentionHandoffCompose } from './useMentionHandoffCompose';
@@ -107,9 +110,13 @@ export function DiscussionPanel({
     };
   }, [load]);
 
-  const open = async (conversation: Conversation) => {
+  const selectedRef = useRef<Conversation | null>(null);
+  useEffect(() => {
+    selectedRef.current = selected;
+  }, [selected]);
+
+  const open = useCallback(async (conversation: Conversation) => {
     setSelected(conversation);
-    setMessages([]);
     setActionError('');
     try {
       const page = await api<Page<Message>>(
@@ -118,8 +125,29 @@ export function DiscussionPanel({
       setMessages(page.items);
     } catch (problem) {
       setActionError((problem as Error).message);
+      setMessages([]);
     }
-  };
+  }, []);
+
+  const subscribeAgentHubTips = useAgentHubTipsSubscribe();
+  const handleConversationTip = useCallback(
+    (tip: AgentHubTipPayload) => {
+      void load();
+      const current = selectedRef.current;
+      if (!current) return;
+      if (tip.conversationId && tip.conversationId !== current.id) return;
+      void open(current);
+    },
+    [load, open],
+  );
+  useDebouncedAgentHubTip(subscribeAgentHubTips, 'conversations', handleConversationTip);
+  const handleCoordinationTip = useCallback(() => {
+    const current = selectedRef.current;
+    if (!current) return;
+    void load();
+    void open(current);
+  }, [load, open]);
+  useDebouncedAgentHubTip(subscribeAgentHubTips, 'coordination', handleCoordinationTip);
 
   const start = async () => {
     const trimmedTitle = title.trim();

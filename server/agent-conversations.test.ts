@@ -71,6 +71,28 @@ describe('agent conversations', () => {
     expect(new Set([...newest.items, ...older.items].map((message) => message.id)).size).toBe(3);
   });
 
+  it('promotes a registered agent to participant on first in-thread post', () => {
+    const db = createDb(':memory:');
+    const conversation = createConversation(
+      db,
+      { title: 'Operator thread', scope: { type: 'freeform' }, participantLabels: [] },
+      'operator',
+    );
+    expect(() => listMessages(db, conversation.id, 'cursor')).toThrow(/not found/i);
+    const message = postMessage(db, conversation.id, 'cursor', 'Joining the thread.');
+    expect(message.senderLabel).toBe('cursor');
+    expect(
+      (
+        db
+          .prepare(
+            'SELECT agent_label FROM agent_conversation_participants WHERE conversation_id=? ORDER BY agent_label',
+          )
+          .all(conversation.id) as { agent_label: string }[]
+      ).map((row) => row.agent_label),
+    ).toEqual(['cursor', 'operator']);
+    expect(listMessages(db, conversation.id, 'cursor').items[0]?.body).toBe('Joining the thread.');
+  });
+
   it('stores agent thought summaries and refuses them on operator posts', () => {
     const db = createDb(':memory:');
     const conversation = createConversation(
