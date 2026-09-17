@@ -1,5 +1,34 @@
 # Changelog
 
+## [6.10.8] - 2026-09-17
+
+### Changed
+
+- Bumped `googleapis` 178.0.0 → 180.0.0.
+
+### Breaking changes
+
+None.
+## [6.10.7] - 2026-09-17
+
+### Changed
+
+- Bumped development dependencies: `@types/node` 26.4.1 → 26.6.1, `typescript-eslint` 8.69.0 →
+  8.70.0, `vite` 8.2.2 → 8.3.0.
+
+### Breaking changes
+
+None.
+## [6.10.6] - 2026-09-17
+
+### Changed
+
+- Bumped production dependencies: `lucide-react` 1.41.0 → 1.45.0, `react` and `react-dom`
+  19.2.8 → 19.3.0 (with matching `@types/react` and `@types/react-dom`), `zod` 4.5.4 → 4.6.2.
+
+### Breaking changes
+
+None.
 ## [6.10.5] - 2026-09-14
 
 ## Added
