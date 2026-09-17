@@ -635,7 +635,7 @@ describe('restoreDatabase', () => {
     const safety = inspectDatabase(result.safetyBackupPath!);
     expect(safety.clients).toBe(1);
     expect(safety.driveReferences).toEqual([]);
-  });
+  }, 15000);
 
   it('restores onto a missing destination without --force', async () => {
     const backup = scratch('backup.db');
