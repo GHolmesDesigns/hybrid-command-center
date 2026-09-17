@@ -1,10 +1,10 @@
 import { test, expect } from '@playwright/test';
 
-const COMMAND_AI_STORAGE_KEY = 'hcc-command-ai-open';
-
+// Open the drawer through its own control. `App` owns the open preference in localStorage and
+// writes it back from an effect once it mounts behind `AuthGate`, so a test that writes the key
+// and reloads races the app's own persistence (#678).
 const openCommandAiDrawer = async (page: import('@playwright/test').Page) => {
-  await page.evaluate((key) => localStorage.setItem(key, '1'), COMMAND_AI_STORAGE_KEY);
-  await page.reload();
+  await page.getByRole('button', { name: 'Open Command AI' }).click();
   await expect(page.getByRole('complementary', { name: 'Command AI' })).toBeVisible();
 };
 
@@ -70,6 +70,8 @@ test('Command AI drawer and Conversations full view stay synchronized', async ({
   await expect(detail.getByRole('heading', { name: titleB })).toBeVisible();
   await expect(drawer.getByRole('heading', { level: 3, name: titleB })).toBeVisible();
 
+  // The drawer was opened by the app, not seeded by the test, so this reload proves the app
+  // persisted the open preference itself.
   await page.reload();
   await expect(drawer).toBeVisible();
   await expect(detail.getByRole('heading', { name: titleB })).toBeVisible();
