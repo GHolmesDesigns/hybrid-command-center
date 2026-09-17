@@ -1,5 +1,14 @@
 # Changelog
 
+## [6.10.10] - 2026-09-17
+
+### Fixed
+
+- Stabilize the intermittent conversation-sync e2e spec: open the Command AI drawer through its own control instead of writing the app's stored open preference and reloading, which raced the app's own persistence as it mounted. The later reload now proves the app keeps the drawer open by itself. No product behaviour changes.
+
+### Breaking changes
+
+None.
 ## [6.10.9] - 2026-09-17
 
 ### Changed
