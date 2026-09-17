@@ -7,8 +7,6 @@ import type { BreadcrumbData } from './components/breadcrumbs';
 const emptyData: BreadcrumbData = {
   clients: [],
   projects: [],
-  tasks: [],
-  signalPosts: [],
 };
 
 function renderPageContext(path: string, data: BreadcrumbData = emptyData) {
@@ -26,8 +24,16 @@ describe('useCommandAiPageContext', () => {
   it('captures project subject metadata on workspace detail routes', () => {
     const data: BreadcrumbData = {
       ...emptyData,
-      projects: [{ id: 'p1', name: 'Website Refresh', clientId: 'c1', status: 'ACTIVE' }],
-      clients: [{ id: 'c1', name: 'Acme Studio', slug: 'acme', status: 'ACTIVE' }],
+      projects: [
+        {
+          id: 'p1',
+          name: 'Website Refresh',
+          clientId: 'c1',
+          clientName: 'Acme Studio',
+          status: 'ACTIVE',
+        },
+      ],
+      clients: [{ id: 'c1', name: 'Acme Studio', status: 'ACTIVE', mergedInto: null }],
     };
     const { result } = renderPageContext('/projects/p1', data);
     expect(result.current).toMatchObject({
