@@ -1,5 +1,15 @@
 # Changelog
 
+## [6.10.6] - 2026-09-17
+
+### Changed
+
+- Bumped production dependencies: `lucide-react` 1.41.0 → 1.45.0, `react` and `react-dom`
+  19.2.8 → 19.3.0 (with matching `@types/react` and `@types/react-dom`), `zod` 4.5.4 → 4.6.2.
+
+### Breaking changes
+
+None.
 ## [6.10.5] - 2026-09-14
 
 ## Added
