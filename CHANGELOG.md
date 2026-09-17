@@ -1,5 +1,15 @@
 # Changelog
 
+## [6.10.11] - 2026-09-17
+
+## Changed
+
+- Live update tips is now **Live updates**. It keeps open conversations and notifications current without requiring a reload.
+- The shell uses an authenticated WebSocket live channel when Live updates is enabled. Wake frames trigger the same debounced HTTP reread as before; the C219 SSE route remains available as a fallback for one release.
+
+## Breaking changes
+
+None.
 ## [6.10.10] - 2026-09-17
 
 ### Fixed
