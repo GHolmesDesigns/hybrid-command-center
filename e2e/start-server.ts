@@ -194,8 +194,7 @@ bufferWrite.createdStateByChannel.set('e2e-buffer-youtube', 'FAILED');
 
 let agentHubLiveHub: AgentHubLiveHub | undefined;
 let agentHubLiveContext:
-  | { registry: AgentHubTipRegistry; auth: AgentHubWsAuth; appOrigin: string }
-  | undefined;
+  { registry: AgentHubTipRegistry; auth: AgentHubWsAuth; appOrigin: string } | undefined;
 const app = createApp(db, {
   publishTimezone: 'America/New_York',
   publish,
