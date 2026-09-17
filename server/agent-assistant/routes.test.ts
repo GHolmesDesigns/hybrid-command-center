@@ -181,10 +181,7 @@ describe('command ai assistant routes', () => {
 
   it('rejects assistant settings that clear every scope', async () => {
     const app = createApp(db);
-    await request(app)
-      .put('/api/settings/command-ai-assistant')
-      .send({ scopes: [] })
-      .expect(400);
+    await request(app).put('/api/settings/command-ai-assistant').send({ scopes: [] }).expect(400);
   });
 
   it('returns 404 for assistant routes on unknown conversations', async () => {
