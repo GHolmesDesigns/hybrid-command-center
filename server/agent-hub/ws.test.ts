@@ -213,7 +213,7 @@ describe('Agent Hub WebSocket (C236)', () => {
   });
 
   it('closes when inbound message rate is exceeded', async () => {
-    let now = 1_000;
+    const now = 1_000;
     hub.dispose();
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
