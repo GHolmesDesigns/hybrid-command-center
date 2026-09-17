@@ -197,6 +197,63 @@ describe('Agent Hub WebSocket (C236)', () => {
     });
     binarySocket.send(Buffer.from([1, 2, 3]));
     expect(await binaryClosed).toBe(1008);
+
+    const oversizedSocket = new WebSocket(wsUrl(), {
+      headers: { Cookie: cookie, Origin: APP_ORIGIN },
+    });
+    await new Promise<void>((resolve, reject) => {
+      oversizedSocket.once('open', () => resolve());
+      oversizedSocket.once('error', reject);
+    });
+    const oversizedClosed = new Promise<number>((resolve) => {
+      oversizedSocket.once('close', (code) => resolve(code));
+    });
+    oversizedSocket.send(JSON.stringify({ kind: 'ping', pad: 'x'.repeat(4096) }));
+    expect(await oversizedClosed).toBe(1008);
+  });
+
+  it('closes when inbound message rate is exceeded', async () => {
+    let now = 1_000;
+    hub.dispose();
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+
+    app = createApp(db, {
+      enforceAuth: true,
+      appOrigin: APP_ORIGIN,
+      auth: {
+        sessionSecret: SECRET,
+        operatorPasswordHash: await hashPassword(PASSWORD),
+        trustedProxyHops: 0,
+        secureCookies: false,
+      },
+      onAgentHubLiveContext: (ctx) => {
+        server = ctx.app.listen(0, '127.0.0.1');
+        hub = attachAgentHubWebSocket(server, ctx.registry, {
+          db,
+          appOrigin: ctx.appOrigin,
+          auth: ctx.auth,
+          now: () => now,
+        });
+      },
+    });
+    await new Promise<void>((resolve) => server.once('listening', resolve));
+    const login = await request(app).post('/api/auth/login').send({ password: PASSWORD });
+    cookie = login.headers['set-cookie']?.[0] as string;
+
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${(server.address() as AddressInfo).port}${AGENT_HUB_WS_PATH}`,
+      { headers: { Cookie: cookie, Origin: APP_ORIGIN } },
+    );
+    await new Promise<void>((resolve, reject) => {
+      socket.once('open', () => resolve());
+      socket.once('error', reject);
+    });
+    const closed = new Promise<number>((resolve) => {
+      socket.once('close', (code) => resolve(code));
+    });
+    for (let i = 0; i < 21; i += 1) socket.send(JSON.stringify({ kind: 'ping' }));
+    expect(await closed).toBe(1008);
   });
 });
 

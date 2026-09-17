@@ -1,5 +1,11 @@
 import type { Server } from 'node:http';
 import { createApp } from '../server/app.ts';
+import {
+  attachAgentHubWebSocket,
+  type AgentHubLiveHub,
+  type AgentHubWsAuth,
+} from '../server/agent-hub/ws.ts';
+import type { AgentHubTipRegistry } from '../server/agent-hub/tips.ts';
 import { config } from '../server/config.ts';
 import { getDb } from '../server/db.ts';
 import { resetE2eDatabase } from './database.ts';
@@ -186,6 +192,10 @@ analyticsWindow.failureAt = 2;
 const bufferWrite = new MockBufferWriteProvider();
 bufferWrite.createdStateByChannel.set('e2e-buffer-youtube', 'FAILED');
 
+let agentHubLiveHub: AgentHubLiveHub | undefined;
+let agentHubLiveContext:
+  | { registry: AgentHubTipRegistry; auth: AgentHubWsAuth; appOrigin: string }
+  | undefined;
 const app = createApp(db, {
   publishTimezone: 'America/New_York',
   publish,
@@ -199,10 +209,20 @@ const app = createApp(db, {
   // A build a person uses never gets this option; see the option's own comment in `server/app.ts`.
   analyticsWindows: ['30d'],
   driveMedia: () => driveMedia,
+  onAgentHubLiveContext: (ctx) => {
+    agentHubLiveContext = ctx;
+  },
 });
-const server: Server = app.listen(config.port, config.host, () =>
-  console.log(`Command Center E2E API ready at http://${config.host}:${config.port}`),
-);
+const server: Server = app.listen(config.port, config.host, () => {
+  if (agentHubLiveContext) {
+    agentHubLiveHub = attachAgentHubWebSocket(server, agentHubLiveContext.registry, {
+      db,
+      appOrigin: agentHubLiveContext.appOrigin,
+      auth: agentHubLiveContext.auth,
+    });
+  }
+  console.log(`Command Center E2E API ready at http://${config.host}:${config.port}`);
+});
 
 const stop = stopWhenTheRunEnds(
   'API',
@@ -210,6 +230,8 @@ const stop = stopWhenTheRunEnds(
     new Promise<void>((resolve) => {
       // Keep-alive sockets held by the browser and by Playwright's own API calls would
       // otherwise keep `close()` pending until they time out on their own.
+      agentHubLiveHub?.closeAll();
+      agentHubLiveHub?.dispose();
       server.closeAllConnections();
       server.close(() => {
         // Releases the SQLite handle, so the next run can delete the file on Windows.
