@@ -5,16 +5,25 @@ import { request as httpRequest } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Express } from 'express';
 import WebSocket from 'ws';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readSessionToken } from '../auth/cookies.ts';
+import { sessionFromRawToken } from '../auth/service.ts';
 import request from 'supertest';
-import { AGENT_HUB_WS_PATH } from '../../shared/agent-hub-live.ts';
+import {
+  AGENT_HUB_WS_PATH,
+  AGENT_HUB_WS_SERVER_PING_INTERVAL_MS,
+} from '../../shared/agent-hub-live.ts';
 import { createApp } from '../app.ts';
 import { hashPassword } from '../auth/password.ts';
 import { OPERATOR_PASSWORD_HASH_SETTING_KEY } from '../auth/service.ts';
 import { createDb, type Db } from '../db.ts';
 import { setSetting } from '../drive/service.ts';
-import { attachAgentHubWebSocket, type AgentHubLiveHub } from './ws.ts';
-import { tipAgentHubConversation } from './tips.ts';
+import {
+  attachAgentHubWebSocket,
+  closeAgentHubLiveForSession,
+  type AgentHubLiveHub,
+} from './ws.ts';
+import { tipAgentHubConversation, tipAgentHubCoordination } from './tips.ts';
 
 const SECRET = 'test-session-secret-at-least-32-chars!';
 const PASSWORD = 'operator-password-ok';
@@ -115,6 +124,39 @@ describe('Agent Hub WebSocket (C236)', () => {
       outgoing.end();
     });
     expect(status).toBe(401);
+  });
+
+  it('allows upgrades without a session when auth is not required', async () => {
+    hub.dispose();
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+
+    app = createApp(db, {
+      enforceAuth: false,
+      appOrigin: APP_ORIGIN,
+      auth: {
+        sessionSecret: SECRET,
+        operatorPasswordHash: await hashPassword(PASSWORD),
+        trustedProxyHops: 0,
+        secureCookies: false,
+      },
+      onAgentHubLiveContext: (ctx) => {
+        server = ctx.app.listen(0, '127.0.0.1');
+        hub = attachAgentHubWebSocket(server, ctx.registry, {
+          db,
+          appOrigin: ctx.appOrigin,
+          auth: { authRequired: false, sessionSecret: ctx.auth.sessionSecret },
+        });
+      },
+    });
+    await new Promise<void>((resolve) => server.once('listening', resolve));
+
+    const socket = new WebSocket(wsUrl(), { headers: { Origin: APP_ORIGIN } });
+    await new Promise<void>((resolve, reject) => {
+      socket.once('open', () => resolve());
+      socket.once('error', reject);
+    });
+    socket.close();
   });
 
   it('fans out wake frames with feeds only and closes on logout', async () => {
@@ -254,6 +296,96 @@ describe('Agent Hub WebSocket (C236)', () => {
     });
     for (let i = 0; i < 21; i += 1) socket.send(JSON.stringify({ kind: 'ping' }));
     expect(await closed).toBe(1008);
+  });
+
+  it('fans out coordination wake frames and closes only the matching session', async () => {
+    const loginB = await request(app).post('/api/auth/login').send({ password: PASSWORD });
+    const cookieB = loginB.headers['set-cookie']?.[0] as string;
+
+    const socketA = new WebSocket(wsUrl(), { headers: { Cookie: cookie, Origin: APP_ORIGIN } });
+    const socketB = new WebSocket(wsUrl(), { headers: { Cookie: cookieB, Origin: APP_ORIGIN } });
+    await Promise.all([
+      new Promise<void>((resolve, reject) => {
+        socketA.once('open', () => resolve());
+        socketA.once('error', reject);
+      }),
+      new Promise<void>((resolve, reject) => {
+        socketB.once('open', () => resolve());
+        socketB.once('error', reject);
+      }),
+    ]);
+
+    const wake = new Promise<unknown>((resolve) => {
+      socketA.once('message', (data) => resolve(JSON.parse(String(data))));
+    });
+    tipAgentHubCoordination();
+    expect(await wake).toMatchObject({
+      kind: 'wake',
+      feeds: ['coordination'],
+    });
+
+    const rawToken = readSessionToken(cookie);
+    const sessionA = sessionFromRawToken(db, {
+      rawToken,
+      sessionSecret: SECRET,
+      now: Date.now(),
+    });
+    closeAgentHubLiveForSession(sessionA!.tokenHash);
+    const closedA = new Promise<number>((resolve) => {
+      socketA.once('close', (code) => resolve(code));
+    });
+    expect(await closedA).toBe(1001);
+    expect(socketB.readyState).toBe(WebSocket.OPEN);
+    socketB.close();
+  });
+
+  it('sends server ping frames on the documented interval', async () => {
+    vi.useFakeTimers();
+    try {
+      hub.dispose();
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+
+      app = createApp(db, {
+        enforceAuth: true,
+        appOrigin: APP_ORIGIN,
+        auth: {
+          sessionSecret: SECRET,
+          operatorPasswordHash: await hashPassword(PASSWORD),
+          trustedProxyHops: 0,
+          secureCookies: false,
+        },
+        onAgentHubLiveContext: (ctx) => {
+          server = ctx.app.listen(0, '127.0.0.1');
+          hub = attachAgentHubWebSocket(server, ctx.registry, {
+            db,
+            appOrigin: ctx.appOrigin,
+            auth: ctx.auth,
+          });
+        },
+      });
+      await new Promise<void>((resolve) => server.once('listening', resolve));
+      const login = await request(app).post('/api/auth/login').send({ password: PASSWORD });
+      cookie = login.headers['set-cookie']?.[0] as string;
+
+      const socket = new WebSocket(
+        `ws://127.0.0.1:${(server.address() as AddressInfo).port}${AGENT_HUB_WS_PATH}`,
+        { headers: { Cookie: cookie, Origin: APP_ORIGIN } },
+      );
+      await new Promise<void>((resolve, reject) => {
+        socket.once('open', () => resolve());
+        socket.once('error', reject);
+      });
+
+      const ping = new Promise<void>((resolve) => {
+        socket.once('ping', () => resolve());
+      });
+      vi.advanceTimersByTime(AGENT_HUB_WS_SERVER_PING_INTERVAL_MS);
+      await ping;
+      socket.close();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
