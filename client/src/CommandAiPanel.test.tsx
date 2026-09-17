@@ -352,12 +352,15 @@ describe('CommandAiPanel', () => {
     };
     const secondMessage = { ...firstMessage, id: 'm2', body: 'Second' };
     let messageReads = 0;
-    let emitTip: ((tip: AgentHubTipPayload) => void) | null = null;
+    const listeners = new Set<(tip: AgentHubTipPayload) => void>();
     const subscribe = (listener: (tip: AgentHubTipPayload) => void) => {
-      emitTip = listener;
+      listeners.add(listener);
       return () => {
-        emitTip = null;
+        listeners.delete(listener);
       };
+    };
+    const emitTip = (tip: AgentHubTipPayload) => {
+      for (const listener of listeners) listener(tip);
     };
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = String(input);
@@ -394,7 +397,7 @@ describe('CommandAiPanel', () => {
     expect(await screen.findByText('First')).toBeVisible();
 
     act(() => {
-      emitTip?.({ feeds: ['conversations'], conversationId: 'other-thread' });
+      emitTip({ feeds: ['conversations'], conversationId: 'other-thread' });
     });
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 350));
@@ -403,7 +406,7 @@ describe('CommandAiPanel', () => {
     expect(messageReads).toBe(1);
 
     act(() => {
-      emitTip?.({ feeds: ['conversations'], conversationId: 'live-thread' });
+      emitTip({ feeds: ['conversations'], conversationId: 'live-thread' });
     });
     expect(await screen.findByText('Second', {}, { timeout: 2000 })).toBeVisible();
   });

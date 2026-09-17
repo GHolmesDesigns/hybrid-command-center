@@ -3,11 +3,11 @@ import { test, expect } from '@playwright/test';
 const openCommandAiDrawer = async (page: import('@playwright/test').Page) => {
   const drawer = page.getByRole('complementary', { name: 'Command AI' });
   if (await drawer.isVisible()) return drawer;
-  const fab = page.getByRole('button', { name: 'Open Command AI' });
-  if (await fab.count()) {
-    await fab.click();
+  const topToggle = page.locator('.command-ai-top-toggle');
+  if (await topToggle.count()) {
+    await topToggle.click();
   } else {
-    await page.getByRole('button', { name: 'Command AI' }).click();
+    await page.getByRole('button', { name: 'Open Command AI' }).click();
   }
   await expect(drawer).toBeVisible();
   return drawer;

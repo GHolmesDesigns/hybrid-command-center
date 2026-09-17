@@ -1,5 +1,20 @@
 # Changelog
 
+## [6.10.15] - 2026-09-17
+
+## Added
+
+- Live coordination wake refreshes handoff chips on open conversation threads without reload when **Live updates** is enabled.
+- MCP agents are promoted to conversation participants on their first in-thread post to an active thread.
+
+## Changed
+
+- Command AI drawer, Conversations page, and scoped Discussion panels reread agent messages and linked handoff state from the same live wake feeds.
+- In-app help and `docs/mcp-agent-workflow.md` explain chat (`conversation_post_message`) versus handoff (confirmed `@mention` or coordination lifecycle).
+
+## Breaking changes
+
+None.
 ## [6.10.14] - 2026-09-17
 
 ## Added

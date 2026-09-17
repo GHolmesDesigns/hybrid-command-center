@@ -194,6 +194,22 @@ const requireVisible = (db: Db, id: string, actor: string | null) => {
   return row;
 };
 
+/** Operator posts require membership; registered agents may join an active thread on first post. */
+const requirePostAccess = (db: Db, id: string, actor: string) => {
+  const row = db.prepare('SELECT * FROM agent_conversations WHERE id=?').get(id) as
+    ConversationRow | undefined;
+  if (!row) throw Object.assign(new Error('Conversation not found.'), { status: 404 });
+  if (actor === 'operator') {
+    if (!visible(db, id, actor))
+      throw Object.assign(new Error('Conversation not found.'), { status: 404 });
+    return row;
+  }
+  if (row.state !== 'ACTIVE') {
+    throw Object.assign(new Error('Conversation is not active.'), { status: 400 });
+  }
+  return row;
+};
+
 const registeredLabels = (db: Db) => listAgentDirectory(db).map((agent) => agent.label);
 
 const linkedHandoffsForMessages = (
@@ -366,7 +382,7 @@ export function postMessage(
   now = new Date(),
   options?: PostMessageOptions,
 ): AgentConversationMessage {
-  const conversation = requireVisible(db, id, actor);
+  const conversation = requirePostAccess(db, id, actor);
   const input = parsePostInput(raw);
   const body = redactSecrets(input.body);
   const instant = now.toISOString();
@@ -421,6 +437,10 @@ export function postMessage(
     const linkInsert = db.prepare(
       'INSERT INTO agent_conversation_message_handoffs(message_id,handoff_id,to_agent_label) VALUES(?,?,?)',
     );
+
+    if (actor !== 'operator') {
+      participantInsert.run(id, actor);
+    }
 
     for (const label of confirmed) {
       participantInsert.run(id, label);

@@ -235,12 +235,15 @@ describe('ConversationsView', () => {
       body: 'Second',
     };
     let messageReads = 0;
-    let emitTip: ((tip: AgentHubTipPayload) => void) | null = null;
+    const listeners = new Set<(tip: AgentHubTipPayload) => void>();
     const subscribe = (listener: (tip: AgentHubTipPayload) => void) => {
-      emitTip = listener;
+      listeners.add(listener);
       return () => {
-        emitTip = null;
+        listeners.delete(listener);
       };
+    };
+    const emitTip = (tip: AgentHubTipPayload) => {
+      for (const listener of listeners) listener(tip);
     };
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = String(input);
@@ -273,7 +276,7 @@ describe('ConversationsView', () => {
     expect(await screen.findByText('First')).toBeVisible();
 
     act(() => {
-      emitTip?.({ feeds: ['conversations'], conversationId: 'other-thread' });
+      emitTip({ feeds: ['conversations'], conversationId: 'other-thread' });
     });
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 350));
@@ -281,8 +284,82 @@ describe('ConversationsView', () => {
     expect(screen.getByText('First')).toBeVisible();
 
     act(() => {
-      emitTip?.({ feeds: ['conversations'], conversationId: 'live-thread' });
+      emitTip({ feeds: ['conversations'], conversationId: 'live-thread' });
     });
     expect(await screen.findByText('Second', {}, { timeout: 2000 })).toBeVisible();
+  });
+
+  it('rereads the open thread when a coordination wake arrives', async () => {
+    const conversation = {
+      id: 'handoff-thread',
+      title: 'Handoff thread',
+      state: 'ACTIVE',
+      scope: { type: 'freeform', id: null },
+      participants: ['operator', 'cursor'],
+      messageCount: 1,
+      updatedAt: '2026-09-10T12:00:00Z',
+      isDecision: false,
+      decisionOutcome: null,
+      decidedAt: null,
+    };
+    const openHandoff = {
+      id: 'm1',
+      senderLabel: 'operator',
+      sentAt: '2026-09-10T12:00:00Z',
+      body: '@cursor please review',
+      provenance: 'VERIFIED',
+      linkedHandoffs: [{ id: 'h1', toAgentLabel: 'cursor', state: 'OPEN' }],
+    };
+    const completedHandoff = {
+      ...openHandoff,
+      linkedHandoffs: [{ id: 'h1', toAgentLabel: 'cursor', state: 'COMPLETED' }],
+    };
+    let messageReads = 0;
+    const listeners = new Set<(tip: AgentHubTipPayload) => void>();
+    const subscribe = (listener: (tip: AgentHubTipPayload) => void) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    };
+    const emitTip = (tip: AgentHubTipPayload) => {
+      for (const listener of listeners) listener(tip);
+    };
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/agents/directory')) return new Response(JSON.stringify({ agents: [] }));
+      if (url.includes('/agents/presence')) return new Response(JSON.stringify({ presence: [] }));
+      if (url.includes('/agent-summaries')) return new Response(JSON.stringify({ summaries: [] }));
+      if (url.includes('/messages')) {
+        messageReads += 1;
+        return new Response(
+          JSON.stringify({
+            items: [messageReads > 1 ? completedHandoff : openHandoff],
+            nextCursor: null,
+            hasMore: false,
+          }),
+        );
+      }
+      return new Response(
+        JSON.stringify({ items: [conversation], nextCursor: null, hasMore: false }),
+      );
+    });
+
+    renderConversations(
+      <AgentHubTipsContext.Provider
+        value={{ subscribe, subscribeConversation: () => () => undefined, reconnecting: false }}
+      >
+        <ConversationsView flash={vi.fn()} liveTipsEnabled />
+      </AgentHubTipsContext.Provider>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: /Handoff thread/ }));
+    expect(await screen.findByText(/Handoff to @cursor · OPEN/)).toBeVisible();
+
+    act(() => {
+      emitTip({ feeds: ['coordination'] });
+    });
+    expect(
+      await screen.findByText(/Handoff to @cursor · COMPLETED/, {}, { timeout: 2000 }),
+    ).toBeVisible();
   });
 });

@@ -192,6 +192,16 @@ export function ConversationsView({
     'conversations',
     handleConversationTip,
   );
+  const handleCoordinationTip = useCallback(() => {
+    const current = selectedRef.current;
+    if (!current) return;
+    void open(current);
+  }, [open]);
+  useDebouncedAgentHubTip(
+    liveTipsEnabled ? subscribeAgentHubTips : null,
+    'coordination',
+    handleCoordinationTip,
+  );
   const saveDecision = async (event: FormEvent) => {
     event.preventDefault();
     if (!selected) return;
@@ -307,8 +317,9 @@ export function ConversationsView({
         The Command AI drawer and this page are synchronized views, not two separate clients.
         Selecting any active thread here updates the drawer when it is open, and vice versa.{' '}
         <strong>Open full view</strong> in the drawer lands on the same thread. Scoped subjects keep
-        one canonical thread; additional threads are labelled Secondary thread. @mentions open
-        handoffs only after you check them in the confirm preview.
+        one canonical thread; additional threads are labelled Secondary thread. Posting as an agent
+        via MCP is chat — it does not open a handoff. @mentions open handoffs only after you check
+        them in the confirm preview.
       </p>
       {scopeType && scopeId && (
         <p className="field-hint">

@@ -333,6 +333,16 @@ export function CommandAiPanel({
     'conversations',
     handleConversationTip,
   );
+  const handleCoordinationTip = useCallback(() => {
+    const current = selectedRef.current;
+    if (!current) return;
+    void reloadThreadMessages(current);
+  }, [reloadThreadMessages]);
+  useDebouncedAgentHubTip(
+    liveTipsEnabled ? subscribeAgentHubTips : null,
+    'coordination',
+    handleCoordinationTip,
+  );
 
   const handleAssistantDelta = useCallback(
     (frame: Parameters<NonNullable<AssistantStreamCallbacks['onDelta']>>[0]) => {
@@ -770,7 +780,8 @@ export function CommandAiPanel({
               <p>
                 Ask a question, mention an agent with @label, or resume a recent thread. This drawer
                 and the Conversations page show the same selected thread across every scope — they
-                are not two separate chats.
+                are not two separate chats. MCP agents can post in a thread as chat peers; a checked
+                @mention opens a handoff for claim and complete.
               </p>
             </div>
             {recent.length > 0 && (
