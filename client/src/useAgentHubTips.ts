@@ -8,18 +8,24 @@ import {
   AGENT_HUB_WS_PATH,
   isAgentHubAssistantDeltaFrame,
   isAgentHubAssistantTurnStateFrame,
+  isAgentHubTypingFrame,
   isAgentHubWakeFrame,
   type AgentHubAssistantDeltaFrame,
   type AgentHubAssistantTurnStateFrame,
   type AgentHubClientFrame,
+  type AgentHubTypingFrame,
 } from '../../shared/agent-hub-live';
 
 export type AgentHubTipListener = (tip: AgentHubTipPayload) => void;
 
-export type AssistantStreamCallbacks = {
+export type ConversationStreamCallbacks = {
   onDelta?: (frame: AgentHubAssistantDeltaFrame) => void;
   onTurnState?: (frame: AgentHubAssistantTurnStateFrame) => void;
+  onTyping?: (frame: AgentHubTypingFrame) => void;
 };
+
+/** @deprecated Use ConversationStreamCallbacks */
+export type AssistantStreamCallbacks = ConversationStreamCallbacks;
 
 const INITIAL_RETRY_MS = 1_000;
 const MAX_RETRY_MS = 30_000;
@@ -34,7 +40,7 @@ export type AgentHubLiveConnection = {
   subscribe: (listener: AgentHubTipListener) => () => void;
   subscribeConversation: (
     conversationId: string,
-    callbacks: AssistantStreamCallbacks,
+    callbacks: ConversationStreamCallbacks,
   ) => () => void;
   /** True after repeated reconnect failures — navigation and HTTP refresh still work. */
   reconnecting: boolean;
@@ -42,7 +48,7 @@ export type AgentHubLiveConnection = {
 
 export function useAgentHubTips(enabled: boolean): AgentHubLiveConnection {
   const listenersRef = useRef(new Set<AgentHubTipListener>());
-  const conversationSubsRef = useRef(new Map<string, Set<AssistantStreamCallbacks>>());
+  const conversationSubsRef = useRef(new Map<string, Set<ConversationStreamCallbacks>>());
   const subscribedIdsRef = useRef(new Set<string>());
   const socketRef = useRef<WebSocket | null>(null);
   const [reconnecting, setReconnecting] = useState(false);
@@ -68,7 +74,7 @@ export function useAgentHubTips(enabled: boolean): AgentHubLiveConnection {
   }, []);
 
   const subscribeConversation = useCallback(
-    (conversationId: string, callbacks: AssistantStreamCallbacks) => {
+    (conversationId: string, callbacks: ConversationStreamCallbacks) => {
       let set = conversationSubsRef.current.get(conversationId);
       if (!set) {
         set = new Set();
@@ -107,7 +113,7 @@ export function useAgentHubTips(enabled: boolean): AgentHubLiveConnection {
       }
     };
 
-    const dispatchAssistant = (conversationId: string, frame: unknown) => {
+    const dispatchConversation = (conversationId: string, frame: unknown) => {
       const subs = conversationSubsRef.current.get(conversationId);
       if (!subs?.size) return;
       if (isAgentHubAssistantDeltaFrame(frame)) {
@@ -116,6 +122,10 @@ export function useAgentHubTips(enabled: boolean): AgentHubLiveConnection {
       }
       if (isAgentHubAssistantTurnStateFrame(frame)) {
         for (const callbacks of subs) callbacks.onTurnState?.(frame);
+        return;
+      }
+      if (isAgentHubTypingFrame(frame)) {
+        for (const callbacks of subs) callbacks.onTyping?.(frame);
       }
     };
 
@@ -152,11 +162,15 @@ export function useAgentHubTips(enabled: boolean): AgentHubLiveConnection {
             return;
           }
           if (isAgentHubAssistantDeltaFrame(parsed)) {
-            dispatchAssistant(parsed.conversationId, parsed);
+            dispatchConversation(parsed.conversationId, parsed);
             return;
           }
           if (isAgentHubAssistantTurnStateFrame(parsed)) {
-            dispatchAssistant(parsed.conversationId, parsed);
+            dispatchConversation(parsed.conversationId, parsed);
+            return;
+          }
+          if (isAgentHubTypingFrame(parsed)) {
+            dispatchConversation(parsed.conversationId, parsed);
           }
         } catch {
           // Ignore malformed frames; the next HTTP reread remains authoritative.

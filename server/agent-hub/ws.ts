@@ -23,7 +23,12 @@ import {
   type AgentHubAssistantDeltaFrame,
   type AgentHubAssistantTurnStateFrame,
   type AgentHubClientFrame,
+  type AgentHubTypingFrame,
 } from '../../shared/agent-hub-live.ts';
+import {
+  AgentHubTypingRegistry,
+  registerAgentHubTypingRegistry,
+} from './typing.ts';
 
 export type AgentHubWsAuth = {
   authRequired: boolean;
@@ -78,14 +83,23 @@ function sessionForUpgrade(
 export class AgentHubLiveHub {
   private readonly registry: AgentHubTipRegistry;
   private readonly options: AgentHubWsOptions;
+  private readonly typingRegistry: AgentHubTypingRegistry;
   private readonly sockets = new Set<TrackedSocket>();
   private wakeSeq = 0;
   private tipUnsubscribe: (() => void) | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
 
-  constructor(registry: AgentHubTipRegistry, options: AgentHubWsOptions) {
+  constructor(
+    registry: AgentHubTipRegistry,
+    options: AgentHubWsOptions,
+    typingRegistry: AgentHubTypingRegistry,
+  ) {
     this.registry = registry;
     this.options = options;
+    this.typingRegistry = typingRegistry;
+    typingRegistry.attachBroadcast((conversationId, frame) => {
+      this.broadcastTyping(conversationId, frame);
+    });
   }
 
   attach(server: HttpServer): void {
@@ -225,6 +239,7 @@ export class AgentHubLiveHub {
     this.tipUnsubscribe = null;
     if (this.pingTimer) clearInterval(this.pingTimer);
     this.pingTimer = null;
+    this.typingRegistry.dispose();
   }
 
   /** Test helper — count of open sockets. */
@@ -256,6 +271,15 @@ export class AgentHubLiveHub {
     const payload = JSON.stringify(frame);
     for (const tracked of this.sockets) {
       if ((tracked.tokenHash ?? '') !== (tokenHash ?? '')) continue;
+      if (!tracked.subscribedConversationIds.has(conversationId)) continue;
+      if (tracked.ws.readyState === tracked.ws.OPEN) tracked.ws.send(payload);
+    }
+  }
+
+  /** Typing is routed to every socket subscribed to the conversation (LC-P5 / #675). */
+  broadcastTyping(conversationId: string, frame: AgentHubTypingFrame): void {
+    const payload = JSON.stringify(frame);
+    for (const tracked of this.sockets) {
       if (!tracked.subscribedConversationIds.has(conversationId)) continue;
       if (tracked.ws.readyState === tracked.ws.OPEN) tracked.ws.send(payload);
     }
@@ -292,9 +316,11 @@ export function attachAgentHubWebSocket(
   server: HttpServer,
   registry: AgentHubTipRegistry,
   options: AgentHubWsOptions,
+  typingRegistry = new AgentHubTypingRegistry({ now: options.now }),
 ): AgentHubLiveHub {
-  const hub = new AgentHubLiveHub(registry, options);
+  const hub = new AgentHubLiveHub(registry, options, typingRegistry);
   hub.attach(server);
   registerAgentHubLiveHub(hub);
+  registerAgentHubTypingRegistry(typingRegistry);
   return hub;
 }

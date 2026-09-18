@@ -97,6 +97,12 @@ export const messageListSchema = z
     direction: z.enum(['forward', 'before']).default('forward'),
   })
   .strict();
+export const conversationTypingSchema = z
+  .object({
+    id: z.string().trim().min(1).max(128),
+    active: z.boolean(),
+  })
+  .strict();
 export type CreateConversationInput = z.infer<typeof createConversationSchema>;
 export type AgentConversation = {
   id: string;

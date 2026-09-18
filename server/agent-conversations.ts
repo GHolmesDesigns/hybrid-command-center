@@ -5,6 +5,7 @@ import { redactSecrets } from './integration-log.ts';
 import { listAgentDirectory } from './agent-directory.ts';
 import { insertHandoff } from './agent-coordination/service.ts';
 import { tipAgentHubConversation } from './agent-hub/tips.ts';
+import { setAgentHubConversationTyping } from './agent-hub/typing.ts';
 import { notify } from './agent-summaries.ts';
 import { knownAgentMentionLabels } from '../shared/agent-mentions.ts';
 import { startTurnAfterOperatorMessage } from './agent-assistant/service.ts';
@@ -602,4 +603,24 @@ export function purgeArchivedConversations(db: Db, before: string) {
   return db
     .prepare("DELETE FROM agent_conversations WHERE state='ARCHIVED' AND updated_at < ?")
     .run(before).changes;
+}
+
+/** Ephemeral typing signal for subscribed operators — never persisted (LC-P5 / #675). */
+export function setConversationTyping(
+  db: Db,
+  id: string,
+  actor: string,
+  active: boolean,
+): { conversationId: string; agentLabel: string; active: boolean; expiresAt: string | null } {
+  requirePostAccess(db, id, actor);
+  const frame = setAgentHubConversationTyping(id, actor, active);
+  if (!frame) {
+    throw Object.assign(new Error('Live typing is unavailable.'), { status: 503 });
+  }
+  return {
+    conversationId: frame.conversationId,
+    agentLabel: frame.agentLabel,
+    active: frame.active,
+    expiresAt: frame.expiresAt,
+  };
 }

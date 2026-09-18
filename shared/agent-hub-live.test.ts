@@ -3,6 +3,7 @@ import {
   agentHubWakeFromTip,
   isAgentHubAssistantDeltaFrame,
   isAgentHubAssistantTurnStateFrame,
+  isAgentHubTypingFrame,
   isAgentHubWakeFrame,
   parseAgentHubClientFrame,
 } from './agent-hub-live.ts';
@@ -78,5 +79,19 @@ describe('agent hub live frames', () => {
     expect(isAgentHubAssistantTurnStateFrame(state)).toBe(true);
     expect(isAgentHubAssistantTurnStateFrame({ ...state, state: 42 })).toBe(false);
     expect(isAgentHubAssistantTurnStateFrame(null)).toBe(false);
+  });
+
+  it('validates typing frames for subscribed threads', () => {
+    const frame = {
+      kind: 'typing',
+      conversationId: 'conv-1',
+      agentLabel: 'reviewer',
+      active: true,
+      expiresAt: '2026-09-18T12:00:00.000Z',
+    };
+    expect(isAgentHubTypingFrame(frame)).toBe(true);
+    expect(isAgentHubTypingFrame({ ...frame, active: false, expiresAt: null })).toBe(true);
+    expect(isAgentHubTypingFrame({ ...frame, agentLabel: '' })).toBe(false);
+    expect(isAgentHubTypingFrame({ ...frame, expiresAt: 1 })).toBe(false);
   });
 });

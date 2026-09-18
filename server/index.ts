@@ -13,6 +13,7 @@ import {
   type AgentHubLiveHub,
   type AgentHubWsAuth,
 } from './agent-hub/ws.ts';
+import { registerAgentHubTypingRegistry } from './agent-hub/typing.ts';
 import type { AgentHubTipRegistry } from './agent-hub/tips.ts';
 
 const production = process.env.NODE_ENV === 'production' || process.argv.includes('--production');
@@ -64,4 +65,5 @@ closeOnSignals(server, db, process, HTTP_SHUTDOWN_DRAIN_MS, () => {
   agentHubLiveHub?.closeAll();
   agentHubLiveHub?.dispose();
   registerAgentHubLiveHub(null);
+  registerAgentHubTypingRegistry(null);
 });

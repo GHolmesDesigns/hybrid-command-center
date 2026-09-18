@@ -12,7 +12,12 @@ import {
   resolveCanonicalConversationId,
   resolveScopedConversation,
   setConversationState,
+  setConversationTyping,
 } from './agent-conversations.ts';
+import {
+  AgentHubTypingRegistry,
+  registerAgentHubTypingRegistry,
+} from './agent-hub/typing.ts';
 
 describe('agent conversations', () => {
   it('keeps sender identity server-owned, enforces participants, and resumes messages by cursor', () => {
@@ -296,5 +301,27 @@ describe('agent conversations', () => {
       decidedAt: null,
     });
     expect(listConversations(db, 'operator', { isDecision: true }).items).toHaveLength(0);
+  });
+
+  it('signals ephemeral typing without writing messages', () => {
+    const db = createDb(':memory:');
+    const registry = new AgentHubTypingRegistry();
+    registerAgentHubTypingRegistry(registry);
+    const conversation = createConversation(
+      db,
+      { title: 'Typing', scope: { type: 'freeform' }, participantLabels: ['reviewer'] },
+      'operator',
+    );
+    const before = listMessages(db, conversation.id, 'operator', { limit: 10 }).items.length;
+
+    const signal = setConversationTyping(db, conversation.id, 'reviewer', true);
+    expect(signal).toMatchObject({
+      conversationId: conversation.id,
+      agentLabel: 'reviewer',
+      active: true,
+    });
+    expect(listMessages(db, conversation.id, 'operator', { limit: 10 }).items).toHaveLength(before);
+
+    registerAgentHubTypingRegistry(null);
   });
 });

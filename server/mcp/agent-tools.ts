@@ -20,9 +20,11 @@ import {
   listMessages,
   postMessage,
   setConversationState,
+  setConversationTyping,
 } from '../agent-conversations.ts';
 import {
   conversationListSchema,
+  conversationTypingSchema,
   createConversationSchema,
   messageListSchema,
 } from '../../shared/agent-conversations.ts';
@@ -113,6 +115,12 @@ export function callAgentTool(
           options.now,
         ),
       );
+    case 'conversation_set_typing': {
+      if (!session.agentLabel)
+        return { outcome: 'REFUSED', error: 'This tool requires an authenticated agent label.' };
+      const typing = conversationTypingSchema.parse(args);
+      return success(setConversationTyping(db, typing.id, session.agentLabel, typing.active));
+    }
     case 'agent_health_dashboard':
       return success(buildAppHealth(db, { authRequired: options.authRequired, now: options.now }));
     case 'agent_get_presence':

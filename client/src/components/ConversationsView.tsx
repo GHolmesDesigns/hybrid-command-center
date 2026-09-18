@@ -13,6 +13,10 @@ import { MentionHandoffPreview } from './MentionHandoffCompose';
 import { useMentionHandoffCompose } from './useMentionHandoffCompose';
 import { ConversationTurn } from './ConversationTurn';
 import type { AgentBadgePresence, AgentBadgeProfile } from './AgentBadge';
+import { ThreadParticipantPresence } from './ThreadParticipantPresence';
+import { ThreadTypingIndicator } from './ThreadTypingIndicator';
+import { loadAgentPresenceByLabel } from '../loadAgentPresence';
+import { useConversationTyping } from '../useConversationTyping';
 
 type Conversation = {
   id: string;
@@ -112,15 +116,21 @@ export function ConversationsView({
   useEffect(() => {
     void load();
   }, [load]);
+  const refreshPresence = useCallback(async () => {
+    try {
+      setPresenceByLabel(await loadAgentPresenceByLabel());
+    } catch {
+      setPresenceByLabel({});
+    }
+  }, []);
+
   useEffect(() => {
     void Promise.all([
       api<{ agents: AgentDirectoryEntry[] }>('/agents/directory'),
-      api<{
-        presence?: Array<{ agentLabel: string; state: string; lastActivityAt: string | null }>;
-      }>('/agents/presence'),
+      loadAgentPresenceByLabel(),
       api<{ summaries?: Array<{ agentLabel: string; text: string }> }>('/agent-summaries'),
     ])
-      .then(([directory, live, summaries]) => {
+      .then(([directory, presence, summaries]) => {
         const agents = directory.agents ?? [];
         setRegisteredLabels(agents.map((entry) => entry.label));
         setAgentProfiles(
@@ -135,14 +145,7 @@ export function ConversationsView({
             ]),
           ),
         );
-        setPresenceByLabel(
-          Object.fromEntries(
-            (live.presence ?? []).map((row) => [
-              row.agentLabel.toLowerCase(),
-              { state: row.state, lastActivityAt: row.lastActivityAt },
-            ]),
-          ),
-        );
+        setPresenceByLabel(presence);
         setSummariesByLabel(
           Object.fromEntries(
             (summaries.summaries ?? []).map((row) => [row.agentLabel.toLowerCase(), row.text]),
@@ -154,6 +157,8 @@ export function ConversationsView({
         setAgentProfiles({});
       });
   }, []);
+
+  const typingLabels = useConversationTyping(selected?.id ?? null, liveTipsEnabled);
   const openedConversationRef = useRef<string | null>(null);
   const open = useCallback(
     async (conversation: Conversation) => {
@@ -180,12 +185,13 @@ export function ConversationsView({
   const handleConversationTip = useCallback(
     (tip: AgentHubTipPayload) => {
       void load();
+      void refreshPresence();
       const current = selectedRef.current;
       if (!current) return;
       if (tip.conversationId && tip.conversationId !== current.id) return;
       void open(current);
     },
-    [load, open],
+    [load, open, refreshPresence],
   );
   useDebouncedAgentHubTip(
     liveTipsEnabled ? subscribeAgentHubTips : null,
@@ -419,6 +425,11 @@ export function ConversationsView({
                   )}{' '}
                   · {selected.participants.join(', ')}
                 </p>
+                <ThreadParticipantPresence
+                  participants={selected.participants}
+                  agentProfiles={agentProfiles}
+                  presenceByLabel={presenceByLabel}
+                />
               </div>
               {selected.state === 'ACTIVE' && (
                 <button className="secondary-btn" onClick={() => void archive()}>
@@ -476,6 +487,7 @@ export function ConversationsView({
                   }
                 />
               ))}
+              <ThreadTypingIndicator typingLabels={typingLabels} agentProfiles={agentProfiles} />
             </div>
             {selected.state === 'ACTIVE' && (
               <form

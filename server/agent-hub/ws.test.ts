@@ -23,6 +23,7 @@ import {
   closeAgentHubLiveForSession,
   type AgentHubLiveHub,
 } from './ws.ts';
+import { setAgentHubConversationTyping } from './typing.ts';
 import { tipAgentHubConversation, tipAgentHubCoordination } from './tips.ts';
 
 const SECRET = 'test-session-secret-at-least-32-chars!';
@@ -484,6 +485,43 @@ describe('Agent Hub WebSocket (C236)', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('routes typing frames only to sockets subscribed to the conversation', async () => {
+    const socketA = new WebSocket(wsUrl(), { headers: { Cookie: cookie, Origin: APP_ORIGIN } });
+    const socketB = new WebSocket(wsUrl(), { headers: { Cookie: cookie, Origin: APP_ORIGIN } });
+    await Promise.all([
+      new Promise<void>((resolve, reject) => {
+        socketA.once('open', () => resolve());
+        socketA.once('error', reject);
+      }),
+      new Promise<void>((resolve, reject) => {
+        socketB.once('open', () => resolve());
+        socketB.once('error', reject);
+      }),
+    ]);
+    socketA.send(JSON.stringify({ kind: 'subscribe', conversationId: 'conv-typing' }));
+    socketB.send(JSON.stringify({ kind: 'subscribe', conversationId: 'conv-other' }));
+    await new Promise((resolve) => setTimeout(resolve, 25));
+
+    setAgentHubConversationTyping('conv-typing', 'reviewer', true);
+
+    const frame = await new Promise<unknown>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('timed out waiting for typing')), 2_000);
+      socketA.once('message', (data) => {
+        clearTimeout(timer);
+        resolve(JSON.parse(String(data)));
+      });
+    });
+    expect(frame).toMatchObject({
+      kind: 'typing',
+      conversationId: 'conv-typing',
+      agentLabel: 'reviewer',
+      active: true,
+    });
+
+    socketA.close();
+    socketB.close();
   });
 });
 

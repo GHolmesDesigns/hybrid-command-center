@@ -16,6 +16,7 @@ export const AGENT_HUB_SERVER_FRAME_KINDS = [
   'pong',
   'assistant_delta',
   'assistant_turn_state',
+  'typing',
 ] as const;
 export type AgentHubServerFrameKind = (typeof AGENT_HUB_SERVER_FRAME_KINDS)[number];
 
@@ -67,11 +68,25 @@ export type AgentHubAssistantTurnStateFrame = {
   state: AgentHubAssistantTurnState;
 };
 
+/** Ephemeral agent typing in a subscribed thread — never persisted (LC-P5 / #675). */
+export type AgentHubTypingFrame = {
+  kind: 'typing';
+  conversationId: string;
+  agentLabel: string;
+  active: boolean;
+  /** UTC ISO instant when the server clears this signal if not refreshed. */
+  expiresAt: string | null;
+};
+
 export type AgentHubServerFrame =
   | AgentHubWakeFrame
   | AgentHubPongFrame
   | AgentHubAssistantDeltaFrame
-  | AgentHubAssistantTurnStateFrame;
+  | AgentHubAssistantTurnStateFrame
+  | AgentHubTypingFrame;
+
+/** How long a typing signal lives without refresh — shared by server TTL and client expiry. */
+export const AGENT_HUB_TYPING_TTL_MS = 5_000;
 
 export const AGENT_HUB_WS_MAX_INBOUND_BYTES = 4_096;
 export const AGENT_HUB_WS_MAX_INBOUND_MESSAGES_PER_SECOND = 20;
@@ -143,4 +158,18 @@ export function isAgentHubAssistantTurnStateFrame(
     isAssistantConversationId(record.conversationId) &&
     typeof record.state === 'string'
   );
+}
+
+const isAgentLabel = (value: unknown): value is string =>
+  typeof value === 'string' && value.length > 0 && value.length <= 200;
+
+export function isAgentHubTypingFrame(value: unknown): value is AgentHubTypingFrame {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  if (record.kind !== 'typing') return false;
+  if (!isAssistantConversationId(record.conversationId)) return false;
+  if (!isAgentLabel(record.agentLabel)) return false;
+  if (record.active !== true && record.active !== false) return false;
+  if (record.expiresAt !== null && typeof record.expiresAt !== 'string') return false;
+  return true;
 }
