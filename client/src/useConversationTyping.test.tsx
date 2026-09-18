@@ -44,4 +44,32 @@ describe('useConversationTyping', () => {
     });
     expect(result.current).toEqual([]);
   });
+
+  it('clears typing when the server expiry instant is already past', () => {
+    let callbacks: { onTyping?: (frame: AgentHubTypingFrame) => void } = {};
+    const subscribeConversation = vi.fn((_id: string, next: typeof callbacks) => {
+      callbacks = next;
+      return () => undefined;
+    });
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <AgentHubTipsContext.Provider
+        value={{ subscribe: () => () => undefined, subscribeConversation, reconnecting: false }}
+      >
+        {children}
+      </AgentHubTipsContext.Provider>
+    );
+
+    const { result } = renderHook(() => useConversationTyping('conv-1', true), { wrapper });
+
+    act(() => {
+      callbacks.onTyping?.({
+        kind: 'typing',
+        conversationId: 'conv-1',
+        agentLabel: 'reviewer',
+        active: true,
+        expiresAt: '2020-01-01T00:00:00.000Z',
+      });
+    });
+    expect(result.current).toEqual([]);
+  });
 });

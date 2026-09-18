@@ -15,6 +15,19 @@ describe('ThreadTypingIndicator', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Reviewer is typing…');
   });
 
+  it('joins two typing agents with and', () => {
+    render(
+      <ThreadTypingIndicator
+        typingLabels={['reviewer', 'planner']}
+        agentProfiles={{
+          reviewer: { label: 'reviewer', displayName: 'Reviewer', trustLevel: 'VERIFIED' },
+          planner: { label: 'planner', displayName: 'Planner', trustLevel: 'UNVERIFIED' },
+        }}
+      />,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('Reviewer and Planner are typing…');
+  });
+
   it('renders nothing when no agents are typing', () => {
     const { container } = render(<ThreadTypingIndicator typingLabels={[]} agentProfiles={{}} />);
     expect(container).toBeEmptyDOMElement();
