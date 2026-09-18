@@ -3,9 +3,9 @@ import {
   AGENT_HUB_TIP_ALLOWED_KEYS,
   isAgentHubTipPayload,
   parseAgentHubLiveTipsSettings,
-} from './agent-hub-sse.ts';
+} from './agent-hub-tips.ts';
 
-describe('agent hub SSE tip payload', () => {
+describe('agent hub tip payload', () => {
   it('accepts feeds-only tips and optional conversationId', () => {
     expect(isAgentHubTipPayload({ feeds: ['notifications'] })).toBe(true);
     expect(isAgentHubTipPayload({ feeds: ['conversations'], conversationId: 'thread-1' })).toBe(

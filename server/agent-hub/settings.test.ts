@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createDb, type Db } from '../db.ts';
 import { setSetting } from '../drive/service.ts';
-import { AGENT_HUB_LIVE_TIPS_SETTING_KEY } from '../../shared/agent-hub-sse.ts';
+import { AGENT_HUB_LIVE_TIPS_SETTING_KEY } from '../../shared/agent-hub-tips.ts';
 import { readAgentHubLiveTips, updateAgentHubLiveTips } from './settings.ts';
 
 describe('agent hub live tips settings', () => {

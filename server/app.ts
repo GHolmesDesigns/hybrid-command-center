@@ -395,7 +395,6 @@ import {
   setPresence,
 } from './agent-summaries.ts';
 import { AgentHubTipRegistry, setAgentHubTipBridge } from './agent-hub/tips.ts';
-import { handleAgentHubTipsGet } from './agent-hub/sse-route.ts';
 import { closeAgentHubLiveForSession, type AgentHubWsAuth } from './agent-hub/ws.ts';
 import {
   agentHubLiveTipsInput,
@@ -3181,9 +3180,6 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     } catch (error) {
       next(error);
     }
-  });
-  app.get('/api/agent-hub/tips', (req, res) => {
-    handleAgentHubTipsGet(req, res, agentHubTips);
   });
   app.get('/api/agent-summaries', (req, res, next) => {
     try {

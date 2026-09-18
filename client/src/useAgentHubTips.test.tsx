@@ -1,7 +1,7 @@
 import { renderHook, act } from '@testing-library/react';
 import { useEffect, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import type { AgentHubTipPayload } from '../../shared/agent-hub-sse';
+import type { AgentHubTipPayload } from '../../shared/agent-hub-tips';
 import {
   useAgentHubTips,
   useDebouncedAgentHubTip,

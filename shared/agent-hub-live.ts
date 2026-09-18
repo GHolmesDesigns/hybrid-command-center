@@ -2,9 +2,9 @@
  * Agent Hub WebSocket live channel frame vocabulary (C236 / #669).
  *
  * Frames wake the shell or carry non-authoritative assistant streaming state. Persisted messages,
- * counts, and snapshots stay on HTTP — the same discipline as C219 SSE tips.
+ * counts, and snapshots stay on HTTP — the same discipline as live tip payloads.
  */
-import type { AgentHubTipFeed, AgentHubTipPayload } from './agent-hub-sse.ts';
+import type { AgentHubTipFeed, AgentHubTipPayload } from './agent-hub-tips.ts';
 
 export const AGENT_HUB_WS_PATH = '/api/agent-hub/ws';
 

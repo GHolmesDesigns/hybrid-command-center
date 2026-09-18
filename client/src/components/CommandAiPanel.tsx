@@ -10,7 +10,7 @@ import {
   Sparkles,
   X,
 } from 'lucide-react';
-import type { AgentHubTipPayload } from '../../../shared/agent-hub-sse';
+import type { AgentHubTipPayload } from '../../../shared/agent-hub-tips';
 import type {
   AssistantPendingApproval,
   AssistantTurnState,

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createDb, type Db } from '../db.ts';
-import { AGENT_HUB_LIVE_TIPS_SETTING_KEY } from '../../shared/agent-hub-sse.ts';
+import { AGENT_HUB_LIVE_TIPS_SETTING_KEY } from '../../shared/agent-hub-tips.ts';
 import { getSetting, setSetting } from '../drive/service.ts';
 import { COMMAND_AI_ASSISTANT_SETTING_KEY } from '../../shared/command-ai-assistant.ts';
 import { storeKey } from './keys.ts';
