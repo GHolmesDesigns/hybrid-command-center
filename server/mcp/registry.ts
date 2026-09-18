@@ -377,6 +377,12 @@ const agentTools: McpToolRegistryEntry[] = [
     'L',
   ],
   ['conversation_archive', 'Archive a visible conversation.', { id: { type: 'string' } }, 'L'],
+  [
+    'conversation_set_typing',
+    'Signal ephemeral typing in a thread (never persisted).',
+    { id: { type: 'string' }, active: { type: 'boolean' } },
+    'L',
+  ],
   ['agent_health_dashboard', 'Read application health signals and their freshness.', {}, 'R'],
   ['agent_get_presence', 'Read the authenticated agent session presence.', {}, 'R'],
   [

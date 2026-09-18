@@ -38,6 +38,10 @@ import { AssistantApprovalCard } from './AssistantApprovalCard';
 import { ConversationTurn } from './ConversationTurn';
 import { shortConversationId } from './formatting';
 import type { AgentBadgePresence, AgentBadgeProfile } from './AgentBadge';
+import { ThreadParticipantPresence } from './ThreadParticipantPresence';
+import { ThreadTypingIndicator } from './ThreadTypingIndicator';
+import { loadAgentPresenceByLabel } from '../loadAgentPresence';
+import { useConversationTyping } from '../useConversationTyping';
 import { formatDateTime } from './formatting';
 import { useMentionHandoffCompose } from './useMentionHandoffCompose';
 import { MentionHandoffPreview } from './MentionHandoffCompose';
@@ -164,15 +168,21 @@ export function CommandAiPanel({
     selectedRef.current = selected;
   }, [selected]);
 
+  const refreshPresence = useCallback(async () => {
+    try {
+      setPresenceByLabel(await loadAgentPresenceByLabel());
+    } catch {
+      setPresenceByLabel({});
+    }
+  }, []);
+
   const loadAgents = useCallback(async () => {
     try {
-      const [directory, live, summaries] = await Promise.all([
+      const [directory, presence, summaries] = await Promise.all([
         api<{ agents?: Array<{ label: string; displayName: string; trustLevel: string }> }>(
           '/agents/directory',
         ),
-        api<{
-          presence?: Array<{ agentLabel: string; state: string; lastActivityAt: string | null }>;
-        }>('/agents/presence'),
+        loadAgentPresenceByLabel(),
         api<{ summaries?: Array<{ agentLabel: string; text: string }> }>('/agent-summaries'),
       ]);
       const profiles: Record<string, AgentBadgeProfile> = {};
@@ -185,14 +195,7 @@ export function CommandAiPanel({
       }
       setAgentProfiles(profiles);
       setRegisteredLabels((directory.agents ?? []).map((agent) => agent.label));
-      setPresenceByLabel(
-        Object.fromEntries(
-          (live.presence ?? []).map((row) => [
-            row.agentLabel.toLowerCase(),
-            { state: row.state, lastActivityAt: row.lastActivityAt },
-          ]),
-        ),
-      );
+      setPresenceByLabel(presence);
       setSummariesByLabel(
         Object.fromEntries(
           (summaries.summaries ?? []).map((row) => [row.agentLabel.toLowerCase(), row.text]),
@@ -321,13 +324,16 @@ export function CommandAiPanel({
   const handleConversationTip = useCallback(
     (tip: AgentHubTipPayload) => {
       void loadConversations();
+      void refreshPresence();
       const current = selectedRef.current;
       if (!current) return;
       if (tip.conversationId && tip.conversationId !== current.id) return;
       void reloadThreadMessages(current);
     },
-    [loadConversations, reloadThreadMessages],
+    [loadConversations, reloadThreadMessages, refreshPresence],
   );
+
+  const typingLabels = useConversationTyping(selected?.id ?? null, liveTipsEnabled);
   useDebouncedAgentHubTip(
     liveTipsEnabled ? subscribeAgentHubTips : null,
     'conversations',
@@ -846,6 +852,11 @@ export function CommandAiPanel({
                   <Link to={conversationsOpenPath(selected.id)}>Open full view</Link>
                 )}
               </p>
+              <ThreadParticipantPresence
+                participants={selected.participants}
+                agentProfiles={agentProfiles}
+                presenceByLabel={presenceByLabel}
+              />
             </div>
             {assistantEnabled && assistantReady && turnState && (
               <div className="command-ai-turn-status" role="status" aria-live="polite">
@@ -895,6 +906,7 @@ export function CommandAiPanel({
                   }
                 />
               ))}
+              <ThreadTypingIndicator typingLabels={typingLabels} agentProfiles={agentProfiles} />
               {streamingText && (
                 <article
                   className="conversation-turn assistant-turn command-ai-streaming-bubble"
