@@ -1,5 +1,14 @@
 # Changelog
 
+## [6.10.16] - 2026-09-18
+
+## Removed
+
+- The C219 Agent Hub SSE live-tip route (`GET /api/agent-hub/tips`). Live updates now use the WebSocket channel only.
+
+## Breaking changes
+
+None.
 ## [6.10.15] - 2026-09-17
 
 ## Added

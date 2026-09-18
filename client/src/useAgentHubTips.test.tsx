@@ -1,7 +1,7 @@
 import { renderHook, act } from '@testing-library/react';
 import { useEffect, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import type { AgentHubTipPayload } from '../../shared/agent-hub-sse';
+import type { AgentHubTipPayload } from '../../shared/agent-hub-tips';
 import {
   useAgentHubTips,
   useDebouncedAgentHubTip,
@@ -39,6 +39,29 @@ describe('useDebouncedAgentHubTip', () => {
       vi.advanceTimersByTime(300);
     });
     expect(hits).toHaveLength(1);
+
+    vi.useRealTimers();
+  });
+
+  it('debounces coordination feed tips', () => {
+    vi.useFakeTimers();
+    let trigger: AgentHubTipListener | null = null;
+    const subscribe = (listener: AgentHubTipListener) => {
+      trigger = listener;
+      return () => {
+        trigger = null;
+      };
+    };
+    const hits: AgentHubTipPayload[] = [];
+    renderHook(() =>
+      useDebouncedAgentHubTip(subscribe, 'coordination', (tip) => hits.push(tip), 300),
+    );
+
+    act(() => {
+      trigger?.({ feeds: ['coordination'] });
+      vi.advanceTimersByTime(300);
+    });
+    expect(hits).toEqual([{ feeds: ['coordination'] }]);
 
     vi.useRealTimers();
   });
@@ -373,6 +396,44 @@ describe('useAgentHubTips', () => {
       instances[0]?.onerror?.();
     });
     expect(instances[0]?.close).toHaveBeenCalled();
+
+    globalThis.WebSocket = Original;
+    vi.useRealTimers();
+  });
+
+  it('dispatches coordination wake tips to subscribers', () => {
+    vi.useFakeTimers();
+    const instances: Array<{
+      onopen: (() => void) | null;
+      onmessage: ((event: MessageEvent) => void) | null;
+    }> = [];
+    class MockWebSocket {
+      static OPEN = 1;
+      readyState = MockWebSocket.OPEN;
+      onopen: (() => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onclose: (() => void) | null = null;
+      close = vi.fn();
+      constructor() {
+        instances.push(this);
+        queueMicrotask(() => this.onopen?.());
+      }
+      send = vi.fn();
+    }
+    const Original = globalThis.WebSocket;
+    globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
+
+    const tips: AgentHubTipPayload[] = [];
+    const { result } = renderHook(() => useAgentHubTips(true));
+    act(() => {
+      result.current.subscribe((tip) => tips.push(tip));
+    });
+    act(() => {
+      instances[0]?.onmessage?.({
+        data: JSON.stringify({ kind: 'wake', seq: 1, feeds: ['coordination'] }),
+      } as MessageEvent);
+    });
+    expect(tips).toEqual([{ feeds: ['coordination'] }]);
 
     globalThis.WebSocket = Original;
     vi.useRealTimers();

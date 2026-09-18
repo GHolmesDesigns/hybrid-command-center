@@ -5,7 +5,7 @@ import {
   AGENT_HUB_LIVE_TIPS_SETTING_KEY,
   DEFAULT_AGENT_HUB_LIVE_TIPS_SETTINGS,
   type AgentHubLiveTipsSettings,
-} from '../../shared/agent-hub-sse.ts';
+} from '../../shared/agent-hub-tips.ts';
 
 export const agentHubLiveTipsInput = z.object({
   enabled: z.boolean(),

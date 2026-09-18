@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CheckCircle2, Handshake, MessageSquare, Send } from 'lucide-react';
 import type { AgentHandoff, AgentHandoffPage } from '../../../shared/agent-coordination';
 import { AGENT_HANDOFF_SUBJECT_TYPE_LABEL } from '../../../shared/agent-coordination';
-import type { AgentHubTipPayload } from '../../../shared/agent-hub-sse';
+import type { AgentHubTipPayload } from '../../../shared/agent-hub-tips';
 import type { MessageLinkedHandoff } from '../../../shared/agent-conversations';
 import { api, send } from '../api';
 import { useDebouncedAgentHubTip } from '../useAgentHubTips';

@@ -1,9 +1,9 @@
 /**
- * Agent Hub live tip vocabulary (C219 / #605).
+ * Agent Hub live tip vocabulary (C219 / #605, WebSocket delivery C236 / #669).
  *
- * SSE payloads name affected feeds only — never message bodies, counts, or other authoritative
- * business data. The shell rereads HTTP state after each tip, the same discipline as MCP change
- * feeds.
+ * Tip payloads name affected feeds only — never message bodies, counts, or other authoritative
+ * business data. The shell rereads HTTP state after each wake frame, the same discipline as MCP
+ * change feeds.
  */
 export const AGENT_HUB_TIP_FEEDS = ['conversations', 'notifications', 'coordination'] as const;
 export type AgentHubTipFeed = (typeof AGENT_HUB_TIP_FEEDS)[number];

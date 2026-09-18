@@ -1,12 +1,12 @@
 /**
- * Process-local Agent Hub tip fan-out (C219 / #605).
+ * Process-local Agent Hub tip fan-out (C219 / #605, WebSocket delivery C236 / #669).
  *
  * Conversation and notification writers call the helpers here. The HTTP app installs one bridge
- * that forwards tips into the shell SSE registry (replaced on each `createApp`, so tests do not
- * stack listeners). Payloads name feeds only — clients reread HTTP state.
+ * that forwards tips into the WebSocket hub (replaced on each `createApp`, so tests do not stack
+ * listeners). Payloads name feeds only — clients reread HTTP state.
  */
-import type { AgentHubTipFeed, AgentHubTipPayload } from '../../shared/agent-hub-sse.ts';
-import { isAgentHubTipPayload } from '../../shared/agent-hub-sse.ts';
+import type { AgentHubTipFeed, AgentHubTipPayload } from '../../shared/agent-hub-tips.ts';
+import { isAgentHubTipPayload } from '../../shared/agent-hub-tips.ts';
 
 export type AgentHubTipListener = (tip: AgentHubTipPayload) => void;
 

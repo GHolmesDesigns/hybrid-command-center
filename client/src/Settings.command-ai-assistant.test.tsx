@@ -10,6 +10,7 @@ import {
   screen,
   testState,
   vi,
+  waitFor,
   within,
 } from './App.test-setup';
 
@@ -114,10 +115,13 @@ describe('Command AI assistant settings', () => {
       ready: false,
     };
     await renderSettings();
+    expect(await screen.findByLabelText('Assistant provider')).toHaveValue('openai');
     fireEvent.change(screen.getByLabelText('Assistant provider'), {
       target: { value: 'anthropic' },
     });
-    expect(screen.getByLabelText('Assistant model')).toHaveValue('claude-sonnet-4-20250514');
+    await waitFor(() =>
+      expect(screen.getByLabelText('Assistant model')).toHaveValue('claude-sonnet-4-20250514'),
+    );
   });
 
   it('shows the missing-key hint and keeps short keys from saving', async () => {

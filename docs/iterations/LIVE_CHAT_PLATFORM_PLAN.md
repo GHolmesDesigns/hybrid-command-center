@@ -14,7 +14,7 @@ Hybrid Command Center is being extended into an in-app live chat platform built 
 
 The assistant will run server-side using an operator-supplied provider key. It acts through a dedicated assistant credential, and its available tools match the scopes granted to that credential under the existing MCP registry checks; every permitted write still requires an explicit approval showing the actual arguments, target, and revision, and each outcome is recorded in the thread audit. HTTP remains authoritative for persisted messages and workspace state, while WebSocket frames provide wake-ups and ephemeral streaming deltas. Secrets, credentials, sensitive client fields, and raw provider payloads remain out of model context, frames, logs, and exports.
 
-Delivery is phased: first establish authenticated WebSocket live updates with an SSE fallback, then extend drawer synchronization and canonical threads to all workspace scopes, then split the MCP write scopes and add the assistant credential, then add the assistant turn pipeline and approvals, followed by multi-party agent-chat polish. External chat services, provider publishing, Drive byte operations, message editing, browser notifications, and automatic approvals remain outside this build.
+Delivery is phased: first establish authenticated WebSocket live updates, then extend drawer synchronization and canonical threads to all workspace scopes, then split the MCP write scopes and add the assistant credential, then add the assistant turn pipeline and approvals, followed by multi-party agent-chat polish. External chat services, provider publishing, Drive byte operations, message editing, browser notifications, and automatic approvals remain outside this build.
 
 **Release note:** This document is planning only. Version bumps happen at merge time per `AGENTS.md`; do not pre-assign version numbers to cards named here.
 
@@ -24,8 +24,8 @@ Delivery is phased: first establish authenticated WebSocket live updates with an
 
 | Question | Current answer |
 | --- | --- |
-| What exists today? | Durable conversation records, operator compose, @mention → confirmed handoff, MCP agent replies as messages, SSE wake-up tips (C219), drawer/full-page sync (Wave 39). |
-| What is missing for “live chat”? | No in-app assistant that answers in-thread; no typing/presence; agent replies depend on polling/MCP unless SSE tip triggers a reread; Command AI label implies AI but the drawer is compose-only today. |
+| What exists today? | Durable conversation records, operator compose, @mention → confirmed handoff, MCP agent replies as messages, WebSocket wake-up tips (C236), drawer/full-page sync (Wave 39). |
+| What is missing for “live chat”? | No in-app assistant that answers in-thread; no typing/presence; agent replies depend on polling/MCP unless a wake frame triggers a reread; Command AI label implies AI but the drawer is compose-only today. |
 | What should this plan produce? | Phased cards from the locked decisions below, beginning with Wave 41 — filed as C236–C243 (#669–#676). |
 | What is not being filed yet? | Wave assignment for cards after C236, and semver. |
 | Owner decisions | Q1–Q16 locked 16 Sep 2026 — see §4 summary table; A1–A4 amendments accepted 17 Sep 2026 — see §4.10 |
@@ -51,7 +51,7 @@ Delivery is phased: first establish authenticated WebSocket live updates with an
 | **Operator UI** | Full **Conversations** page (`/agents/conversations`) and **Command AI** drawer — synchronized freeform selection (Wave 39), page context attachment (6.10.3+). |
 | **Agent participation** | Agents post messages and complete handoffs through MCP; operator posts as `operator`; conversation listing joins `agent_conversation_participants`. |
 | **Mentions** | `@label` → confirm handoffs preview → linked `OPEN` handoff (C210); notification on confirm (C218). |
-| **Wake-up transport** | C219 SSE shell tips on `GET /api/agent-hub/tips` — **tip only**; feeds `conversations` and `notifications`; `AgentHubTipRegistry` broadcasts every tip to every subscriber; gated by the `agent_hub_live_tips` setting (default off). |
+| **Wake-up transport** | Authenticated WebSocket on `GET /api/agent-hub/ws` upgrade — **wake frames only**; feeds `conversations`, `notifications`, and `coordination`; `AgentHubTipRegistry` broadcasts every tip to every subscriber; gated by the `agent_hub_live_tips` setting (default off). C219 SSE removed in C241 (#674). |
 | **What Command AI is not** | An embedded LLM. Sending a message stores it; nothing in HCC generates an assistant reply in the drawer today. |
 
 ### Reference docs
@@ -80,7 +80,7 @@ Locked interpretation:
 
 | Capability | Today | Live platform target |
 | --- | --- | --- |
-| Message delivery to open UI | SSE tip → debounced HTTP reread (C219) | WebSocket wake-up → debounced HTTP reread; assistant token streaming on same socket (Q10) |
+| Message delivery to open UI | WebSocket wake-up → debounced HTTP reread (C236) | Same; assistant token streaming on same socket (Q10) |
 | Message delivery when tab backgrounded | Reread on visibility / navigation | Unchanged in v1; browser notifications are a non-goal (§6) |
 | Assistant replies in Command AI | None | Operator message → bounded assistant turn in-thread (Phase 3) |
 | Agent replies in-thread | Agents can post via MCP if they choose | **Chat peers (Q15):** agents may post freely as participants; handoffs for heavy work, not every message |
@@ -88,7 +88,7 @@ Locked interpretation:
 | History | Cursor-paged HTTP | Unchanged; live layer sits on top |
 | Edit / delete message | Not supported | Non-goal (§6) |
 | External chat (Slack, SMS) | None | Out of scope for HCC platform |
-| Authoritative live payload | Refused by design (C219 SSE) | **Keep refusal on WebSocket** — frames wake or stream partial assistant text only until HTTP confirms persistence |
+| Authoritative live payload | Refused by design (WebSocket wake frames) | **Keep refusal** — frames wake or stream partial assistant text only until HTTP confirms persistence |
 
 ---
 
@@ -114,11 +114,11 @@ These are inherited from AGENTS.md and Agent Hub; a live chat layer must not wea
 | Q2 | Assistant boundary | **B — Scoped writes** via existing workspace write paths (tasks, projects, etc.); no publish/Drive widening |
 | Q3 | Provider | **A — Operator-supplied API key** (server-side only; never returned to browser) — storage clarified in §4.2 |
 | Q4 | Drawer scope | **B — Scoped threads in the drawer** (client, project, task, and freeform synchronized with full page) |
-| Q5 | Transport | **B — WebSocket** (replace C219 SSE as the shell live channel for this platform) |
+| Q5 | Transport | **B — WebSocket** (C219 SSE removed in C241; WebSocket is the shell live channel) |
 | Q6 | Feature flag | **Option 2 — Assistant flag implies tips** (enabling assistant enables live WebSocket subscription) — *amended by A2* |
 | Q7 | Follow-page behavior | **B — Prompt on scope change** (“Switch to **Acme Studio** project chat?”; never silent auto-switch) |
 | Q8 | Threads per scope | **C — One canonical + New thread** (default canonical active thread; explicit action for a second scoped thread) |
-| Q9 | C219 SSE migration | **B — One-release parallel** (SSE + WebSocket both work one release; remove SSE after prod verification) — *amended by A3* |
+| Q9 | C219 SSE migration | **Done** — one-release parallel completed; C241 (#674) removed SSE after production verification (18 Sep 2026) |
 | Q10 | Assistant streaming v1 | **A — Stream tokens** (`assistant_delta` on WebSocket; HTTP persist at end) |
 | Q11 | LLM providers v1 | **B — OpenAI + Anthropic** (operator picks provider in Settings; one active provider per request) |
 | Q12 | Write confirmation | **B — Tiered confirm** (see §7.1) |
@@ -170,7 +170,7 @@ Update `USER_MANUAL.md` and help copy when this ships; Wave 39 doc remains histo
 
 | Frame kind | Direction | Authoritative? | Purpose |
 | --- | --- | --- | --- |
-| `wake` | server → client | No | Names feeds (`conversations`, `notifications`, `coordination`) and optional `conversationId` — client debounces HTTP reread (same as C219 SSE) |
+| `wake` | server → client | No | Names feeds (`conversations`, `notifications`, `coordination`) and optional `conversationId` — client debounces HTTP reread |
 | `subscribe` / `unsubscribe` | client → server | No | Declares which `conversationId` the socket is displaying, for delta routing |
 | `assistant_delta` | server → client | No | Streaming text for in-progress assistant turn, keyed by `turnId`; replaced by persisted message on `wake` + reread |
 | `assistant_turn_state` | server → client | No | `started` / `awaiting_approval` / `finished` / `failed` / `cancelled` for UI state only; HTTP reread is the truth |
@@ -183,15 +183,15 @@ Update `USER_MANUAL.md` and help copy when this ships; Wave 39 doc remains histo
 - **Session auth:** Express session middleware does not run on `upgrade`; the handler parses and validates the session cookie explicitly with the same store and rejects unauthenticated upgrades before accepting. Session expiry or logout closes open sockets.
 - **Routing:** `wake` frames may fan out to every authenticated socket (same as today's broadcast `AgentHubTipRegistry`). `assistant_delta` and `assistant_turn_state` are **not** broadcast — they go only to sockets of the operator who owns the turn that are subscribed to that `conversationId`.
 - **Frame limits:** max inbound frame size and per-socket message rate; unknown client frame kinds close the socket with a policy code.
-- **Shutdown:** `server.close()` does not close upgraded sockets. Track open sockets and close them (going-away code) on shutdown; add a test alongside `server/shutdown-sse.test.ts`.
+- **Shutdown:** `server.close()` does not close upgraded sockets. Track open sockets and close them (going-away code) on shutdown; covered by `server/agent-hub/ws.test.ts`.
 - **New `coordination` feed:** `AGENT_HUB_TIP_FEEDS` today is only `conversations` + `notifications`. Add `coordination` to the shared vocabulary and emit it from handoff create/claim/complete/cancel write paths (needed by Phase 4).
 
 **Infrastructure:**
 
 - Caddy v2 `reverse_proxy` forwards WebSocket upgrades without extra directives; the `deploy/aws/` work is documenting idle timeout behaviour and choosing a server `ping` interval shorter than any proxy/load-balancer idle timeout.
-- **C219 SSE:** see amendment A3 (§4.10).
+- **C219 SSE:** removed in C241 (#674) after production verification (18 Sep 2026).
 
-**Client:** replace `useAgentHubTips` EventSource with a WebSocket hook; reconnect with backoff + last-seen generation guard (W40 stale-response lessons); reconnect banner after repeated failure.
+**Client:** `useAgentHubTips` uses WebSocket; reconnect with backoff + last-seen generation guard (W40 stale-response lessons); reconnect banner after repeated failure.
 
 **Not on WebSocket:** persisted message bodies, handoff rows, notification counts, or workspace snapshots.
 
@@ -251,7 +251,7 @@ Found in the 16 September 2026 review against `main`. On 17 September 2026 the o
 | --- | --- | --- | --- | --- |
 | **A1** (owner-revised) | Q13, §7.3 | The assistant must not invent a second permission model that diverges from the scopes carried by the authenticated key. | Assistant uses the granted scopes of its dedicated credential (R1) and the existing registry `requiredScope` checks, exactly as MCP does. If a finer distinction is needed than the current scope vocabulary provides, refine the credential scope model and registry metadata (first instance: R2 scope split); do not add an assistant-only exclusion list. Tests compare assistant and MCP access decisions for the same granted scopes. | A separate hard-coded assistant allowlist. |
 | **A2** | Q6, §4.5, phases | Assistant toggle is built in Phase 3, but Phases 1–2 gate the WebSocket on it — the transport could not be enabled or verified in production before Phase 3. | Keep `agent_hub_live_tips` (“Live updates”) as the WebSocket gate in Phases 1–2; in Phase 3 the assistant toggle forces it on (§4.5). | Ship the assistant toggle in Phase 1 with no assistant behind it (confusing label until Phase 3). |
-| **A3** | Q9 | Removing SSE while assistant-off gets no WebSocket strands operators who enabled live tips today. | Phase 1 serves WebSocket to every “Live updates” user; SSE route stays one release as fallback, then is removed. No operator loses live updates. | Keep SSE indefinitely for assistant-off (two transports to maintain). |
+| **A3** | Q9 | Removing SSE while assistant-off gets no WebSocket strands operators who enabled live tips today. | Phase 1 served WebSocket to every “Live updates” user; SSE fallback ran one release; C241 (#674) removed SSE after prod verification. No operator lost live updates. | Keep SSE indefinitely for assistant-off (two transports to maintain). |
 | **A4** | Q16 | “Same as today” and “no WebSocket when assistant off” become contradictory once SSE is removed. | Assistant off = no assistant; **wake-only WebSocket if Live updates is on**; nothing if off. | Accept that live updates require the assistant (a regression for current live-tips users; needs release-note copy). |
 
 ### 4.11 Assistant identity and provenance
@@ -308,11 +308,11 @@ Phases reflect locked decisions, A1–A4, and R1–R9. Each card is implemented 
 - Add `coordination` feed to the tip vocabulary and emit it from handoff write paths.
 - Socket tracking + close on shutdown; frame size/rate limits.
 - Client hook replaces EventSource; Conversations + Command AI + notification badge reread on wake.
-- **SSE parallel (Q9/A3):** SSE route unchanged for one release as fallback; removal is C241 (#674) after prod verification.
+- **SSE parallel (Q9/A3):** completed — C241 (#674) removed the C219 SSE route after production verification (18 Sep 2026).
 - Settings copy: “Live update tips” → “Live updates”; same persisted key.
 - Regression: wake for other `conversationId` does not clobber selection; disconnect/reconnect; HTTP fallback on navigation; foreign Origin rejected; unauthenticated upgrade rejected; logout closes socket.
 
-**Likely touch:** new `server/agent-hub/ws*.ts`, `server/index.ts`, `server/agent-hub/tips.ts`, `client/src/useAgentHubLive.ts`, `deploy/aws/` docs, `shared/agent-hub-sse.ts` (rename or extend vocabulary).
+**Likely touch:** new `server/agent-hub/ws*.ts`, `server/index.ts`, `server/agent-hub/tips.ts`, `client/src/useAgentHubLive.ts`, `deploy/aws/` docs, `shared/agent-hub-tips.ts`.
 
 ### Phase 2 — Scoped drawer synchronization
 
@@ -496,7 +496,7 @@ Wave milestone rule: at least one new `e2e/` spec when a **milestone** closes, n
 | --- | --- |
 | Wave 39 (shipped) | Prerequisite — freeform selection bridge; **extended** in Phase 2 for all scopes |
 | W40-A drawer loop fix | Prerequisite — stale-response guards must survive WebSocket + scoped sync |
-| C219 SSE | Fallback for one release after Phase 1 (A3), then removed by C241 (#674) |
+| C219 SSE | Removed by C241 (#674) after one-release parallel with WebSocket (A3) |
 | C216 rollups | Phase 6 or parallel docs-only; no blocker |
 | C215 scheduled agent runs | Orthogonal — scheduled work ≠ live chat |
 | MCP C132 change feeds | Same “tip → cursor” mental model; do not duplicate cursor state in live frames |
@@ -506,7 +506,7 @@ Wave milestone rule: at least one new `e2e/` spec when a **milestone** closes, n
 ## 10. Next steps
 
 1. **Product:** Wireframe Q7 scope-change prompt, Q8 canonical vs secondary thread badges, and §7.1 blocking vs inline approval cards.
-2. **Engineering spike (Phase 1):** `ws` upgrade on the Node server behind Caddy with Origin + session checks; frame schema; SSE fallback test plan.
+2. **Engineering spike (Phase 1):** shipped in C236 (#669); SSE fallback removed in C241 (#674).
 3. **Schema sketch (Phase 2):** `is_canonical` + partial unique index on `agent_conversations` — additive migration.
 4. **Scope split sketch (Phase 3 prerequisite):** new scope names, `requiredScope` reassignment table, and additive credential migration (R2).
 5. **Cards filed:** C236–C243 (#669–#676). Start with C236 (#669) in **Wave 41**; C238 (#671) may run in parallel with C236/C237. Assign later cards to waves as they are planned. Keep one implementing PR at a time per AGENTS.md.
@@ -564,7 +564,7 @@ Resolved in the 16 September review (previously open): canonical storage (explic
 | Q6 | Assistant toggle enables live updates (A2: Live updates gates Phases 1–2) |
 | Q7 | Prompt on scope change |
 | Q8 | Canonical thread + New thread |
-| Q9 | SSE parallel one release (A3: no live-tips user loses live updates) |
+| Q9 | SSE parallel one release — completed; C241 removed SSE (A3) |
 | Q10 | Stream tokens v1 |
 | Q11 | OpenAI + Anthropic v1 |
 | Q12 | Tiered write approval |
@@ -586,3 +586,4 @@ _Changelog for this doc:_
 - _2026-09-17 — Owner accepted A1–A4 and the Appendix B recommendations; A1 follows authenticated-key permissions rather than a separate assistant allowlist; sender kind uses a separate column; light-touch workload, model-aware forecasting, and Live updates copy are resolved; ready for card filing._
 - _2026-09-17 — Second review: R1–R9 recorded (§4.12) — dedicated assistant credential; `workspace:write` split as a Phase 3 prerequisite card; tier map as fail-closed safety net; approval wait excluded from clock with 15-minute expiry; forecast on overrun; fixed complex-run ceiling; operator-lowerable daily cap defaults; `sender_kind` backfill then `NOT NULL`; two-phase Live updates copy. Wording fixes: §4.10 intro, A1 marked owner-revised, 16 September changelog entry corrected, duplicate §7.3 paragraph removed, executive summary approval wording._
 - _2026-09-17 — Cards filed: C236–C243 as issues #669–#676 on project Command Center v6.0.0; milestone **Wave 41 — Live chat platform** created for C236 (#669); §5 card index and per-phase card references added._
+- _2026-09-18 — C241 (#674): production verification recorded (WebSocket through Caddy, wake → reread, reconnect); C219 SSE route removed; shared vocabulary renamed to `shared/agent-hub-tips.ts`._

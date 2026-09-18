@@ -81,6 +81,10 @@ curl -i -N \
 Expect `101 Switching Protocols` when the session cookie is valid and the Origin matches
 `APP_ORIGIN` exactly.
 
+**Production verification (C241, 18 Sep 2026):** WebSocket connects through Caddy; wake frames
+trigger debounced HTTP reread; reconnect after disconnect succeeds. The C219 SSE fallback route
+was removed after this verification.
+
 # Backup timers
 
 Copy and enable `hcc-offsite-backup.timer`, `hcc-backup-rehearsal.timer`, and

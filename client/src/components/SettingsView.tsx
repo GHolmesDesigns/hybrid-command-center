@@ -55,7 +55,7 @@ import {
   writeTaskTimerSettings,
   type TaskTimerSettings,
 } from '../../../shared/task-timer';
-import type { AgentHubLiveTipsSettings } from '../../../shared/agent-hub-sse';
+import type { AgentHubLiveTipsSettings } from '../../../shared/agent-hub-tips';
 import {
   ASSISTANT_MODELS_BY_PROVIDER,
   DEFAULT_COMMAND_AI_ASSISTANT_SETTINGS,

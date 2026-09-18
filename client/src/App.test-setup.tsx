@@ -9,7 +9,7 @@ import { CANONICAL_VIEW_DEFAULTS, type ViewDefaults } from '../../shared/view-de
 import {
   DEFAULT_AGENT_HUB_LIVE_TIPS_SETTINGS,
   type AgentHubLiveTipsSettings,
-} from '../../shared/agent-hub-sse';
+} from '../../shared/agent-hub-tips';
 import type { Category, Client, DashboardData, Project, Tag, Task } from '../../shared/types';
 import { sameTagName } from '../../shared/types';
 import {

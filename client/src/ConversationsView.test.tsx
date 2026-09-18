@@ -2,7 +2,7 @@ import { act } from '@testing-library/react';
 import { AgentHubTipsContext } from './components/AgentHubTipsContext';
 import { ConversationSelectionProvider } from './components/ConversationSelectionProvider';
 import { ConversationsView } from './components/ConversationsView';
-import type { AgentHubTipPayload } from '../../shared/agent-hub-sse';
+import type { AgentHubTipPayload } from '../../shared/agent-hub-tips';
 import {
   afterEach,
   describe,

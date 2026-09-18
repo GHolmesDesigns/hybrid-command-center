@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useEffect, useState } from 'react';
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
-import type { AgentHubTipPayload } from '../../shared/agent-hub-sse';
+import type { AgentHubTipPayload } from '../../shared/agent-hub-tips';
 import { CommandAiFab, CommandAiPanel, CommandAiTopbarToggle } from './components/CommandAiPanel';
 import type { AssistantStreamCallbacks } from './useAgentHubTips';
 import type { BreadcrumbData } from './components/breadcrumbs';

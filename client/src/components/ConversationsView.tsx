@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import type { AgentHubTipPayload } from '../../../shared/agent-hub-sse';
+import type { AgentHubTipPayload } from '../../../shared/agent-hub-tips';
 import { useAgentHubTipsSubscribe } from './AgentHubTipsContext';
 import { useDebouncedAgentHubTip } from '../useAgentHubTips';
 import { Link, useSearchParams } from 'react-router-dom';

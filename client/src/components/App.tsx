@@ -40,7 +40,7 @@ import { resolveGlobalStartTask, startTaskPath } from '../../../shared/start-tas
 import {
   DEFAULT_AGENT_HUB_LIVE_TIPS_SETTINGS,
   type AgentHubLiveTipsSettings,
-} from '../../../shared/agent-hub-sse';
+} from '../../../shared/agent-hub-tips';
 import {
   DEFAULT_COMMAND_AI_ASSISTANT_SETTINGS,
   type AssistantKeyMetadata,

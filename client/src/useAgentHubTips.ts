@@ -3,7 +3,7 @@ import {
   isAgentHubTipPayload,
   type AgentHubTipFeed,
   type AgentHubTipPayload,
-} from '../../shared/agent-hub-sse';
+} from '../../shared/agent-hub-tips';
 import {
   AGENT_HUB_WS_PATH,
   isAgentHubAssistantDeltaFrame,
