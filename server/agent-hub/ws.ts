@@ -25,10 +25,7 @@ import {
   type AgentHubClientFrame,
   type AgentHubTypingFrame,
 } from '../../shared/agent-hub-live.ts';
-import {
-  AgentHubTypingRegistry,
-  registerAgentHubTypingRegistry,
-} from './typing.ts';
+import { AgentHubTypingRegistry, registerAgentHubTypingRegistry } from './typing.ts';
 
 export type AgentHubWsAuth = {
   authRequired: boolean;

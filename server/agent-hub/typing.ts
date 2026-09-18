@@ -3,10 +3,7 @@
  *
  * Never persisted — TTL-backed in-memory state broadcast over WebSocket to subscribed operators.
  */
-import {
-  AGENT_HUB_TYPING_TTL_MS,
-  type AgentHubTypingFrame,
-} from '../../shared/agent-hub-live.ts';
+import { AGENT_HUB_TYPING_TTL_MS, type AgentHubTypingFrame } from '../../shared/agent-hub-live.ts';
 
 type TypingEntry = {
   agentLabel: string;

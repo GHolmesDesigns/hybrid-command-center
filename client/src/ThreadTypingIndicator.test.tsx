@@ -16,9 +16,7 @@ describe('ThreadTypingIndicator', () => {
   });
 
   it('renders nothing when no agents are typing', () => {
-    const { container } = render(
-      <ThreadTypingIndicator typingLabels={[]} agentProfiles={{}} />,
-    );
+    const { container } = render(<ThreadTypingIndicator typingLabels={[]} agentProfiles={{}} />);
     expect(container).toBeEmptyDOMElement();
   });
 });

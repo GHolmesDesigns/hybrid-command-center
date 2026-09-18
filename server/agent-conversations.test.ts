@@ -14,10 +14,7 @@ import {
   setConversationState,
   setConversationTyping,
 } from './agent-conversations.ts';
-import {
-  AgentHubTypingRegistry,
-  registerAgentHubTypingRegistry,
-} from './agent-hub/typing.ts';
+import { AgentHubTypingRegistry, registerAgentHubTypingRegistry } from './agent-hub/typing.ts';
 
 describe('agent conversations', () => {
   it('keeps sender identity server-owned, enforces participants, and resumes messages by cursor', () => {

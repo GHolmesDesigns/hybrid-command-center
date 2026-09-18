@@ -24,7 +24,9 @@ export function ThreadParticipantPresence({
         };
         const presence = presenceByLabel[profileKey] ?? null;
         const online =
-          presence && !isAgentActivityStale(presence.lastActivityAt ?? null) && presence.state !== 'OFFLINE';
+          presence &&
+          !isAgentActivityStale(presence.lastActivityAt ?? null) &&
+          presence.state !== 'OFFLINE';
         return (
           <li key={label} className={online ? 'online' : 'offline'}>
             <AgentBadge compact profile={profile} presence={presence} />
