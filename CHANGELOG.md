@@ -1,5 +1,14 @@
 # Changelog
 
+## [6.10.18] - 2026-09-28
+
+### Changed
+
+- Updated production dependencies: `lucide-react` to 1.47.0, `react-router-dom` to 7.18.4, and `zod` to 4.6.5.
+
+### Breaking changes
+
+None.
 ## [6.10.17] - 2026-09-18
 
 ## Added
