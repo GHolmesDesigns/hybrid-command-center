@@ -4,7 +4,7 @@
 
 ### Changed
 
-- Updated development dependencies: Vitest and its coverage provider to 5.0.1, `eslint-plugin-react-refresh` to 0.5.7, `jsdom` to 30.1.0, and Prettier to 3.9.8.
+- Updated development dependencies: `eslint-plugin-react-refresh` to 0.5.7 and Prettier to 3.9.8; retained the compatible Vitest and jsdom versions.
 
 ### Breaking changes
 
