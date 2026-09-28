@@ -1,5 +1,14 @@
 # Changelog
 
+## [6.10.21] - 2026-09-28
+
+### Changed
+
+- Updated the `dotenv` dependency to 18.0.0.
+
+### Breaking changes
+
+None.
 ## [6.10.20] - 2026-09-28
 
 ### Changed
