@@ -1,5 +1,14 @@
 # Changelog
 
+## [6.10.19] - 2026-09-28
+
+### Changed
+
+- Updated development dependencies: `eslint-plugin-react-refresh` to 0.5.7 and Prettier to 3.9.8; retained the compatible Vitest and jsdom versions.
+
+### Breaking changes
+
+None.
 ## [6.10.18] - 2026-09-28
 
 ### Changed
