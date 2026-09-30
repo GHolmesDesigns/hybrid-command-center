@@ -56,6 +56,11 @@ import { DriveBadge, Empty, ProjectStatusChip, SearchBox } from './Primitives';
 import { projectStatusStyle } from './project-status';
 import { tagAccent } from './ui-shared';
 import { PageHead } from './Shell';
+import {
+  projectDeleteConfirmation,
+  projectDeleteSuccess,
+  signalPostDetachmentCopy,
+} from './project-deletion';
 
 const PROJECT_PRIORITY_ORDER: Record<Priority, number> = {
   URGENT: 0,
@@ -246,16 +251,11 @@ export function Projects({
     flash('Project archived.');
   };
   const remove = async (p: Project) => {
-    if (
-      !confirm(
-        `Delete project “${p.name}” from Command Center?\n\nThis removes the project and its tasks from the app only. Drive folders and files are not touched.`,
-      )
-    )
-      return;
+    if (!confirm(projectDeleteConfirmation(p))) return;
     try {
-      await send(`/projects/${p.id}`, 'DELETE');
+      const result = await send<{ detachedSignalPosts: number }>(`/projects/${p.id}`, 'DELETE');
       await refresh();
-      flash('Project deleted from Command Center. Drive files were left alone.');
+      flash(projectDeleteSuccess(result.detachedSignalPosts));
     } catch (e) {
       flash((e as Error).message, 'error');
     }
@@ -483,34 +483,40 @@ function ProjectActions({
   remove: (p: Project) => void;
 }) {
   return (
-    <div className="card-actions">
-      <Link className="secondary buttonlike" to={`/status?project=${project.id}`}>
-        Open board
-      </Link>
-      <button
-        className="icon-btn"
-        onClick={() => open({ type: 'project', value: project })}
-        aria-label={`Edit ${project.name}`}
-      >
-        <Settings />
-      </button>
-      {project.status !== 'ARCHIVED' && (
+    <>
+      <div className="card-actions">
+        <Link className="secondary buttonlike" to={`/status?project=${project.id}`}>
+          Open board
+        </Link>
+        <button
+          className="icon-btn"
+          onClick={() => open({ type: 'project', value: project })}
+          aria-label={`Edit ${project.name}`}
+        >
+          <Settings />
+        </button>
+        {project.status !== 'ARCHIVED' && (
+          <button
+            className="icon-btn danger"
+            onClick={() => archive(project)}
+            aria-label={`Archive ${project.name}`}
+          >
+            <Archive />
+          </button>
+        )}
         <button
           className="icon-btn danger"
-          onClick={() => archive(project)}
-          aria-label={`Archive ${project.name}`}
+          onClick={() => remove(project)}
+          aria-label={`Delete ${project.name}`}
+          title={signalPostDetachmentCopy(project.signalPostCount)}
         >
-          <Archive />
+          <Trash2 />
         </button>
+      </div>
+      {project.signalPostCount > 0 && (
+        <p className="field-hint">{signalPostDetachmentCopy(project.signalPostCount)}</p>
       )}
-      <button
-        className="icon-btn danger"
-        onClick={() => remove(project)}
-        aria-label={`Delete ${project.name}`}
-      >
-        <Trash2 />
-      </button>
-    </div>
+    </>
   );
 }
 
@@ -690,6 +696,7 @@ function ProjectTile({
           className="icon-btn danger"
           onClick={() => remove(project)}
           aria-label={`Delete ${project.name}`}
+          title={signalPostDetachmentCopy(project.signalPostCount)}
         >
           <Trash2 />
         </button>
@@ -704,6 +711,9 @@ function ProjectTile({
           <GripVertical />
         </button>
       </div>
+      {project.signalPostCount > 0 && (
+        <p className="field-hint">{signalPostDetachmentCopy(project.signalPostCount)}</p>
+      )}
       <label className="keyboard-move">
         <span className="sr-only">{`Position of ${project.name}`}</span>
         <select

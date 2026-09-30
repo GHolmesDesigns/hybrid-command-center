@@ -577,11 +577,13 @@ export async function callWorkspaceWriteTool(
           return finish(db, session, tool, gate, { summary: 'Refused: confirmation required.' });
         const before = getProjectById(db, args.projectId);
         const after = deleteProject(db, args.projectId);
-        const data = mutationSummary(before, after);
+        const data = mutationSummary(before, after, {
+          detachedSignalPosts: after.detachedSignalPosts,
+        });
         return finish(db, session, tool, success(data), {
           entityType: 'project',
           entityId: args.projectId,
-          summary: `Deleted project ${args.projectId}.`,
+          summary: `Deleted project ${args.projectId}; unassigned ${after.detachedSignalPosts} Signal posts.`,
           clientRequestId,
           persistIdempotency: true,
         });

@@ -224,19 +224,30 @@ export function deleteProject(db: Db, projectId: string) {
   const project = db.prepare('SELECT id, name FROM projects WHERE id=?').get(projectId) as
     { id: string; name: string } | undefined;
   if (!project) throw new WorkspaceNotFoundError('Project not found.');
-  transaction(db, () => {
+  const detachedSignalPosts = transaction(db, () => {
+    const assigned = db
+      .prepare('SELECT id, revision FROM signal_posts WHERE project_id=?')
+      .all(project.id) as { id: string; revision: number }[];
+    const stamp = now();
+    const detach = db.prepare('UPDATE signal_posts SET project_id=NULL, updated_at=? WHERE id=?');
+    for (const post of assigned) {
+      detach.run(stamp, post.id);
+      advanceRevision(db, 'signal_post', post.id, post.revision, ['projectId', 'clientId'], stamp);
+    }
     db.prepare('DELETE FROM tasks WHERE project_id=?').run(project.id);
     db.prepare("DELETE FROM drive_steps WHERE entity_type='project' AND entity_id=?").run(
       project.id,
     );
     db.prepare('DELETE FROM projects WHERE id=?').run(project.id);
     recordWorkspaceChange(db, 'project.deleted', 'project', project.id, 'Project deleted.');
+    return assigned.length;
   });
   return {
     ok: true as const,
     deleted: 'project' as const,
     name: project.name,
     driveTouched: false,
+    detachedSignalPosts,
   };
 }
 

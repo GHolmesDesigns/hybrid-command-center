@@ -82,7 +82,9 @@ export function listProjects(db: Db) {
       .prepare(
         // `position` leads so the manual tile order survives a reload. Until a project is
         // dragged every row shares position 0, leaving the original ordering intact.
-        `SELECT p.*, c.name client_name FROM projects p JOIN clients c ON c.id=p.client_id
+        `SELECT p.*, c.name client_name,
+                (SELECT COUNT(*) FROM signal_posts s WHERE s.project_id=p.id) signal_post_count
+         FROM projects p JOIN clients c ON c.id=p.client_id
     ORDER BY p.position, CASE p.status WHEN 'ACTIVE' THEN 0 ELSE 1 END, p.updated_at DESC`,
       )
       .all() as any[]

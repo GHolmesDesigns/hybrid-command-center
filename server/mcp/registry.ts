@@ -866,7 +866,7 @@ const workspaceWriteTools: McpToolRegistryEntry[] = [
   {
     name: 'workspace_delete_project',
     description:
-      'Hard-delete a project and its tasks locally. Never touches Drive. Requires confirm.',
+      'Hard-delete a project and its tasks locally. Assigned Signal posts remain and become unassigned; the result reports detachedSignalPosts. Never touches Drive. Requires confirm.',
     inputSchema: {
       type: 'object',
       properties: {

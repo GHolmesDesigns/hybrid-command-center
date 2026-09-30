@@ -6,6 +6,7 @@ import { callWorkspaceWriteTool } from './workspace-write.ts';
 import { callMcpTool } from './dispatch.ts';
 import { DEFAULT_BRANDING } from '../../shared/branding.ts';
 import { CANONICAL_VIEW_DEFAULTS } from '../../shared/view-defaults.ts';
+import { seedSignalPost } from '../signal/test-fixture.ts';
 
 let db: Db;
 
@@ -264,6 +265,37 @@ describe('workspace MCP writes', () => {
     expect(refused.outcome).toBe('REFUSED');
     expect(refused.errorDetail?.code).toBe('WORKSPACE_CONFIRMATION_REQUIRED');
     expect(db.prepare('SELECT COUNT(*) AS n FROM projects').get()).toEqual({ n: 1 });
+  });
+
+  it('reports detached Signal posts from confirmed project deletion and replays the same result', async () => {
+    const clientId = seedClient();
+    const projectId = '33333333-3333-4333-8333-333333333333';
+    seedProject(projectId, clientId);
+    const post = seedSignalPost(db, { projectId, text: 'MCP preserved post', date: '2027-08-14' });
+    const args = {
+      clientRequestId: 'delete-project-with-post',
+      projectId,
+      confirmProjectId: projectId,
+      confirm: true,
+    };
+    const first = await callWorkspaceWriteTool(db, session(), 'workspace_delete_project', args);
+    expect(first.outcome).toBe('SUCCESS');
+    expect(first.data).toMatchObject({ detachedSignalPosts: 1, after: { detachedSignalPosts: 1 } });
+    expect(
+      db
+        .prepare('SELECT project_id, text, date, revision FROM signal_posts WHERE id=?')
+        .get(post.id),
+    ).toEqual({ project_id: null, text: 'MCP preserved post', date: '2027-08-14', revision: 2 });
+    const replay = await callWorkspaceWriteTool(db, session(), 'workspace_delete_project', args);
+    expect(replay.outcome).toBe('SUCCESS');
+    expect(replay.data).toEqual(first.data);
+    expect(
+      db
+        .prepare(
+          "SELECT COUNT(*) AS n FROM entity_revision_changes WHERE entity_type='signal_post' AND entity_id=?",
+        )
+        .get(post.id),
+    ).toEqual({ n: 1 });
   });
 
   it('updates branding with a before/after summary', async () => {

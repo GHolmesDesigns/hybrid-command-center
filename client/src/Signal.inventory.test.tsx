@@ -33,7 +33,11 @@ const openSignal = async () => {
     </MemoryRouter>,
   );
   await screen.findByText(branding.title);
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh' })).toBeEnabled());
+  // Coverage instrumentation can delay the planner's initial read beyond Testing Library's
+  // default one-second wait; wait for the actual ready control before asserting inventory state.
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh' })).toBeEnabled(), {
+    timeout: 5_000,
+  });
 };
 
 const panel = () => screen.getByRole('region', { name: 'What Post Bridge is holding' });
