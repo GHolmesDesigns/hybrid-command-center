@@ -21,7 +21,7 @@ test('deleting a project unassigns its Signal post and removes the project from 
       clientId: client.id,
       projectId: project.id,
       text: postText,
-      date: '2099-03-17',
+      date: '2088-11-05',
       time: '13:00',
       channels: ['li'],
       status: 'SCHEDULED',
@@ -50,7 +50,7 @@ test('deleting a project unassigns its Signal post and removes the project from 
     id: post.id,
     projectId: null,
     text: postText,
-    date: '2099-03-17',
+    date: '2088-11-05',
     time: '13:00',
     revision: 2,
   });
