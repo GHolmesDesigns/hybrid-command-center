@@ -1,5 +1,14 @@
 # Changelog
 
+## [6.10.23] - 2026-09-30
+
+### Changed
+
+- Updated the CodeQL GitHub Actions to 4.38.2.
+
+### Breaking changes
+
+None.
 ## [6.10.22] - 2026-09-30
 
 ### Changed
