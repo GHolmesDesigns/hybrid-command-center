@@ -4,7 +4,7 @@
 
 ### Changed
 
-- Updated development dependencies (`vite`, `vitest`, `eslint`, `typescript-eslint`, `prettier`, `supertest`, `smol-toml`, `@types/node`) to their latest patch and minor releases. `jsdom` stays at 30.0.x because 30.1 breaks a Settings form test. No change to how the app behaves.
+- Updated development dependencies (`vite`, `eslint`, `typescript-eslint`, `prettier`, `supertest`, `smol-toml`, `@types/node`) to their latest patch and minor releases. `jsdom` stays at 30.0.x because 30.1 breaks Settings form tests, and `vitest` and its coverage provider stay at 5.0.0 because 5.0.2 drops client branch coverage under its threshold. No change to how the app behaves.
 
 ### Breaking changes
 
