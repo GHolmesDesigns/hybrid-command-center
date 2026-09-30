@@ -1,5 +1,14 @@
 # Changelog
 
+## [6.10.23] - 2026-09-30
+
+### Changed
+
+- Updated development dependencies (`vite`, `vitest`, `eslint`, `typescript-eslint`, `prettier`, `jsdom`, `supertest`, `smol-toml`, `@types/node`) to their latest patch and minor releases. No change to how the app behaves.
+
+### Breaking changes
+
+None.
 ## [6.10.22] - 2026-09-30
 
 ### Changed
