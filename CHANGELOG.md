@@ -1,5 +1,14 @@
 # Changelog
 
+## [7.0.2] - 2026-09-30
+
+## Added
+
+- Signal calendar rows can be resized by dragging or keyboard, with a separate saved height for Today, Week, and Month on this device.
+
+## Breaking changes
+
+None.
 ## [7.0.1] - 2026-09-30
 
 ## Added
