@@ -1,5 +1,18 @@
 # Changelog
 
+## [7.0.0] - 2026-09-30
+
+### Fixed
+
+- Projects with assigned Signal posts can now be deleted. The posts remain on the Signal schedule as unassigned posts, and the delete confirmation reports how many will be unassigned.
+
+### Security
+
+- Updated transitive dependency locks to resolve newly reported denial of service advisories and clear the required dependency audit.
+
+### Breaking changes
+
+None.
 ## [6.10.24] - 2026-09-30
 
 ### Changed
