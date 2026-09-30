@@ -1,5 +1,18 @@
 # Changelog
 
+## [7.0.1] - 2026-09-30
+
+## Added
+
+- A project summary on Status when one project is selected, with project dates, health, status, categories, and direct Open and Edit actions.
+
+## Changed
+
+- The project detail summary now shows the start date and uses the same status label, icon, and colours as the project list.
+
+## Breaking changes
+
+None.
 ## [7.0.0] - 2026-09-30
 
 ### Fixed
