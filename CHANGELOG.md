@@ -1,5 +1,23 @@
 # Changelog
 
+## [6.10.22] - 2026-09-30
+
+### Changed
+
+- Updated the `lucide-react` dependency to 1.48.0.
+
+### Breaking changes
+
+None.
+## [6.10.21] - 2026-09-28
+
+### Changed
+
+- Updated the `dotenv` dependency to 18.0.0.
+
+### Breaking changes
+
+None.
 ## [6.10.20] - 2026-09-28
 
 ### Changed
