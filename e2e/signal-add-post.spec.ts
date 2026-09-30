@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { gotoSettled } from './ready';
 
 /**
  * Wave 17 / C99: one Add Post flow from day cells and top navigation.
@@ -15,8 +16,11 @@ test('Signal Add Post entry points share one form and preserve the cell date', a
   const datedText = `E2E dated Add Post ${run}`;
   const queueText = `E2E unscheduled Add Post ${run}`;
 
-  await page.goto(`/signal?month=${MONTH}`);
-  await expect(page.getByRole('heading', { level: 2, name: 'August 2099' })).toBeVisible();
+  await gotoSettled(page, `/signal?month=${MONTH}`);
+  await expect(page).toHaveURL(new RegExp(`[?&]month=${MONTH}`));
+  await expect(page.getByRole('heading', { level: 2, name: 'August 2099' })).toBeVisible({
+    timeout: 10_000,
+  });
 
   await page.getByRole('button', { name: `Add post on ${DAY}` }).click();
   const editor = page.getByRole('dialog');
