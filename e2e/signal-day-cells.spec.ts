@@ -111,4 +111,28 @@ test('a Signal day cell keeps its height whatever its posts hold', async ({ page
 
   // The heights the month started with are the heights it ends with.
   expect(await heights()).toEqual(before);
+
+  // A drag grows every row together, persists on this device, and leaves the queue outside it.
+  const grip = page.getByRole('separator', { name: 'Resize calendar rows' });
+  const queue = page.getByRole('complementary', { name: 'Unscheduled queue' });
+  const queueHeight = Math.round((await queue.boundingBox())!.height);
+  await grip.scrollIntoViewIfNeeded();
+  const gripBox = (await grip.boundingBox())!;
+  const x = gripBox.x + gripBox.width / 2;
+  const y = gripBox.y + gripBox.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x - gripBox.width - 20, y + 80);
+  await page.mouse.up();
+  await expect(grip).toHaveAttribute('aria-valuenow', '264');
+  expect(new Set(await heights())).toEqual(new Set([264]));
+  expect(Math.round((await queue.boundingBox())!.height)).toBe(queueHeight);
+
+  await page.reload();
+  await expect(grip).toHaveAttribute('aria-valuenow', '264');
+  expect(new Set(await heights())).toEqual(new Set([264]));
+  await grip.focus();
+  await page.keyboard.press('Home');
+  await expect(grip).toHaveAttribute('aria-valuenow', '184');
+  expect(await heights()).toEqual(before);
 });

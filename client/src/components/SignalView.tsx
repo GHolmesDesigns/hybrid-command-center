@@ -130,6 +130,7 @@ import { SignalHealthPanel } from './SignalHealth';
 import { SignalProviderInventoryPanel } from './SignalProviderInventory';
 import { SignalAnalyticsWindowPanel } from './SignalAnalyticsWindow';
 import { SignalMetrics } from './SignalMetrics';
+import { SignalCalendarResize } from './SignalCalendarResize';
 import { previewPlatforms, variantList, variantMap } from './signal-variants';
 import { BUFFER_PROVIDER } from '../../../shared/buffer';
 import {
@@ -2603,55 +2604,57 @@ export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
               <ChevronRight />
             </button>
           </div>
-          <div className={`signal-weekdays view-${view}`} aria-hidden="true">
-            {weekdays.map((day) => (
-              <span key={day}>{day}</span>
-            ))}
-          </div>
-          <div className={`signal-grid view-${view}`}>
-            {days.map((date) => {
-              const scheduled = byDate.get(date) ?? [];
-              const adjacent = view === 'month' && date.slice(0, 7) !== anchor.slice(0, 7);
-              return (
-                <section
-                  className={`signal-day ${adjacent ? 'is-adjacent-month' : ''} ${date === now ? 'is-today' : ''}`}
-                  key={date}
-                  aria-label={date}
-                >
-                  <header>
-                    <span>{Number(date.slice(-2))}</span>
-                    <div className="signal-day-actions">
-                      {date === now && <strong>Today</strong>}
-                      <button
-                        type="button"
-                        className="icon-btn signal-day-add"
-                        aria-label={`Add post on ${date}`}
-                        onClick={() => openCreate(date)}
-                      >
-                        <Plus aria-hidden="true" />
-                      </button>
-                    </div>
-                  </header>
-                  {scheduled.length === 0 ? (
-                    <span className="signal-day-empty">No posts</span>
-                  ) : (
-                    <ul>
-                      {scheduled.map((post) => (
-                        <li key={post.id}>
-                          <Post
-                            post={post}
-                            delivery={deliveryFor(post.id)}
-                            open={openPost}
-                            preview
-                          />
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </section>
-              );
-            })}
-          </div>
+          <SignalCalendarResize key={view} view={view}>
+            <div className={`signal-weekdays view-${view}`} aria-hidden="true">
+              {weekdays.map((day) => (
+                <span key={day}>{day}</span>
+              ))}
+            </div>
+            <div className={`signal-grid view-${view}`}>
+              {days.map((date) => {
+                const scheduled = byDate.get(date) ?? [];
+                const adjacent = view === 'month' && date.slice(0, 7) !== anchor.slice(0, 7);
+                return (
+                  <section
+                    className={`signal-day ${adjacent ? 'is-adjacent-month' : ''} ${date === now ? 'is-today' : ''}`}
+                    key={date}
+                    aria-label={date}
+                  >
+                    <header>
+                      <span>{Number(date.slice(-2))}</span>
+                      <div className="signal-day-actions">
+                        {date === now && <strong>Today</strong>}
+                        <button
+                          type="button"
+                          className="icon-btn signal-day-add"
+                          aria-label={`Add post on ${date}`}
+                          onClick={() => openCreate(date)}
+                        >
+                          <Plus aria-hidden="true" />
+                        </button>
+                      </div>
+                    </header>
+                    {scheduled.length === 0 ? (
+                      <span className="signal-day-empty">No posts</span>
+                    ) : (
+                      <ul>
+                        {scheduled.map((post) => (
+                          <li key={post.id}>
+                            <Post
+                              post={post}
+                              delivery={deliveryFor(post.id)}
+                              open={openPost}
+                              preview
+                            />
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+                );
+              })}
+            </div>
+          </SignalCalendarResize>
           {loading && (
             <div className="signal-loading">
               <RefreshCw className="spin" /> Loading planner…
