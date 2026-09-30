@@ -31,6 +31,7 @@ const baseProject: Project = {
   lastActivityAt: '2026-01-01T00:00:00.000Z',
   revision: 1,
   categories: [],
+  signalPostCount: 0,
 };
 
 const baseTask: Task = {

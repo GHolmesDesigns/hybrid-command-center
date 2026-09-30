@@ -904,6 +904,10 @@ describe('command center API', () => {
   it('deletes projects and tasks locally without claiming Drive was touched', async () => {
     const { p } = await setup();
     const app = createApp(db);
+    const post = seedSignalPost(db, { projectId: p.id, text: 'Preserved in Signal' });
+    expect(
+      (await request(app).get('/api/projects')).body.find((x: any) => x.id === p.id),
+    ).toMatchObject({ signalPostCount: 1 });
     const task = (
       await request(app).post('/api/tasks').send({ projectId: p.id, title: 'Disposable task' })
     ).body;
@@ -914,6 +918,10 @@ describe('command center API', () => {
     const deletedProject = await request(app).delete(`/api/projects/${p.id}`);
     expect(deletedProject.status).toBe(200);
     expect(deletedProject.body.driveTouched).toBe(false);
+    expect(deletedProject.body.detachedSignalPosts).toBe(1);
+    expect(
+      db.prepare('SELECT project_id, text, revision FROM signal_posts WHERE id=?').get(post.id),
+    ).toEqual({ project_id: null, text: 'Preserved in Signal', revision: 2 });
     expect(
       (await request(app).get('/api/projects')).body.find((x: any) => x.id === p.id),
     ).toBeUndefined();

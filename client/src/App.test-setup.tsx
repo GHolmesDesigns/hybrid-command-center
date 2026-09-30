@@ -183,6 +183,7 @@ export const project = (
   updatedAt: '2026-01-01T00:00:00.000Z',
   lastActivityAt: '2026-01-01T00:00:00.000Z',
   categories: [],
+  signalPostCount: 0,
   ...overrides,
   revision: overrides.revision ?? 1,
 });
@@ -1680,6 +1681,13 @@ const respondTo = (url: string, init?: RequestInit) => {
       current.id === id ? { ...current, ...body } : current,
     );
     return testState.projectsPayload.find((current) => current.id === id) ?? {};
+  }
+  if (method === 'DELETE' && /\/api\/projects\/[^/]+$/.test(url)) {
+    const id = url.split('/api/projects/')[1];
+    const deleted = testState.projectsPayload.find((current) => current.id === id);
+    testState.projectsPayload = testState.projectsPayload.filter((current) => current.id !== id);
+    testState.tasksPayload = testState.tasksPayload.filter((current) => current.projectId !== id);
+    return { ok: true, deleted: 'project', detachedSignalPosts: deleted?.signalPostCount ?? 0 };
   }
   if (method === 'PATCH' && /\/api\/tasks\/[^/]+$/.test(url)) {
     if (testState.taskPatchError) return reply(500, { error: testState.taskPatchError });

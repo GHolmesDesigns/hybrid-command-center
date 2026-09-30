@@ -6,6 +6,7 @@ import {
   fireEvent,
   it,
   render,
+  requests,
   screen,
   testState,
 } from './App.test-setup';
@@ -27,9 +28,18 @@ describe('Live updates settings', () => {
     testState.liveTipsPayload = { enabled: false };
     await renderSettings();
 
-    fireEvent.click(screen.getByLabelText('Enable live updates'));
+    const enabled = screen.getByLabelText('Enable live updates');
+    expect(enabled).not.toBeChecked();
+    fireEvent.click(enabled);
+    expect(enabled).toBeChecked();
     fireEvent.click(screen.getByRole('button', { name: 'Save live updates' }));
     expect(await screen.findByText(/Live updates saved/i)).toBeVisible();
+    expect(
+      requests.find(
+        (request) =>
+          request.method === 'PUT' && request.url.endsWith('/api/settings/agent-hub-live-tips'),
+      )?.body,
+    ).toEqual({ enabled: true });
     expect(testState.liveTipsPayload).toEqual({ enabled: true });
   });
 

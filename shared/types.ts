@@ -107,6 +107,8 @@ export interface Client {
 }
 export interface Project {
   id: string;
+  /** Assigned Signal posts that will become unassigned if this project is deleted. */
+  signalPostCount: number;
   clientId: string;
   clientName?: string;
   name: string;

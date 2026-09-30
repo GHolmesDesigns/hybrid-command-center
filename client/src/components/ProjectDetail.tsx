@@ -36,6 +36,11 @@ import { Due, Empty, PriorityBadge, StatusDot } from './Primitives';
 import { STATUS_LABEL } from './ui-shared';
 import { PageHead } from './Shell';
 import { DiscussionPanel } from './DiscussionPanel';
+import {
+  projectDeleteConfirmation,
+  projectDeleteSuccess,
+  signalPostDetachmentCopy,
+} from './project-deletion';
 
 export function ProjectDetail({
   projects,
@@ -126,16 +131,11 @@ export function ProjectDetail({
     if (target) reorder(task, target.id);
   };
   const remove = async () => {
-    if (
-      !confirm(
-        `Delete project “${p.name}” from Command Center?\n\nThis removes the project and its tasks from the app only. Drive folders and files are not touched.`,
-      )
-    )
-      return;
+    if (!confirm(projectDeleteConfirmation(p))) return;
     try {
-      await send(`/projects/${p.id}`, 'DELETE');
+      const result = await send<{ detachedSignalPosts: number }>(`/projects/${p.id}`, 'DELETE');
       await refresh();
-      flash('Project deleted from Command Center. Drive files were left alone.');
+      flash(projectDeleteSuccess(result.detachedSignalPosts));
       nav('/projects');
     } catch (e) {
       flash((e as Error).message, 'error');
@@ -222,7 +222,8 @@ export function ProjectDetail({
             links to outlives the record, and that is easiest to believe before the prompt. */}
         <p className="field-hint">
           Deleting this project removes it and its tasks from Command Center only. Its Drive folder
-          and every file in it are left exactly as they are.
+          and every file in it are left exactly as they are.{' '}
+          {signalPostDetachmentCopy(p.signalPostCount)}
         </p>
       </div>
       <DiscussionPanel

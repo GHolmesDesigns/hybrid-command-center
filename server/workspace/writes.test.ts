@@ -23,6 +23,7 @@ import {
 } from './writes.ts';
 import { DEFAULT_BRANDING } from '../../shared/branding.ts';
 import { CANONICAL_VIEW_DEFAULTS, VIEW_DEFAULTS_SETTING_KEY } from '../../shared/view-defaults.ts';
+import { seedSignalPost } from '../signal/test-fixture.ts';
 
 let db: Db;
 
@@ -209,7 +210,99 @@ describe('workspace writes', () => {
       deleted: 'project',
       name: 'Retainer',
       driveTouched: false,
+      detachedSignalPosts: 0,
     });
+  });
+
+  it('deletes a project while preserving its Signal schedule and advancing assignment revisions once', () => {
+    const project = seedProject();
+    const post = seedSignalPost(db, {
+      projectId: project.id,
+      text: 'Keep this scheduled post',
+      date: '2027-08-14',
+      time: '14:30',
+      campaigns: [{ id: 'campaign-1', name: 'Launch' }],
+      channels: ['x', 'li'],
+    });
+    db.prepare(
+      `INSERT INTO signal_publications(
+         id,post_id,state,provider,provider_post_id,idempotency_key,scheduled_instant,timezone,
+         sent_caption,sent_channels,created_at,updated_at
+       ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      'publication-1',
+      post.id,
+      'CONFIRMED',
+      'post-bridge',
+      'provider-1',
+      'delete-project-test',
+      '2027-08-14T18:30:00.000Z',
+      'America/New_York',
+      post.text,
+      '["x"]',
+      post.createdAt,
+      post.createdAt,
+    );
+    db.prepare(
+      `INSERT INTO signal_publication_targets(publication_id,channel,provider_account_id,outcome)
+       VALUES(?,?,?,?)`,
+    ).run('publication-1', 'x', 7, 'SUCCESS');
+    const publication = db
+      .prepare('SELECT * FROM signal_publications WHERE id=?')
+      .get('publication-1');
+    const target = db
+      .prepare('SELECT * FROM signal_publication_targets WHERE publication_id=?')
+      .get('publication-1');
+    const before = db.prepare('SELECT * FROM signal_posts WHERE id=?').get(post.id) as Record<
+      string,
+      unknown
+    >;
+    const channels = db
+      .prepare('SELECT channel FROM signal_post_channels WHERE post_id=? ORDER BY channel')
+      .all(post.id);
+    const campaigns = db
+      .prepare('SELECT campaign_id FROM signal_post_campaigns WHERE post_id=?')
+      .all(post.id);
+
+    expect(() => deleteProject(db, project.id)).not.toThrow();
+    expect(db.prepare('SELECT id FROM projects WHERE id=?').get(project.id)).toBeUndefined();
+    const after = db.prepare('SELECT * FROM signal_posts WHERE id=?').get(post.id) as Record<
+      string,
+      unknown
+    >;
+    expect(after).toMatchObject({
+      ...before,
+      project_id: null,
+      updated_at: expect.any(String),
+      revision: 2,
+    });
+    expect(new Date(after.updated_at as string).getTime()).toBeGreaterThan(
+      new Date(before.updated_at as string).getTime(),
+    );
+    expect(
+      db
+        .prepare('SELECT channel FROM signal_post_channels WHERE post_id=? ORDER BY channel')
+        .all(post.id),
+    ).toEqual(channels);
+    expect(
+      db.prepare('SELECT campaign_id FROM signal_post_campaigns WHERE post_id=?').all(post.id),
+    ).toEqual(campaigns);
+    expect(db.prepare('SELECT * FROM signal_publications WHERE id=?').get('publication-1')).toEqual(
+      publication,
+    );
+    expect(
+      db
+        .prepare('SELECT * FROM signal_publication_targets WHERE publication_id=?')
+        .get('publication-1'),
+    ).toEqual(target);
+    expect(
+      db
+        .prepare(
+          "SELECT revision, changed_fields FROM entity_revision_changes WHERE entity_type='signal_post' AND entity_id=?",
+        )
+        .all(post.id),
+    ).toEqual([{ revision: 2, changed_fields: '["clientId","projectId"]' }]);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM integration_events').get()).toEqual({ n: 0 });
   });
 
   it('refuses invalid creates and missing entities', () => {
