@@ -1632,12 +1632,13 @@ button.tag-chip.toggle.active {
 }
 .project-summary {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   background: #fff;
   border: 1px solid var(--line);
   border-radius: 13px;
 }
 .project-summary > div {
+  min-width: 0;
   padding: 18px;
   border-right: 1px solid #eee;
   display: flex;
@@ -1646,7 +1647,7 @@ button.tag-chip.toggle.active {
 .project-summary > div:last-child {
   border: 0;
 }
-.project-summary span {
+.project-summary > div > span:first-child {
   font-size: 10px;
   color: var(--muted);
   text-transform: uppercase;
@@ -1655,10 +1656,40 @@ button.tag-chip.toggle.active {
 .project-summary strong {
   margin-top: 5px;
   font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.project-summary .status-label {
+  align-self: flex-start;
+  margin-top: 5px;
+  padding: 5px 7px;
 }
 .detail-actions {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
+}
+.status-project-overview {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: #fff;
+}
+.status-project-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.status-project-heading > div:first-child {
+  min-width: 0;
+}
+.status-project-heading h2,
+.status-project-heading p {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
 }
 .task-table {
   background: #fff;

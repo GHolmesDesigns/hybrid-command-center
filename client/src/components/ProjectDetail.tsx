@@ -30,12 +30,12 @@ import { send } from '../api';
 import type { Project, Task, TaskStatus } from '../../../shared/types';
 import { TASK_STATUSES } from '../../../shared/types';
 import { type Modal } from './App';
-import { formatDate } from './formatting';
-import { TagChip } from './FormControls';
 import { Due, Empty, PriorityBadge, StatusDot } from './Primitives';
 import { STATUS_LABEL } from './ui-shared';
 import { PageHead } from './Shell';
 import { DiscussionPanel } from './DiscussionPanel';
+import { ProjectSummary } from './ProjectSummary';
+import { projectDescription } from './project-description';
 import {
   projectDeleteConfirmation,
   projectDeleteSuccess,
@@ -150,7 +150,7 @@ export function ProjectDetail({
         focusOnMount
         eyebrow={p.clientName || 'Project'}
         title={p.name}
-        body={p.description || 'Project tasks, launch plan, deadline, and Drive workspace.'}
+        body={projectDescription(p)}
         action={
           <div className="head-actions">
             {p.driveFolderUrl && (
@@ -173,37 +173,7 @@ export function ProjectDetail({
           categories are the same distance from the actions whether there are none of them, one,
           or enough to wrap — see `.project-overview` in `styles.css`. */}
       <div className="project-overview">
-        <div className="project-summary">
-          <div>
-            <span>Status</span>
-            <strong>{p.status.replace('_', ' ')}</strong>
-          </div>
-          <div>
-            <span>Planned launch</span>
-            <strong>{p.launchDate ? formatDate(p.launchDate) : 'Not set'}</strong>
-          </div>
-          <div>
-            <span>Target deadline</span>
-            <strong>{p.targetDeadline ? formatDate(p.targetDeadline) : 'Not set'}</strong>
-          </div>
-          <div>
-            <span>Priority</span>
-            <strong>{p.priority}</strong>
-          </div>
-          <div>
-            <span>Task health</span>
-            <strong>{mine.filter((t) => t.overdue).length} overdue</strong>
-          </div>
-        </div>
-        {p.categories.length > 0 && (
-          <ul className="tag-list" aria-label={`Categories on ${p.name}`}>
-            {p.categories.map((category) => (
-              <li key={category.id}>
-                <TagChip tag={category} />
-              </li>
-            ))}
-          </ul>
-        )}
+        <ProjectSummary project={p} tasks={tasks} />
         <div className="detail-actions">
           <Link className="buttonlike" to={`/status?project=${p.id}`}>
             Open project status <ArrowRight />

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   DndContext,
   KeyboardSensor,
@@ -22,6 +22,8 @@ import { STATUS_LABEL, TASK_TYPE_LABEL, tagAccent } from './ui-shared';
 import { PageHead } from './Shell';
 import type { TaskFilter, TaskFilterPreset } from '../../../shared/task-filters';
 import { MultiSelectFilter, type FilterOption } from './MultiSelectFilter';
+import { ProjectSummary } from './ProjectSummary';
+import { projectDescription } from './project-description';
 
 /**
  * The `type` value that asks for tasks carrying no type at all. Untyped tasks predate the
@@ -214,6 +216,10 @@ export function Kanban({
   const availableProjects = projects.filter(
     (candidate) => selectedClients.length === 0 || selectedClients.includes(candidate.clientId),
   );
+  const summaryProject =
+    params.getAll('project').length === 1 && selectedProjects.length === 1
+      ? availableProjects.find((candidate) => candidate.id === selectedProjects[0])
+      : undefined;
   const filterOptions: Array<{
     paramKey: string;
     label: string;
@@ -343,6 +349,29 @@ export function Kanban({
           </button>
         }
       />
+      {summaryProject && (
+        <section className="project-overview status-project-overview" aria-label="Project summary">
+          <div className="status-project-heading">
+            <div>
+              <span className="eyebrow">{summaryProject.clientName || 'Project'}</span>
+              <h2>{summaryProject.name}</h2>
+              <p>{projectDescription(summaryProject)}</p>
+            </div>
+            <div className="detail-actions">
+              <Link className="buttonlike secondary" to={`/projects/${summaryProject.id}`}>
+                Open project
+              </Link>
+              <button
+                className="secondary"
+                onClick={() => open({ type: 'project', value: summaryProject })}
+              >
+                Edit project
+              </button>
+            </div>
+          </div>
+          <ProjectSummary project={summaryProject} tasks={tasks} />
+        </section>
+      )}
       <div className="board-filters">
         {filterOptions.map((filter) => (
           <MultiSelectFilter
