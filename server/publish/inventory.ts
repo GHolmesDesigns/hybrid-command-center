@@ -1,6 +1,6 @@
 import type { Db } from '../db.ts';
 import { transaction } from '../db.ts';
-import { getSetting, setSetting } from '../drive/service.ts';
+import { setSetting } from '../drive/service.ts';
 import { recordIntegrationEvent, redactSecrets } from '../integration-log.ts';
 import {
   providerInventoryOrphans,
@@ -12,7 +12,15 @@ import {
 } from '../../shared/provider-inventory.ts';
 import { PublishProviderError, PUBLISH_RATE_LIMIT_FALLBACK_SECONDS } from './provider.ts';
 import type { ProviderInventoryProvider } from './inventory-provider.ts';
-import { knownProviderPostIds, readProviderInventoryEntries } from './inventory-rows.ts';
+import {
+  inventoryKey,
+  knownProviderPostIds,
+  readProviderInventoryEntries,
+  readProviderInventoryRecord,
+  type StoredInventoryRecord,
+} from './inventory-rows.ts';
+
+export { readProviderInventoryRecord };
 import { readSyncHealth, recordSyncHealth } from './sync-health.ts';
 
 /**
@@ -47,47 +55,6 @@ import { readSyncHealth, recordSyncHealth } from './sync-health.ts';
  * calls. There is no timer, no schedule, and no background job — which is what lets the queue-health
  * alert derive from stored rows and keeps `deriveQueueHealth` free of the network.
  */
-
-/**
- * The record of the last attempt: when a complete read last replaced the generation, and why the
- * most recent one did not.
- *
- * A settings row rather than a table because there is exactly one of it, the same reason
- * `sync-health.ts` is one. It is deliberately *not* a snapshot row and cannot become one: it holds no
- * provider post, so writing it on a failed refresh cannot produce a mixed generation — the rows carry
- * their own `snapshot_at` and a failed read leaves every one of them untouched. Without it a failed
- * refresh could only say nothing, and a panel that silently keeps showing last week's inventory is
- * the thing this card exists to prevent.
- *
- * Nothing here is a credential and nothing here is a provider response body: one timestamp and one
- * already-redacted sentence.
- */
-export const PROVIDER_INVENTORY_KEY = 'signal_provider_inventory';
-const inventoryKey = (provider: string) =>
-  provider === 'post-bridge' ? PROVIDER_INVENTORY_KEY : `${PROVIDER_INVENTORY_KEY}:${provider}`;
-
-interface StoredInventoryRecord {
-  lastRefreshAt?: string;
-  reason?: string;
-}
-
-/** The stored record, or nothing. A row this build cannot parse is treated as absent. */
-export function readProviderInventoryRecord(
-  db: Db,
-  provider = 'post-bridge',
-): StoredInventoryRecord {
-  const raw = getSetting(db, inventoryKey(provider));
-  if (!raw) return {};
-  try {
-    const stored = JSON.parse(raw) as StoredInventoryRecord;
-    return {
-      ...(typeof stored.lastRefreshAt === 'string' ? { lastRefreshAt: stored.lastRefreshAt } : {}),
-      ...(typeof stored.reason === 'string' ? { reason: stored.reason } : {}),
-    };
-  } catch {
-    return {};
-  }
-}
 
 const writeProviderInventoryRecord = (
   db: Db,

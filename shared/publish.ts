@@ -739,6 +739,27 @@ export interface ProviderPostMissing {
 }
 
 /**
+ * What the stored inventory says about one submission, as one verdict.
+ *
+ * The inventory half of the **Release locally** gate, stated once so the comparison that offers the
+ * release and the queue-health alert that points at it cannot disagree about which read counts. A
+ * complete read is evidence a post is gone only when it exists, finished after the submission was
+ * created — an earlier read would not list the post whether or not it was deleted — and does not
+ * list the id. Pure over stored values: no provider is asked.
+ */
+export type ProviderInventoryVerdict = 'NO_READ' | 'OLDER_THAN_SUBMISSION' | 'LISTED' | 'GONE';
+
+export const providerInventoryVerdict = (
+  publication: { createdAt: string },
+  inventory: ProviderPostMissing['inventory'],
+): ProviderInventoryVerdict => {
+  if (!inventory.readAt) return 'NO_READ';
+  if (Date.parse(inventory.readAt) <= Date.parse(publication.createdAt))
+    return 'OLDER_THAN_SUBMISSION';
+  return inventory.listsPost ? 'LISTED' : 'GONE';
+};
+
+/**
  * The fields a provider record and a Signal plan can disagree about.
  *
  * Four rather than one flat "changed" flag, because the two update actions split along them: a

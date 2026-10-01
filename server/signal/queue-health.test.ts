@@ -231,6 +231,55 @@ describe('what the summary is gathered from', () => {
   });
 });
 
+describe('a post Post Bridge no longer lists', () => {
+  const seedInventory = (readAt: string, listedIds: string[] = []) => {
+    setSetting(db, 'signal_provider_inventory', JSON.stringify({ lastRefreshAt: readAt }));
+    for (const id of listedIds)
+      db.prepare(
+        `INSERT INTO signal_provider_inventory_posts(
+           provider,provider_post_id,state,scheduled_instant,caption_excerpt,account_refs,provider_url,snapshot_at)
+         VALUES('post-bridge',?,'SCHEDULED',NULL,'','[]',NULL,?)`,
+      ).run(id, readAt);
+  };
+  const goneAlert = () =>
+    readQueueHealth(db, NOW).alerts.find((alert) => alert.kind === 'PROVIDER_POST_GONE');
+
+  it('is raised from the stored read and clears when the delivery is released', () => {
+    const post = seedSignalPost(db, { date: dayLabel(1), status: 'PUBLISHED' });
+    const publicationId = seedPublication(post.id, { state: 'SUBMITTED' });
+    expect(goneAlert()).toBeUndefined();
+    seedInventory('2026-08-19T08:00:00.000Z');
+    expect(goneAlert()?.publicationId).toBe(publicationId);
+    db.prepare("UPDATE signal_publications SET state='CANCELLED' WHERE id=?").run(publicationId);
+    expect(goneAlert()).toBeUndefined();
+  });
+
+  it('stays quiet when the stored read lists the post or predates it', () => {
+    const post = seedSignalPost(db, { date: dayLabel(1), status: 'PUBLISHED' });
+    seedPublication(post.id, { state: 'SUBMITTED', providerPostId: 'remote-1' });
+    seedInventory('2026-08-19T08:00:00.000Z', ['remote-1']);
+    expect(goneAlert()).toBeUndefined();
+    db.prepare('DELETE FROM signal_provider_inventory_posts').run();
+    seedInventory('2026-08-17T00:00:00.000Z');
+    expect(goneAlert()).toBeUndefined();
+  });
+
+  it('writes only an acknowledgement when acknowledged', () => {
+    const post = seedSignalPost(db, { date: dayLabel(1), status: 'PUBLISHED' });
+    const publicationId = seedPublication(post.id, { state: 'SUBMITTED' });
+    seedInventory('2026-08-19T08:00:00.000Z');
+    const tables = ['signal_publications', 'signal_posts', 'integration_events'];
+    const snapshot = () => tables.map((table) => db.prepare(`SELECT * FROM ${table}`).all());
+    const before = snapshot();
+    const summary = acknowledgeQueueAlert(db, `PROVIDER_POST_GONE:${publicationId}`, NOW);
+    expect(summary.alerts.find((alert) => alert.kind === 'PROVIDER_POST_GONE')?.acknowledged).toBe(
+      true,
+    );
+    expect(snapshot()).toEqual(before);
+    expect(readAcknowledgements(db)).toHaveLength(1);
+  });
+});
+
 describe('the synchronisation record', () => {
   it('is absent until something has been observed, and unreadable rows read as absent', () => {
     expect(readSyncHealth(db)).toBeUndefined();

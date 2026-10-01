@@ -16,6 +16,7 @@ import {
   PROVIDER_DIFF_FIELDS,
   providerRecordIsMutable,
   providerRecordIsPublished,
+  providerInventoryVerdict,
   publicationTracksProvider,
   PROVIDER_POST_STATE_LABEL,
   PUBLICATION_STATE_LABEL,
@@ -180,21 +181,24 @@ export function providerMissingRefusals(
   publication: Pick<SignalPublication, 'createdAt'>,
   missing: ProviderPostMissing,
 ): string[] {
-  const { readAt, listsPost } = missing.inventory;
+  const { readAt } = missing.inventory;
   const id = missing.providerPostId;
-  if (!readAt)
-    return [
-      `Post Bridge has no post ${id}. This app releases a submission only when a complete inventory read also shows it gone, and none has been taken yet. ${INVENTORY_INSTRUCTION}`,
-    ];
-  if (Date.parse(readAt) <= Date.parse(publication.createdAt))
-    return [
-      `Post Bridge has no post ${id}, but the last complete inventory read (${readAt}) is older than this submission. ${INVENTORY_INSTRUCTION}`,
-    ];
-  if (listsPost)
-    return [
-      `Post Bridge answered that it has no post ${id}, but the last complete inventory read (${readAt}) still lists it. ${INVENTORY_INSTRUCTION} If it is still listed, check the post in Post Bridge before acting here.`,
-    ];
-  return [];
+  switch (providerInventoryVerdict(publication, missing.inventory)) {
+    case 'NO_READ':
+      return [
+        `Post Bridge has no post ${id}. This app releases a submission only when a complete inventory read also shows it gone, and none has been taken yet. ${INVENTORY_INSTRUCTION}`,
+      ];
+    case 'OLDER_THAN_SUBMISSION':
+      return [
+        `Post Bridge has no post ${id}, but the last complete inventory read (${readAt}) is older than this submission. ${INVENTORY_INSTRUCTION}`,
+      ];
+    case 'LISTED':
+      return [
+        `Post Bridge answered that it has no post ${id}, but the last complete inventory read (${readAt}) still lists it. ${INVENTORY_INSTRUCTION} If it is still listed, check the post in Post Bridge before acting here.`,
+      ];
+    case 'GONE':
+      return [];
+  }
 }
 
 /** The token a release commits against: the publication as it stands and the evidence for it. */
