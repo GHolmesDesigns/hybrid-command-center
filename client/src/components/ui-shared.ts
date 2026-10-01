@@ -57,6 +57,8 @@ export type TagDraft = { id?: string; name: string; color?: string };
 /** A saved tag or category, which is what the chip input can offer as a suggestion. */
 export type ChipOption = { id: string; name: string; color?: string };
 
+// These are user/data accents for both tags and categories, not presentation-theme tokens.
+// The dot carries the hue; chip text keeps its own contrast-tested theme ink and surface.
 const TAG_ACCENTS = ['#2f6f52', '#315f79', '#7b4fa8', '#9b5f12', '#a33d63', '#4a6b8a'];
 
 export const tagAccent = (tag: TagDraft) => {

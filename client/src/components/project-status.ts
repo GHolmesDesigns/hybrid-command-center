@@ -29,7 +29,8 @@ export interface ProjectStatusPresentation {
 }
 
 /**
- * How far a chip fill is faded toward paper to become the tile behind it. The tile carries
+ * The status palette is measured data, independent of presentation-theme tokens. This factor
+ * fades a chip fill toward paper to become the tile behind it. The tile carries
  * every colour the page's body text uses, so the tint has to stay light enough that
  * `--muted` — the weakest of them — still clears AA on it; `Projects.status.test.tsx`
  * measures that rather than trusting the number.
