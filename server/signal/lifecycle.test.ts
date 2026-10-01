@@ -120,6 +120,11 @@ describe('Signal lifecycle and delivery provenance', () => {
       '2099-10-01T00:00:00.000Z',
     );
     expect(() => retirePost(db, post.id)).toThrow(/Withdraw or reconcile/);
+    // The refusal is the one place a person stuck on a post deleted in Post Bridge reads, so it
+    // names the way out rather than only the two that need the post to still be there (#711).
+    expect(() => retirePost(db, post.id)).toThrow(
+      /deleted the post in Post Bridge.*Release locally/,
+    );
   });
 
   it('lets a person mark and clear Outside of Signal without inventing delivery', async () => {

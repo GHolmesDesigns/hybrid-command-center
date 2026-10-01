@@ -86,7 +86,9 @@ provider submission** in planner-level copy where the audience may not know “p
 
 **Refused without a separate withdraw when:** a publication is in `SUBMITTING`, `SUBMITTED`, or
 `UNCONFIRMED` — the operator must withdraw or reconcile first, or retire only after the
-publication reaches a terminal state (`CONFIRMED`, `PARTIAL`, `FAILED`, `CANCELLED`).
+publication reaches a terminal state (`CONFIRMED`, `PARTIAL`, `FAILED`, `CANCELLED`). A post
+deleted in Post Bridge itself reaches `CANCELLED` through **Release locally** (§3.1), and the
+refusal names that path.
 
 ### 2.3 Remove from live platform (declined)
 
@@ -302,7 +304,7 @@ This documentation card is complete when:
 ## 11. Sources
 
 - [`publishing-integration.md`](publishing-integration.md) — §6 status vs delivery, §7 delete-before-row,
-  §7.2 four actions, §2.1–§2.2 Buffer contract and probe matrix
+  §7.2 five actions, §2.1–§2.2 Buffer contract and probe matrix
 - [`post-bridge-api-surface.md`](post-bridge-api-surface.md) — §3 endpoint table, §14 live probe
 - [`social-media-publisher-artifact.md`](social-media-publisher-artifact.md) — §8 Remove behaviour
 - [`post-bridge-integrations-plan.md`](post-bridge-integrations-plan.md) — §0.3 inventory non-adoption

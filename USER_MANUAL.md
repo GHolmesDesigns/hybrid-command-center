@@ -932,7 +932,8 @@ instead:
   cancelled in Hybrid Command Center and sends nothing to the provider, so the plan can be retired
   or sent again. It is offered only when Post Bridge says it has no such post **and** the last
   **Refresh inventory** under **What Post Bridge is holding**, taken after you sent it, does not list
-  it. If the panel asks you to, press **Refresh inventory** and compare again.
+  it. If the panel asks you to, press **Refresh inventory** and compare again. The full steps are in
+  [Retire plan says a provider submission is still live](#retire-plan-says-a-provider-submission-is-still-live-but-you-deleted-the-post-in-post-bridge).
 
 Four things are refused, and the panel says which apply:
 
@@ -1497,6 +1498,38 @@ Retiring a plan never withdraws a provider submission and never unpublishes plat
 Withdraw a scheduled provider post from the reconcile panel first if one is still live; then use
 **Retire plan** to hide the local plan while keeping publication history. Hard-delete is refused
 when any publication row exists.
+
+### Retire plan says a provider submission is still live, but you deleted the post in Post Bridge
+
+Deleting a post in Post Bridge itself does not tell Hybrid Command Center. The delivery keeps saying
+**Accepted, not out yet**, and **Retire plan** refuses the plan until that delivery is released. Do
+these in order, in the post's editor and the Signal page:
+
+1. **Refresh delivery** (optional). It should say Post Bridge has no post with that id and that
+   nothing was changed. This only confirms the cause; it does not release anything.
+2. Scroll to **What Post Bridge is holding** and press **Refresh inventory**. The read has to finish
+   after the post was sent, and it must not list the post.
+3. Back in the editor, press **Compare with provider**. The panel says the post was deleted in Post
+   Bridge and shows a **Release locally** button. The other four actions are replaced by "Post Bridge
+   no longer has this post…".
+4. Press **Release locally**. The delivery changes to **Cancelled**. Nothing is sent to Post Bridge,
+   and one entry is added to the integration activity log.
+5. Press **Retire plan** and confirm. Publication history stays with the retired plan.
+
+If step 3 shows no **Release locally** button, the panel names which check failed:
+
+- **None has been taken yet** — no inventory has been read. Do step 2.
+- **Older than this submission** — the last inventory read happened before the post was sent. Do
+  step 2 again.
+- **Still lists it** — the inventory still shows the post. Refresh the inventory again; if it is
+  still listed, open the post in Post Bridge before doing anything here, because it may not be
+  deleted after all.
+- **The provider could not be read** — Post Bridge refused for another reason, such as a rate limit
+  or an outage. Release is not offered in that case; try again later.
+
+Release locally only changes this app's record of the delivery. It cannot delete or unpublish
+anything in Post Bridge or on a platform. To send the plan again instead of retiring it, publish it
+as a new submission after releasing.
 
 ### The root folder is rejected
 
