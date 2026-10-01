@@ -158,10 +158,19 @@ describe('Command AI assistant settings', () => {
       ready: false,
     };
     await renderSettings();
+    await waitFor(() =>
+      expect(screen.getByLabelText('Assistant API key')).toHaveAttribute(
+        'placeholder',
+        'Stored key ending in 1234',
+      ),
+    );
     fireEvent.click(screen.getByLabelText('Enable Command AI assistant'));
+    expect(screen.getByLabelText('Enable Command AI assistant')).toBeChecked();
     fireEvent.click(screen.getByRole('button', { name: 'Save assistant' }));
     expect(await screen.findByText(/Command AI assistant saved/i)).toBeVisible();
-    expect(screen.getByLabelText('Enable live updates')).toBeDisabled();
+    expect(testState.commandAiAssistantPayload?.assistant.enabled).toBe(true);
+    expect(testState.liveTipsPayload).toEqual({ enabled: true });
+    await waitFor(() => expect(screen.getByLabelText('Enable live updates')).toBeDisabled());
   });
 
   it('lowers the daily token cap before saving assistant settings', async () => {
