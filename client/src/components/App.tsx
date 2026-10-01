@@ -73,6 +73,16 @@ import { TaskDetail } from './TaskDetail';
 import { PageHead } from './Shell';
 import { Nav } from './Shell';
 import { brandStyle } from './ui-shared';
+import {
+  applyTheme,
+  browserStorage,
+  readBrowserPreference,
+  readBrowserThemeMode,
+  saveBrowserThemeMode,
+  systemThemePreference,
+  type ThemeMode,
+  writeBrowserPreference,
+} from '../theme';
 
 export type Modal =
   | { type: 'client'; value?: Client }
@@ -137,10 +147,10 @@ function TopbarStartTask({
   const location = useLocation();
   const navigate = useNavigate();
   const [savedSessionTaskId, setSavedSessionTaskId] = useState<string | null>(
-    () => readTaskTimer(window.localStorage)?.taskId ?? null,
+    () => readTaskTimer(browserStorage())?.taskId ?? null,
   );
   useEffect(() => {
-    const refresh = () => setSavedSessionTaskId(readTaskTimer(window.localStorage)?.taskId ?? null);
+    const refresh = () => setSavedSessionTaskId(readTaskTimer(browserStorage())?.taskId ?? null);
     window.addEventListener('focus', refresh);
     window.addEventListener('storage', refresh);
     return () => {
@@ -254,6 +264,7 @@ function TaskDetailRoute({
 }
 
 export function App() {
+  const [themeMode, setThemeMode] = useState<ThemeMode>(readBrowserThemeMode);
   const [clients, setClients] = useState<Client[]>([]),
     [projects, setProjects] = useState<Project[]>([]),
     [tasks, setTasks] = useState<Task[]>([]),
@@ -267,12 +278,12 @@ export function App() {
     [refreshing, setRefreshing] = useState(false);
   const [notice, setNotice] = useState<{ tone: 'success' | 'error'; text: string } | null>(null),
     [navOpen, setNavOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === '1');
+  const [collapsed, setCollapsed] = useState(() => readBrowserPreference(SIDEBAR_KEY) === '1');
   const [commandAiOpen, setCommandAiOpen] = useState(
-    () => localStorage.getItem(COMMAND_AI_KEY) === '1',
+    () => readBrowserPreference(COMMAND_AI_KEY) === '1',
   );
   const [lastProjectId, setLastProjectId] = useState(
-    () => localStorage.getItem(LAST_PROJECT_KEY) || '',
+    () => readBrowserPreference(LAST_PROJECT_KEY) || '',
   );
   const [branding, setBranding] = useState<Branding>(DEFAULT_BRANDING);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
@@ -289,6 +300,29 @@ export function App() {
   // modal that finished in front of the page does not leave a stale list behind it.
   const [importedAt, setImportedAt] = useState(0);
   const location = useLocation();
+  useEffect(() => {
+    const preference = systemThemePreference();
+    const update = () =>
+      applyTheme(
+        document.documentElement,
+        themeMode,
+        preference?.matches ?? false,
+        document.querySelector<HTMLMetaElement>('meta[name="theme-color"]'),
+      );
+    update();
+    preference?.addEventListener('change', update);
+    return () => preference?.removeEventListener('change', update);
+  }, [themeMode]);
+  const changeThemeMode = (mode: ThemeMode) => {
+    setThemeMode(mode);
+    saveBrowserThemeMode(mode);
+    applyTheme(
+      document.documentElement,
+      mode,
+      systemThemePreference()?.matches ?? false,
+      document.querySelector<HTMLMetaElement>('meta[name="theme-color"]'),
+    );
+  };
   const refresh = useCallback(async () => {
     setRefreshing(true);
     try {
@@ -355,13 +389,13 @@ export function App() {
     setNavOpen(false);
   }, [location.pathname]);
   useEffect(() => {
-    localStorage.setItem(SIDEBAR_KEY, collapsed ? '1' : '0');
+    writeBrowserPreference(SIDEBAR_KEY, collapsed ? '1' : '0');
   }, [collapsed]);
   useEffect(() => {
-    localStorage.setItem(COMMAND_AI_KEY, commandAiOpen ? '1' : '0');
+    writeBrowserPreference(COMMAND_AI_KEY, commandAiOpen ? '1' : '0');
   }, [commandAiOpen]);
   useEffect(() => {
-    localStorage.setItem(LAST_PROJECT_KEY, lastProjectId);
+    writeBrowserPreference(LAST_PROJECT_KEY, lastProjectId);
   }, [lastProjectId]);
   const flash = (text: string, tone: 'success' | 'error' = 'success') => {
     setNotice({ text, tone });
@@ -640,6 +674,8 @@ export function App() {
                   path="/settings"
                   element={
                     <SettingsView
+                      themeMode={themeMode}
+                      onThemeModeChange={changeThemeMode}
                       branding={branding}
                       viewDefaults={viewDefaults}
                       liveTips={liveTips}

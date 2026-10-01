@@ -66,6 +66,7 @@ import {
 } from '../../../shared/command-ai-assistant';
 import { MCP_AGENT_SCOPES, type McpAgentScope } from '../../../shared/mcp-agent-registry';
 import type { CommandAiAssistantBundle } from './CommandAiPanel';
+import { browserStorage, THEME_MODES, type ThemeMode } from '../theme';
 
 const COLOR_LABEL: Record<BrandingColorField, string> = {
   background: 'Sidebar background',
@@ -107,6 +108,8 @@ function readNotificationPermission(): NotificationPermissionState {
 }
 
 export function SettingsView({
+  themeMode,
+  onThemeModeChange,
   branding,
   viewDefaults,
   liveTips,
@@ -121,6 +124,8 @@ export function SettingsView({
   refresh,
   flash,
 }: {
+  themeMode: ThemeMode;
+  onThemeModeChange: (mode: ThemeMode) => void;
   branding: Branding;
   viewDefaults: ViewDefaults;
   liveTips: AgentHubLiveTipsSettings;
@@ -145,7 +150,7 @@ export function SettingsView({
     [pickerBusy, setPickerBusy] = useState(false),
     [driveError, setDriveError] = useState('');
   const [timerSettings, setTimerSettings] = useState<TaskTimerSettings>(() =>
-    readTaskTimerSettings(window.localStorage),
+    readTaskTimerSettings(browserStorage()),
   );
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermissionState>(
     readNotificationPermission,
@@ -162,9 +167,8 @@ export function SettingsView({
   const [assistantBusy, setAssistantBusy] = useState(false);
   const [assistantKeyBusy, setAssistantKeyBusy] = useState(false);
   useEffect(() => {
-    setAssistantForm(commandAiAssistant.assistant);
     setAssistantKeyMeta(commandAiAssistant.key);
-  }, [commandAiAssistant, setAssistantForm]);
+  }, [commandAiAssistant]);
   const load = useCallback(async () => {
     const next = await api<DriveSettingsState>('/settings/drive');
     setState(next);
@@ -629,7 +633,7 @@ export function SettingsView({
                   onChange={(e) => {
                     const next = { ...timerSettings, enabled: e.target.checked };
                     setTimerSettings(next);
-                    writeTaskTimerSettings(window.localStorage, next);
+                    writeTaskTimerSettings(browserStorage(), next);
                   }}
                 />{' '}
                 Enable timer notifications
@@ -642,7 +646,7 @@ export function SettingsView({
                   onChange={(e) => {
                     const next = { ...timerSettings, completion: e.target.checked };
                     setTimerSettings(next);
-                    writeTaskTimerSettings(window.localStorage, next);
+                    writeTaskTimerSettings(browserStorage(), next);
                   }}
                 />{' '}
                 Session completion
@@ -655,7 +659,7 @@ export function SettingsView({
                   onChange={(e) => {
                     const next = { ...timerSettings, unavailable: e.target.checked };
                     setTimerSettings(next);
-                    writeTaskTimerSettings(window.localStorage, next);
+                    writeTaskTimerSettings(browserStorage(), next);
                   }}
                 />{' '}
                 Permission unavailable warnings
@@ -668,7 +672,7 @@ export function SettingsView({
                   onChange={(e) => {
                     const next = { ...timerSettings, sound: e.target.checked };
                     setTimerSettings(next);
-                    writeTaskTimerSettings(window.localStorage, next);
+                    writeTaskTimerSettings(browserStorage(), next);
                   }}
                 />{' '}
                 Sound when supported
@@ -950,6 +954,32 @@ export function SettingsView({
                 </button>
               </div>
             </form>
+          </section>
+          <section className="panel settings-card" aria-labelledby="theme-settings-heading">
+            <div className="section-title">
+              <div>
+                <span className="eyebrow">Appearance</span>
+                <h2 id="theme-settings-heading">Theme</h2>
+              </div>
+            </div>
+            <label>
+              Color theme
+              <select
+                aria-label="Color theme"
+                value={themeMode}
+                onChange={(event) => onThemeModeChange(event.target.value as ThemeMode)}
+              >
+                {THEME_MODES.map((mode) => (
+                  <option key={mode} value={mode}>
+                    {mode === 'system' ? 'System' : mode === 'light' ? 'Light' : 'Dark'}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="field-hint">
+              This preference is saved on this device. System follows your current operating system
+              appearance.
+            </p>
           </section>
           <section className="panel settings-card">
             <div className="settings-icon neutral">
