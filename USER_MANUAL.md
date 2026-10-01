@@ -737,8 +737,8 @@ going out.
 **Retire plan** asks for confirmation and then hides the post from ordinary planner, calendar, and
 queue-health views. Publication history, metrics, and integration events stay. Retiring does **not**
 withdraw a provider submission and does **not** unpublish platform content — use the reconcile
-panel's **Cancel provider post** for a scheduled provider submission. There is no undelete in this
-version. Drafts that have never had a publication row can still be hard-deleted through the API when
+panel's **Cancel provider post** for a scheduled provider submission, or **Release locally** for one
+you already deleted in Post Bridge. There is no undelete in this version. Drafts that have never had a publication row can still be hard-deleted through the API when
 needed; the editor offers Retire plan instead of Delete.
 
 A planning status of **Published** is your own record that the post went out. **Delivery
@@ -916,7 +916,7 @@ has been asked of the provider, and nothing will be until you say so.
 holds, field by field, with the rows that disagree marked. Reading the comparison changes nothing on
 either side.
 
-Four things can then be done, each with its own button and, where it is unavailable, the reason
+Five things can then be done, each with its own button and, where it is unavailable, the reason
 instead:
 
 - **Update provider content** sends the caption, media, accounts, and per-platform content Signal now
@@ -928,6 +928,11 @@ instead:
   deleted here.
 - **Restore from Signal and resubmit** withdraws what the provider holds and sends the post again
   from Signal as a new submission. Use it when the provider's copy is not worth repairing.
+- **Release locally** is for a post you deleted in Post Bridge itself. It marks the submission
+  cancelled in Hybrid Command Center and sends nothing to the provider, so the plan can be retired
+  or sent again. It is offered only when Post Bridge says it has no such post **and** the last
+  **Refresh inventory** under **What Post Bridge is holding**, taken after you sent it, does not list
+  it. If the panel asks you to, press **Refresh inventory** and compare again.
 
 Four things are refused, and the panel says which apply:
 
@@ -944,6 +949,10 @@ Four things are refused, and the panel says which apply:
 
 If the post or the provider changes while the comparison is open, confirming is refused and the
 comparison is taken again, so you are never acting on a difference that has already moved.
+
+If **Refresh delivery** cannot read the provider, it says why under the Delivery section and changes
+nothing. For a post deleted in Post Bridge, it says the post is gone and points you to **Compare with
+provider**.
 
 #### Queue health
 

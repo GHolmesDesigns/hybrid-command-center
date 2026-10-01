@@ -229,6 +229,51 @@ describe('Signal provider reconciliation', () => {
       expect(within(panel).queryByRole('button', { name: label })).toBeNull();
   });
 
+  it('offers Release locally for a post deleted in Post Bridge, with no provider side to show', async () => {
+    const gone =
+      'Post Bridge no longer has this post, so there is nothing there to change or withdraw.';
+    testState.publicationsPayload = [publication()];
+    testState.providerReconcilePayload = comparison({
+      record: undefined,
+      diffs: [],
+      changed: [],
+      warnings: [
+        'Post Bridge has no post provider-1, and the complete inventory read at 2026-10-01T12:24:29.000Z does not list it, so it was deleted in Post Bridge. Release locally marks this submission cancelled here and sends nothing to the provider.',
+      ],
+      actions: [
+        { action: 'UPDATE_CONTENT', available: false, refusals: [gone] },
+        { action: 'UPDATE_SCHEDULE', available: false, refusals: [gone] },
+        { action: 'CANCEL', available: false, refusals: [gone] },
+        { action: 'RESTORE_AND_RESUBMIT', available: false, refusals: [gone] },
+        { action: 'RELEASE_LOCALLY', available: true, refusals: [] },
+      ],
+    });
+    testState.providerApplyPayload = publication({ state: 'CANCELLED' });
+    const delivery = await openEditor();
+
+    fireEvent.click(within(delivery).getByRole('button', { name: 'Compare with provider' }));
+    const panel = await screen.findByRole('region', { name: 'Provider comparison' });
+
+    expect(panel).toHaveTextContent('it was deleted in Post Bridge');
+    // There is no remote record, so there is no table claiming the two sides agree or differ.
+    expect(within(panel).queryByRole('table')).toBeNull();
+    for (const label of [
+      'Update provider content',
+      'Update provider schedule',
+      'Cancel provider post',
+      'Restore from Signal and resubmit',
+    ])
+      expect(within(panel).queryByRole('button', { name: label })).toBeNull();
+    expect(panel).toHaveTextContent(gone);
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'Release locally' }));
+    await waitFor(() => expect(testState.providerApplyRequests).toHaveLength(1));
+    expect(testState.providerApplyRequests[0]).toEqual({
+      action: 'RELEASE_LOCALLY',
+      reconcileHash: 'b'.repeat(64),
+    });
+  });
+
   it('surfaces a refused commit and takes the comparison again', async () => {
     testState.publicationsPayload = [publication({ driftFields: ['caption'] })];
     testState.providerReconcilePayload = comparison();

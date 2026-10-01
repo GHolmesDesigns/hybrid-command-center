@@ -6,6 +6,7 @@ import type { SignalProvider } from '../signal/provider.ts';
 import type {
   ProviderAction,
   ProviderDiffField,
+  ProviderPostMissing,
   ProviderPostRecord,
   ProviderReconcilePreview,
   PublishPreview,
@@ -26,6 +27,7 @@ import {
 import { buildPublishPlan, planHash, publishInstantFor } from './plan.ts';
 import { buildProviderReconcile, providerRecordNeedsWithdrawal } from './reconcile.ts';
 import {
+  providerSaysNotFound,
   PublishMediaUploadError,
   PublishProviderError,
   PUBLISH_RATE_LIMIT_FALLBACK_SECONDS,
@@ -33,6 +35,7 @@ import {
   type PublishRequest,
   type PublishSubmission,
 } from './provider.ts';
+import { readProviderInventoryRecord } from './inventory.ts';
 import { recordSyncHealth } from './sync-health.ts';
 import { toPublication, toTarget, type PublicationRow, type TargetRow } from './rows.ts';
 import { targetRowsFor } from './read.ts';
@@ -849,7 +852,22 @@ export class PublishService {
 
     const providerPostId = current.providerPostId;
     this.assertProviderRoute(current.provider);
-    const result = await this.checked(() => this.provider.check(providerPostId));
+    let result: PublishSubmission;
+    try {
+      result = await this.checked(() => this.provider.check(providerPostId));
+    } catch (error) {
+      // A provider refusal is an answer the person pressing refresh can act on, so it is said here
+      // rather than left to fall through to a bare "something went wrong". Nothing is written: a
+      // check that got no result has nothing to record against the publication.
+      if (!(error instanceof PublishProviderError)) throw error;
+      throw new PublishRequestError(
+        providerSaysNotFound(error)
+          ? `Post Bridge has no post ${providerPostId}: it was deleted in Post Bridge, or never existed there. Nothing was changed here. Compare with provider to release it.`
+          : `The provider could not be read: ${redactSecrets(error.message)} Nothing was changed here.`,
+        409,
+        { cause: error },
+      );
+    }
     const attempts = current.checkAttempts + (automatic ? 1 : 0);
     // The bound, expressed where it happens: an automatic schedule that runs out while the
     // provider still has no answer stops asking and hands the question to a person. Manual
@@ -1055,6 +1073,8 @@ export class PublishService {
         refusals.push(
           'Buffer restore-and-resubmit is declined; cancel and take a fresh confirmation separately.',
         );
+      if (action === 'RELEASE_LOCALLY')
+        refusals.push('Release locally covers Post Bridge posts deleted in Post Bridge only.');
       return { action, available: refusals.length === 0, refusals };
     });
     return {
@@ -1342,6 +1362,14 @@ export class PublishService {
         record: await this.provider.describe(publication.providerPostId),
       });
     } catch (error) {
+      // The provider saying it holds no such post is an answer rather than a failed read. The
+      // comparison weighs it against the stored inventory before it offers anything.
+      if (providerSaysNotFound(error))
+        return buildProviderReconcile({
+          publication,
+          plan,
+          missing: this.providerPostMissing(publication.provider, publication.providerPostId),
+        });
       // A failed read is a preview that explains itself rather than an error page: the panel still
       // has a publication to describe, and *the provider could not be read* is the one thing the
       // user needs to know before pressing anything. Redacted on the way in like every other
@@ -1352,6 +1380,26 @@ export class PublishService {
         recordError: `The provider could not be read: ${redactSecrets((error as Error).message)}`,
       });
     }
+  }
+
+  /**
+   * What the stored inventory says about one provider post: when the last complete read finished,
+   * and whether it listed the id. Stored rows only — no provider call on this path.
+   */
+  private providerPostMissing(provider: string, providerPostId: string): ProviderPostMissing {
+    const { lastRefreshAt } = readProviderInventoryRecord(this.db, provider);
+    const listed = this.db
+      .prepare(
+        'SELECT 1 FROM signal_provider_inventory_posts WHERE provider=? AND provider_post_id=?',
+      )
+      .get(provider, providerPostId);
+    return {
+      providerPostId,
+      inventory: {
+        ...(lastRefreshAt ? { readAt: lastRefreshAt } : {}),
+        listsPost: Boolean(listed),
+      },
+    };
   }
 
   /** The publication row plus the log entry for one withdrawal, in one transaction. */
@@ -1521,6 +1569,17 @@ export class PublishService {
         409,
       );
     const publication = this.get(publicationId) as SignalPublication;
+
+    // The provider holds nothing to act on, which the comparison just re-established from a fresh
+    // read and the inventory. Local only: no provider call, one row and one log entry.
+    if (action === 'RELEASE_LOCALLY') {
+      this.recordProviderCancel(
+        publication,
+        `Released locally: Post Bridge no longer has provider post ${publication.providerPostId}, and the complete inventory read agrees. Nothing was sent to the provider.`,
+      );
+      return this.get(publicationId) as SignalPublication;
+    }
+
     const record = preview.record as ProviderPostRecord;
     const providerPostId = publication.providerPostId as string;
     this.assertProviderRoute(publication.provider);

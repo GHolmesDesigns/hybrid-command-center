@@ -23,6 +23,7 @@ import {
   type ProviderActionOffer,
   type ProviderDiffField,
   type ProviderFieldDiff,
+  type ProviderPostMissing,
   type ProviderPostRecord,
   type ProviderReconcilePreview,
   type PublishPreview,
@@ -158,7 +159,54 @@ export interface ProviderReconcileInput {
   record?: ProviderPostRecord;
   /** Why the record could not be read, already redacted. Present only when `record` is absent. */
   recordError?: string;
+  /**
+   * Present only when the read failed because the provider holds no post with this id. Takes the
+   * place of `recordError`: a post that is gone is an answer, not a failure to get one.
+   */
+  missing?: ProviderPostMissing;
 }
+
+const INVENTORY_INSTRUCTION =
+  'Refresh the provider inventory under What Post Bridge is holding, then compare again.';
+
+/**
+ * Why a post the provider reports as not found cannot be released yet, or nothing when it can.
+ *
+ * The `404` is one fact; this asks for the second. A complete inventory read is the evidence §14
+ * verified for deletion, and it has to postdate the submission — a read from before the post was
+ * sent would not list it either, and saying so would prove nothing.
+ */
+export function providerMissingRefusals(
+  publication: Pick<SignalPublication, 'createdAt'>,
+  missing: ProviderPostMissing,
+): string[] {
+  const { readAt, listsPost } = missing.inventory;
+  const id = missing.providerPostId;
+  if (!readAt)
+    return [
+      `Post Bridge has no post ${id}. This app releases a submission only when a complete inventory read also shows it gone, and none has been taken yet. ${INVENTORY_INSTRUCTION}`,
+    ];
+  if (Date.parse(readAt) <= Date.parse(publication.createdAt))
+    return [
+      `Post Bridge has no post ${id}, but the last complete inventory read (${readAt}) is older than this submission. ${INVENTORY_INSTRUCTION}`,
+    ];
+  if (listsPost)
+    return [
+      `Post Bridge answered that it has no post ${id}, but the last complete inventory read (${readAt}) still lists it. ${INVENTORY_INSTRUCTION} If it is still listed, check the post in Post Bridge before acting here.`,
+    ];
+  return [];
+}
+
+/** The token a release commits against: the publication as it stands and the evidence for it. */
+const releaseHash = (publication: SignalPublication, missing: ProviderPostMissing) =>
+  planHash({
+    action: 'RELEASE_LOCALLY',
+    publicationId: publication.id,
+    publicationState: publication.state,
+    publicationProvider: publication.provider,
+    providerPostId: missing.providerPostId,
+    inventoryReadAt: missing.inventory.readAt ?? null,
+  });
 
 /**
  * Everything the confirmation screen needs, and everything the commit re-derives.
@@ -168,7 +216,7 @@ export interface ProviderReconcileInput {
  * inputs, so an action cannot be shown as available and then permitted on a different basis.
  */
 export function buildProviderReconcile(input: ProviderReconcileInput): ProviderReconcilePreview {
-  const { publication, plan, record, recordError } = input;
+  const { publication, plan, record, recordError, missing } = input;
   const refusals: string[] = [];
   const warnings: string[] = [];
 
@@ -181,7 +229,11 @@ export function buildProviderReconcile(input: ProviderReconcileInput): ProviderR
       `This submission is ${PUBLICATION_STATE_LABEL[publication.state].toLowerCase()}, so the provider is no longer holding it for this app to change.`,
     );
   if (!record)
-    refusals.push(recordError ?? 'The provider could not be read, so no difference can be shown.');
+    refusals.push(
+      ...(missing
+        ? providerMissingRefusals(publication, missing)
+        : [recordError ?? 'The provider could not be read, so no difference can be shown.']),
+    );
 
   const empty: ProviderReconcilePreview = {
     publicationId: publication.id,
@@ -193,7 +245,34 @@ export function buildProviderReconcile(input: ProviderReconcileInput): ProviderR
     warnings,
     refusals,
   };
-  if (refusals.length || !record) return empty;
+  if (refusals.length) return empty;
+
+  /**
+   * The provider holds no post with this id and a complete inventory read agrees. Every action that
+   * would reach the provider is refused — there is nothing there to change or withdraw — and the one
+   * that stays local is offered. No diff is shown, because there is no remote side to show.
+   */
+  if (!record) {
+    const evidence = missing as ProviderPostMissing;
+    const gone =
+      'Post Bridge no longer has this post, so there is nothing there to change or withdraw.';
+    return {
+      publicationId: publication.id,
+      postId: publication.postId,
+      reconcileHash: releaseHash(publication, evidence),
+      diffs: [],
+      changed: [],
+      actions: PROVIDER_ACTIONS.map((action) =>
+        action === 'RELEASE_LOCALLY'
+          ? { action, available: true, refusals: [] }
+          : { action, available: false, refusals: [gone] },
+      ),
+      warnings: [
+        `Post Bridge has no post ${evidence.providerPostId}, and the complete inventory read at ${evidence.inventory.readAt} does not list it, so it was deleted in Post Bridge. Release locally marks this submission cancelled here and sends nothing to the provider.`,
+      ],
+      refusals: [],
+    };
+  }
 
   // The plan's own refusals are the reason an update cannot be assembled, and they are worth
   // repeating here rather than collapsing to "no request": a caption over X's limit should say so
@@ -279,6 +358,16 @@ export function buildProviderReconcile(input: ProviderReconcileInput): ProviderR
   };
 
   const offers: ProviderActionOffer[] = PROVIDER_ACTIONS.map((action) => {
+    // Ahead of `mutability`, whose reasons are about writing to a record: what refuses a local
+    // release is that the record is there at all.
+    if (action === 'RELEASE_LOCALLY')
+      return {
+        action,
+        available: false,
+        refusals: [
+          'Post Bridge still has this post, so it is not released here. Release locally is only for a post deleted in Post Bridge.',
+        ],
+      };
     const reasons = mutability(action);
     switch (action) {
       case 'UPDATE_CONTENT':

@@ -3,10 +3,16 @@ import { createDb, type Db } from '../db.ts';
 import { LocalSignalProvider } from '../signal/read.ts';
 import { listIntegrationEvents } from '../integration-log.ts';
 import { buildPublishPlan, preflightPlatform, publishInstantFor } from './plan.ts';
-import { MockBufferWriteProvider, MockPublishProvider } from './mock-provider.ts';
-import { PublishProviderError } from './provider.ts';
+import {
+  MockBufferWriteProvider,
+  MockProviderInventoryProvider,
+  MockPublishProvider,
+} from './mock-provider.ts';
+import { ProviderInventoryService } from './inventory.ts';
+import { providerSaysNotFound, PublishProviderError } from './provider.ts';
+import { PostBridgeProvider } from './post-bridge.ts';
 import { UnavailablePublishProvider, type PublishRequest } from './provider.ts';
-import { PublishService } from './service.ts';
+import { PublishRequestError, PublishService } from './service.ts';
 import {
   deliveryModeFor,
   deliveryModeForCapability,
@@ -42,7 +48,13 @@ import {
   type PublishVariantBase,
   type PublishVariantRecord,
 } from '../../shared/publish-variants.ts';
-import { replacePostVariants, deletePost, getPost } from '../signal/service.ts';
+import {
+  replacePostVariants,
+  deletePost,
+  getPost,
+  retirePost,
+  SignalPostProtectedError,
+} from '../signal/service.ts';
 import { SIGNAL_CHANNELS, type SignalChannel, type SignalPost } from '../../shared/signal.ts';
 import {
   publishPlatformFor,
@@ -50,7 +62,7 @@ import {
   type PublishPlatformCapability,
 } from '../../shared/publish-capabilities.ts';
 import request from 'supertest';
-import { createApp } from '../app.ts';
+import { createApp, SERVER_ERROR_MESSAGE } from '../app.ts';
 import { seedSignalPost } from '../signal/test-fixture.ts';
 import { MockDriveMediaProvider } from '../drive/mock-provider.ts';
 import type { SignalPostMedia } from '../../shared/signal-media.ts';
@@ -193,6 +205,31 @@ describe('provider boundary', () => {
         targets: [],
       }),
     ).rejects.toThrow('Publishing is off.');
+  });
+
+  /**
+   * The seam every deleted-post case above stands on (#711). The mock throws a `404` with its
+   * status by construction, so only the real adapter can show that a refusal from Post Bridge
+   * carries one — without it, production would still read a deleted post as "could not be read".
+   */
+  it('carries the HTTP status of a Post Bridge refusal, and only a 404 reads as not found', async () => {
+    const original = globalThis.fetch;
+    let status = 404;
+    globalThis.fetch = async () => new Response('{}', { status, headers: { 'Retry-After': '30' } });
+    try {
+      const provider = new PostBridgeProvider('test-key', 'https://post-bridge.invalid/v1');
+      const gone = (await provider.describe('deleted-in-post-bridge').catch((e) => e)) as Error;
+      expect(gone).toBeInstanceOf(PublishProviderError);
+      expect((gone as PublishProviderError).status).toBe(404);
+      expect(providerSaysNotFound(gone)).toBe(true);
+
+      status = 429;
+      const limited = (await provider.check('any').catch((e) => e)) as PublishProviderError;
+      expect(limited).toMatchObject({ status: 429, rateLimited: true, retryAfterSeconds: 30 });
+      expect(providerSaysNotFound(limited)).toBe(false);
+    } finally {
+      globalThis.fetch = original;
+    }
   });
 });
 
@@ -2220,6 +2257,225 @@ describe('a post the provider is already holding', () => {
   });
 });
 
+/**
+ * A post deleted in Post Bridge itself (#711).
+ *
+ * Before this, nothing could move such a publication out of flight: Refresh delivery answered a
+ * bare server error, the comparison refused every action, and Retire plan refused the plan for good.
+ * Release locally is the way out, and it needs two facts that agree — the provider's `404` and a
+ * complete inventory read, taken after the submission, that does not list the post.
+ */
+describe('a provider post deleted in Post Bridge', () => {
+  const SUBMITTED_AT = '2026-01-01T00:00:00.000Z';
+  const BEFORE_SUBMISSION = '2025-12-31T00:00:00.000Z';
+  const AFTER_SUBMISSION = '2026-01-02T00:00:00.000Z';
+  const LATER = '2026-01-03T00:00:00.000Z';
+
+  const serviceFor = (provider: MockPublishProvider) =>
+    new PublishService(
+      db,
+      new LocalSignalProvider(db),
+      provider,
+      'America/New_York',
+      () => new Date(SUBMITTED_AT),
+    );
+
+  /** Submitted from Signal, then — unless `deleted` is false — deleted in Post Bridge. */
+  const submitted = async (deleted = true) => {
+    const post = add({ channels: ['x'] });
+    const provider = new MockPublishProvider(targets);
+    const service = serviceFor(provider);
+    const plan = await service.preview(post.id);
+    const publication = await service.submit(post.id, plan.planHash);
+    provider.deleted = deleted;
+    return { post, provider, service, publication };
+  };
+
+  /** A complete inventory read that finished at `at` and listed exactly `ids`. */
+  const readInventory = async (at: string, ids: string[] = []) => {
+    const inventory = new MockProviderInventoryProvider();
+    inventory.hold(
+      ids.map((providerPostId) => ({
+        providerPostId,
+        state: 'SCHEDULED' as const,
+        scheduledInstant: null,
+        captionExcerpt: 'A clear campaign post',
+        accountIds: [1],
+      })),
+    );
+    await new ProviderInventoryService(db, inventory, () => new Date(at)).refresh();
+  };
+
+  const publicationRow = (id: string) =>
+    db.prepare('SELECT * FROM signal_publications WHERE id=?').get(id);
+  const logged = (operation: string) =>
+    listIntegrationEvents(db, { limit: 50 }).filter((row) => row.operation === operation);
+
+  it('answers Refresh delivery with the reason, and writes nothing', async () => {
+    const { provider, service, publication } = await submitted();
+    const before = publicationRow(publication.id);
+    const eventsBefore = listIntegrationEvents(db, { limit: 50 }).length;
+
+    const error = (await service.reconcile(publication.id).catch((caught) => caught)) as Error;
+
+    // A refusal the route answers with its own status and words, not one that falls through to
+    // "something went wrong" — the production symptom this card was opened for.
+    expect(error).toBeInstanceOf(PublishRequestError);
+    expect((error as PublishRequestError).status).toBe(409);
+    expect(error.message).toMatch(
+      /has no post mock-publication: it was deleted in Post Bridge.*Compare with provider to release it/,
+    );
+    expect(provider.checks.at(-1)).toBe(publication.providerPostId);
+    // A check that got no result records nothing against the publication, not even `checked_at`.
+    expect(publicationRow(publication.id)).toEqual(before);
+    expect(listIntegrationEvents(db, { limit: 50 })).toHaveLength(eventsBefore);
+  });
+
+  it('says what any other refusal on Refresh delivery was, without a credential', async () => {
+    const { provider, service, publication } = await submitted(false);
+    provider.checkFailure = new PublishProviderError(
+      'Post Bridge refused: Authorization: Bearer pb_live_abcdef123456',
+      false,
+      { status: 500 },
+    );
+
+    const error = (await service.reconcile(publication.id).catch((caught) => caught)) as Error;
+
+    expect(error).toBeInstanceOf(PublishRequestError);
+    expect(error.message).toMatch(/^The provider could not be read: .*\[redacted\]/);
+    expect(error.message).not.toMatch(/pb_live_abcdef123456/);
+    // Only a 404 is the post being gone. A 500 must not say so.
+    expect(error.message).not.toMatch(/deleted in Post Bridge/);
+  });
+
+  it('holds the release back until a complete inventory read after the submission agrees', async () => {
+    const { provider, service, publication } = await submitted();
+    const providerPostId = publication.providerPostId as string;
+    const compare = async () => {
+      const preview = await service.providerPreview(publication.id);
+      return { preview, release: providerActionOffer(preview, 'RELEASE_LOCALLY') };
+    };
+
+    // The 404 alone: no inventory has ever been read.
+    let { preview, release } = await compare();
+    expect(release?.available).toBe(false);
+    expect(preview.reconcileHash).toBe('');
+    expect(preview.refusals.join(' ')).toMatch(/none has been taken yet/);
+
+    // A read from before the post was sent would not have listed it either way.
+    await readInventory(BEFORE_SUBMISSION);
+    ({ preview, release } = await compare());
+    expect(release?.available).toBe(false);
+    expect(preview.refusals.join(' ')).toMatch(/older than this submission/);
+
+    // A later read that still lists it contradicts the 404.
+    await readInventory(AFTER_SUBMISSION, [providerPostId]);
+    ({ preview, release } = await compare());
+    expect(release?.available).toBe(false);
+    expect(preview.refusals.join(' ')).toMatch(/still lists it/);
+
+    // A later read without it: both facts agree, and only the local action is offered.
+    await readInventory(LATER);
+    ({ preview, release } = await compare());
+    expect(preview.refusals).toEqual([]);
+    expect(release).toEqual({ action: 'RELEASE_LOCALLY', available: true, refusals: [] });
+    expect(preview.reconcileHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(preview.warnings.join(' ')).toMatch(/deleted in Post Bridge/);
+    for (const action of PROVIDER_ACTIONS.filter((candidate) => candidate !== 'RELEASE_LOCALLY')) {
+      expect(providerActionOffer(preview, action)?.available).toBe(false);
+      expect(providerActionOffer(preview, action)?.refusals.join(' ')).toMatch(
+        /no longer has this post/,
+      );
+    }
+    // Comparing is reading. Nothing was written to the provider on any of the four.
+    expect(provider.updates).toEqual([]);
+    expect(provider.cancels).toEqual([]);
+  });
+
+  it('never offers a release when the read failed for any reason but a 404', async () => {
+    const { provider, service, publication } = await submitted(false);
+    provider.describeFailure = new PublishProviderError(
+      'Post Bridge refused the request (500).',
+      false,
+      { status: 500 },
+    );
+    // The inventory would agree, which is exactly why the provider's own answer has to be a 404.
+    await readInventory(AFTER_SUBMISSION);
+
+    const preview = await service.providerPreview(publication.id);
+
+    expect(providerActionOffer(preview, 'RELEASE_LOCALLY')?.available).toBe(false);
+    expect(preview.refusals.join(' ')).toMatch(/could not be read: Post Bridge refused/);
+    expect(preview.reconcileHash).toBe('');
+  });
+
+  it('releases locally without contacting the provider, and the plan can then retire', async () => {
+    const { post, provider, service, publication } = await submitted();
+    await readInventory(AFTER_SUBMISSION);
+    // The production symptom: the plan cannot be retired while the publication is in flight.
+    expect(() => retirePost(db, post.id)).toThrow(SignalPostProtectedError);
+    const preview = await service.providerPreview(publication.id);
+
+    const released = await service.applyProviderAction(
+      publication.id,
+      'RELEASE_LOCALLY',
+      preview.reconcileHash,
+    );
+
+    expect(released.state).toBe('CANCELLED');
+    expect(provider.cancels).toEqual([]);
+    expect(provider.updates).toEqual([]);
+    expect(provider.submissions).toHaveLength(1);
+    const cancellations = logged('signal.provider-cancel');
+    expect(cancellations).toHaveLength(1);
+    expect(cancellations[0]).toMatchObject({ outcome: 'SUCCESS', correlationId: publication.id });
+    expect(cancellations[0]?.summary).toMatch(/Released locally.*Nothing was sent to the provider/);
+    // Releasing touches the publication alone; retiring is still the person's own step.
+    expect(getPost(db, post.id)?.lifecycle).toBe('ACTIVE');
+
+    expect(retirePost(db, post.id).lifecycle).toBe('RETIRED');
+    // And the delivery history survives the retirement.
+    expect(service.list(post.id).map((row) => [row.id, row.state])).toEqual([
+      [publication.id, 'CANCELLED'],
+    ]);
+  });
+
+  it('refuses a release once the post is back at the provider', async () => {
+    const { provider, service, publication } = await submitted();
+    await readInventory(AFTER_SUBMISSION);
+    const preview = await service.providerPreview(publication.id);
+    expect(providerActionOffer(preview, 'RELEASE_LOCALLY')?.available).toBe(true);
+    // Between comparing and confirming, the provider answers for the id again.
+    provider.deleted = false;
+
+    await expect(
+      service.applyProviderAction(publication.id, 'RELEASE_LOCALLY', preview.reconcileHash),
+    ).rejects.toThrow(/changed after this comparison was taken/);
+
+    expect(service.get(publication.id)?.state).toBe('SUBMITTED');
+    expect(logged('signal.provider-cancel')).toEqual([]);
+  });
+
+  it('offers no release while the provider still holds the post, whatever the inventory says', async () => {
+    const { provider, service, publication } = await submitted(false);
+    await readInventory(AFTER_SUBMISSION);
+
+    const preview = await service.providerPreview(publication.id);
+
+    expect(preview.record?.state).toBe('SCHEDULED');
+    expect(providerActionOffer(preview, 'RELEASE_LOCALLY')?.available).toBe(false);
+    expect(providerActionOffer(preview, 'RELEASE_LOCALLY')?.refusals.join(' ')).toMatch(
+      /still has this post/,
+    );
+    // A token valid for the other actions does not buy a release.
+    await expect(
+      service.applyProviderAction(publication.id, 'RELEASE_LOCALLY', preview.reconcileHash),
+    ).rejects.toThrow(/still has this post/);
+    expect(service.get(publication.id)?.state).toBe('SUBMITTED');
+    expect(provider.cancels).toEqual([]);
+  });
+});
+
 describe('the provider reconciliation over HTTP', () => {
   // Same wall-clock headroom as above: several sequential requests through a real Express app,
   // which can brush the 5s default under coverage instrumentation plus full-suite contention.
@@ -2272,6 +2528,55 @@ describe('the provider reconciliation over HTTP', () => {
     expect(applied.status).toBe(200);
     expect(applied.body.sentCaption).toBe('Rewritten in Signal');
     expect(applied.body.driftFields).toBeUndefined();
+  }, 15000);
+
+  it('takes a post deleted in Post Bridge from a readable refusal to a retired plan', async () => {
+    const provider = new MockPublishProvider(targets);
+    const app = createApp(db, {
+      publish: provider,
+      publishTimezone: 'America/New_York',
+      now: () => new Date('2026-01-01'),
+    });
+    const post = add({ channels: ['x'] });
+    const planned = await request(app).post(`/api/signal/posts/${post.id}/publish/preview`).send();
+    const submission = await request(app)
+      .post(`/api/signal/posts/${post.id}/publish`)
+      .send({ planHash: planned.body.planHash });
+    expect(submission.status).toBe(201);
+    const publicationId = submission.body.id as string;
+    provider.deleted = true;
+
+    // Refresh delivery: a 409 that says what happened, where production answered a bare 500.
+    const refreshed = await request(app)
+      .post(`/api/signal/publications/${publicationId}/reconcile`)
+      .send({ automatic: false });
+    expect(refreshed.status).toBe(409);
+    expect(refreshed.body.error).not.toBe(SERVER_ERROR_MESSAGE);
+    expect(refreshed.body.error).toMatch(/deleted in Post Bridge/);
+
+    // The person refreshes the inventory, which no longer lists the post.
+    const inventory = new MockProviderInventoryProvider();
+    inventory.hold([]);
+    await new ProviderInventoryService(
+      db,
+      inventory,
+      () => new Date('2026-01-02T00:00:00.000Z'),
+    ).refresh();
+
+    const preview = await request(app)
+      .post(`/api/signal/publications/${publicationId}/provider/preview`)
+      .send();
+    expect(preview.status).toBe(200);
+    const released = await request(app)
+      .post(`/api/signal/publications/${publicationId}/provider/apply`)
+      .send({ action: 'RELEASE_LOCALLY', reconcileHash: preview.body.reconcileHash });
+    expect(released.status).toBe(200);
+    expect(released.body.state).toBe('CANCELLED');
+
+    const retired = await request(app).post(`/api/signal/posts/${post.id}/retire`).send();
+    expect(retired.status).toBe(200);
+    expect(retired.body.lifecycle).toBe('RETIRED');
+    expect(provider.cancels).toEqual([]);
   }, 15000);
 
   it('refuses an action the boundary does not know', async () => {
@@ -2841,6 +3146,8 @@ describe('Buffer confirmed publishing', () => {
     const first = listed[0] as (typeof listed)[number];
     const content = await service.bufferTargetPreview(publication.id, first.id, listed);
     expect(providerActionOffer(content, 'UPDATE_CONTENT')?.available).toBe(true);
+    // Release locally is the Post Bridge path for a post deleted there; a Buffer target never has it.
+    expect(providerActionOffer(content, 'RELEASE_LOCALLY')?.available).toBe(false);
     await service.applyBufferTargetAction(
       publication.id,
       first.id,
