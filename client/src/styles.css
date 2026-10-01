@@ -6705,7 +6705,8 @@ button.tag-chip.toggle.active {
   font: 700 15px Manrope;
 }
 .command-ai-brand svg {
-  width: 18px;
+  width: 20px;
+  height: 20px;
   color: var(--accent);
 }
 .command-ai-actions {
@@ -6872,7 +6873,12 @@ button.tag-chip.toggle.active {
   place-items: center;
 }
 .command-ai-fab svg {
-  width: 22px;
+  width: 24px;
+  height: 24px;
+}
+.command-ai-top-toggle .command-ai-glyph {
+  width: 16px;
+  height: 16px;
 }
 .command-ai-fab:hover {
   transform: translateY(-1px);

@@ -12,6 +12,7 @@ import {
   Circle,
   Clock3,
   Copy,
+  FilePlus2,
   Plus,
   Paperclip,
   RefreshCw,
@@ -2542,7 +2543,7 @@ export function SignalView({ viewDefaults }: { viewDefaults: ViewDefaults }) {
             onClick={() => openCreate(null)}
             disabled={creating !== null && creating.date === null}
           >
-            <Plus /> Add post
+            <FilePlus2 aria-hidden="true" /> Add post
           </button>
           {!loading && queue.length === 0 ? (
             <Empty compact title="Queue clear" body="New ideas without a date will wait here." />

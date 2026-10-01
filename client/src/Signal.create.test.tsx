@@ -69,6 +69,10 @@ describe('Signal Add Post entry points', () => {
     const router = await openSignal('/signal?month=2026-09');
 
     const [, queueAdd] = screen.getAllByRole('button', { name: 'Add post' });
+    expect(queueAdd!.querySelector('svg.lucide-file-plus-2')).toHaveAttribute(
+      'aria-hidden',
+      'true',
+    );
     fireEvent.click(queueAdd!);
 
     const editor = await screen.findByRole('dialog');
@@ -81,7 +85,12 @@ describe('Signal Add Post entry points', () => {
     testState.signalPostsPayload = [];
     const router = await openSignal('/signal?month=2026-09');
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Add post' })[0]!);
+    const topbarAdd = screen.getAllByRole('button', { name: 'Add post' })[0]!;
+    expect(topbarAdd.querySelector('svg.lucide-file-plus-2')).toHaveAttribute(
+      'aria-hidden',
+      'true',
+    );
+    fireEvent.click(topbarAdd);
 
     const editor = await screen.findByRole('dialog');
     expect(within(editor).getByLabelText('Date')).toHaveValue('');

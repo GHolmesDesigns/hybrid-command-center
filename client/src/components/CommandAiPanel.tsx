@@ -46,6 +46,7 @@ import { formatDateTime } from './formatting';
 import { useMentionHandoffCompose } from './useMentionHandoffCompose';
 import { MentionHandoffPreview } from './MentionHandoffCompose';
 import { drawerSelectionIssueMessage } from './conversationSelectionUi';
+import { CommandAiGlyph } from './CommandAiGlyph';
 import { useCommandAiPageContext } from '../useCommandAiPageContext';
 import type { BreadcrumbData } from './breadcrumbs';
 
@@ -94,7 +95,7 @@ export function CommandAiFab({ onClick, open }: { onClick: () => void; open: boo
       aria-label="Open Command AI"
       title="Command AI"
     >
-      <Sparkles aria-hidden="true" />
+      <CommandAiGlyph />
     </button>
   );
 }
@@ -655,7 +656,7 @@ export function CommandAiPanel({
     <aside className="command-ai-panel" aria-label="Command AI">
       <header className="command-ai-head">
         <div className="command-ai-brand">
-          <Sparkles aria-hidden="true" />
+          <CommandAiGlyph />
           <strong>Command AI</strong>
         </div>
         <div className="command-ai-actions">
@@ -984,7 +985,7 @@ export function CommandAiTopbarToggle({ onClick, open }: { onClick: () => void; 
       onClick={onClick}
       aria-pressed={open}
     >
-      <MessageSquare aria-hidden="true" /> Command AI
+      <CommandAiGlyph /> Command AI
     </button>
   );
 }

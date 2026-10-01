@@ -142,6 +142,12 @@ describe('CommandAiPanel', () => {
     });
 
     renderPanel(<CommandAiPanel open onClose={() => undefined} />);
+    const headerGlyph = screen
+      .getByRole('complementary', { name: 'Command AI' })
+      .querySelector('.command-ai-brand .command-ai-glyph');
+    expect(headerGlyph).toHaveAttribute('viewBox', '0 0 24 24');
+    expect(headerGlyph).toHaveAttribute('stroke', 'currentColor');
+    expect(headerGlyph).toHaveAttribute('aria-hidden', 'true');
 
     fireEvent.change(screen.getByLabelText('Command AI message'), {
       target: { value: 'Queue health question' },
@@ -162,7 +168,9 @@ describe('CommandAiPanel', () => {
 
   it('shows the floating opener when the panel is collapsed', () => {
     render(<CommandAiFab open={false} onClick={() => undefined} />);
-    expect(screen.getByRole('button', { name: 'Open Command AI' })).toBeVisible();
+    const opener = screen.getByRole('button', { name: 'Open Command AI' });
+    expect(opener).toBeVisible();
+    expect(opener.querySelector('.command-ai-glyph')).toHaveAttribute('stroke', 'currentColor');
   });
 
   it('lists history and returns to a saved thread', async () => {
@@ -290,7 +298,9 @@ describe('CommandAiPanel', () => {
   it('renders the topbar toggle in active state', () => {
     const onClick = vi.fn();
     render(<CommandAiTopbarToggle open onClick={onClick} />);
-    fireEvent.click(screen.getByRole('button', { name: /Command AI/i }));
+    const toggle = screen.getByRole('button', { name: 'Command AI' });
+    expect(toggle.querySelector('.command-ai-glyph')).toHaveAttribute('stroke', 'currentColor');
+    fireEvent.click(toggle);
     expect(onClick).toHaveBeenCalledTimes(1);
   });
 

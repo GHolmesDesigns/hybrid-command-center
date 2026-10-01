@@ -1,5 +1,14 @@
 # Changelog
 
+## [7.0.3] - 2026-10-01
+
+## Changed
+
+- Aligned the Add post actions with a document-plus icon and gave the Command AI entry points one consistent glyph.
+
+## Breaking changes
+
+None.
 ## [7.0.2] - 2026-09-30
 
 ## Added

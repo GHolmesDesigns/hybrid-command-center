@@ -16,6 +16,7 @@ import {
   CalendarDays,
   CheckCircle2,
   CircleAlert,
+  FilePlus2,
   FileText,
   FolderKanban,
   LayoutDashboard,
@@ -117,7 +118,7 @@ function TopbarAddPost() {
   };
   return (
     <button className="top-action" type="button" onClick={open}>
-      <Plus /> Add post
+      <FilePlus2 aria-hidden="true" /> Add post
     </button>
   );
 }
