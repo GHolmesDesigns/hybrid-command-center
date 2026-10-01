@@ -3409,6 +3409,25 @@ npm run cutover:rehearse -- --plan</code></pre>
                     </td>
                   </tr>
                   <tr>
+                    <td>
+                      <strong>Retire plan</strong> says a provider submission is still live, but you
+                      deleted the post in Post Bridge
+                    </td>
+                    <td>
+                      Deleting a post in Post Bridge does not tell this app, so the delivery still
+                      reads <em>Accepted, not out yet</em>. In order: press
+                      <strong>Refresh inventory</strong> under
+                      <strong>What Post Bridge is holding</strong>; open the post and press
+                      <strong>Compare with provider</strong>; press
+                      <strong>Release locally</strong>, which marks the delivery
+                      <em>Cancelled</em> and sends nothing to Post Bridge; then press
+                      <strong>Retire plan</strong>. If no <strong>Release locally</strong> button
+                      appears, the panel names the check that failed &mdash; usually an inventory
+                      read that is missing, older than the post, or still listing it. Refresh the
+                      inventory and compare again.
+                    </td>
+                  </tr>
+                  <tr>
                     <td>Something not on this list</td>
                     <td>
                       Copy the whole message from the terminal, note what you did immediately

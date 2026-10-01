@@ -937,7 +937,7 @@ export function retirePost(db: Db, postId: string): SignalPost {
     .get(postId);
   if (inFlight) {
     throw new SignalPostProtectedError(
-      'A provider submission is still live for this plan. Withdraw or reconcile it first, then retire. Retiring does not cancel a provider post and does not unpublish platform content.',
+      'A provider submission is still live for this plan. Withdraw or reconcile it first, then retire. If you deleted the post in Post Bridge itself, refresh the provider inventory, then use Compare with provider and Release locally. Retiring does not cancel a provider post and does not unpublish platform content.',
     );
   }
   const timestamp = now();
