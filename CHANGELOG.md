@@ -1,5 +1,15 @@
 # Changelog
 
+## [7.0.6] - 2026-10-01
+
+### Fixed
+
+- A Signal plan whose Post Bridge post was deleted in Post Bridge itself can now be released and retired. **Compare with provider** offers **Release locally** when Post Bridge says it has no such post and the last **Refresh inventory**, taken after the post was sent, does not list it. Releasing marks the submission cancelled in Hybrid Command Center, sends nothing to the provider, and records one entry in the integration log. **Retire plan** then works.
+- **Refresh delivery** no longer answers "Something went wrong on the server" when Post Bridge refuses the check. A post deleted in Post Bridge is named as gone with a pointer to **Compare with provider**, and any other refusal is shown with its reason, credentials redacted. A refused check still changes nothing.
+
+### Breaking changes
+
+None.
 ## [7.0.5] - 2026-10-01
 
 ## Changed

@@ -686,11 +686,22 @@ export const providerRecordIsMutable = (state: ProviderPostState): boolean =>
 export const providerRecordIsPublished = (state: ProviderPostState): boolean =>
   state === 'PUBLISHED';
 
+/**
+ * What may be done about a submission the provider was holding.
+ *
+ * `RELEASE_LOCALLY` is the one action that never reaches the provider. It exists for a post that was
+ * deleted in Post Bridge itself: there is nothing left to update or withdraw, and without it the
+ * publication stays in flight for ever and the plan can never be retired. It is offered only on two
+ * independent facts — the provider answering *not found* for this id, and a complete inventory read
+ * taken after the submission that does not list it — so a single odd `404` cannot release a post
+ * that is still going out (`docs/published-deletion-decision.md` §3.1).
+ */
 export const PROVIDER_ACTIONS = [
   'UPDATE_CONTENT',
   'UPDATE_SCHEDULE',
   'CANCEL',
   'RESTORE_AND_RESUBMIT',
+  'RELEASE_LOCALLY',
 ] as const;
 export type ProviderAction = (typeof PROVIDER_ACTIONS)[number];
 
@@ -699,6 +710,7 @@ export const PROVIDER_ACTION_LABEL: Record<ProviderAction, string> = {
   UPDATE_SCHEDULE: 'Update provider schedule',
   CANCEL: 'Cancel provider post',
   RESTORE_AND_RESUBMIT: 'Restore from Signal and resubmit',
+  RELEASE_LOCALLY: 'Release locally',
 };
 
 export const PROVIDER_ACTION_DESCRIPTION: Record<ProviderAction, string> = {
@@ -709,7 +721,22 @@ export const PROVIDER_ACTION_DESCRIPTION: Record<ProviderAction, string> = {
   CANCEL: 'Withdraws the post from the provider. Signal keeps the plan; nothing is deleted here.',
   RESTORE_AND_RESUBMIT:
     'Withdraws what the provider holds and sends this post again from Signal as a new submission.',
+  RELEASE_LOCALLY:
+    'For a post deleted in Post Bridge itself. Marks this submission cancelled here without contacting the provider, so the plan can be retired or sent again. Signal keeps the plan and its delivery history.',
 };
+
+/**
+ * The evidence that the provider no longer holds a post, gathered by the service and judged by the
+ * comparison.
+ *
+ * Present only when the provider answered *not found* for the publication's provider post id. The
+ * inventory half is the stored result of the last complete read (`server/publish/inventory.ts`):
+ * when it finished, and whether it listed this id. A read that never happened has no `readAt`.
+ */
+export interface ProviderPostMissing {
+  providerPostId: string;
+  inventory: { readAt?: string; listsPost: boolean };
+}
 
 /**
  * The fields a provider record and a Signal plan can disagree about.

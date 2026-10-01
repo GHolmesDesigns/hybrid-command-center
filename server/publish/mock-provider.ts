@@ -38,6 +38,10 @@ import { BufferWriteError } from './buffer/write-provider.ts';
  * say something different. `record` is that memory, and `updates`/`cancels` are the call logs a
  * test asserts against when it needs to prove that nothing remote happened.
  */
+/** Post Bridge's answer for an id it holds no post under, in the adapter's own words. */
+const notFound = () =>
+  new PublishProviderError('Post Bridge refused the request (404).', false, { status: 404 });
+
 export class MockPublishProvider implements PublishProvider {
   readonly available = true;
   readonly submissions: PublishRequest[] = [];
@@ -72,6 +76,14 @@ export class MockPublishProvider implements PublishProvider {
   cancelFailure?: Error;
   /** Raised by `describe`, so "the provider could not be read" is a testable preview. */
   describeFailure?: Error;
+  /** Raised by `check`, so a refused delivery refresh is a testable answer. */
+  checkFailure?: Error;
+  /**
+   * The post was deleted in Post Bridge itself. Both reads by id then answer `404`, as the vendor
+   * did on production (`docs/published-deletion-decision.md` §3.1), so a case states the one fact
+   * rather than wiring the same refusal into two hooks.
+   */
+  deleted = false;
   /**
    * What the provider is holding. A test that never touches it gets a scheduled post matching the
    * default submission, which is the case the reconciliation panel exists to report *no difference*
@@ -126,10 +138,13 @@ export class MockPublishProvider implements PublishProvider {
   }
   async check(providerPostId: string) {
     this.checks.push(providerPostId);
+    if (this.deleted) throw notFound();
+    if (this.checkFailure) throw this.checkFailure;
     return this.checkResult ?? this.result;
   }
   async describe(providerPostId: string) {
     this.describes.push(providerPostId);
+    if (this.deleted) throw notFound();
     if (this.describeFailure) throw this.describeFailure;
     return { ...this.record, providerPostId };
   }

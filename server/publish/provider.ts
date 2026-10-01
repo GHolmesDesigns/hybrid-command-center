@@ -147,19 +147,31 @@ export class PublishProviderError extends Error {
   readonly rateLimited: boolean;
   /** How long the provider asked us to wait, in seconds, where it said. */
   readonly retryAfterSeconds?: number;
+  /**
+   * The HTTP status of a refusal, where the provider answered with one.
+   *
+   * Absent on a request that got no answer at all. Read by exactly one rule today: a `404` on
+   * `GET /v1/posts/{id}` is the provider saying it holds no post with that id, which is the first of
+   * the two facts **Release locally** needs (`docs/published-deletion-decision.md` §3.1).
+   */
+  readonly status?: number;
   constructor(
     message: string,
     ambiguous = false,
-    rateLimit: { rateLimited?: boolean; retryAfterSeconds?: number } = {},
+    details: { rateLimited?: boolean; retryAfterSeconds?: number; status?: number } = {},
   ) {
     super(message);
     this.name = 'PublishProviderError';
     this.ambiguous = ambiguous;
-    this.rateLimited = rateLimit.rateLimited ?? false;
-    if (rateLimit.retryAfterSeconds !== undefined)
-      this.retryAfterSeconds = rateLimit.retryAfterSeconds;
+    this.rateLimited = details.rateLimited ?? false;
+    if (details.retryAfterSeconds !== undefined) this.retryAfterSeconds = details.retryAfterSeconds;
+    if (details.status !== undefined) this.status = details.status;
   }
 }
+
+/** Whether this is the provider saying it holds no post with the id it was asked about. */
+export const providerSaysNotFound = (error: unknown): boolean =>
+  error instanceof PublishProviderError && error.status === 404;
 
 /** Upload failed after the provider had already reserved an ephemeral asset id. */
 export class PublishMediaUploadError extends PublishProviderError {

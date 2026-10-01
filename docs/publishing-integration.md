@@ -970,7 +970,7 @@ CREATE INDEX IF NOT EXISTS idx_signal_publications_post ON signal_publications(p
 
 ---
 
-### 7.2 The provider update path, and the four actions
+### 7.2 The provider update path, and the five actions
 
 **The question this section exists to settle:** the interface was `listTargets`, `submit`, `check`,
 and `cancel`. Nothing in the earlier sources established that Post Bridge had an update path at all,
@@ -1011,7 +1011,7 @@ user gets a sentence instead of a `400`. `PROCESSING` is refused as well — a p
 request is made would land on either side of the send, and that is the ambiguity §8 exists to decline
 rather than gamble on.
 
-#### The four actions
+#### The five actions
 
 Read first, act second, always. `describe` returns the provider's record; `buildProviderReconcile`
 in `server/publish/reconcile.ts` puts it beside the plan and produces the difference, the offers, and
@@ -1024,8 +1024,9 @@ and gates the commit — the importer's rule, for the importer's reason.
 | **Update provider schedule** | Signal's instant, on the content the provider already holds | as above; the instant already matches; **the provider holds content this app did not send** |
 | **Cancel provider post** | `DELETE` | not scheduled or draft — a published post explicitly |
 | **Restore from Signal and resubmit** | withdraw, then a fresh `submit` | published or processing; the plan itself refuses |
+| **Release locally** | nothing — the publication becomes `CANCELLED` here | the provider still has the post; the read failed for any reason but `404`; no complete inventory read after the submission, or that read still lists the id |
 
-Drive media changes what goes on the wire, not the four actions. Immediately before every submit,
+Drive media changes what goes on the wire, not the five actions. Immediately before every submit,
 content update, schedule update, or restore-and-resubmit, the service revalidates each stored Drive
 fingerprint and opens a bounded stream only if it still matches. The adapter reserves a new provider
 media id for each source, streams directly to that signed URL, and sends `media`; it never sends the
@@ -1054,6 +1055,15 @@ nothing out and cannot be `DELETE`d, so restore skips the call, releases the pub
 resubmits. That is two external operations, two `integration_events` rows, and the first is kept
 whatever the second does: a resend that fails leaves a cancelled publication and a recorded
 cancellation — the state a person retries from, not a half-written one they cannot read.
+
+**Release locally is for a post deleted in Post Bridge itself** (#711). Such a publication cannot
+be updated, withdrawn, or resent, because there is nothing at the provider to act on — and before
+this action it stayed in flight for good, which also kept **Retire plan** refused. The comparison
+offers it only when `describe` answers `404` and the stored inventory, completely read after the
+publication was created, does not list the id; the commit re-reads both and checks the token. It
+calls nothing at the provider. **Refresh delivery** on such a post answers a `409` that says the
+post is gone and points here, and any other provider refusal on that path is reported, redacted,
+rather than surfacing as a bare server error ([`published-deletion-decision.md`](published-deletion-decision.md) §3.1).
 
 #### Staleness, over both sides
 

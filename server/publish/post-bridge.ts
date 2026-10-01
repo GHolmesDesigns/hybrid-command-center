@@ -91,13 +91,14 @@ class PostBridgeApi {
         false,
         response.status === 429
           ? {
+              status: response.status,
               rateLimited: true,
               retryAfterSeconds:
                 Number.isFinite(retryAfter) && retryAfter > 0
                   ? retryAfter
                   : PUBLISH_RATE_LIMIT_FALLBACK_SECONDS,
             }
-          : {},
+          : { status: response.status },
       );
     }
     return body;

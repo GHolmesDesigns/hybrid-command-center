@@ -117,9 +117,17 @@ dated §14 or §2.2 matrix records live behaviour.
 | `processing` | Refused — ambiguous send in flight | **verified** — contract + app refusal ([`publishing-integration.md`](publishing-integration.md) §7.2, §8) | **Refuse** — no gamble |
 | `posted` | `400` — “Can only delete scheduled or draft posts.” | **verified** — OpenAPI + app pre-refusal ([`publishing-integration.md`](publishing-integration.md) §7.2) | **Will not build unpublish** |
 | `failed` | Nothing to withdraw | **verified** — restore path skips `DELETE` ([`publishing-integration.md`](publishing-integration.md) §7.2) | Local release only |
+| Deleted in Post Bridge itself (`GET /v1/posts/{id}` → `404`) | Nothing to withdraw — the post is gone | **verified** — owner-observed on production, 1 Oct 2026: a scheduled Instagram post deleted in the Post Bridge UI answered `404` to both **Refresh delivery** and **Compare with provider** (#711). Absence from a complete inventory read is the §14 teardown proof ([`post-bridge-api-surface.md`](post-bridge-api-surface.md)) | **Release locally** (#711) — offered only when the `404` and a complete inventory read taken after the submission both say the post is gone |
 
 **No inference rule:** a successful `DELETE` on a scheduled Post Bridge post proves the **queue
 entry** is gone, not that a previously published post on the same account was affected.
+
+**Two facts for a local release.** A `404` alone does not release a publication: a wrong base URL
+or a changed route would answer `404` for every post, including ones still going out. The
+comparison also requires the stored inventory — a complete read, finished after the publication
+was created — not to list the id, and the commit re-reads both. Release locally sets the
+publication to `CANCELLED`, calls nothing at the provider, and records one `signal.provider-cancel`
+event. It does not retire the plan; that stays the operator's own step.
 
 ### 3.2 Buffer
 
@@ -192,6 +200,7 @@ Buffer multi-channel submissions already commit per target. Withdrawal follows t
 | --- | --- |
 | Withdraw succeeded, plan still active | Plan unchanged; publication `CANCELLED`; operator may edit and submit again. |
 | Withdraw refused (published/processing/sent) | Operator uses platform apps to remove live content if desired; may retire plan locally after reconciling delivery state. |
+| Post deleted in Post Bridge, not from here | **Refresh inventory**, then **Compare with provider** → **Release locally**. The publication becomes `CANCELLED` and the plan can be retired or sent again (§3.1). |
 | Retire mistaken | **No undelete in v1.** C107 may record `retired_at` and `retired_by` for audit; restoration is a future card if needed. |
 | Orphan provider post (never sent from here) | Unchanged — C78 inventory; adopt/edit/withdraw still declined ([`post-bridge-integrations-plan.md`](post-bridge-integrations-plan.md) §0.3). |
 
