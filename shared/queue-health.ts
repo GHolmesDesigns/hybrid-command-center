@@ -9,6 +9,8 @@ import {
 import {
   deliveryTargetAwaitsPerson,
   isReconcilableState,
+  providerInventoryVerdict,
+  publicationTracksProvider,
   PROVIDER_POST_STATE_LABEL,
   PUBLICATION_STATE_DESCRIPTION,
   PUBLICATION_STATE_LABEL,
@@ -87,6 +89,9 @@ export const QUEUE_ALERT_KINDS = [
   // the order of this list is the order alerts read down the page and an existing one should not
   // move to make room for a new one.
   'PROVIDER_ORPHAN',
+  // The inverse of the orphan: *a post this app sent that the provider no longer holds*. Appended
+  // after it for the same reason it was appended itself — the order is the reading order.
+  'PROVIDER_POST_GONE',
 ] as const;
 export type QueueAlertKind = (typeof QUEUE_ALERT_KINDS)[number];
 
@@ -98,6 +103,7 @@ export const QUEUE_ALERT_KIND_LABEL: Record<QueueAlertKind, string> = {
   CHANNEL_UNCOVERED: 'Channel coverage',
   SYNC_BEHIND: 'Provider synchronisation',
   PROVIDER_ORPHAN: 'Provider inventory',
+  PROVIDER_POST_GONE: 'Post gone at provider',
 };
 
 /**
@@ -124,6 +130,7 @@ export const QUEUE_ALERT_KIND_SEVERITY: Record<QueueAlertKind, QueueAlertSeverit
   CHANNEL_UNCOVERED: 'WATCH',
   SYNC_BEHIND: 'WATCH',
   PROVIDER_ORPHAN: 'WATCH',
+  PROVIDER_POST_GONE: 'ACTION',
 };
 
 /**
@@ -229,6 +236,14 @@ export interface QueueHealthFacts {
    * a windowed list would report every old delivery as somebody else's post.
    */
   knownProviderPostIds?: readonly string[];
+  /**
+   * When the last *complete* Post Bridge inventory read finished, from the stored record.
+   *
+   * Separate from `providerPosts` because the rows carry no read of their own that a failed refresh
+   * leaves alone: this is the one timestamp the Release-locally gate also weighs. Absent is *no
+   * complete read yet*, which raises no gone-post alert.
+   */
+  providerInventoryReadAt?: string;
 }
 
 export interface QueueHealthAlert {
@@ -280,6 +295,7 @@ export interface QueueHealthCounts {
 
 /** The planner, and the planner with one post open on it. */
 const PLANNER_PATH = '/signal';
+const POST_BRIDGE = 'post-bridge';
 const postHref = (postId: string) => `${PLANNER_PATH}?post=${encodeURIComponent(postId)}`;
 
 /**
@@ -504,6 +520,53 @@ const orphanCandidate = (facts: QueueHealthFacts): Candidate | undefined => {
   };
 };
 
+/**
+ * Deliveries Post Bridge was holding that its last complete inventory no longer lists.
+ *
+ * One alert per publication, opening its post. The evidence is the same two stored facts the
+ * **Release locally** gate weighs, through the same `providerInventoryVerdict`, so the alert appears
+ * exactly when the release could be offered once the provider confirms with a `404`. It never makes
+ * that call itself: the detail sends the person to **Compare with provider**, which asks.
+ */
+const goneCandidates = (facts: QueueHealthFacts, posts: Map<string, SignalPost>): Candidate[] => {
+  const readAt = facts.providerInventoryReadAt;
+  if (!readAt) return [];
+  const listed = new Set(
+    (facts.providerPosts ?? [])
+      .filter((post) => post.provider === POST_BRIDGE)
+      .map((post) => post.providerPostId),
+  );
+  return facts.publications.flatMap((publication): Candidate[] => {
+    const providerPostId = publication.providerPostId;
+    if (
+      !providerPostId ||
+      publication.provider !== POST_BRIDGE ||
+      !publicationTracksProvider(publication.state)
+    )
+      return [];
+    const verdict = providerInventoryVerdict(publication, {
+      readAt,
+      listsPost: listed.has(providerPostId),
+    });
+    if (verdict !== 'GONE') return [];
+    return [
+      {
+        kind: 'PROVIDER_POST_GONE',
+        subject: signalPostName(posts.get(publication.postId)?.text ?? publication.sentCaption),
+        title: 'Post Bridge no longer lists this post',
+        detail: `This delivery still reads ${PUBLICATION_STATE_LABEL[publication.state]}, but the last complete read of Post Bridge's inventory (${readAt}) does not list post ${providerPostId}, so it may have been deleted there and nothing will go out. Open the post, press Compare with provider, then Release locally. The comparison confirms with Post Bridge before anything is released.`,
+        href: postHref(publication.postId),
+        key: publication.id,
+        // The read is part of the fact: a later read that still omits the post is the same
+        // situation, but a state change or a different id is a new one.
+        fingerprint: `${providerPostId}|${publication.state}`,
+        postId: publication.postId,
+        publicationId: publication.id,
+      },
+    ];
+  });
+};
+
 const KIND_ORDER = new Map(QUEUE_ALERT_KINDS.map((kind, index) => [kind, index]));
 const SEVERITY_ORDER = new Map(QUEUE_ALERT_SEVERITIES.map((severity, index) => [severity, index]));
 
@@ -581,6 +644,8 @@ export function deriveQueueHealth(
 
   const orphans = orphanCandidate(facts);
   if (orphans) candidates.push(orphans);
+
+  candidates.push(...goneCandidates(facts, posts));
 
   const acknowledged = new Map(
     facts.acknowledgements.map((record) => [record.alertId, record] as const),

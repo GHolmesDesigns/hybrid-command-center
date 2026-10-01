@@ -764,3 +764,96 @@ describe('posts in the provider this app did not send', () => {
     expect(kindsOf(summary)).toEqual(['CHANNEL_UNCOVERED', 'PROVIDER_ORPHAN']);
   });
 });
+
+describe('a post Post Bridge no longer lists', () => {
+  // Created 2026-08-18T00:00Z (see `publication`), so a read on the 19th postdates it.
+  const READ_AFTER = '2026-08-19T08:00:00.000Z';
+  const listing = (providerPostId: string): ProviderInventoryPost => ({
+    provider: 'post-bridge',
+    providerPostId,
+    state: 'SCHEDULED',
+    scheduledInstant: null,
+    captionExcerpt: '',
+    accountIds: [],
+  });
+  const gone = (overrides: Partial<QueueHealthFacts> = {}) =>
+    derive({
+      publications: [publication()],
+      providerPosts: [],
+      providerInventoryReadAt: READ_AFTER,
+      ...overrides,
+    });
+  const goneAlerts = (summary: ReturnType<typeof derive>) =>
+    summary.alerts.filter((alert) => alert.kind === 'PROVIDER_POST_GONE');
+
+  it('raises one action alert that opens the post and names both buttons', () => {
+    const alerts = goneAlerts(gone({ posts: [post()] }));
+    expect(alerts).toHaveLength(1);
+    const [alert] = alerts;
+    expect(alert?.severity).toBe('ACTION');
+    expect(alert?.href).toBe('/signal?post=post-1');
+    expect(alert?.postId).toBe('post-1');
+    expect(alert?.publicationId).toBe('pub-1');
+    expect(alert?.detail).toContain('Compare with provider');
+    expect(alert?.detail).toContain('Release locally');
+    expect(alert?.detail).toContain('confirms with Post Bridge before anything is released');
+  });
+
+  it.each(['SUBMITTING', 'SUBMITTED', 'UNCONFIRMED'] as const)('covers a %s delivery', (state) => {
+    expect(goneAlerts(gone({ publications: [publication({ state })] }))).toHaveLength(1);
+  });
+
+  it.each(['CONFIRMED', 'PARTIAL', 'FAILED', 'CANCELLED'] as const)(
+    'says nothing for a settled %s delivery',
+    (state) => {
+      expect(goneAlerts(gone({ publications: [publication({ state })] }))).toHaveLength(0);
+    },
+  );
+
+  it('says nothing when no complete read has been taken', () => {
+    expect(goneAlerts(gone({ providerInventoryReadAt: undefined }))).toHaveLength(0);
+  });
+
+  it('says nothing when the read is not after the submission', () => {
+    for (const readAt of ['2026-08-18T00:00:00.000Z', '2026-08-17T00:00:00.000Z'])
+      expect(goneAlerts(gone({ providerInventoryReadAt: readAt }))).toHaveLength(0);
+  });
+
+  it('says nothing when the read lists the id', () => {
+    expect(goneAlerts(gone({ providerPosts: [listing('remote-1')] }))).toHaveLength(0);
+  });
+
+  it('says nothing without a provider post id or for another provider', () => {
+    expect(
+      goneAlerts(gone({ publications: [publication({ providerPostId: undefined })] })),
+    ).toHaveLength(0);
+    expect(goneAlerts(gone({ publications: [publication({ provider: 'buffer' })] }))).toHaveLength(
+      0,
+    );
+  });
+
+  it('is one alert per publication, each acknowledgeable on its own', () => {
+    const summary = gone({
+      publications: [
+        publication(),
+        publication({ id: 'pub-2', postId: 'post-2', providerPostId: 'remote-2' }),
+      ],
+      acknowledgements: [
+        {
+          alertId: 'PROVIDER_POST_GONE:pub-1',
+          fingerprint: 'remote-1|SUBMITTED',
+          acknowledgedAt: '2026-08-19T09:00:00.000Z',
+        },
+      ],
+    });
+    expect(goneAlerts(summary).map((alert) => [alert.id, alert.acknowledged])).toEqual([
+      ['PROVIDER_POST_GONE:pub-2', false],
+      ['PROVIDER_POST_GONE:pub-1', true],
+    ]);
+  });
+
+  it('reads after the orphan alert', () => {
+    const summary = gone({ providerPosts: [listing('remote-9')], knownProviderPostIds: [] });
+    expect(kindsOf(summary)).toEqual(['PROVIDER_POST_GONE', 'PROVIDER_ORPHAN']);
+  });
+});

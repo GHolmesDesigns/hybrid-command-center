@@ -17,7 +17,11 @@ import {
 import { isSignalChannel, type SignalChannel } from '../../shared/signal.ts';
 import { toSignalPosts, type SignalPostRow } from './rows.ts';
 import { publicationsForHealth } from '../publish/read.ts';
-import { knownProviderPostIds, readProviderInventoryPosts } from '../publish/inventory-rows.ts';
+import {
+  knownProviderPostIds,
+  readProviderInventoryPosts,
+  readProviderInventoryRecord,
+} from '../publish/inventory-rows.ts';
 
 /**
  * The queue-health summary, gathered here and concluded in `shared/queue-health.ts`.
@@ -160,6 +164,12 @@ export function readAcknowledgements(db: Db): QueueAlertAcknowledgement[] {
   }));
 }
 
+/** When the last complete inventory read finished, from the stored record. */
+const inventoryReadAt = (db: Db) => {
+  const { lastRefreshAt } = readProviderInventoryRecord(db);
+  return lastRefreshAt ? { providerInventoryReadAt: lastRefreshAt } : {};
+};
+
 /**
  * The summary as it stands, derived from rows and written nowhere.
  *
@@ -196,6 +206,7 @@ export function readQueueHealth(db: Db, now: Date): QueueHealthSummary {
       // no provider call happens here, which is what keeps loading the planner free of one.
       providerPosts: readProviderInventoryPosts(db),
       knownProviderPostIds: knownProviderPostIds(db),
+      ...inventoryReadAt(db),
       acknowledgements: readAcknowledgements(db),
     },
     config,

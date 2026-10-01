@@ -35,7 +35,7 @@ import {
   type PublishRequest,
   type PublishSubmission,
 } from './provider.ts';
-import { readProviderInventoryRecord } from './inventory.ts';
+import { readProviderInventoryRecord } from './inventory-rows.ts';
 import { recordSyncHealth } from './sync-health.ts';
 import { toPublication, toTarget, type PublicationRow, type TargetRow } from './rows.ts';
 import { targetRowsFor } from './read.ts';

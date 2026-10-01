@@ -958,7 +958,7 @@ provider**.
 #### Queue health
 
 **What needs attention** sits above the planner and is the one place a problem surfaces without
-your going to look for it. It reports seven things, each one read from your own posts, deliveries, and the last inventory you
+your going to look for it. It reports eight things, each one read from your own posts, deliveries, and the last inventory you
 read rather than from anything a provider is asked while the page loads:
 
 - **Delivery** — a post that was not delivered, was only partly delivered, or whose result the
@@ -977,6 +977,11 @@ read rather than from anything a provider is asked while the page loads:
   appears once you have read the inventory at least once, names the first few, and comes back if one
   of them is published or another one turns up. **What Post Bridge is holding**, below the planner,
   is where the whole list is.
+- **Post gone at provider** — a delivery still reading **Accepted, not out yet** whose post Post Bridge's
+  last complete inventory read no longer lists, so it may have been deleted there and nothing will go
+  out. It appears only after a **Refresh inventory** that finished after the post was sent, and it
+  opens the post. Press **Compare with provider**, which confirms with Post Bridge, then **Release
+  locally**. Releasing removes the line. Nothing is asked of Post Bridge while this page loads.
 
 Each line names the post it is about, and the name is a link that opens that post — including a post
 in another month. **Alert windows** changes the three windows the rules measure against, and lets you
@@ -1515,6 +1520,9 @@ these in order, in the post's editor and the Signal page:
 4. Press **Release locally**. The delivery changes to **Cancelled**. Nothing is sent to Post Bridge,
    and one entry is added to the integration activity log.
 5. Press **Retire plan** and confirm. Publication history stays with the retired plan.
+
+After step 2, **What needs attention** also shows **Post gone at provider** for the delivery. Its
+link opens the post, so you can start at step 3.
 
 If step 3 shows no **Release locally** button, the panel names which check failed:
 

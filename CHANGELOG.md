@@ -1,5 +1,18 @@
 # Changelog
 
+## [7.0.10] - 2026-10-01
+
+### Added
+
+- **What needs attention** now raises **Post gone at provider** when a Post Bridge delivery is still waiting but the last complete **Refresh inventory** no longer lists its post. It opens the post and points you to **Compare with provider**, then **Release locally**. Nothing is asked of Post Bridge when the page loads.
+
+### Changed
+
+- The user manual and README count the new alert, and the troubleshooting entry for a post deleted in Post Bridge mentions it.
+
+### Breaking changes
+
+None.
 ## [7.0.9] - 2026-10-01
 
 ### Added
