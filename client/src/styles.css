@@ -4366,10 +4366,32 @@ button.tag-chip.toggle.active {
 .signal-grid.view-today {
   grid-template-columns: minmax(0, 1fr);
 }
-/* Every row is the same fixed height, so the longest post in a week cannot stretch the week.
+/* Every row uses one wrapper height, so the longest post cannot stretch its week.
    A cell that holds more than fits scrolls inside itself. */
 .signal-grid {
-  grid-auto-rows: 184px;
+  grid-auto-rows: var(--signal-row-height, 184px);
+}
+.signal-resize-grip {
+  display: grid;
+  place-items: center;
+  height: 22px;
+  cursor: row-resize;
+  touch-action: none;
+  background: var(--paper);
+}
+.signal-resize-grip span {
+  width: 44px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--muted);
+}
+.signal-resize-grip:hover span,
+.signal-resize-grip:focus-visible span {
+  background: var(--blue);
+}
+.signal-resize-grip:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: -3px;
 }
 .signal-weekdays {
   border-bottom: 1px solid var(--line);

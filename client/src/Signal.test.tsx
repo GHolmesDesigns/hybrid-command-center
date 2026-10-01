@@ -78,6 +78,26 @@ describe('Signal planner', () => {
     );
   });
 
+  it('resizes the scheduled grid while leaving the unscheduled queue alone', async () => {
+    testState.signalPostsPayload = [
+      signalPost('queued-resize', 'Queue content stays visible', null),
+      signalPost('scheduled-resize', 'Scheduled content', '2026-09-14'),
+    ];
+    await openSignal('/signal?view=week&month=2026-09&date=2026-09-14');
+
+    const grip = screen.getByRole('separator', { name: 'Resize calendar rows' });
+    const grid = document.querySelector('.signal-grid') as HTMLElement;
+    expect(grid.parentElement).toHaveStyle({ '--signal-row-height': '184px' });
+    fireEvent.keyDown(grip, { key: 'ArrowDown' });
+    expect(grid.parentElement).toHaveStyle({ '--signal-row-height': '208px' });
+    expect(screen.getAllByRole('region', { name: /^2026-/ })).toHaveLength(7);
+    expect(
+      within(screen.getByRole('complementary', { name: 'Unscheduled queue' })).getByText(
+        'Queue content stays visible',
+      ),
+    ).toBeInTheDocument();
+  });
+
   it.each(['today', 'week', 'month'] as const)(
     'edits a scheduled post from the %s view without changing the queue',
     async (view) => {
