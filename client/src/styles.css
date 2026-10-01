@@ -1729,6 +1729,10 @@ button svg,
   background: var(--status-wash);
   border-top: 4px solid var(--status-ink);
 }
+:root[data-theme='dark'] .project-row,
+:root[data-theme='dark'] .project-cards > article.project-tile {
+  background: var(--theme-surface-panel);
+}
 /* Thinner as well as dashed: archived work still announces itself in a greyscale grid, but a
    solid 4px bar beside four live projects would announce it loudest. */
 .project-cards > article.project-tile[data-status='ARCHIVED'] {

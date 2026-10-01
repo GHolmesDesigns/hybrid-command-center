@@ -121,4 +121,19 @@ describe('presentation theme tokens', () => {
     expect(tagAccent({ name: 'Campaign', color: '#123456' })).toBe('#123456');
     expect(tagAccent({ name: 'Campaign' })).toBe(tagAccent({ name: 'campaign' }));
   });
+
+  it('uses a dark panel surface for project tiles and rows in dark mode', () => {
+    const darkProjectCards = rules.match(
+      /:root\[data-theme='dark'\] \.project-row,\s*:root\[data-theme='dark'\] \.project-cards > article\.project-tile\s*\{([^}]*)\}/,
+    )?.[1];
+    const surface = darkDefinitions.get('--theme-surface-panel');
+
+    expect(darkProjectCards).toContain('background: var(--theme-surface-panel)');
+    expect(surface).toBeTruthy();
+    for (const token of ['--theme-text-primary', '--theme-text-muted', '--theme-accent-link']) {
+      const ink = darkDefinitions.get(token);
+      expect(ink, token).toBeTruthy();
+      expect(contrastRatio(ink!, surface!)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
 });
