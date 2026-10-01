@@ -1,5 +1,14 @@
 # Changelog
 
+## [7.0.8] - 2026-10-01
+
+### Fixed
+
+- Fixed low-contrast project titles and supporting text on Projects grid tiles and list rows in dark mode.
+
+### Breaking changes
+
+None.
 ## [7.0.7] - 2026-10-01
 
 ### Added
