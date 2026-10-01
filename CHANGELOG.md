@@ -1,5 +1,15 @@
 # Changelog
 
+## [7.0.7] - 2026-10-01
+
+### Added
+
+- Added per-device System, Light, and Dark appearance choices that follow operating system changes when System is selected.
+- Added dark color tokens across the operator interface, with readable text, status, and focus treatments.
+
+### Breaking changes
+
+None.
 ## [7.0.6] - 2026-10-01
 
 ### Fixed
