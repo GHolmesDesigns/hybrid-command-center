@@ -30,7 +30,6 @@ const GAP = 18;
 
 /** The cards in document order, which is the order they are meant to be read in. */
 const READING_ORDER = [
-  'Theme',
   'Live updates',
   'Command AI assistant',
   'Timer notifications',
@@ -39,6 +38,7 @@ const READING_ORDER = [
   'Signal campaigns',
   'User manual',
   'Default views',
+  'Theme',
   'Branding',
   'Google Drive',
   'Local timezone',
@@ -132,9 +132,9 @@ test('each Settings column stacks on its own at desktop width', async ({ page })
 
   const cards = await cardBoxes(page);
   expect(cards.map((card) => card.heading)).toEqual(READING_ORDER);
-  // Seven cards in the left stack and six in the right, and every card in one — a card left as
+  // Six cards in the left stack and seven in the right, and every card in one — a card left as
   // the grid's own child would report column -1 and be back in a shared row track.
-  expect(cards.map((card) => card.column)).toEqual([0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1]);
+  expect(cards.map((card) => card.column)).toEqual([0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1]);
 
   const [left, right] = [0, 1].map((column) => cards.filter((card) => card.column === column));
 

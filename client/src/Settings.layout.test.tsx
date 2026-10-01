@@ -57,7 +57,6 @@ describe('the Settings layout', () => {
 
     const [connections, appearance] = columns();
     expect(headingsIn(connections)).toEqual([
-      'Theme',
       'Live updates',
       'Command AI assistant',
       'Timer notifications',
@@ -68,6 +67,7 @@ describe('the Settings layout', () => {
     expect(headingsIn(appearance)).toEqual([
       'User manual',
       'Default views',
+      'Theme',
       'Branding',
       'Google Drive',
       'Local timezone',
@@ -79,7 +79,6 @@ describe('the Settings layout', () => {
     // below 1100px the two stacks sit one under the other and the thirteen cards read straight
     // through. `e2e/settings-column-independence.spec.ts` measures that they really do.
     expect(headingsIn(document.querySelector('.settings-layout')!)).toEqual([
-      'Theme',
       'Live updates',
       'Command AI assistant',
       'Timer notifications',
@@ -88,6 +87,7 @@ describe('the Settings layout', () => {
       'Signal campaigns',
       'User manual',
       'Default views',
+      'Theme',
       'Branding',
       'Google Drive',
       'Local timezone',

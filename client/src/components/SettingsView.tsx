@@ -307,32 +307,6 @@ export function SettingsView({
       */}
       <div className="settings-layout">
         <div className="settings-column">
-          <section className="panel settings-card" aria-labelledby="theme-settings-heading">
-            <div className="section-title">
-              <div>
-                <span className="eyebrow">Appearance</span>
-                <h2 id="theme-settings-heading">Theme</h2>
-              </div>
-            </div>
-            <label>
-              Color theme
-              <select
-                aria-label="Color theme"
-                value={themeMode}
-                onChange={(event) => onThemeModeChange(event.target.value as ThemeMode)}
-              >
-                {THEME_MODES.map((mode) => (
-                  <option key={mode} value={mode}>
-                    {mode === 'system' ? 'System' : mode === 'light' ? 'Light' : 'Dark'}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <p className="field-hint">
-              This preference is saved on this device. System follows your current operating system
-              appearance.
-            </p>
-          </section>
           <section className="panel settings-card" aria-labelledby="agent-hub-live-tips-heading">
             <div className="section-title">
               <div>
@@ -981,6 +955,32 @@ export function SettingsView({
                 </button>
               </div>
             </form>
+          </section>
+          <section className="panel settings-card" aria-labelledby="theme-settings-heading">
+            <div className="section-title">
+              <div>
+                <span className="eyebrow">Appearance</span>
+                <h2 id="theme-settings-heading">Theme</h2>
+              </div>
+            </div>
+            <label>
+              Color theme
+              <select
+                aria-label="Color theme"
+                value={themeMode}
+                onChange={(event) => onThemeModeChange(event.target.value as ThemeMode)}
+              >
+                {THEME_MODES.map((mode) => (
+                  <option key={mode} value={mode}>
+                    {mode === 'system' ? 'System' : mode === 'light' ? 'Light' : 'Dark'}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="field-hint">
+              This preference is saved on this device. System follows your current operating system
+              appearance.
+            </p>
           </section>
           <section className="panel settings-card">
             <div className="settings-icon neutral">
