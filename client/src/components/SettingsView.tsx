@@ -167,9 +167,8 @@ export function SettingsView({
   const [assistantBusy, setAssistantBusy] = useState(false);
   const [assistantKeyBusy, setAssistantKeyBusy] = useState(false);
   useEffect(() => {
-    setAssistantForm(commandAiAssistant.assistant);
     setAssistantKeyMeta(commandAiAssistant.key);
-  }, [commandAiAssistant, setAssistantForm]);
+  }, [commandAiAssistant]);
   const load = useCallback(async () => {
     const next = await api<DriveSettingsState>('/settings/drive');
     setState(next);
