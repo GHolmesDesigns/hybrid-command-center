@@ -9,6 +9,7 @@ import {
   requests,
   screen,
   testState,
+  waitFor,
 } from './App.test-setup';
 
 const renderSettings = async () => {
@@ -31,7 +32,7 @@ describe('Live updates settings', () => {
     const enabled = screen.getByLabelText('Enable live updates');
     expect(enabled).not.toBeChecked();
     fireEvent.click(enabled);
-    expect(enabled).toBeChecked();
+    await waitFor(() => expect(enabled).toBeChecked());
     fireEvent.click(screen.getByRole('button', { name: 'Save live updates' }));
     expect(await screen.findByText(/Live updates saved/i)).toBeVisible();
     expect(
@@ -47,7 +48,10 @@ describe('Live updates settings', () => {
     testState.liveTipsPayload = { enabled: true };
     await renderSettings();
 
+    const enabled = screen.getByLabelText('Enable live updates');
+    await waitFor(() => expect(enabled).toBeChecked());
     fireEvent.click(screen.getByRole('button', { name: 'Turn off' }));
+    await waitFor(() => expect(enabled).not.toBeChecked());
     fireEvent.click(screen.getByRole('button', { name: 'Save live updates' }));
     expect(await screen.findByText(/Live updates saved/i)).toBeVisible();
     expect(testState.liveTipsPayload).toEqual({ enabled: false });

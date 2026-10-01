@@ -1,5 +1,14 @@
 # Changelog
 
+## [7.0.4] - 2026-10-01
+
+## Fixed
+
+- Made Command AI settings, live updates, and Files upload checks reliable when their controls update asynchronously.
+
+## Breaking changes
+
+None.
 ## [7.0.3] - 2026-10-01
 
 ## Changed

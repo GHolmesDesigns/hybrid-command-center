@@ -213,7 +213,7 @@ describe('Files module', () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     await openFiles();
     const file = new File(['hello'], 'brief.txt', { type: 'text/plain' });
-    fireEvent.change(screen.getByLabelText('Upload file'), { target: { files: [file] } });
+    fireEvent.change(await screen.findByLabelText('Upload file'), { target: { files: [file] } });
     await waitFor(() => expect(confirm).toHaveBeenCalled());
     expect(
       requests.some((call) => call.method === 'POST' && call.url.endsWith('/drive-write/upload')),
