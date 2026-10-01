@@ -1,5 +1,14 @@
 # Changelog
 
+## [7.0.5] - 2026-10-01
+
+## Changed
+
+- Prepared the light theme for future theme choices with semantic color tokens while preserving its current appearance and contrast behavior.
+
+## Breaking changes
+
+None.
 ## [7.0.4] - 2026-10-01
 
 ## Fixed
