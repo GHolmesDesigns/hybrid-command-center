@@ -4,12 +4,6 @@
   color: var(--theme-text-primary);
   background: var(--theme-canvas);
   font-synthesis: none;
-  --theme-text-primary: #202522;
-  --theme-text-muted: #6e746f;
-  --theme-surface-panel: #fff;
-  --theme-danger-ink: #b9473f;
-  --theme-warning-primary: #b67521;
-  --theme-success-primary: #34715b;
   --ink: var(--theme-text-primary);
   --muted: var(--theme-text-muted);
   --line: var(--theme-border-default);
@@ -20,10 +14,14 @@
   --green: var(--theme-success-primary);
   --shadow: var(--theme-shadow-default);
 
-  /* Light-theme presentation inventory. Roles are canvas/panel/interactive surfaces; primary,
-     muted, inverse, and feedback text; hairlines and state borders; focus; status washes;
-     accents; and shadows. Component-specific names preserve subtly different light values.
-     Project status, tag/category, channel, and user-configured sidebar palettes remain separate. */
+  /* Light-only presentation values: surfaces, text, hairlines, focus, washes, accents,
+     and shadows. Component roles retain their subtly different current light values. */
+  --theme-text-primary: #202522;
+  --theme-text-muted: #6e746f;
+  --theme-surface-panel: #fff;
+  --theme-danger-ink: #b9473f;
+  --theme-warning-primary: #b67521;
+  --theme-success-primary: #34715b;
   --theme-shadow-default: 0 14px 34px rgba(26, 35, 31, 0.08);
   --theme-canvas: #f4f3ef;
   --theme-text-on-strong: #fff;
@@ -36,8 +34,6 @@
   --theme-danger-surface: #fff7f5;
   --theme-neutral-badge-surface: #eef0ef;
   --theme-neutral-badge-ink: #53605a;
-  --theme-connection-online: #67b092;
-  --theme-connection-halo: rgba(103, 176, 146, 0.12);
   --theme-topbar-glass: rgba(255, 255, 255, 0.78);
   --theme-eyebrow-ink: #747b76;
   --theme-refresh-glass: rgba(255, 255, 255, 0.65);
@@ -54,13 +50,6 @@
   --theme-toggle-selected-overlay: rgba(255, 255, 255, 0.22);
   --theme-urgent-line: #efdcd7;
   --theme-hairline: #eee;
-  --theme-priority-stripe-neutral: #9ba19d;
-  --theme-status-dot-default: #aaa;
-  --theme-status-dot-backlog: #9ca29f;
-  --theme-status-dot-todo: #68889b;
-  --theme-status-dot-progress: #32729a;
-  --theme-status-dot-review: #bf812f;
-  --theme-status-dot-complete: #3c8467;
   --theme-icon-quiet: #9aa09c;
   --theme-monogram-surface: #e8e2d4;
   --theme-monogram-ink: #3f4a45;
@@ -68,15 +57,11 @@
   --theme-quick-actions-line: #dcddd8;
   --theme-search-icon: #8a918d;
   --theme-search-clear: #999;
+  --theme-icon-disabled: #aaa;
   --theme-card-hairline-shadow: rgba(0, 0, 0, 0.01);
   --theme-archived-line: #c7cbc8;
   --theme-drive-badge-ink: #777;
-  --theme-priority-urgent-surface: #fde9e5;
-  --theme-priority-high-surface: #fff1db;
-  --theme-priority-high-ink: #9b5f12;
-  --theme-priority-medium-surface: #e7f0f5;
   --theme-accent-link: #315f79;
-  --theme-priority-low-ink: #6f7773;
   --theme-chip-line: #cfd8d4;
   --theme-chip-muted-ink: #4b5854;
   --theme-chip-ink: #3f4a46;
@@ -136,27 +121,16 @@
   --theme-partial-ink: #7a4f10;
   --theme-nav-scrim: rgba(0, 0, 0, 0.4);
   --theme-calendar-count-overlay: rgba(0, 0, 0, 0.06);
-  --theme-channel-neutral-line: #7f8583;
-  --theme-channel-neutral-surface: #eff1ef;
-  --theme-channel-neutral-ink: #5f6764;
   --theme-info-line: #b9cdd8;
   --theme-info-surface: #eef4f8;
   --theme-info-ink: #2a4d61;
   --theme-plan-surface: #fafbfa;
   --theme-action-surface: #fff9f0;
-  --theme-watch-line: #b9c6dd;
-  --theme-watch-surface: #f7f9fd;
-  --theme-watch-badge: #eaf0fa;
-  --theme-watch-ink: #2f4b93;
   --theme-count-surface: #eef1ef;
   --theme-calendar-add-focus: #eef1eb;
   --theme-calendar-empty-ink: #a3a8a4;
   --theme-post-hover: #f7f8f5;
   --theme-amber-fallback: #b45309;
-  --theme-delivered-line: #a9cfb4;
-  --theme-delivered-surface: #e6f4ea;
-  --theme-delivered-ink: #1d6b36;
-  --theme-stopped-ink: #4a4f57;
   --theme-provider-reconcile-surface: #fafbfc;
   --theme-editor-scrim: rgba(19, 25, 22, 0.5);
   --theme-editor-shadow: rgba(0, 0, 0, 0.2);
@@ -170,30 +144,59 @@
   --theme-unverified-surface: #fdf8e7;
   --theme-login-glow: rgba(215, 197, 162, 0.35);
   --theme-login-gradient-end: #e8ebe7;
-  --theme-presence-online: #15803d;
   --theme-assistant-panel-shadow: rgba(16, 24, 40, 0.08);
   --theme-assistant-header: rgba(255, 255, 255, 0.92);
   --theme-assistant-fab-shadow: rgba(16, 24, 40, 0.18);
   --theme-approval-warning-fallback: #c27803;
-  --theme-assistant-avatar-start: #5b21b6;
-  --theme-assistant-avatar-end: #7c3aed;
-  --theme-operator-avatar-surface: #dbeafe;
-  --theme-operator-avatar-ink: #1d4ed8;
-  --theme-available-avatar-surface: #dcfce7;
-  --theme-available-avatar-ink: #166534;
-  --theme-busy-avatar-surface: #fee2e2;
-  --theme-busy-avatar-ink: #991b1b;
-  --theme-away-avatar-surface: #fef3c7;
-  --theme-away-avatar-ink: #92400e;
-  --theme-unknown-avatar-surface: #e5e7eb;
-  --theme-unknown-avatar-ink: #374151;
-  --theme-operator-turn-line: #bfdbfe;
-  --theme-operator-turn-surface: #eff6ff;
   --theme-thought-line: #fcd34d;
   --theme-thought-surface: #fffbeb;
   --theme-thought-edge: #f59e0b;
   --theme-thought-ink: #78350f;
-  --theme-provenance-unknown: #6b7280;
+
+  /* Data and provider state swatches keep their own measured pairs. These are not
+     general presentation surfaces; their labels and contrast rules travel with the state. */
+  --state-connection-online: #67b092;
+  --state-connection-halo: rgba(103, 176, 146, 0.12);
+  --state-priority-stripe-neutral: #9ba19d;
+  --state-status-dot-default: #aaa;
+  --state-status-dot-backlog: #9ca29f;
+  --state-status-dot-todo: #68889b;
+  --state-status-dot-progress: #32729a;
+  --state-status-dot-review: #bf812f;
+  --state-status-dot-complete: #3c8467;
+  --state-priority-urgent-surface: #fde9e5;
+  --state-priority-high-surface: #fff1db;
+  --state-priority-high-ink: #9b5f12;
+  --state-priority-medium-surface: #e7f0f5;
+  --state-priority-low-ink: #6f7773;
+  --state-channel-neutral-line: #7f8583;
+  --state-channel-neutral-surface: #eff1ef;
+  --state-channel-neutral-ink: #5f6764;
+  --state-watch-line: #b9c6dd;
+  --state-watch-surface: #f7f9fd;
+  --state-watch-badge: #eaf0fa;
+  --state-watch-ink: #2f4b93;
+  --state-delivered-line: #a9cfb4;
+  --state-delivered-surface: #e6f4ea;
+  --state-delivered-ink: #1d6b36;
+  --state-stopped-ink: #4a4f57;
+  --state-presence-online: #15803d;
+  --state-assistant-avatar-start: #5b21b6;
+  --state-assistant-avatar-end: #7c3aed;
+  --state-operator-avatar-surface: #dbeafe;
+  --state-operator-avatar-ink: #1d4ed8;
+  --state-available-avatar-surface: #dcfce7;
+  --state-available-avatar-ink: #166534;
+  --state-busy-avatar-surface: #fee2e2;
+  --state-busy-avatar-ink: #991b1b;
+  --state-away-avatar-surface: #fef3c7;
+  --state-away-avatar-ink: #92400e;
+  --state-unknown-avatar-surface: #e5e7eb;
+  --state-unknown-avatar-ink: #374151;
+  --state-operator-turn-line: #bfdbfe;
+  --state-operator-turn-surface: #eff6ff;
+  --state-provenance-unknown: #6b7280;
+
   /* Sidebar palette. Settings overrides these per element via `sidebarPalette()`, which
      derives the muted, surface, hairline, and focus values from the three chosen colours;
      these defaults mirror DEFAULT_BRANDING so the sidebar is painted before it loads. */
@@ -686,10 +689,10 @@ button svg,
   display: inline-block;
   width: 8px;
   height: 8px;
-  background: var(--theme-connection-online);
+  background: var(--state-connection-online);
   border-radius: 50%;
   margin-right: 7px;
-  box-shadow: 0 0 0 3px var(--theme-connection-halo);
+  box-shadow: 0 0 0 3px var(--state-connection-halo);
 }
 .mobile-close,
 .menu-btn,
@@ -1026,7 +1029,7 @@ button svg,
   width: 3px;
   height: 31px;
   border-radius: 3px;
-  background: var(--theme-priority-stripe-neutral) !important;
+  background: var(--state-priority-stripe-neutral) !important;
 }
 .priority-stripe[data-priority='URGENT'] {
   background: var(--red) !important;
@@ -1068,22 +1071,22 @@ button svg,
   height: 9px !important;
   border-radius: 50%;
   flex: none;
-  background: var(--theme-status-dot-default) !important;
+  background: var(--state-status-dot-default) !important;
 }
 .status-dot.backlog {
-  background: var(--theme-status-dot-backlog) !important;
+  background: var(--state-status-dot-backlog) !important;
 }
 .status-dot.todo {
-  background: var(--theme-status-dot-todo) !important;
+  background: var(--state-status-dot-todo) !important;
 }
 .status-dot.in_progress {
-  background: var(--theme-status-dot-progress) !important;
+  background: var(--state-status-dot-progress) !important;
 }
 .status-dot.review {
-  background: var(--theme-status-dot-review) !important;
+  background: var(--state-status-dot-review) !important;
 }
 .status-dot.complete {
-  background: var(--theme-status-dot-complete) !important;
+  background: var(--state-status-dot-complete) !important;
 }
 .project-list a {
   display: flex;
@@ -1545,20 +1548,20 @@ button svg,
   padding-top: 22px;
 }
 .priority-badge.urgent {
-  background: var(--theme-priority-urgent-surface);
+  background: var(--state-priority-urgent-surface);
   color: var(--red);
 }
 .priority-badge.high {
-  background: var(--theme-priority-high-surface);
-  color: var(--theme-priority-high-ink);
+  background: var(--state-priority-high-surface);
+  color: var(--state-priority-high-ink);
 }
 .priority-badge.medium {
-  background: var(--theme-priority-medium-surface);
+  background: var(--state-priority-medium-surface);
   color: var(--theme-accent-link);
 }
 .priority-badge.low {
   background: var(--theme-neutral-badge-surface);
-  color: var(--theme-priority-low-ink);
+  color: var(--state-priority-low-ink);
 }
 /* Outlined rather than filled, so a type never reads as another priority level. */
 .task-type-badge {
@@ -3177,7 +3180,7 @@ button.tag-chip.toggle.active {
 .checklist button,
 .dependency-list button {
   background: transparent;
-  color: var(--theme-status-dot-default);
+  color: var(--theme-icon-disabled);
   padding: 2px;
 }
 .inline-add {
@@ -4081,12 +4084,12 @@ button.tag-chip.toggle.active {
   min-width: 22px;
   height: 19px;
   padding: 0 5px;
-  border: 1px solid var(--channel-border, var(--theme-channel-neutral-line));
+  border: 1px solid var(--channel-border, var(--state-channel-neutral-line));
   border-radius: 5px;
-  background: var(--channel-surface, var(--theme-channel-neutral-surface));
+  background: var(--channel-surface, var(--state-channel-neutral-surface));
   font-size: 10.5px;
   font-weight: 700;
-  color: var(--channel-text, var(--theme-channel-neutral-ink));
+  color: var(--channel-text, var(--state-channel-neutral-ink));
 }
 .cal-campaign,
 .cal-project,
@@ -4323,8 +4326,8 @@ button.tag-chip.toggle.active {
   background: var(--theme-action-surface);
 }
 .signal-health-alert.severity-watch {
-  border-left-color: var(--theme-watch-line);
-  background: var(--theme-watch-surface);
+  border-left-color: var(--state-watch-line);
+  background: var(--state-watch-surface);
 }
 .signal-health-alert.is-acknowledged {
   background: var(--paper);
@@ -4380,9 +4383,9 @@ button.tag-chip.toggle.active {
   color: var(--theme-warning-ink);
 }
 .signal-health-severity.severity-watch {
-  border-color: var(--theme-watch-line);
-  background: var(--theme-watch-badge);
-  color: var(--theme-watch-ink);
+  border-color: var(--state-watch-line);
+  background: var(--state-watch-badge);
+  color: var(--state-watch-ink);
 }
 .signal-health-kind {
   color: var(--muted);
@@ -4831,10 +4834,10 @@ button.tag-chip.toggle.active {
   min-width: 20px;
   height: 18px;
   padding: 0 4px;
-  border: 1px solid var(--channel-border, var(--theme-channel-neutral-line));
+  border: 1px solid var(--channel-border, var(--state-channel-neutral-line));
   border-radius: 5px;
-  background: var(--channel-surface, var(--theme-channel-neutral-surface));
-  color: var(--channel-text, var(--theme-channel-neutral-ink));
+  background: var(--channel-surface, var(--state-channel-neutral-surface));
+  color: var(--channel-text, var(--state-channel-neutral-ink));
   font-size: 9px;
   font-weight: 700;
 }
@@ -4969,14 +4972,14 @@ button.tag-chip.toggle.active {
   height: 12px;
 }
 .signal-delivery-chip.delivery-in_flight {
-  border-color: var(--theme-watch-line);
-  background: var(--theme-watch-badge);
-  color: var(--theme-watch-ink);
+  border-color: var(--state-watch-line);
+  background: var(--state-watch-badge);
+  color: var(--state-watch-ink);
 }
 .signal-delivery-chip.delivery-delivered {
-  border-color: var(--theme-delivered-line);
-  background: var(--theme-delivered-surface);
-  color: var(--theme-delivered-ink);
+  border-color: var(--state-delivered-line);
+  background: var(--state-delivered-surface);
+  color: var(--state-delivered-ink);
 }
 .signal-delivery-chip.delivery-attention {
   border-color: var(--theme-warning-line);
@@ -4986,7 +4989,7 @@ button.tag-chip.toggle.active {
 .signal-delivery-chip.delivery-stopped {
   border-color: var(--line);
   background: var(--theme-chip-toggle);
-  color: var(--theme-stopped-ink);
+  color: var(--state-stopped-ink);
 }
 .signal-delivery-targets {
   list-style: none;
@@ -6104,8 +6107,8 @@ button.tag-chip.toggle.active {
 /* An orphan is marked by its border, its words, and its icon. The colour is the least of the three:
    the row says "Not sent from here" whatever a reader can see. */
 .signal-inventory-row.is-orphan {
-  border-left-color: var(--theme-watch-line);
-  background: var(--theme-watch-surface);
+  border-left-color: var(--state-watch-line);
+  background: var(--state-watch-surface);
 }
 .signal-inventory-row > p {
   margin: 0;
@@ -6133,9 +6136,9 @@ button.tag-chip.toggle.active {
   height: 12px;
 }
 .signal-inventory-origin.is-orphan {
-  border-color: var(--theme-watch-line);
-  background: var(--theme-watch-badge);
-  color: var(--theme-watch-ink);
+  border-color: var(--state-watch-line);
+  background: var(--state-watch-badge);
+  color: var(--state-watch-ink);
 }
 .signal-inventory-state {
   color: var(--muted);
@@ -6294,9 +6297,9 @@ button.tag-chip.toggle.active {
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-left-width: 3px;
-  border-left-color: var(--theme-watch-line);
+  border-left-color: var(--state-watch-line);
   border-radius: 8px;
-  background: var(--theme-watch-surface);
+  background: var(--state-watch-surface);
   font-size: 12px;
 }
 .signal-window-unmapped > p {
@@ -6811,7 +6814,7 @@ button.tag-chip.toggle.active {
   color: var(--muted);
 }
 .thread-participant-presence li.online .thread-participant-state {
-  color: var(--success, var(--theme-presence-online));
+  color: var(--success, var(--state-presence-online));
 }
 .thread-typing-indicator {
   margin: 0;
@@ -7165,8 +7168,8 @@ button.tag-chip.toggle.active {
 .agent-badge-mark.assistant {
   background: linear-gradient(
     135deg,
-    var(--theme-assistant-avatar-start),
-    var(--theme-assistant-avatar-end)
+    var(--state-assistant-avatar-start),
+    var(--state-assistant-avatar-end)
   );
   color: var(--theme-text-on-strong);
   display: grid;
@@ -7198,25 +7201,25 @@ button.tag-chip.toggle.active {
   flex: none;
 }
 .agent-badge-mark.operator {
-  background: var(--theme-operator-avatar-surface);
-  color: var(--theme-operator-avatar-ink);
+  background: var(--state-operator-avatar-surface);
+  color: var(--state-operator-avatar-ink);
 }
 .agent-badge-mark.presence-available {
-  background: var(--theme-available-avatar-surface);
-  color: var(--theme-available-avatar-ink);
+  background: var(--state-available-avatar-surface);
+  color: var(--state-available-avatar-ink);
 }
 .agent-badge-mark.presence-busy {
-  background: var(--theme-busy-avatar-surface);
-  color: var(--theme-busy-avatar-ink);
+  background: var(--state-busy-avatar-surface);
+  color: var(--state-busy-avatar-ink);
 }
 .agent-badge-mark.presence-away {
-  background: var(--theme-away-avatar-surface);
-  color: var(--theme-away-avatar-ink);
+  background: var(--state-away-avatar-surface);
+  color: var(--state-away-avatar-ink);
 }
 .agent-badge-mark.presence-offline,
 .agent-badge-mark.presence-unknown {
-  background: var(--theme-unknown-avatar-surface);
-  color: var(--theme-unknown-avatar-ink);
+  background: var(--state-unknown-avatar-surface);
+  color: var(--state-unknown-avatar-ink);
 }
 .agent-badge-copy strong {
   display: block;
@@ -7238,8 +7241,8 @@ button.tag-chip.toggle.active {
   background: var(--surface-alt);
 }
 .conversation-turn.operator-turn {
-  border-color: var(--theme-operator-turn-line);
-  background: var(--theme-operator-turn-surface);
+  border-color: var(--state-operator-turn-line);
+  background: var(--state-operator-turn-surface);
 }
 .conversation-thought {
   display: grid;
@@ -7252,7 +7255,7 @@ button.tag-chip.toggle.active {
   width: fit-content;
   border: 1px solid var(--theme-thought-line);
   background: var(--theme-thought-surface);
-  color: var(--theme-away-avatar-ink);
+  color: var(--state-away-avatar-ink);
   border-radius: 999px;
   padding: 4px 10px;
   font-size: 12px;
@@ -7289,13 +7292,13 @@ button.tag-chip.toggle.active {
   letter-spacing: 0.04em;
 }
 .conversation-turn-body .provenance.verified {
-  color: var(--theme-available-avatar-ink);
+  color: var(--state-available-avatar-ink);
 }
 .conversation-turn-body .provenance.asserted {
-  color: var(--theme-away-avatar-ink);
+  color: var(--state-away-avatar-ink);
 }
 .conversation-turn-body .provenance.unknown {
-  color: var(--theme-provenance-unknown);
+  color: var(--state-provenance-unknown);
 }
 
 .split-layout {

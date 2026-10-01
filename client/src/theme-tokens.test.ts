@@ -8,12 +8,15 @@ const css = readFileSync(resolve(process.cwd(), 'client/src/styles.css'), 'utf8'
 const root = css.slice(css.indexOf(':root {'), css.indexOf('\n* {'));
 const rules = css.slice(css.indexOf('\n* {'));
 const definitions = new Map(
-  [...root.matchAll(/^\s*(--theme-[\w-]+):\s*([^;]+);/gm)].map(([, name, value]) => [name, value]),
+  [...root.matchAll(/^\s*(--(?:theme|state)-[\w-]+):\s*([^;]+);/gm)].map(([, name, value]) => [
+    name,
+    value,
+  ]),
 );
 
 describe('light-theme presentation tokens', () => {
   it('keeps every consumed presentation colour in the light inventory', () => {
-    const used = [...rules.matchAll(/var\((--theme-[\w-]+)/g)].map(([, name]) => name);
+    const used = [...rules.matchAll(/var\((--(?:theme|state)-[\w-]+)/g)].map(([, name]) => name);
     expect(used.length).toBeGreaterThan(200);
     for (const name of used) expect(definitions.has(name), name).toBe(true);
     expect(rules).not.toMatch(/#[\da-f]{3,8}\b|rgba?\(/i);
@@ -37,7 +40,7 @@ describe('light-theme presentation tokens', () => {
     expect(root).toContain('--sidebar-focus: #ffffff');
     expect(rules).toContain('background: var(--status-wash)');
     expect(rules).toContain(
-      'background: var(--channel-surface, var(--theme-channel-neutral-surface))',
+      'background: var(--channel-surface, var(--state-channel-neutral-surface))',
     );
     expect(rules).toContain('color: var(--status-ink)');
     expect(rules).toContain('color: var(--theme-chip-ink)');
