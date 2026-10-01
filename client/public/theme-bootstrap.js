@@ -1,3 +1,4 @@
+/* global window, document */
 (() => {
   let mode = 'system';
   try {
