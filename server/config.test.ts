@@ -461,3 +461,101 @@ describe('.env.example', () => {
     expect([...documented().keys()].sort()).toEqual([...ENVIRONMENT_VARIABLES].sort());
   });
 });
+
+describe('Google Ads configuration', () => {
+  const ADS_VARIABLES = [
+    'GOOGLE_ADS_CLIENT_ID',
+    'GOOGLE_ADS_CLIENT_SECRET',
+    'GOOGLE_ADS_REDIRECT_URI',
+    'GOOGLE_ADS_TOKEN_ENCRYPTION_KEY',
+    'GOOGLE_ADS_LOGIN_CUSTOMER_ID',
+  ];
+  const clearAds = () => {
+    for (const name of ADS_VARIABLES) setEnv(name, undefined);
+    setEnv('GOOGLE_TOKEN_ENCRYPTION_KEY', undefined);
+  };
+  const load = async () => {
+    vi.resetModules();
+    return import('./config.ts');
+  };
+
+  it('starts with every Ads variable blank, reports Ads unavailable, and leaves Drive alone', async () => {
+    clearAds();
+    setEnv('GOOGLE_CLIENT_ID', 'drive-client');
+    setEnv('GOOGLE_CLIENT_SECRET', 'drive-secret');
+    setEnv('GOOGLE_TOKEN_ENCRYPTION_KEY', 'd'.repeat(32));
+    const { config, adsConfigured, adsMissingConfig } = await load();
+    expect(adsConfigured()).toBe(false);
+    expect(adsMissingConfig()).toEqual([
+      'GOOGLE_ADS_CLIENT_ID',
+      'GOOGLE_ADS_CLIENT_SECRET',
+      'GOOGLE_ADS_REDIRECT_URI',
+      'GOOGLE_ADS_TOKEN_ENCRYPTION_KEY',
+    ]);
+    expect(config.google.clientId).toBe('drive-client');
+    expect(config.google.encryptionKey).toBe('d'.repeat(32));
+  });
+
+  it('counts a half-configured Ads module as unavailable without stopping the app', async () => {
+    clearAds();
+    setEnv('GOOGLE_ADS_CLIENT_ID', 'ads-client');
+    const { adsConfigured, adsMissingConfig } = await load();
+    expect(adsConfigured()).toBe(false);
+    expect(adsMissingConfig()).not.toContain('GOOGLE_ADS_CLIENT_ID');
+  });
+
+  it('is available once the four required values are present, with the login customer optional', async () => {
+    clearAds();
+    setEnv('GOOGLE_ADS_CLIENT_ID', 'ads-client');
+    setEnv('GOOGLE_ADS_CLIENT_SECRET', 'ads-secret');
+    setEnv('GOOGLE_ADS_REDIRECT_URI', 'http://localhost:8787/api/ads/oauth/callback');
+    setEnv('GOOGLE_ADS_TOKEN_ENCRYPTION_KEY', 'a'.repeat(32));
+    const { config, adsConfigured } = await load();
+    expect(adsConfigured()).toBe(true);
+    expect(config.ads.loginCustomerId).toBe('');
+  });
+
+  it('normalizes a dashed login customer ID and refuses a malformed one by name', async () => {
+    clearAds();
+    setEnv('GOOGLE_ADS_LOGIN_CUSTOMER_ID', '123-456-7890');
+    expect((await load()).config.ads.loginCustomerId).toBe('1234567890');
+    setEnv('GOOGLE_ADS_LOGIN_CUSTOMER_ID', '12345');
+    await expect(load()).rejects.toThrow(/GOOGLE_ADS_LOGIN_CUSTOMER_ID: must be a 10-digit/);
+  });
+
+  it('refuses an Ads redirect URI on the Drive path or an untrusted host, naming the Ads variable', async () => {
+    clearAds();
+    setEnv('GOOGLE_ADS_REDIRECT_URI', 'http://localhost:8787/api/drive/oauth/callback');
+    await expect(load()).rejects.toThrow(/GOOGLE_ADS_REDIRECT_URI: must be http/);
+    setEnv('GOOGLE_ADS_REDIRECT_URI', 'http://example.com/api/ads/oauth/callback');
+    await expect(load()).rejects.toThrow(/GOOGLE_ADS_REDIRECT_URI:/);
+  });
+
+  it('accepts an https Ads redirect URI on its fixed path', async () => {
+    clearAds();
+    setEnv('GOOGLE_ADS_REDIRECT_URI', 'https://command.example.com/api/ads/oauth/callback');
+    expect((await load()).config.ads.redirectUri).toBe(
+      'https://command.example.com/api/ads/oauth/callback',
+    );
+  });
+
+  it('refuses a short Ads key and an Ads key reused from Drive, without quoting either', async () => {
+    clearAds();
+    setEnv('GOOGLE_ADS_TOKEN_ENCRYPTION_KEY', 'short-ads-key-value');
+    const short = load();
+    await expect(short).rejects.toThrow(/GOOGLE_ADS_TOKEN_ENCRYPTION_KEY: must be at least 32/);
+    await expect(short).rejects.not.toThrow(/short-ads-key-value/);
+
+    const reusedKey = 'k'.repeat(40);
+    setEnv('GOOGLE_ADS_TOKEN_ENCRYPTION_KEY', reusedKey);
+    setEnv('GOOGLE_TOKEN_ENCRYPTION_KEY', reusedKey);
+    const reused = load();
+    await expect(reused).rejects.toThrow(/GOOGLE_ADS_TOKEN_ENCRYPTION_KEY: must differ from/);
+    await expect(reused).rejects.not.toThrow(new RegExp(reusedKey));
+  });
+
+  it('has no developer-token variable', async () => {
+    const { ENVIRONMENT_VARIABLES } = await load();
+    expect(ENVIRONMENT_VARIABLES.filter((name) => /DEVELOPER/i.test(name))).toEqual([]);
+  });
+});

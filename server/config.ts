@@ -2,6 +2,7 @@ import 'dotenv/config';
 import path from 'node:path';
 import { z } from 'zod';
 import { isAllowedGoogleRedirectUri } from '../shared/drive-oauth.ts';
+import { isAllowedAdsRedirectUri, normalizeAdsCustomerId } from '../shared/ads.ts';
 
 export const PROJECT_SUBFOLDERS = [
   '01_Admin',
@@ -180,6 +181,31 @@ const environment = z.object({
     .string()
     .regex(/^\d+$/, 'must be the numeric Google Cloud project number')
     .optional(),
+  // Google Ads (C255) is a separate grant from Drive: its own OAuth client, redirect, and
+  // encryption key, all optional. Present values have to be usable and every message names an
+  // Ads variable, so a bad one is never mistaken for a Drive problem. There is deliberately no
+  // developer-token variable � the API ignores that header (docs/google-ads-api-surface.md).
+  GOOGLE_ADS_CLIENT_ID: z.string().optional(),
+  GOOGLE_ADS_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_ADS_REDIRECT_URI: absoluteUrl
+    .refine(
+      isAllowedAdsRedirectUri,
+      'must be http://localhost|127.0.0.1�/api/ads/oauth/callback or https://�/api/ads/oauth/callback with no query or hash',
+    )
+    .optional(),
+  GOOGLE_ADS_TOKEN_ENCRYPTION_KEY: z
+    .string()
+    .min(ENCRYPTION_KEY_MIN_LENGTH, `must be at least ${ENCRYPTION_KEY_MIN_LENGTH} characters`)
+    .refine(
+      (value) => value !== read('GOOGLE_TOKEN_ENCRYPTION_KEY'),
+      'must differ from GOOGLE_TOKEN_ENCRYPTION_KEY; Ads tokens are encrypted under their own key',
+    )
+    .optional(),
+  GOOGLE_ADS_LOGIN_CUSTOMER_ID: z
+    .string()
+    .transform(normalizeAdsCustomerId)
+    .pipe(z.string().regex(/^\d{10}$/, 'must be a 10-digit Google Ads customer ID'))
+    .optional(),
   POST_BRIDGE_API_KEY: z.string().optional(),
   BUFFER_API_KEY: z.string().optional(),
   // One-release migration alias. The canonical value always wins when both are present.
@@ -231,6 +257,11 @@ const parsed = environment.safeParse({
   HCC_ASSISTANT_PROVIDER: read('HCC_ASSISTANT_PROVIDER'),
   GOOGLE_API_KEY: read('GOOGLE_API_KEY'),
   GOOGLE_APP_ID: read('GOOGLE_APP_ID'),
+  GOOGLE_ADS_CLIENT_ID: read('GOOGLE_ADS_CLIENT_ID'),
+  GOOGLE_ADS_CLIENT_SECRET: read('GOOGLE_ADS_CLIENT_SECRET'),
+  GOOGLE_ADS_REDIRECT_URI: read('GOOGLE_ADS_REDIRECT_URI'),
+  GOOGLE_ADS_TOKEN_ENCRYPTION_KEY: read('GOOGLE_ADS_TOKEN_ENCRYPTION_KEY'),
+  GOOGLE_ADS_LOGIN_CUSTOMER_ID: read('GOOGLE_ADS_LOGIN_CUSTOMER_ID'),
   POST_BRIDGE_API_KEY: read('POST_BRIDGE_API_KEY'),
   BUFFER_API_KEY: read('BUFFER_API_KEY'),
   BUFFER_KEY: read('BUFFER_KEY'),
@@ -276,6 +307,14 @@ export const config = {
     apiKey: env.GOOGLE_API_KEY ?? '',
     appId: env.GOOGLE_APP_ID ?? '',
   },
+  ads: {
+    clientId: env.GOOGLE_ADS_CLIENT_ID ?? '',
+    clientSecret: env.GOOGLE_ADS_CLIENT_SECRET ?? '',
+    redirectUri: env.GOOGLE_ADS_REDIRECT_URI ?? '',
+    encryptionKey: env.GOOGLE_ADS_TOKEN_ENCRYPTION_KEY ?? '',
+    /** Only when access goes through a manager account; blank for direct access. */
+    loginCustomerId: env.GOOGLE_ADS_LOGIN_CUSTOMER_ID ?? '',
+  },
   publish: {
     apiKey: env.POST_BRIDGE_API_KEY ?? '',
     timezone: env.PUBLISH_TIMEZONE ?? '',
@@ -301,6 +340,28 @@ export const config = {
     trustedProxyHopsConfigured,
   },
 };
+
+/**
+ * The required Ads variables still blank. `GOOGLE_ADS_LOGIN_CUSTOMER_ID` is not on the list: it
+ * is optional by design. Names only, never values.
+ */
+export const adsMissingConfig = (ads: typeof config.ads = config.ads): string[] =>
+  (
+    [
+      ['GOOGLE_ADS_CLIENT_ID', ads.clientId],
+      ['GOOGLE_ADS_CLIENT_SECRET', ads.clientSecret],
+      ['GOOGLE_ADS_REDIRECT_URI', ads.redirectUri],
+      ['GOOGLE_ADS_TOKEN_ENCRYPTION_KEY', ads.encryptionKey],
+    ] as const
+  )
+    .filter(([, value]) => !value)
+    .map(([name]) => name);
+
+/**
+ * Google Ads is optional and independent of Drive and Signal: half-configuration never counts
+ * as available, and an unavailable Ads module does not stop the app starting.
+ */
+export const adsConfigured = () => adsMissingConfig().length === 0;
 
 /** Publishing is optional, but half-configuration never counts as available. */
 export const publishConfigured = () => Boolean(config.publish.apiKey && config.publish.timezone);

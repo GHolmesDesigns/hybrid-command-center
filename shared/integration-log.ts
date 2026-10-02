@@ -15,6 +15,8 @@ export const INTEGRATION_SOURCES = [
   'signal-campaign',
   'google-drive',
   'agent-hub',
+  // Google Ads is its own source: its own OAuth grant, its own failure modes, and read-only.
+  'google-ads',
 ] as const;
 export type IntegrationSource = (typeof INTEGRATION_SOURCES)[number];
 
@@ -61,6 +63,12 @@ export const INTEGRATION_OPERATIONS = [
   // Reading provider-reported agent usage. Separate from every Signal operation because it changes
   // no post, no handoff, and no workspace row — it appends usage snapshots only.
   'agent.cost-refresh',
+  // Google Ads connection and refresh. A refresh reads every approved account before its one write,
+  // so it lands or it does not and never reports PARTIAL. No row carries a token, a provider
+  // response, or a campaign name; a failure's words pass through `redactSecrets`.
+  'ads.connect',
+  'ads.disconnect',
+  'ads.sync',
 ] as const;
 export type IntegrationOperation = (typeof INTEGRATION_OPERATIONS)[number];
 
@@ -85,6 +93,8 @@ export const INTEGRATION_ENTITY_TYPES = [
   'signalPost',
   'driveFolder',
   'driveFile',
+  // An ad account, by customer ID. Campaigns are never listed: their names are provider free text.
+  'adsAccount',
 ] as const;
 export type IntegrationEntityType = (typeof INTEGRATION_ENTITY_TYPES)[number];
 
@@ -138,6 +148,7 @@ export const INTEGRATION_SOURCE_LABEL: Record<IntegrationSource, string> = {
   'signal-campaign': 'Signal Campaign',
   'google-drive': 'Google Drive',
   'agent-hub': 'Agent Hub',
+  'google-ads': 'Google Ads',
 };
 
 export const INTEGRATION_OPERATION_LABEL: Record<IntegrationOperation, string> = {
@@ -159,6 +170,9 @@ export const INTEGRATION_OPERATION_LABEL: Record<IntegrationOperation, string> =
   'signal.buffer-accounts-refresh': 'Signal Buffer accounts refresh',
   'signal.analytics-window-refresh': 'Signal analytics window refresh',
   'agent.cost-refresh': 'Agent cost refresh',
+  'ads.connect': 'Google Ads connect',
+  'ads.disconnect': 'Google Ads disconnect',
+  'ads.sync': 'Google Ads sync',
 };
 
 export const INTEGRATION_OUTCOME_LABEL: Record<IntegrationOutcome, string> = {
@@ -174,4 +188,5 @@ export const INTEGRATION_ENTITY_LABEL: Record<IntegrationEntityType, string> = {
   signalPost: 'Signal post',
   driveFolder: 'Drive folder',
   driveFile: 'Drive file',
+  adsAccount: 'Ads account',
 };
