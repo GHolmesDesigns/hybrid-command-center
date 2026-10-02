@@ -33,8 +33,8 @@ type PendingRow = {
   expires_at: string;
 };
 
-export const challengeFor = (verifier: string) =>
-  crypto.createHash('sha256').update(verifier).digest('base64url');
+/** The `S256` transformation from RFC 7636 §4.2: a public PKCE challenge, not a stored password. */
+export const challengeFor = (verifier: string) => crypto.hash('sha256', verifier, 'base64url');
 
 function sameSecret(a: string, b: string) {
   const left = Buffer.from(a, 'utf8');
