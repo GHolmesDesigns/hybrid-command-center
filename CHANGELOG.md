@@ -1,5 +1,14 @@
 # Changelog
 
+## [7.1.3] - 2026-10-02
+
+### Added
+
+- A client's page now has a read-only **Ads summary**: the client's approved Google Ads accounts, the last successful snapshot time, and the provider's totals per currency over the stored 90 days, with an **Open in Ads** link to the Ads page filtered to that client. A client with no mapped account, or an account with no measured days, gets its own empty state instead of zero totals. When Google Ads is disconnected or the latest refresh failed, the last stored figures stay visible beside a notice. Opening the page reads stored data only and never contacts Google.
+
+### Breaking changes
+
+None.
 ## [7.1.2] - 2026-10-02
 
 ### Added
