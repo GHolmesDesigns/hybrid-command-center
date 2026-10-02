@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   AdsRequestBudget,
+  describeAdsOutcome,
   ADS_REQUEST_CAP,
   parseAdsProbeArgs,
   renderAdsPlan,
@@ -35,30 +36,40 @@ describe('Google Ads probe guards', () => {
     expect(renderAdsPlan()).toContain('1 approved-account dated metrics SearchStream');
   });
 
-  it('refuses missing approval, identity, credentials, and unbounded dates', () => {
+  it('refuses each missing guard for its own reason, and enforces the 90-date boundary', () => {
     const env = {
       GOOGLE_ADS_CLIENT_ID: 'a',
       GOOGLE_ADS_CLIENT_SECRET: 'b',
       GOOGLE_ADS_REFRESH_TOKEN: 'c',
     };
+    const withEnd = (end: string) => [...args.slice(0, -1), end];
     expect(
       parseAdsProbeArgs(
         args.filter((a) => a !== '--account-approved'),
         env,
       ).error,
-    ).toBeTruthy();
+    ).toBe('--yes and --account-approved are required');
     expect(
       parseAdsProbeArgs(
-        args.filter((a) => a !== config.account),
+        args.filter((a) => a !== '--yes'),
         env,
       ).error,
-    ).toBeTruthy();
-    expect(parseAdsProbeArgs(args, {}).error).toBeTruthy();
-    expect(parseAdsProbeArgs([...args.slice(0, -1), '2026-12-31'], env).error).toBeTruthy();
+    ).toBe('--yes and --account-approved are required');
+    const noAccount = args.filter((a) => a !== '--account' && a !== config.account);
+    expect(parseAdsProbeArgs(noAccount, env).error).toBe(
+      'an explicit 10-digit --account is required',
+    );
+    expect(parseAdsProbeArgs(args, {}).error).toMatch(/GOOGLE_ADS_CLIENT_ID/);
     expect(parseAdsProbeArgs(['--unknown'], env).error).toBe('unknown plan arguments');
     expect(parseAdsProbeArgs(['--help'], env).help).toBe(true);
-    expect(parseAdsProbeArgs([...args, '--account', config.account], env).error).toBeTruthy();
-    expect(parseAdsProbeArgs([...args.slice(0, -1), '2026-07-01'], env).error).toBeTruthy();
+    expect(parseAdsProbeArgs([...args, '--account', config.account], env).error).toBe(
+      'invalid or repeated option',
+    );
+    // 2026-07-05..2026-10-02 is exactly 90 calendar dates; one more day is refused.
+    expect(parseAdsProbeArgs(args, env).config?.end).toBe('2026-10-02');
+    expect(parseAdsProbeArgs(withEnd('2026-10-03'), env).error).toMatch(/at most 90 days/);
+    expect(parseAdsProbeArgs(withEnd('2026-07-04'), env).error).toMatch(/at most 90 days/);
+    expect(parseAdsProbeArgs(withEnd('2026-07-05'), env).config?.end).toBe('2026-07-05');
   });
 
   it('reads only the approved account, omits developer token, and reports empty rows honestly', async () => {
@@ -78,10 +89,9 @@ describe('Google Ads probe guards', () => {
     expect(result).toEqual({
       requests: 5,
       accessibleCount: 2,
-      approvedAccountPresent: true,
-      metadataRows: 1,
-      campaignRows: 0,
-      metricRows: 0,
+      customer: { accepted: true, rows: 1 },
+      campaign: { accepted: true, rows: 0 },
+      metrics: { accepted: true, rows: 0 },
     });
     expect(calls.slice(2).every(({ url }) => url.includes('/customers/1234567890/'))).toBe(true);
     expect(
@@ -135,18 +145,67 @@ describe('Google Ads probe guards', () => {
         response(++call === 1 ? { access_token: 'token' } : { resourceNames: ['bad'] })('', {}),
       ),
     ).rejects.toThrow('invalid accessible-customer');
-    call = 0;
-    await expect(
-      runAdsProbe(config, async () =>
-        response(
-          ++call === 1
-            ? { access_token: 'token' }
-            : call === 2
-              ? { resourceNames: ['customers/1234567890'] }
-              : { results: [] },
-        )('', {}),
-      ),
-    ).rejects.toThrow('invalid or oversized SearchStream');
+  });
+
+  it('records each rejected query and still runs the rest, keeping only the Google status enum', async () => {
+    const calls: string[] = [];
+    const transport: AdsTransport = async (_url, init) => {
+      calls.push(String(init.body ?? ''));
+      const n = calls.length;
+      if (n === 1) return { ok: true, status: 200, json: async () => ({ access_token: 't' }) };
+      if (n === 2)
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ resourceNames: ['customers/1234567890'] }),
+        };
+      if (n === 3)
+        return {
+          ok: false,
+          status: 400,
+          json: async () => ({
+            error: { status: 'INVALID_ARGUMENT', message: 'secret 1234567890' },
+          }),
+        };
+      if (n === 4)
+        return {
+          ok: false,
+          status: 500,
+          json: async () => {
+            throw new Error('not json');
+          },
+        };
+      return { ok: true, status: 200, json: async () => ({ results: [] }) };
+    };
+    const result = await runAdsProbe(config, transport);
+    expect(result.requests).toBe(5);
+    expect(result.customer).toEqual({
+      accepted: false,
+      httpStatus: 400,
+      errorStatus: 'INVALID_ARGUMENT',
+    });
+    expect(result.campaign).toEqual({ accepted: false, httpStatus: 500, errorStatus: null });
+    expect(result.metrics).toEqual({ accepted: false, httpStatus: null, errorStatus: null });
+    expect(JSON.stringify(result)).not.toContain('secret');
+    expect(describeAdsOutcome(result.customer)).toBe('rejected (HTTP 400, INVALID_ARGUMENT)');
+    expect(describeAdsOutcome({ accepted: true, rows: 3 })).toBe('accepted, 3 rows');
+  });
+
+  it('sends every request with a timeout signal', async () => {
+    const signals: (AbortSignal | null | undefined)[] = [];
+    const payloads = [
+      { access_token: 't' },
+      { resourceNames: ['customers/1234567890'] },
+      [],
+      [],
+      [],
+    ];
+    await runAdsProbe(config, async (_url, init) => {
+      signals.push(init.signal);
+      return { ok: true, status: 200, json: async () => payloads[signals.length - 1] };
+    });
+    expect(signals).toHaveLength(5);
+    expect(signals.every((s) => s instanceof AbortSignal)).toBe(true);
   });
 
   it('stops on transport and JSON failures without exposing their bodies', async () => {

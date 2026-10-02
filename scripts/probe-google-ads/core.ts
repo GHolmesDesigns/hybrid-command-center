@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const ADS_API_VERSION = 'v25';
 export const ADS_SCOPE = 'https://www.googleapis.com/auth/adwords';
 export const ADS_REQUEST_CAP = 8;
+export const ADS_REQUEST_TIMEOUT_MS = 30_000;
 export class AdsRequestBudget {
   private count = 0;
 
@@ -112,22 +113,39 @@ const streamSchema = z
   .array(z.object({ results: z.array(z.unknown()).max(10000).optional() }))
   .max(100);
 
+export type AdsQueryOutcome =
+  | { accepted: true; rows: number }
+  | { accepted: false; httpStatus: number | null; errorStatus: string | null };
+
+const errorStatusSchema = z.object({
+  error: z.object({ status: z.string().regex(/^[A-Z_]{1,60}$/) }),
+});
+
 export async function runAdsProbe(config: AdsProbeConfig, transport: AdsTransport) {
   const budget = new AdsRequestBudget();
-  async function request(url: string, init: RequestInit): Promise<unknown> {
+  async function send(url: string, init: RequestInit) {
     const requestNumber = budget.take();
-    let response: Pick<Response, 'ok' | 'status' | 'json'>;
     try {
-      response = await transport(url, init);
+      const response = await transport(url, {
+        ...init,
+        signal: AbortSignal.timeout(ADS_REQUEST_TIMEOUT_MS),
+      });
+      return { response, requestNumber };
     } catch {
       throw new Error('network request failed');
     }
-    if (!response.ok) throw new Error(`HTTP ${response.status} at request ${requestNumber}`);
+  }
+  async function readJson(response: Pick<Response, 'json'>): Promise<unknown> {
     try {
       return await response.json();
     } catch {
       throw new Error('invalid JSON response');
     }
+  }
+  async function request(url: string, init: RequestInit): Promise<unknown> {
+    const { response, requestNumber } = await send(url, init);
+    if (!response.ok) throw new Error(`HTTP ${response.status} at request ${requestNumber}`);
+    return readJson(response);
   }
   const tokenResult = z.object({ access_token: z.string().min(1) }).safeParse(
     await request('https://oauth2.googleapis.com/token', {
@@ -153,33 +171,45 @@ export async function runAdsProbe(config: AdsProbeConfig, transport: AdsTranspor
     ),
   );
   if (!accessible.success) throw new Error('invalid accessible-customer response');
-  const approvedAccountPresent = accessible.data.resourceNames.includes(
-    `customers/${config.account}`,
-  );
-  if (!approvedAccountPresent) throw new Error('approved account was not directly accessible');
-  async function search(query: string): Promise<number> {
-    const response = streamSchema.safeParse(
-      await request(
-        `https://googleads.googleapis.com/${ADS_API_VERSION}/customers/${config.account}/googleAds:searchStream`,
-        {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ query }),
-        },
-      ),
+  if (!accessible.data.resourceNames.includes(`customers/${config.account}`))
+    throw new Error('approved account was not directly accessible');
+  // A rejected query is evidence, not a reason to skip the others: each is recorded on its own,
+  // keeping only Google's status enum from an error body, never the message or its contents.
+  async function search(query: string): Promise<AdsQueryOutcome> {
+    const { response } = await send(
+      `https://googleads.googleapis.com/${ADS_API_VERSION}/customers/${config.account}/googleAds:searchStream`,
+      { method: 'POST', headers, body: JSON.stringify({ query }) },
     );
-    if (!response.success) throw new Error('invalid or oversized SearchStream response');
-    return response.data.reduce((sum, batch) => sum + (batch.results?.length ?? 0), 0);
+    if (!response.ok) {
+      let errorStatus: string | null = null;
+      try {
+        const parsed = errorStatusSchema.safeParse(await response.json());
+        if (parsed.success) errorStatus = parsed.data.error.status;
+      } catch {
+        // an unreadable error body is reported as no status
+      }
+      return { accepted: false, httpStatus: response.status, errorStatus };
+    }
+    const parsed = streamSchema.safeParse(await readJson(response));
+    if (!parsed.success) return { accepted: false, httpStatus: null, errorStatus: null };
+    return {
+      accepted: true,
+      rows: parsed.data.reduce((sum, batch) => sum + (batch.results?.length ?? 0), 0),
+    };
   }
-  const metadataRows = await search(ADS_QUERIES.customer);
-  const campaignRows = await search(ADS_QUERIES.campaign);
-  const metricRows = await search(ADS_QUERIES.metrics(config.start, config.end));
+  const customer = await search(ADS_QUERIES.customer);
+  const campaign = await search(ADS_QUERIES.campaign);
+  const metrics = await search(ADS_QUERIES.metrics(config.start, config.end));
   return {
     requests: budget.used,
     accessibleCount: accessible.data.resourceNames.length,
-    approvedAccountPresent,
-    metadataRows,
-    campaignRows,
-    metricRows,
+    customer,
+    campaign,
+    metrics,
   };
+}
+
+export function describeAdsOutcome(outcome: AdsQueryOutcome): string {
+  if (outcome.accepted) return `accepted, ${outcome.rows} rows`;
+  return `rejected (HTTP ${outcome.httpStatus ?? 'n/a'}, ${outcome.errorStatus ?? 'no status'})`;
 }

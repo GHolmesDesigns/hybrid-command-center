@@ -14,7 +14,7 @@ This note supports issue #723 and the read-only probe at `scripts/probe-google-a
 
 ## Exact requests and fields
 
-The plan makes one OAuth refresh at `https://oauth2.googleapis.com/token`, one `GET /v25/customers:listAccessibleCustomers`, then these three distinct `POST /v25/customers/{approved-id}/googleAds:searchStream` calls. The approved ID is never printed or persisted. The request returns row **counts** only.
+The plan makes one OAuth refresh at `https://oauth2.googleapis.com/token`, one `GET /v25/customers:listAccessibleCustomers`, then these three distinct `POST /v25/customers/{approved-id}/googleAds:searchStream` calls. The approved ID is never printed or persisted. The probe returns row **counts** only. Each SearchStream query is recorded as accepted or rejected on its own: a rejection is reported with its HTTP status and Google's error status enum (never the message or body) and the remaining queries still run. Every request has a 30-second timeout.
 
 ```sql
 SELECT customer.id, customer.descriptive_name, customer.currency_code, customer.time_zone, customer.manager, customer.status FROM customer LIMIT 1
