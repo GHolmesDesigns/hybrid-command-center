@@ -1,5 +1,15 @@
 # Changelog
 
+## [7.0.12] - 2026-10-02
+
+## Added
+
+- Added an owner-run, read-only Google Ads API probe that plans locally by default and requires explicit approval for an account and date range before live requests.
+- Added a dated Google Ads API-surface note with documented facts, probe limits, and open verification questions.
+
+## Breaking changes
+
+None.
 ## [7.0.11] - 2026-10-02
 
 ### Fixed
