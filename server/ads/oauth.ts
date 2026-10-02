@@ -33,7 +33,7 @@ type PendingRow = {
   expires_at: string;
 };
 
-const challengeFor = (verifier: string) =>
+export const challengeFor = (verifier: string) =>
   crypto.createHash('sha256').update(verifier).digest('base64url');
 
 function sameSecret(a: string, b: string) {

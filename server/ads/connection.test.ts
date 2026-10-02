@@ -1,4 +1,3 @@
-import crypto from 'node:crypto';
 import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ADS_OAUTH_SCOPE } from '../../shared/ads.ts';
@@ -10,6 +9,7 @@ import { setSetting, getSetting } from '../drive/service.ts';
 import { MockOAuthClient } from '../drive/mock-provider.ts';
 import { listIntegrationEvents } from '../integration-log.ts';
 import { MockAdsOAuthClient } from './mock-oauth.ts';
+import { challengeFor } from './oauth.ts';
 import { AdsTokenError, decryptAdsRefreshToken, encryptAdsRefreshToken } from './tokens.ts';
 
 const ADS_KEY = 'ads-encryption-key-that-is-32-chars!!';
@@ -107,9 +107,7 @@ describe('Ads connect over HTTP', () => {
     const response = await callback(app, { state, code: 'ads-code' }).expect(302);
     expect(response.headers.location).toBe(`${config.appOrigin}/settings?ads=connected`);
 
-    expect(
-      crypto.createHash('sha256').update(oauth.exchanges[0].verifier).digest('base64url'),
-    ).toBe(oauth.authorizations[0].challenge);
+    expect(challengeFor(oauth.exchanges[0].verifier)).toBe(oauth.authorizations[0].challenge);
     // The list call happened with the access token the exchange returned, before the row existed.
     expect(oauth.listCalls).toEqual(['mock-ads-access-token']);
 
@@ -298,6 +296,19 @@ describe('Ads connect over HTTP', () => {
     const status = (await request(rotated).get('/api/ads/status')).body;
     expect(status.status).toBe('ERROR');
     expect(status.problem).toMatch(/cannot be read/);
+  });
+
+  it('reports a saved connection as an error when the Ads key is no longer configured', async () => {
+    const { app } = harness();
+    await connect(app);
+    const keyless = createApp(db, {
+      adsOauth: () => new MockAdsOAuthClient(),
+      adsConfig: { ...ads, encryptionKey: '' },
+      now: () => NOW,
+    });
+    const status = (await request(keyless).get('/api/ads/status')).body;
+    expect(status).toMatchObject({ configured: false, status: 'ERROR' });
+    expect(status.problem).toMatch(/encryption key is not configured/);
   });
 
   it('disconnects locally, records one event, and is a no-op the second time', async () => {
