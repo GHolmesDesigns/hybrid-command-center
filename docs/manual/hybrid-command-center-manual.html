@@ -957,13 +957,14 @@
       <a href="#session" data-for="session"><span class="n">04</span> First session</a>
       <a href="#modules" data-for="modules"><span class="n">05</span> The modules</a>
       <a href="#signal" data-for="signal"><span class="n">06</span> Publishing &amp; figures</a>
-      <a href="#mcp" data-for="mcp"><span class="n">07</span> MCP &amp; agent workflows</a>
-      <a href="#backup" data-for="backup"><span class="n">08</span> Backup &amp; recovery</a>
-      <a href="#trouble" data-for="trouble"><span class="n">09</span> Troubleshooting</a>
+      <a href="#ads" data-for="ads"><span class="n">07</span> Google Ads</a>
+      <a href="#mcp" data-for="mcp"><span class="n">08</span> MCP &amp; agent workflows</a>
+      <a href="#backup" data-for="backup"><span class="n">09</span> Backup &amp; recovery</a>
+      <a href="#trouble" data-for="trouble"><span class="n">10</span> Troubleshooting</a>
       <a href="#contributing" data-for="contributing"
-        ><span class="n">10</span> Changing the code</a
+        ><span class="n">11</span> Changing the code</a
       >
-      <a href="#reference" data-for="reference"><span class="n">11</span> Reference tables</a>
+      <a href="#reference" data-for="reference"><span class="n">12</span> Reference tables</a>
     </nav>
 
     <div class="railfoot">
@@ -1099,7 +1100,7 @@
                 <dd>
                   The one folder that holds this whole application. You can recognise it: it
                   directly contains a file named <code>package.json</code> and folders named
-                  <code>client</code> and <code>server</code>. Almost every problem in Section 09
+                  <code>client</code> and <code>server</code>. Almost every problem in Section 10
                   comes from running a command somewhere else.
                 </dd>
               </div>
@@ -1326,7 +1327,7 @@
               <li>
                 <strong>Your computer</strong> keeps the records &mdash; clients, projects, tasks,
                 checklists, dependencies, notes, tags, and planned posts. All of them sit in one
-                file, which is why Section 08 exists.
+                file, which is why Section 09 exists.
               </li>
               <li>
                 <strong>Google Drive</strong> keeps the actual files. The app stores links to Drive
@@ -1828,7 +1829,7 @@ http://localhost:8787</code></pre>
                   </table>
                 </div>
                 Keep a copy of that encryption key somewhere private and
-                <em>separate from your backups</em>. Section 08 explains why the separation matters.
+                <em>separate from your backups</em>. Section 09 explains why the separation matters.
               </li>
               <li>Save the file. Stop the app with <kbd>Ctrl</kbd>+<kbd>C</kbd> and start it again.</li>
               <li>
@@ -2137,7 +2138,7 @@ http://localhost:8787</code></pre>
           <h2>The modules</h2>
         </div>
         <p class="sintro">
-          Ten places to be. Each one is labelled with what it is allowed to do to your data.
+          Eleven places to be. Each one is labelled with what it is allowed to do to your data.
         </p>
 
         <div class="lanes">
@@ -2145,7 +2146,7 @@ http://localhost:8787</code></pre>
             <span class="chip">Operator</span>
             <h3>Where each job lives</h3>
             <p>
-              Ten areas, reached from the sidebar. The tag beside each name says what it is allowed
+              Eleven areas, reached from the sidebar. The tag beside each name says what it is allowed
               to do: <strong>READ</strong> only shows you things, <strong>WRITE</strong> changes
               them, and <strong>READ ONLY</strong> means the area physically cannot alter what it is
               showing you, however hard you click.
@@ -2211,6 +2212,14 @@ http://localhost:8787</code></pre>
                 </p>
               </div>
               <div class="mod">
+                <h4>Ads <span class="rw">READ ONLY</span></h4>
+                <p>
+                  Stored Google Ads performance for the accounts you approved, grouped by client,
+                  with totals per currency. Opening it never contacts Google; only
+                  <strong>Refresh from Google</strong> does. Section 07 explains the setup.
+                </p>
+              </div>
+              <div class="mod">
                 <h4>Agents <span class="rw">READ / CONTROL</span></h4>
                 <p>
                   Set up local or hosted MCP connections, issue scoped credentials, verify
@@ -2222,7 +2231,7 @@ http://localhost:8787</code></pre>
               <div class="mod">
                 <h4>Settings <span class="rw">READ / WRITE</span></h4>
                 <p>
-                  Drive connection, branding, tags, categories, and campaigns. Deleting a label
+                  Drive and Google Ads connections, Ads account approval and client mapping, branding, tags, categories, and campaigns. Deleting a label
                   tells you how many records it affects and never deletes one of them.
                 </p>
               </div>
@@ -2276,6 +2285,11 @@ http://localhost:8787</code></pre>
                     <td>Figures</td>
                     <td><code>AnalyticsProvider</code></td>
                     <td>metrics tables only</td>
+                  </tr>
+                  <tr>
+                    <td>Ads</td>
+                    <td><code>AdsProvider</code> (read only), stored snapshot</td>
+                    <td>nothing on page load; refresh replaces the snapshot; mapping changes one <code>client_id</code></td>
                   </tr>
                   <tr>
                     <td>Agents</td>
@@ -2572,9 +2586,138 @@ http://localhost:8787</code></pre>
       </section>
 
       <!-- 07 ================================================= -->
-      <section id="mcp" data-lanes="operator engineer agent">
+      <section id="ads" data-lanes="operator engineer agent">
         <div class="shead">
           <span class="num">07</span>
+          <h2>Google Ads</h2>
+        </div>
+        <p class="sintro">
+          A read-only window onto Google Ads performance. The app reads what Google reports and
+          stores it; it can never change an account.
+        </p>
+
+        <div class="lanes">
+          <article class="lane" data-lane="operator">
+            <span class="chip">Operator</span>
+            <h3>Connect, approve, map, then read</h3>
+            <p>
+              Google Ads is a separate grant from Drive, with its own Google OAuth client and its own
+              encryption key. Opening the <strong>Ads</strong> page never contacts Google. The only
+              path to Google is <strong>Refresh from Google</strong>, which a person presses; there
+              is no timer.
+            </p>
+            <ol>
+              <li>
+                Put <code>GOOGLE_ADS_CLIENT_ID</code>, <code>GOOGLE_ADS_CLIENT_SECRET</code>,
+                <code>GOOGLE_ADS_REDIRECT_URI</code>, and
+                <code>GOOGLE_ADS_TOKEN_ENCRYPTION_KEY</code> in <code>.env</code> and restart. Add
+                <code>GOOGLE_ADS_LOGIN_CUSTOMER_ID</code> only if access goes through a manager
+                account.
+              </li>
+              <li>
+                <strong>Settings &rarr; Google Ads &rarr; Connect Google Ads.</strong> It counts as
+                connected only after Google lists the accounts your login reaches directly; a
+                failure saves nothing and leaves any earlier connection alone.
+              </li>
+              <li>
+                <strong>Settings &rarr; Ads accounts &rarr; List accessible accounts.</strong>
+                Listing reads no account details, and connecting approves nothing.
+              </li>
+              <li>
+                <strong>Approve</strong> one account at a time. A manager account, or one that is
+                cancelled, suspended, or closed, is refused with the reason.
+              </li>
+              <li>
+                Choose a client for an approved account, <strong>Review change</strong>, then
+                <strong>Confirm mapping</strong>. An unmapped account stays listed as
+                <strong>Unassigned</strong>.
+              </li>
+            </ol>
+            <h4>The Ads page</h4>
+            <p>
+              Accounts are grouped by client, with <strong>Unassigned</strong> as a group of its own.
+              Each shows its currency, its own time zone, the stored day range (up to 90
+              account-local days), and when it was last refreshed. The four figures are
+              impressions, clicks, cost, and conversions, exactly as Google reports them.
+            </p>
+            <ul>
+              <li>
+                <strong>Totals for this view</strong> add Google's daily values separately per
+                currency. Two currencies give two totals; they are never combined or converted. No
+                rate, average, or per-click cost is shown.
+              </li>
+              <li>
+                A campaign or view with no measured day shows no figures and says so. A missing day
+                is not a zero.
+              </li>
+              <li>
+                The client, account, from, and to filters live in the address bar, so a filtered
+                view can be bookmarked. A link naming something the snapshot no longer has still
+                opens; that filter is ignored and the page says so.
+              </li>
+            </ul>
+            <h4>On a client's page</h4>
+            <p>
+              Each client has an <strong>Ads summary</strong>: its approved accounts, the last
+              successful snapshot time, and per-currency totals over the stored 90 days, with
+              <strong>Open in Ads</strong> to the page filtered to that client. A client with no
+              mapped account and a mapped account with no measured days get different messages, and
+              neither shows zeros. An archived client keeps its accounts; a merged client's accounts
+              move to the survivor, and the merged client's card says so.
+            </p>
+            <div class="note">
+              <strong>If a refresh fails</strong>, the previous figures stay exactly as they were
+              and a banner gives the reason and the last successful snapshot time. If Google Ads is
+              disconnected, or the login no longer reaches an account, the last snapshot stays
+              readable and is marked as not being refreshed. Disconnecting removes only the
+              credential stored here; also revoke the app under Google Account permissions.
+            </div>
+          </article>
+
+          <article class="lane" data-lane="engineer">
+            <span class="chip">Engineer</span>
+            <h3>Boundaries</h3>
+            <ul>
+              <li>
+                <code>server/ads/</code> is separate from Drive. <code>provider.ts</code> exposes
+                read methods only; <code>read.ts</code> is SELECT-only; nothing reads a Drive
+                setting. Tokens are encrypted under <code>GOOGLE_ADS_TOKEN_ENCRYPTION_KEY</code>
+                alone and never reach the browser.
+              </li>
+              <li>
+                Listing records accounts as <em>discoverable</em> and reads no metadata; approval is
+                a person naming one exact ID twice. What the provider reports lives in
+                <code>ads_accounts</code>; what a person decided lives in
+                <code>ads_account_settings</code>. Mapping is a hash-checked preview and commit that
+                changes one <code>client_id</code> and writes no <code>integration_events</code>
+                row.
+              </li>
+              <li>
+                <code>sync.ts</code> runs only from a person's POST. It makes three calls per
+                approved account under fixed request, row, and response ceilings, validates every
+                row, then replaces the provider-owned campaign, day, and window rows in one
+                transaction under one <code>snapshot_at</code>. A failure leaves the prior
+                generation untouched and records its <code>FAILURE</code> event afterwards.
+              </li>
+              <li>
+                The page and the client card share <code>shared/ads-performance-view.ts</code>:
+                addition of the provider's own daily rows, per currency, no totals (not zeros) for
+                an empty set. Filters are durable URL state read defensively. A client merge
+                retargets the source's accounts in its own transaction.
+              </li>
+              <li>
+                No MCP tool exposes any Ads data. <code>npm run probe:google-ads</code> is owner-run
+                only, never CI.
+              </li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <!-- 08 ================================================= -->
+      <section id="mcp" data-lanes="operator engineer agent">
+        <div class="shead">
+          <span class="num">08</span>
           <h2>MCP connections and agent workflows</h2>
         </div>
         <p class="sintro">
@@ -2588,7 +2731,7 @@ http://localhost:8787</code></pre>
             <h3>What an agent connection is, and what it is not</h3>
             <p>
               This section matters only if AI coding assistants work on this application alongside a
-              person. If that is not happening on your machine, skip to Section 08 &mdash; nothing
+              person. If that is not happening on your machine, skip to Section 09 &mdash; nothing
               here is needed to run the app.
             </p>
             <p>
@@ -3109,10 +3252,10 @@ MCP_AGENT_LABEL = "codex-release"</code></pre>
         </div>
       </section>
 
-      <!-- 08 ================================================= -->
+      <!-- 09 ================================================= -->
       <section id="backup" data-lanes="operator engineer agent">
         <div class="shead">
-          <span class="num">08</span>
+          <span class="num">09</span>
           <h2>Backup and recovery</h2>
         </div>
         <p class="sintro">
@@ -3257,10 +3400,10 @@ npm run cutover:rehearse -- --plan</code></pre>
         </div>
       </section>
 
-      <!-- 09 ================================================= -->
+      <!-- 10 ================================================= -->
       <section id="trouble" data-lanes="operator engineer">
         <div class="shead">
-          <span class="num">09</span>
+          <span class="num">10</span>
           <h2>Troubleshooting</h2>
         </div>
         <p class="sintro">Symptom, cause, and the next thing to try.</p>
@@ -3349,6 +3492,36 @@ npm run cutover:rehearse -- --plan</code></pre>
                       <code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code>, and
                       <code>GOOGLE_TOKEN_ENCRYPTION_KEY</code> must all have something after the
                       <code>=</code>. Fill in whichever is blank and restart.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Google Ads will not connect</td>
+                    <td>
+                      <strong>Credentials required</strong> names the <code>.env</code> values still
+                      missing. After Google's screen, a message says why and nothing changes:
+                      <em>no refresh token</em> means remove the app under Google Account
+                      permissions and connect again; <em>no directly accessible accounts</em> means
+                      use a login that reaches one or set
+                      <code>GOOGLE_ADS_LOGIN_CUSTOMER_ID</code>; <em>encryption key</em> means
+                      <code>GOOGLE_ADS_TOKEN_ENCRYPTION_KEY</code> must be 32+ characters and differ
+                      from the Drive key.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>The Ads page says the latest refresh failed</td>
+                    <td>
+                      The figures are the last successful snapshot, unchanged. Fix the cause named
+                      in the banner and press <strong>Refresh from Google</strong>; nothing retries
+                      by itself.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>An Ads account or client shows no figures</td>
+                    <td>
+                      Before its first refresh an account has none; afterwards a campaign Google
+                      reported no days for shows no figures rather than zeros. A client card saying
+                      no account is mapped needs a mapping in
+                      <strong>Settings &rarr; Ads accounts</strong>.
                     </td>
                   </tr>
                   <tr>
@@ -3469,10 +3642,10 @@ npm run cutover:rehearse -- --plan</code></pre>
         </div>
       </section>
 
-      <!-- 10 ================================================= -->
+      <!-- 11 ================================================= -->
       <section id="contributing" data-lanes="engineer agent">
         <div class="shead">
-          <span class="num">10</span>
+          <span class="num">11</span>
           <h2>Changing the code</h2>
         </div>
         <p class="sintro">
@@ -3581,10 +3754,10 @@ npm run cutover:rehearse -- --plan</code></pre>
         </div>
       </section>
 
-      <!-- 11 ================================================= -->
+      <!-- 12 ================================================= -->
       <section id="reference" data-lanes="operator engineer agent">
         <div class="shead">
-          <span class="num">11</span>
+          <span class="num">12</span>
           <h2>Reference tables</h2>
         </div>
         <p class="sintro">The lists worth keeping open in a second window.</p>
@@ -3737,6 +3910,32 @@ npm run cutover:rehearse -- --plan</code></pre>
                     <td><code>GOOGLE_TOKEN_ENCRYPTION_KEY</code></td>
                     <td>blank</td>
                     <td>At least 32 characters. Back up separately.</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <code>GOOGLE_ADS_CLIENT_ID</code> / <code>GOOGLE_ADS_CLIENT_SECRET</code>
+                    </td>
+                    <td>blank</td>
+                    <td>Optional Google Ads OAuth web client, separate from Drive's. Server-side only.</td>
+                  </tr>
+                  <tr>
+                    <td><code>GOOGLE_ADS_REDIRECT_URI</code></td>
+                    <td>blank</td>
+                    <td>
+                      <code>http://localhost</code> or <code>127.0.0.1</code>, or
+                      <code>https://</code>, on <code>/api/ads/oauth/callback</code>; no query or
+                      hash.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><code>GOOGLE_ADS_TOKEN_ENCRYPTION_KEY</code></td>
+                    <td>blank</td>
+                    <td>At least 32 characters and different from the Drive key. Back up separately.</td>
+                  </tr>
+                  <tr>
+                    <td><code>GOOGLE_ADS_LOGIN_CUSTOMER_ID</code></td>
+                    <td>blank</td>
+                    <td>Optional 10-digit manager account ID, only when access goes through a manager.</td>
                   </tr>
                   <tr>
                     <td><code>POST_BRIDGE_API_KEY</code></td>
@@ -3987,6 +4186,18 @@ npm run cutover:rehearse -- --plan</code></pre>
                     </td>
                   </tr>
                   <tr>
+                    <td>Google Ads</td>
+                    <td>
+                      <code>GET /api/ads/status</code>, <code>/api/ads/oauth/start|callback</code>,
+                      <code>POST /api/ads/disconnect</code>, <code>GET /api/ads/accounts</code>,
+                      <code>POST &hellip;/accounts/discover</code>,
+                      <code>&hellip;/accounts/:customerId/approve|withdraw</code>,
+                      <code>&hellip;/mapping/preview</code>, <code>&hellip;/mapping</code>,
+                      <code>GET /api/ads/performance</code>,
+                      <code>POST /api/ads/performance/refresh</code>
+                    </td>
+                  </tr>
+                  <tr>
                     <td>Activity</td>
                     <td>
                       <code>GET /api/integrations/activity</code> &mdash; append-only, newest 200,
@@ -4061,7 +4272,7 @@ npm run cutover:rehearse -- --plan</code></pre>
     <footer class="footer">
       <div class="inner">
         <p>
-                Hybrid Command Center 7.1.3 &mdash; operating manual, updated 2026-09-14. Compiled from
+                Hybrid Command Center 7.1.3 &mdash; operating manual, updated 2026-10-02. Compiled from
           <code>USER_MANUAL.md</code>, <code>README.md</code>, and <code>AGENTS.md</code>. Where
           this page and those files disagree, the repository is correct.
         </p>
