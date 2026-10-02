@@ -57,6 +57,14 @@
   behaviour. **Owner-run only, and never in CI**: it is a write against real social accounts. Its
   request budget is a hard 50 including cleanup. What it establishes goes in §14 of
   `docs/post-bridge-api-surface.md` as a dated result matrix — the transcript is never committed.
+- `npm run probe:google-ads`: the read-only Google Ads API contract probe,
+  `scripts/probe-google-ads.ts`. It plans by default and contacts nothing; `--live` requires
+  `GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_CLIENT_SECRET`, `GOOGLE_ADS_REFRESH_TOKEN`, `--yes`,
+  `--account-approved`, an explicit 10-digit `--account`, an explicit `--start`/`--end` of at most 90
+  dates, and `LIVE` typed at the prompt. It sends no developer-token header, makes no Ads write, and
+  hard-caps itself at 8 HTTP requests. **Owner-run only, and never in CI.** It records each of the
+  three queries as accepted or rejected independently, so one rejection does not hide the others.
+  Findings go in `docs/google-ads-api-surface.md` as redacted results; the transcript is never committed.
 - `npm run probe:buffer`: the Buffer GraphQL contract probe, `scripts/probe-buffer.ts`. It plans by
   default and contacts nothing. Live mode is owner-run only and never CI: it requires
   `BUFFER_API_KEY` (or the one-release `BUFFER_KEY` fallback), `--live`, `--yes`,
