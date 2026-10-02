@@ -288,3 +288,110 @@ export interface AdsMappingPreview extends AdsMappingPlan {
 /** The way Google's console shows a customer ID: `123-456-7890`. Display only; never sent back. */
 export const formatAdsCustomerId = (customerId: string): string =>
   customerId.replace(/^(\d{3})(\d{3})(\d{4})$/, '$1-$2-$3');
+
+/**
+ * The performance snapshot (C258).
+ *
+ * A refresh reads the latest {@link ADS_SYNC_WINDOW_DAYS} account-local calendar dates, today
+ * included, for every approved serving account, and replaces the provider-owned campaign and day
+ * rows in one transaction or not at all. The bounds below are the budget `docs/google-ads-api-surface.md`
+ * estimated, fixed here because an unbounded stream is how a refresh would spend a day's allowance.
+ */
+export const ADS_SYNC_WINDOW_DAYS = 90;
+
+export const ADS_SYNC_LIMITS = {
+  /** Accounts one refresh may read. Past this the refresh is refused before any call. */
+  accounts: 25,
+  /** Customer metadata, campaign metadata, then daily metrics: three Ads calls per account. */
+  requestsPerAccount: 3,
+  campaignsPerAccount: 5_000,
+  dayRowsPerAccount: 100_000,
+  /** Raw characters of one stream's response; a larger answer is refused, never truncated. */
+  responseChars: 25_000_000,
+} as const;
+
+/** Every Ads call a refresh may make, token exchange excluded: the hard ceiling the wrapper enforces. */
+export const ADS_SYNC_MAX_REQUESTS = ADS_SYNC_LIMITS.accounts * ADS_SYNC_LIMITS.requestsPerAccount;
+
+export interface AdsSyncWindow {
+  /** First account-local date, inclusive. */
+  startDate: string;
+  /** Today in the account's own time zone, inclusive. */
+  endDate: string;
+}
+
+/**
+ * The finite range one account is read for: its latest 90 local calendar dates including today.
+ * The date is the one the account's own clock shows at `now`, because Google segments by that
+ * calendar and a UTC date would drop or repeat a day for an account east or west of it.
+ */
+export function adsSyncWindow(now: Date, timeZone: string): AdsSyncWindow {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now);
+  const part = (type: string) => parts.find((entry) => entry.type === type)?.value ?? '';
+  const endDate = `${part('year')}-${part('month')}-${part('day')}`;
+  const end = new Date(`${endDate}T00:00:00.000Z`);
+  if (Number.isNaN(end.getTime())) throw new Error('the account time zone is not usable');
+  const start = new Date(end.getTime() - (ADS_SYNC_WINDOW_DAYS - 1) * 86_400_000);
+  return { startDate: start.toISOString().slice(0, 10), endDate };
+}
+
+/** What the last refresh attempt did. A failure never changes the figures; it only says so. */
+export interface AdsLastSync {
+  at: string | null;
+  outcome: AdsSyncOutcome | null;
+  error: string | null;
+}
+
+export interface AdsCampaignDayView {
+  date: string;
+  impressions: number;
+  clicks: number;
+  costMicros: number;
+  conversions: number;
+}
+
+export interface AdsCampaignView {
+  campaignId: string;
+  name: string;
+  status: string;
+  channelType: string;
+  /** Only days the provider reported, oldest first. An absent date is not a measured zero. */
+  days: AdsCampaignDayView[];
+}
+
+/** One account's stored snapshot. Currency and time zone stay here, beside the figures they govern. */
+export interface AdsPerformanceAccount {
+  customerId: string;
+  descriptiveName: string;
+  currencyCode: string;
+  timeZone: string;
+  approved: boolean;
+  client: AdsAccountClientRef | null;
+  stale: AdsStaleReason | null;
+  /** The generation these figures came from, or null before the first refresh read this account. */
+  syncedAt: string | null;
+  window: AdsSyncWindow | null;
+  campaigns: AdsCampaignView[];
+}
+
+export interface AdsPerformanceState {
+  connectionStatus: AdsConnectionStatus;
+  lastSync: AdsLastSync;
+  /** True when the last attempt failed, so the figures below are the previous generation. */
+  lastAttemptFailed: boolean;
+  accounts: AdsPerformanceAccount[];
+}
+
+export interface AdsSyncResult {
+  syncedAt: string;
+  accounts: number;
+  campaigns: number;
+  days: number;
+  /** Approved accounts the grant no longer reaches: left as they were and stale. */
+  skipped: number;
+}

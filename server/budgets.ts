@@ -145,6 +145,17 @@ export const ADS_ACCOUNTS_BUDGET: Budget = {
 };
 
 /**
+ * Refreshing the Google Ads performance snapshot (C258): each press reads every approved account
+ * and can spend up to `ADS_SYNC_MAX_REQUESTS` Ads calls. Six in fifteen minutes is above a person
+ * retrying after a failure and keeps even a loop well inside the Explorer daily allowance.
+ */
+export const ADS_SYNC_BUDGET: Budget = {
+  limit: 6,
+  windowMs: 15 * 60_000,
+  message: 'Too many Google Ads refreshes. Wait a few minutes and try again.',
+};
+
+/**
  * Operator MCP health panel under `/api/mcp/health`. Uses `express-rate-limit` in `app.ts` (like
  * auth) so CodeQL's missing-rate-limiting query can see the limiter. Sixty a minute is above a
  * person opening Settings and pressing Test connection a few times.

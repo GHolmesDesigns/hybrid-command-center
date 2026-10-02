@@ -156,7 +156,7 @@ describe('Google Ads migration', () => {
     const file = path.join(directory, 'old.db');
     const first = createDb(file);
     first.exec(
-      `DROP TABLE ads_campaign_days; DROP TABLE ads_campaigns; DROP TABLE ads_accounts;
+      `DROP TABLE ads_sync_windows; DROP TABLE ads_campaign_days; DROP TABLE ads_campaigns; DROP TABLE ads_accounts;
        DROP TABLE ads_account_settings; DROP TABLE ads_connection; DROP TABLE ads_discovered_accounts;`,
     );
     first
@@ -180,6 +180,7 @@ describe('Google Ads migration', () => {
       'ads_connection',
       'ads_discovered_accounts',
       'ads_oauth_pending_states',
+      'ads_sync_windows',
     ]);
     expect(upgraded.prepare('SELECT name FROM clients').all()).toEqual([{ name: 'Acme' }]);
     upgraded.close();

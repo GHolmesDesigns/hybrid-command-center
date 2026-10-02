@@ -351,6 +351,14 @@ CREATE TABLE IF NOT EXISTS ads_campaign_days (
   PRIMARY KEY (customer_id, campaign_id, date),
   FOREIGN KEY (customer_id, campaign_id) REFERENCES ads_campaigns(customer_id, campaign_id) ON DELETE CASCADE
 );
+-- Which generation of figures an account holds and the finite range it was read for (C258). A
+-- successful account with no campaigns leaves no campaign row, so without this an unread account and
+-- an empty one would look the same. One row per refreshed account, replaced with its figures; it is
+-- provider-owned and carries nothing a person chose.
+CREATE TABLE IF NOT EXISTS ads_sync_windows (
+  customer_id TEXT PRIMARY KEY REFERENCES ads_accounts(customer_id) ON DELETE CASCADE,
+  window_start TEXT NOT NULL, window_end TEXT NOT NULL, synced_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS drive_steps (
   entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, step_key TEXT NOT NULL, folder_id TEXT NOT NULL,
   folder_url TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(entity_type, entity_id, step_key)

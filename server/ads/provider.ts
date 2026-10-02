@@ -3,10 +3,15 @@
  * creates, updates, or removes anything at the provider, and adding one means a new module beside
  * this file rather than a method on it.
  *
- * `readAccount` is the one call that names an account, and the service in `accounts.ts` calls it
- * only after a person approved that exact customer ID. Listing accounts names none.
+ * `readAccount`, `readCampaigns`, and `readCampaignDays` name an account, and the services call
+ * them only for an ID a person approved. Listing accounts names none.
  */
-import type { AdsAccountSnapshot } from '../../shared/ads.ts';
+import type {
+  AdsAccountSnapshot,
+  AdsCampaignDay,
+  AdsCampaignSnapshot,
+  AdsSyncWindow,
+} from '../../shared/ads.ts';
 
 export interface AdsProvider {
   /** Exchanges the stored refresh token for a short-lived access token. Never persisted. */
@@ -19,4 +24,20 @@ export interface AdsProvider {
     customerId: string,
     options?: { loginCustomerId?: string },
   ): Promise<AdsAccountSnapshot>;
+  /** Every campaign the account lists, with no metrics: one with no activity still appears. */
+  readCampaigns(
+    accessToken: string,
+    customerId: string,
+    options?: { loginCustomerId?: string },
+  ): Promise<AdsCampaignSnapshot[]>;
+  /**
+   * Daily figures for one account over a finite range. A date with no reported row is absent.
+   * An implementation throws rather than return a stream it could not read to the end.
+   */
+  readCampaignDays(
+    accessToken: string,
+    customerId: string,
+    window: AdsSyncWindow,
+    options?: { loginCustomerId?: string },
+  ): Promise<AdsCampaignDay[]>;
 }

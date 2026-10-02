@@ -23,7 +23,14 @@
   approval upserts the first and never deletes it. `mapping.ts` is a hash-checked preview and
   commit that changes one `client_id` and writes no `integration_events` row; `read.ts` is
   SELECT-only. Disconnect or a listing that no longer reaches an account leaves its snapshot
-  visibly stale and stops provider reads; nothing deletes retained data. No MCP tool exposes any of
+  visibly stale and stops provider reads; nothing deletes retained data.
+  Performance (C258): `sync.ts` is the one refresh, reached only by a person's POST (no timer, no page
+  read). It reads every approved, still-discovered account (customer, campaign, and dated-metric
+  queries, three calls each, under request/row/response ceilings in `shared/ads.ts`), validates every
+  row, and only then replaces the provider-owned campaign/day/window rows in one transaction under one
+  `snapshot_at`; any failure leaves the prior generation untouched and writes its `FAILURE` event and
+  last-sync record afterwards. It stores the four provider figures as reported, computes no rate and
+  no cross-account or cross-currency sum, and never touches approval, mapping, or tokens. No MCP tool exposes any of
   it. A client merge retargets the source's accounts to the survivor in its own transaction.
 - `server/signal/`: Signal Campaign's schedule, split the same way Drive is. `provider.ts` is the
   `SignalProvider` interface and `read.ts` is its implementation — the read-only half everything
