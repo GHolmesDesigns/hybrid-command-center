@@ -1,5 +1,14 @@
 # Changelog
 
+## [7.1.4] - 2026-10-02
+
+### Changed
+
+- The user manual and the operating manual now cover Google Ads: connecting it, approving accounts, mapping them to clients, reading the Ads page and a client's Ads summary, and fixing a failed connection or refresh.
+
+### Breaking changes
+
+None.
 ## [7.1.3] - 2026-10-02
 
 ### Added

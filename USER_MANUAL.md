@@ -1186,6 +1186,77 @@ Dates behave the same way they do everywhere else in the application: a post sch
 14th appears on the 14th, whatever timezone the computer is set to. A post with no date at all is
 not scheduled, and deliberately appears on no day here.
 
+### Ads — read-only Google Ads performance
+
+Ads shows the figures Google Ads last reported for the accounts you approved. It is read-only:
+nothing in this app can create, edit, pause, or delete anything in Google Ads, and opening the page
+never contacts Google. The one path to Google is the **Refresh from Google** button, which only a
+person presses — there is no timer.
+
+Google Ads is a separate grant from Drive. It uses its own Google OAuth client and its own token
+encryption key, so connecting or disconnecting one never touches the other.
+
+#### Set it up once
+
+1. Add four values to `.env`, then restart the app: `GOOGLE_ADS_CLIENT_ID`,
+   `GOOGLE_ADS_CLIENT_SECRET`, `GOOGLE_ADS_REDIRECT_URI` (ending in `/api/ads/oauth/callback`), and
+   `GOOGLE_ADS_TOKEN_ENCRYPTION_KEY` (at least 32 characters, different from the Drive key; back it
+   up separately). If you reach accounts through a manager account, also set
+   `GOOGLE_ADS_LOGIN_CUSTOMER_ID` to its 10-digit ID.
+2. Open **Settings → Google Ads** and choose **Connect Google Ads**. The app counts as connected
+   only after Google lists the accounts your login can reach directly. If that list fails, nothing
+   is saved and any earlier connection is left as it was.
+3. Open **Settings → Ads accounts** and choose **List accessible accounts**. Listing records which
+   accounts exist and reads no details. Connecting approves no account.
+4. Beside an account under **Not approved**, choose **Approve**. Only then does the app read that
+   account's details. A manager account, or one that is cancelled, suspended, or closed, is refused
+   with the reason, because only an enabled serving account can be a performance target.
+5. Under **Approved accounts**, pick a client from the **Client** menu and choose
+   **Review change**. The preview states exactly what will change; **Confirm mapping** applies it.
+   An account left on **Unassigned** stays listed and is never hidden.
+
+**Withdraw approval** stops the app reading that account. Its last snapshot stays on screen,
+marked stale, and nothing is deleted.
+
+#### The Ads page
+
+Choose **Ads** in the left navigation. Accounts are grouped by client, with **Unassigned** as a
+group of its own. Each account shows its currency, its own time zone, the day range stored (up to
+90 account-local days), and when it was last refreshed. Every campaign shows the four figures Google
+reports — impressions, clicks, cost, and conversions — added over the dates you chose.
+
+- **Totals for this view** adds Google's own daily values, **separately for each currency**. Two
+  currencies give two totals; they are never combined or converted. There are no rates, averages, or
+  per-click costs, because those are not Google's numbers.
+- A campaign or view with no measured day shows no figures and says so. A missing day is not a
+  zero.
+- The **Client**, **Account**, **From**, and **To** filters are written into the address bar, so a
+  filtered view can be bookmarked or shared. A link naming a client, account, or date the snapshot no
+  longer has still opens; the page ignores that filter and says it did.
+
+**Refresh from Google** reads every approved account (three Google Ads calls each, with fixed limits
+on accounts, rows, and response size), checks every row, and replaces the stored figures in one step.
+If any part fails, the previous figures stay exactly as they were and a banner says the latest refresh
+failed, with the time of the last successful snapshot. Refresh is disabled while Google Ads is not
+connected.
+
+If Google Ads is disconnected, or the connected login no longer reaches an account, the page keeps the
+last snapshot and says it is not being refreshed. Disconnecting removes only the credential stored
+here, so also revoke the app under Google Account permissions.
+
+#### On a client's page
+
+A client's page has an **Ads summary** card: the client's approved accounts, the time of the last
+successful snapshot, and the totals per currency over the stored 90 days, with **Open in Ads** linking
+to the Ads page filtered to that client. It reads stored figures only; it never contacts Google.
+
+- A client with no mapped account says so and offers no link; this is different from a mapped account
+  with no measured days, which says Google has reported none yet.
+- Another client's accounts never appear. An archived client keeps its accounts.
+- When a client is merged into another, its accounts move to the surviving client. The merged client's
+  card says where they went.
+- Stale and disconnected notices appear beside the last stored figures; the figures stay readable.
+
 ### Removing records
 
 Removal works differently for each kind of record:
@@ -1210,6 +1281,7 @@ Recover a mistake by restoring a database backup, as described in
 Settings contains, in the order it reads:
 
 - Google Drive connection and root-folder setup
+- **Google Ads** and **Ads accounts** — the separate read-only Ads connection, and which accounts are approved and mapped to which client (see *Ads* above)
 - **Project categories** — every category in the workspace, with how many projects carry it, and the only place a category is renamed or deleted
 - **Task tags** — every tag in the workspace, with how many tasks carry it, and the only place a tag is deleted
 - **Signal campaigns** — every campaign in the workspace, with how many posts carry it, and the only place a campaign is renamed or deleted
@@ -1446,6 +1518,27 @@ For an External app in Testing status, confirm that your Google account is liste
 ### Drive disconnects after several days
 
 An External OAuth app left in Testing status commonly receives a refresh token that expires after seven days when Drive scopes are used. Reconnect from Settings, or review Google’s publishing, verification, and Workspace options for longer-term use.
+
+### Google Ads will not connect
+
+The **Credentials required** notice names the `.env` values still missing; add them and restart.
+After you approve access in Google, a message explains a failure and nothing changes: *did not issue a
+refresh token* means you should remove this app under Google Account permissions and connect again;
+*did not list any directly accessible accounts* means the login reaches no account directly, so use
+a login that does or set `GOOGLE_ADS_LOGIN_CUSTOMER_ID`; *encryption key is missing or unusable* means
+`GOOGLE_ADS_TOKEN_ENCRYPTION_KEY` must be at least 32 characters and differ from the Drive key.
+
+### The Ads page says the latest refresh failed
+
+The figures on screen are the last successful snapshot and are unchanged. Read the message in the
+banner, fix the cause (a disconnected grant, an account Google no longer reaches, or Google limiting
+requests), and press **Refresh from Google** again. Nothing is retried automatically.
+
+### An account shows no figures
+
+An account approved moments ago has none until its first refresh. After a refresh, a campaign Google
+reported no days for is shown without figures rather than as zeros. If a client's card says no account
+is mapped, map one in **Settings → Ads accounts**.
 
 ### Publishing is not available
 

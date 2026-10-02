@@ -25,3 +25,6 @@ coverage/
 docs/iterations/*.docx
 # Scratch/debug capture files dropped at the repo root during ad-hoc investigation.
 .tmp-*
+# Local agent and scratch output folders.
+/outputs/
+/Claude outputs/
