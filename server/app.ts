@@ -269,7 +269,8 @@ import { AdsAccountError } from './ads/errors.ts';
 import { createGoogleAdsProvider } from './ads/google.ts';
 import { commitAdsMapping, previewAdsMapping } from './ads/mapping.ts';
 import type { AdsProvider } from './ads/provider.ts';
-import { readAdsAccounts } from './ads/read.ts';
+import { readAdsAccounts, readAdsPerformance } from './ads/read.ts';
+import { refreshAdsPerformance } from './ads/sync.ts';
 import { DRIVE_PAGE_SIZE, DRIVE_PAGE_SIZE_MAX } from '../shared/drive.ts';
 import {
   IMPORT_BODY_LIMIT_BYTES,
@@ -295,6 +296,7 @@ import {
   AUTH_ROUTE_BUDGET,
   DRIVE_BUDGET,
   ADS_ACCOUNTS_BUDGET,
+  ADS_SYNC_BUDGET,
   ADS_OAUTH_BUDGET,
   DRIVE_OAUTH_BUDGET,
   DRIVE_SYNC_BUDGET,
@@ -1064,6 +1066,21 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       standardHeaders: 'draft-7',
       legacyHeaders: false,
       message: { error: ADS_ACCOUNTS_BUDGET.message },
+      skip: (req) => req.method !== 'POST',
+      keyGenerator: (req) => authKey(req),
+      validate: { xForwardedForHeader: false },
+    }),
+  );
+  // Ads performance refresh (C258): the POST reaches Google for every approved account, so it has
+  // its own small window. Reading the stored snapshot is local and not counted.
+  app.use(
+    '/api/ads/performance',
+    rateLimit({
+      windowMs: ADS_SYNC_BUDGET.windowMs,
+      limit: ADS_SYNC_BUDGET.limit,
+      standardHeaders: 'draft-7',
+      legacyHeaders: false,
+      message: { error: ADS_SYNC_BUDGET.message },
       skip: (req) => req.method !== 'POST',
       keyGenerator: (req) => authKey(req),
       validate: { xForwardedForHeader: false },
@@ -3853,6 +3870,27 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       const { customerId } = adsCustomerIdParam.parse(req.params);
       const { clientId, planHash } = adsMappingCommitSchema.parse(req.body);
       res.json(commitAdsMapping(db, customerId, clientId, planHash, clock()));
+    } catch (e) {
+      next(e);
+    }
+  });
+  // Performance snapshot (C258). The GET is local SELECTs only; the POST is the one person-initiated
+  // path that reads Google, and nothing calls it on a page load or a timer.
+  app.get('/api/ads/performance', (_req, res, next) => {
+    try {
+      res.json(readAdsPerformance(db));
+    } catch (e) {
+      next(e);
+    }
+  });
+  app.post('/api/ads/performance/refresh', async (_req, res, next) => {
+    try {
+      const result = await refreshAdsPerformance(db, {
+        provider: adsProviderFor(adsConfig),
+        ads: adsConfig,
+        now: clock(),
+      });
+      res.json({ result, performance: readAdsPerformance(db) });
     } catch (e) {
       next(e);
     }

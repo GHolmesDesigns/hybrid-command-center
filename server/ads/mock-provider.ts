@@ -1,4 +1,9 @@
-import type { AdsAccountSnapshot } from '../../shared/ads.ts';
+import type {
+  AdsAccountSnapshot,
+  AdsCampaignDay,
+  AdsCampaignSnapshot,
+  AdsSyncWindow,
+} from '../../shared/ads.ts';
 import type { AdsProvider } from './provider.ts';
 
 /**
@@ -10,13 +15,27 @@ export class MockAdsProvider implements AdsProvider {
   listCalls: string[] = [];
   /** Every customer ID `readAccount` was asked about, in order. */
   readCalls: string[] = [];
+  /** Every customer ID `readCampaigns` was asked about, in order. */
+  campaignCalls: string[] = [];
+  /** Every customer ID and window `readCampaignDays` was asked about, in order. */
+  dayCalls: { customerId: string; window: AdsSyncWindow }[] = [];
+  /** The login-customer-id each read was given, so a test can see whether one was sent. */
+  loginCustomerIds: (string | undefined)[] = [];
   /** Customer IDs the grant reaches directly. */
   accessible: string[] = ['1234567890'];
   /** Provider metadata by customer ID; an ID with no entry is one the provider cannot read. */
   accounts = new Map<string, AdsAccountSnapshot>();
+  /** Campaign metadata by customer ID; an ID with no entry has no campaigns. */
+  campaigns = new Map<string, AdsCampaignSnapshot[]>();
+  /** Daily figures by customer ID, returned as given: a test decides what is reported. */
+  days = new Map<string, AdsCampaignDay[]>();
   accessTokenError?: string;
   listError?: string;
   readError?: string;
+  /** Fails the campaign query for these accounts. */
+  campaignError = new Map<string, string>();
+  /** Fails the metrics query for these accounts, the way a stream cut off after earlier chunks does. */
+  dayError = new Map<string, string>();
 
   constructor() {
     this.accounts.set('1234567890', {
@@ -41,11 +60,41 @@ export class MockAdsProvider implements AdsProvider {
     return [...this.accessible];
   }
 
-  async readAccount(_accessToken: string, customerId: string) {
+  async readAccount(
+    _accessToken: string,
+    customerId: string,
+    options?: { loginCustomerId?: string },
+  ) {
     this.readCalls.push(customerId);
+    this.loginCustomerIds.push(options?.loginCustomerId);
     if (this.readError) throw new Error(this.readError);
     const account = this.accounts.get(customerId);
     if (!account) throw new Error('HTTP 403');
     return { ...account };
+  }
+
+  async readCampaigns(
+    _accessToken: string,
+    customerId: string,
+    options?: { loginCustomerId?: string },
+  ) {
+    this.campaignCalls.push(customerId);
+    this.loginCustomerIds.push(options?.loginCustomerId);
+    const failure = this.campaignError.get(customerId);
+    if (failure) throw new Error(failure);
+    return (this.campaigns.get(customerId) ?? []).map((campaign) => ({ ...campaign }));
+  }
+
+  async readCampaignDays(
+    _accessToken: string,
+    customerId: string,
+    window: AdsSyncWindow,
+    options?: { loginCustomerId?: string },
+  ) {
+    this.dayCalls.push({ customerId, window: { ...window } });
+    this.loginCustomerIds.push(options?.loginCustomerId);
+    const failure = this.dayError.get(customerId);
+    if (failure) throw new Error(failure);
+    return (this.days.get(customerId) ?? []).map((day) => ({ ...day }));
   }
 }

@@ -7,6 +7,8 @@ import {
   type AdsAccountClientRef,
   type AdsAccountView,
   type AdsAccountsState,
+  type AdsCampaignView,
+  type AdsPerformanceState,
   type AdsConnectionStatus,
   type AdsStaleReason,
 } from '../../shared/ads.ts';
@@ -99,5 +101,110 @@ export function readAdsAccounts(db: Db): AdsAccountsState {
     connectionStatus,
     discoveredAt: discovered.map((row) => row.discovered_at).sort()[discovered.length - 1] ?? null,
     accounts,
+  };
+}
+
+interface CampaignRow {
+  customer_id: string;
+  campaign_id: string;
+  name: string;
+  status: string;
+  channel_type: string;
+}
+interface DayRow {
+  customer_id: string;
+  campaign_id: string;
+  date: string;
+  impressions: number;
+  clicks: number;
+  cost_micros: number;
+  conversions: number;
+}
+interface WindowRow {
+  customer_id: string;
+  window_start: string;
+  window_end: string;
+  synced_at: string;
+}
+
+/**
+ * The stored performance snapshot, for the page that will show it. Local SELECTs only: opening it
+ * can never call the provider, spend quota, or change a row. Currency and time zone stay on the
+ * account beside its figures and nothing here adds one account's cost to another's.
+ */
+export function readAdsPerformance(db: Db): AdsPerformanceState {
+  const accountsState = readAdsAccounts(db);
+  const sync = (db
+    .prepare(
+      `SELECT last_sync_at, last_sync_outcome, last_sync_error FROM ads_connection WHERE id = 'google-ads'`,
+    )
+    .get() ?? {}) as {
+    last_sync_at?: string | null;
+    last_sync_outcome?: 'SUCCESS' | 'FAILURE' | null;
+    last_sync_error?: string | null;
+  };
+  const windows = new Map(
+    (db.prepare('SELECT * FROM ads_sync_windows').all() as unknown as WindowRow[]).map((row) => [
+      row.customer_id,
+      row,
+    ]),
+  );
+  const campaignsByAccount = new Map<string, AdsCampaignView[]>();
+  const byKey = new Map<string, AdsCampaignView>();
+  for (const row of db
+    .prepare('SELECT * FROM ads_campaigns ORDER BY customer_id, campaign_id')
+    .all() as unknown as CampaignRow[]) {
+    const campaign: AdsCampaignView = {
+      campaignId: row.campaign_id,
+      name: row.name,
+      status: row.status,
+      channelType: row.channel_type,
+      days: [],
+    };
+    byKey.set(`${row.customer_id}|${row.campaign_id}`, campaign);
+    const list = campaignsByAccount.get(row.customer_id) ?? [];
+    list.push(campaign);
+    campaignsByAccount.set(row.customer_id, list);
+  }
+  for (const row of db
+    .prepare('SELECT * FROM ads_campaign_days ORDER BY customer_id, campaign_id, date')
+    .all() as unknown as DayRow[])
+    byKey.get(`${row.customer_id}|${row.campaign_id}`)?.days.push({
+      date: row.date,
+      impressions: row.impressions,
+      clicks: row.clicks,
+      costMicros: row.cost_micros,
+      conversions: row.conversions,
+    });
+
+  return {
+    connectionStatus: accountsState.connectionStatus,
+    lastSync: {
+      at: sync.last_sync_at ?? null,
+      outcome: sync.last_sync_outcome ?? null,
+      error: sync.last_sync_error ?? null,
+    },
+    lastAttemptFailed: sync.last_sync_outcome === 'FAILURE',
+    // An account appears once a person approved it or a refresh read it; a merely listed ID has no
+    // figures and no decision, so it is not here.
+    accounts: accountsState.accounts
+      .filter(
+        (account) => account.snapshot && (account.approved || windows.has(account.customerId)),
+      )
+      .map((account) => {
+        const window = windows.get(account.customerId);
+        return {
+          customerId: account.customerId,
+          descriptiveName: account.snapshot!.descriptiveName,
+          currencyCode: account.snapshot!.currencyCode,
+          timeZone: account.snapshot!.timeZone,
+          approved: account.approved,
+          client: account.client,
+          stale: account.stale,
+          syncedAt: window?.synced_at ?? null,
+          window: window ? { startDate: window.window_start, endDate: window.window_end } : null,
+          campaigns: campaignsByAccount.get(account.customerId) ?? [],
+        };
+      }),
   };
 }
