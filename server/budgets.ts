@@ -134,6 +134,17 @@ export const ADS_OAUTH_BUDGET: Budget = {
 };
 
 /**
+ * Listing, approving, and withdrawing Google Ads accounts: the writes under `/api/ads/accounts`
+ * that reach Google. Reads of the list are not counted. Thirty in fifteen minutes is far above a
+ * person choosing an account and far below a loop spending the Explorer daily allowance.
+ */
+export const ADS_ACCOUNTS_BUDGET: Budget = {
+  limit: 30,
+  windowMs: 15 * 60_000,
+  message: 'Too many Google Ads account requests. Wait a few minutes and try again.',
+};
+
+/**
  * Operator MCP health panel under `/api/mcp/health`. Uses `express-rate-limit` in `app.ts` (like
  * auth) so CodeQL's missing-rate-limiting query can see the limiter. Sixty a minute is above a
  * person opening Settings and pressing Test connection a few times.

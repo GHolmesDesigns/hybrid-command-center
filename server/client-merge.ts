@@ -184,6 +184,16 @@ export function commitClientMerge(
       destinationId,
       sourceId,
     );
+    /**
+     * An ad account approved and mapped to the source follows the work to the survivor, in this
+     * same transaction. Only the link moves: approval, the provider snapshot, and every figure
+     * stay as they were, and an account the source never held is not in the statement.
+     */
+    db.prepare('UPDATE ads_account_settings SET client_id=?, updated_at=? WHERE client_id=?').run(
+      destinationId,
+      stamp,
+      sourceId,
+    );
     db.prepare(
       'INSERT INTO client_merges(source_client_id,surviving_client_id,merged_at) VALUES(?,?,?)',
     ).run(sourceId, destinationId, stamp);

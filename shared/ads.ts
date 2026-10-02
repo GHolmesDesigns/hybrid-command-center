@@ -187,3 +187,104 @@ export const adsConnectionStatusSchema = z.object({
   problem: z.string().nullable(),
 });
 export type AdsConnectionState = z.infer<typeof adsConnectionStatusSchema>;
+
+/**
+ * Account selection and client mapping (C257).
+ *
+ * Three separate facts about an ad account, held apart so none can stand in for another:
+ * *discoverable* (the grant reached it directly), *approved* (a person said this exact ID may be
+ * read), and *mapped* (a person tied it to a client). Listing authorizes nothing, approval is what
+ * lets the server read metadata for that one ID, and a mapping never changes either.
+ */
+
+/** Why an account cannot be a performance target, or null when it can. Read from provider metadata. */
+export function adsTargetIssue(
+  snapshot: { manager: boolean; status: string } | null,
+): 'MANAGER' | 'NOT_ENABLED' | null {
+  if (!snapshot) return null;
+  if (snapshot.manager) return 'MANAGER';
+  return snapshot.status === 'ENABLED' ? null : 'NOT_ENABLED';
+}
+
+export const ADS_TARGET_ISSUE_MESSAGE = {
+  MANAGER:
+    'A manager account holds other accounts and is not a serving account, so it is never a performance target.',
+  NOT_ENABLED:
+    'Only an enabled serving account can be a performance target; this one is cancelled, suspended, or closed.',
+} as const;
+
+/** Why a kept snapshot is no longer being refreshed. Reads stop; nothing is deleted. */
+export type AdsStaleReason = 'DISCONNECTED' | 'ACCESS_LOST';
+
+export const ADS_STALE_MESSAGE: Record<AdsStaleReason, string> = {
+  DISCONNECTED:
+    'Google Ads is not connected, so this is the last snapshot and it is not being refreshed.',
+  ACCESS_LOST:
+    'The connected Google account no longer reaches this account, so this is the last snapshot and it is not being refreshed.',
+};
+
+export interface AdsAccountClientRef {
+  id: string;
+  name: string;
+  status: 'ACTIVE' | 'ARCHIVED';
+}
+
+/** One row on the Ads accounts list. Provider fields are null until an approval read them. */
+export interface AdsAccountView {
+  customerId: string;
+  /** The grant reached it directly the last time accounts were listed. */
+  discovered: boolean;
+  approved: boolean;
+  approvedAt: string | null;
+  /** What the provider reported, kept from the last read. Null before any approval attempt. */
+  snapshot: {
+    descriptiveName: string;
+    currencyCode: string;
+    timeZone: string;
+    manager: boolean;
+    status: string;
+    snapshotAt: string;
+  } | null;
+  /** Set when the kept snapshot is not being refreshed. Only an approved account can be stale. */
+  stale: AdsStaleReason | null;
+  /** Null is **Unassigned**: shown as a group of its own, never hidden. */
+  client: AdsAccountClientRef | null;
+  /** Why this account cannot be approved, from its last metadata read. */
+  targetIssue: 'MANAGER' | 'NOT_ENABLED' | null;
+}
+
+export interface AdsAccountsState {
+  connectionStatus: AdsConnectionStatus;
+  /** When accounts were last listed, or null when they never were. */
+  discoveredAt: string | null;
+  accounts: AdsAccountView[];
+}
+
+/**
+ * Approving an account makes the exact ID typed here readable. The ID is sent back in the body as
+ * well as in the path, so a request can only approve what its sender named twice.
+ */
+export const adsApprovalInputSchema = z.object({ confirmCustomerId: adsCustomerIdSchema });
+
+export const adsMappingInputSchema = z.object({ clientId: z.string().min(1).max(200).nullable() });
+export const adsMappingCommitSchema = adsMappingInputSchema.extend({
+  planHash: z.string().length(64),
+});
+
+export type AdsMappingAction = 'ASSIGN' | 'REASSIGN' | 'UNASSIGN';
+
+/** What a mapping change would do, with both ends named so the confirmation is about real records. */
+export interface AdsMappingPlan {
+  customerId: string;
+  accountName: string;
+  action: AdsMappingAction;
+  from: AdsAccountClientRef | null;
+  to: AdsAccountClientRef | null;
+}
+export interface AdsMappingPreview extends AdsMappingPlan {
+  planHash: string;
+}
+
+/** The way Google's console shows a customer ID: `123-456-7890`. Display only; never sent back. */
+export const formatAdsCustomerId = (customerId: string): string =>
+  customerId.replace(/^(\d{3})(\d{3})(\d{4})$/, '$1-$2-$3');

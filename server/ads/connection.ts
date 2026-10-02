@@ -17,6 +17,7 @@ import {
 import { adsMissingConfig, type config } from '../config.ts';
 import { transaction, type Db } from '../db.ts';
 import { recordIntegrationEvent } from '../integration-log.ts';
+import { replaceDiscoveredAdsAccounts } from './discovered.ts';
 import { consumeAdsAuthorization, type AdsOAuthClient } from './oauth.ts';
 import { AdsTokenError, decryptAdsRefreshToken, encryptAdsRefreshToken } from './tokens.ts';
 
@@ -159,6 +160,9 @@ export async function completeAdsAuthorization(
          login_customer_id=excluded.login_customer_id, connected_at=excluded.connected_at,
          updated_at=excluded.updated_at`,
     ).run(ADS_OAUTH_SCOPE, ciphertext, input.ads.loginCustomerId || null, stamp, stamp);
+    // The list the grant just reached becomes the discoverable set. It authorizes no read: an
+    // account is read only after a person approves its exact ID.
+    replaceDiscoveredAdsAccounts(db, accessible, stamp);
     recordIntegrationEvent(db, {
       source: 'google-ads',
       operation: 'ads.connect',
@@ -168,6 +172,24 @@ export async function completeAdsAuthorization(
   });
   return { ok: true };
 }
+
+/**
+ * The stored refresh token, for a person-initiated provider read, or null when nothing usable is
+ * connected. A disconnected, errored, or undecryptable connection yields null, which is how reads
+ * stop: nothing here falls back to another credential.
+ */
+export function readConnectedAdsRefreshToken(db: Db, ads: AdsConfig): string | null {
+  const row = readRow(db);
+  if (!row || row.status !== 'CONNECTED' || !row.refresh_token_encrypted) return null;
+  try {
+    return decryptAdsRefreshToken(row.refresh_token_encrypted, ads.encryptionKey);
+  } catch {
+    return null;
+  }
+}
+
+/** Whether a credential is stored and marked connected; the status a read must find before it starts. */
+export const isAdsConnected = (db: Db): boolean => readRow(db)?.status === 'CONNECTED';
 
 /**
  * Removes the local credential. Approvals, mappings, and any stored snapshot are other tables and

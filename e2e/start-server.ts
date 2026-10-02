@@ -21,6 +21,7 @@ import {
 } from '../server/publish/mock-provider.ts';
 import { MockDriveMediaProvider } from '../server/drive/mock-provider.ts';
 import { MockAdsOAuthClient } from '../server/ads/mock-oauth.ts';
+import { MockAdsProvider } from '../server/ads/mock-provider.ts';
 
 const databasePath = resetE2eDatabase();
 console.log(`Reset E2E database at ${databasePath}`);
@@ -197,6 +198,8 @@ analyticsWindow.failureAt = 2;
  * Google call. The account list answers from here too.
  */
 const adsOauth = new MockAdsOAuthClient();
+// Account listing and approval answer from a mock too, so no browser run can reach Google.
+const adsProvider = new MockAdsProvider();
 adsOauth.consentUrl = ({ state }) =>
   `${e2eWebOrigin}/api/ads/oauth/callback?${new URLSearchParams({ state, code: 'e2e-ads-code' })}`;
 
@@ -220,6 +223,7 @@ const app = createApp(db, {
   analyticsWindows: ['30d'],
   driveMedia: () => driveMedia,
   adsOauth: () => adsOauth,
+  adsProvider: () => adsProvider,
   onAgentHubLiveContext: (ctx) => {
     agentHubLiveContext = ctx;
   },

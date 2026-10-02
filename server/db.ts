@@ -322,6 +322,14 @@ CREATE TABLE IF NOT EXISTS ads_account_settings (
   approved INTEGER NOT NULL DEFAULT 0 CHECK(approved IN (0,1)), approved_at TEXT,
   client_id TEXT REFERENCES clients(id) ON DELETE SET NULL, updated_at TEXT NOT NULL
 );
+-- The customer IDs the Ads grant reached directly the last time a person listed them (C257). An ID
+-- here is only *discoverable*: it authorizes no metadata read and no metric read, which is what
+-- ads_account_settings.approved is for. A listing replaces this set whole, so an account the grant
+-- no longer reaches drops out and reads as lost access rather than staying as a ghost.
+CREATE TABLE IF NOT EXISTS ads_discovered_accounts (
+  customer_id TEXT PRIMARY KEY CHECK(length(customer_id) = 10 AND customer_id NOT GLOB '*[^0-9]*'),
+  discovered_at TEXT NOT NULL
+);
 -- Campaign identity is account plus campaign: Google's campaign IDs are only unique inside one
 -- account, so a campaign ID alone would let two accounts collide. Provider-owned, replaced whole by
 -- a refresh. The name is a bounded excerpt, never the provider's raw text.

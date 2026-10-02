@@ -241,6 +241,15 @@ export const testState = {
   /** Google Ads connection status (C256); never carries a token. */
   adsStatusPayload: null as import('../../shared/ads').AdsConnectionState | null,
   adsStatusError: null as string | null,
+  /** The Ads accounts list (C257). Disconnected and empty by default, which renders no card. */
+  adsAccountsPayload: {
+    connectionStatus: 'DISCONNECTED',
+    discoveredAt: null,
+    accounts: [],
+  } as import('../../shared/ads').AdsAccountsState,
+  /** What the mapping preview answers, so a case can make the hash stale. */
+  adsMappingPreview: null as import('../../shared/ads').AdsMappingPreview | null,
+  adsMappingCommitError: null as string | null,
   driveSettingsPayload: null as {
     configured: boolean;
     pickerConfigured: boolean;
@@ -921,6 +930,25 @@ const respondTo = (url: string, init?: RequestInit) => {
     testState.dashboardFailures -= 1;
     return reply(503, { error: 'Dashboard refresh is temporarily unavailable.' });
   }
+  if (url.endsWith('/api/ads/accounts') && method === 'GET') return testState.adsAccountsPayload;
+  if (url.endsWith('/api/ads/accounts/discover') && method === 'POST')
+    return testState.adsAccountsPayload;
+  if (/\/api\/ads\/accounts\/\d{10}\/approve$/.test(url) && method === 'POST') {
+    const id = (url.match(/accounts\/(\d{10})\//) as RegExpMatchArray)[1];
+    testState.adsAccountsPayload = {
+      ...testState.adsAccountsPayload,
+      accounts: testState.adsAccountsPayload.accounts.map((account) =>
+        account.customerId === id ? { ...account, approved: true } : account,
+      ),
+    };
+    return testState.adsAccountsPayload;
+  }
+  if (/\/api\/ads\/accounts\/\d{10}\/mapping\/preview$/.test(url) && method === 'POST')
+    return testState.adsMappingPreview;
+  if (/\/api\/ads\/accounts\/\d{10}\/mapping$/.test(url) && method === 'POST')
+    return testState.adsMappingCommitError
+      ? reply(409, { error: testState.adsMappingCommitError })
+      : { ...testState.adsMappingPreview, mappedAt: '2026-10-02T12:00:00.000Z' };
   if (url.endsWith('/api/ads/status') && testState.adsStatusError)
     return reply(503, { error: testState.adsStatusError });
   if (url.endsWith('/api/settings/drive') && testState.driveSettingsError)
@@ -2042,6 +2070,13 @@ beforeEach(() => {
   testState.driveSettingsPayload = null;
   testState.adsStatusPayload = null;
   testState.adsStatusError = null;
+  testState.adsAccountsPayload = {
+    connectionStatus: 'DISCONNECTED',
+    discoveredAt: null,
+    accounts: [],
+  };
+  testState.adsMappingPreview = null;
+  testState.adsMappingCommitError = null;
   testState.importReceiptsPayload = [];
   testState.importPreviewPayload = null;
   testState.importCommitPayload = null;

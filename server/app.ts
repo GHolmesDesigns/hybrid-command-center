@@ -257,7 +257,19 @@ import {
   disconnectAds,
   readAdsConnectionState,
 } from './ads/connection.ts';
-import { ADS_GOOGLE_PERMISSIONS_URL } from '../shared/ads.ts';
+import {
+  ADS_GOOGLE_PERMISSIONS_URL,
+  adsApprovalInputSchema,
+  adsCustomerIdSchema,
+  adsMappingCommitSchema,
+  adsMappingInputSchema,
+} from '../shared/ads.ts';
+import { approveAdsAccount, discoverAdsAccounts, withdrawAdsAccount } from './ads/accounts.ts';
+import { AdsAccountError } from './ads/errors.ts';
+import { createGoogleAdsProvider } from './ads/google.ts';
+import { commitAdsMapping, previewAdsMapping } from './ads/mapping.ts';
+import type { AdsProvider } from './ads/provider.ts';
+import { readAdsAccounts } from './ads/read.ts';
 import { DRIVE_PAGE_SIZE, DRIVE_PAGE_SIZE_MAX } from '../shared/drive.ts';
 import {
   IMPORT_BODY_LIMIT_BYTES,
@@ -282,6 +294,7 @@ import {
   AUTH_LOGIN_BUDGET,
   AUTH_ROUTE_BUDGET,
   DRIVE_BUDGET,
+  ADS_ACCOUNTS_BUDGET,
   ADS_OAUTH_BUDGET,
   DRIVE_OAUTH_BUDGET,
   DRIVE_SYNC_BUDGET,
@@ -605,6 +618,11 @@ export type AppOptions = {
    * `MockAdsOAuthClient`, so a whole Ads connect runs without a live Google call.
    */
   adsOauth?: (credentials: AdsOAuthCredentials) => AdsOAuthClient;
+  /**
+   * The read-only Google Ads provider behind account listing and approval. Tests and the browser
+   * suite supply `MockAdsProvider`, so nothing here can reach Google from CI.
+   */
+  adsProvider?: (credentials: AdsOAuthCredentials) => AdsProvider;
   /** Overrides the Ads configuration read from the environment, for tests. */
   adsConfig?: typeof config.ads;
   /**
@@ -816,6 +834,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   const oauthClient = options.oauth ?? createGoogleOAuthClient;
   const adsOauthClient = options.adsOauth ?? createGoogleAdsOAuthClient;
   const adsConfig = options.adsConfig ?? config.ads;
+  const adsProviderFor = options.adsProvider ?? createGoogleAdsProvider;
   const driveMedia = () => (options.driveMedia ?? driveMediaProvider)(db);
   const publishProvider =
     options.publish ??
@@ -1031,6 +1050,21 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       standardHeaders: 'draft-7',
       legacyHeaders: false,
       message: { error: ADS_OAUTH_BUDGET.message },
+      keyGenerator: (req) => authKey(req),
+      validate: { xForwardedForHeader: false },
+    }),
+  );
+  // Ads account list/approve/withdraw: the POSTs reach Google, so they get their own window. Reading
+  // the list is not counted; Settings loads it on every visit.
+  app.use(
+    '/api/ads/accounts',
+    rateLimit({
+      windowMs: ADS_ACCOUNTS_BUDGET.windowMs,
+      limit: ADS_ACCOUNTS_BUDGET.limit,
+      standardHeaders: 'draft-7',
+      legacyHeaders: false,
+      message: { error: ADS_ACCOUNTS_BUDGET.message },
+      skip: (req) => req.method !== 'POST',
       keyGenerator: (req) => authKey(req),
       validate: { xForwardedForHeader: false },
     }),
@@ -3756,6 +3790,73 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       next(e);
     }
   });
+  // Account selection and client mapping (C257). Operator session only: these routes sit behind the
+  // same `/api` authentication as every other write, and no MCP tool reaches them.
+  const adsCustomerIdParam = z.object({ customerId: adsCustomerIdSchema });
+  app.get('/api/ads/accounts', (_req, res, next) => {
+    try {
+      res.json(readAdsAccounts(db));
+    } catch (e) {
+      next(e);
+    }
+  });
+  app.post('/api/ads/accounts/discover', async (_req, res, next) => {
+    try {
+      res.json(
+        await discoverAdsAccounts(db, {
+          provider: adsProviderFor(adsConfig),
+          ads: adsConfig,
+          now: clock(),
+        }),
+      );
+    } catch (e) {
+      next(e);
+    }
+  });
+  app.post('/api/ads/accounts/:customerId/approve', async (req, res, next) => {
+    try {
+      const { customerId } = adsCustomerIdParam.parse(req.params);
+      const { confirmCustomerId } = adsApprovalInputSchema.parse(req.body);
+      res.json(
+        await approveAdsAccount(db, {
+          customerId,
+          confirmCustomerId,
+          provider: adsProviderFor(adsConfig),
+          ads: adsConfig,
+          now: clock(),
+        }),
+      );
+    } catch (e) {
+      next(e);
+    }
+  });
+  app.post('/api/ads/accounts/:customerId/withdraw', (req, res, next) => {
+    try {
+      const { customerId } = adsCustomerIdParam.parse(req.params);
+      const { confirmCustomerId } = adsApprovalInputSchema.parse(req.body);
+      res.json(withdrawAdsAccount(db, { customerId, confirmCustomerId, now: clock() }));
+    } catch (e) {
+      next(e);
+    }
+  });
+  app.post('/api/ads/accounts/:customerId/mapping/preview', (req, res, next) => {
+    try {
+      const { customerId } = adsCustomerIdParam.parse(req.params);
+      const { clientId } = adsMappingInputSchema.parse(req.body);
+      res.json(previewAdsMapping(db, customerId, clientId));
+    } catch (e) {
+      next(e);
+    }
+  });
+  app.post('/api/ads/accounts/:customerId/mapping', (req, res, next) => {
+    try {
+      const { customerId } = adsCustomerIdParam.parse(req.params);
+      const { clientId, planHash } = adsMappingCommitSchema.parse(req.body);
+      res.json(commitAdsMapping(db, customerId, clientId, planHash, clock()));
+    } catch (e) {
+      next(e);
+    }
+  });
   app.post('/api/ads/disconnect', (_req, res, next) => {
     try {
       const { wasConnected } = disconnectAds(db, clock());
@@ -3827,6 +3928,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
             error instanceof PublishRequestError ||
               error instanceof PublishConfirmationError ||
               error instanceof ClientMergeError ||
+              error instanceof AdsAccountError ||
               error instanceof AgentCoordinationError ||
               error instanceof AgentScheduleError ||
               error instanceof RevisionConflictError ||
