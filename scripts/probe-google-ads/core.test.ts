@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AdsRequestBudget,
   ADS_REQUEST_CAP,
   parseAdsProbeArgs,
   renderAdsPlan,
@@ -54,6 +55,10 @@ describe('Google Ads probe guards', () => {
     ).toBeTruthy();
     expect(parseAdsProbeArgs(args, {}).error).toBeTruthy();
     expect(parseAdsProbeArgs([...args.slice(0, -1), '2026-12-31'], env).error).toBeTruthy();
+    expect(parseAdsProbeArgs(['--unknown'], env).error).toBe('unknown plan arguments');
+    expect(parseAdsProbeArgs(['--help'], env).help).toBe(true);
+    expect(parseAdsProbeArgs([...args, '--account', config.account], env).error).toBeTruthy();
+    expect(parseAdsProbeArgs([...args.slice(0, -1), '2026-07-01'], env).error).toBeTruthy();
   });
 
   it('reads only the approved account, omits developer token, and reports empty rows honestly', async () => {
@@ -104,7 +109,60 @@ describe('Google Ads probe guards', () => {
     expect(count).toBe(2);
   });
 
-  it('keeps a hard HTTP cap even if the request sequence grows', () => {
+  it('stops before request nine, even if the probe grows', () => {
     expect(ADS_REQUEST_CAP).toBe(8);
+    const budget = new AdsRequestBudget();
+    for (let n = 1; n <= ADS_REQUEST_CAP; n++) expect(budget.take()).toBe(n);
+    expect(() => budget.take()).toThrow('request cap reached');
+    expect(budget.used).toBe(ADS_REQUEST_CAP);
+  });
+
+  it('stops on HTTP, malformed OAuth, malformed discovery, and malformed stream responses', async () => {
+    const response =
+      (payload: unknown): AdsTransport =>
+      async () => ({
+        ok: true,
+        status: 200,
+        json: async () => payload,
+      });
+    await expect(
+      runAdsProbe(config, async () => ({ ok: false, status: 403, json: async () => ({}) })),
+    ).rejects.toThrow('HTTP 403');
+    await expect(runAdsProbe(config, response({}))).rejects.toThrow('missing access token');
+    let call = 0;
+    await expect(
+      runAdsProbe(config, async () =>
+        response(++call === 1 ? { access_token: 'token' } : { resourceNames: ['bad'] })('', {}),
+      ),
+    ).rejects.toThrow('invalid accessible-customer');
+    call = 0;
+    await expect(
+      runAdsProbe(config, async () =>
+        response(
+          ++call === 1
+            ? { access_token: 'token' }
+            : call === 2
+              ? { resourceNames: ['customers/1234567890'] }
+              : { results: [] },
+        )('', {}),
+      ),
+    ).rejects.toThrow('invalid or oversized SearchStream');
+  });
+
+  it('stops on transport and JSON failures without exposing their bodies', async () => {
+    await expect(
+      runAdsProbe(config, async () => {
+        throw new Error('secret');
+      }),
+    ).rejects.toThrow('network request failed');
+    await expect(
+      runAdsProbe(config, async () => ({
+        ok: true,
+        status: 200,
+        json: async () => {
+          throw new Error('secret');
+        },
+      })),
+    ).rejects.toThrow('invalid JSON response');
   });
 });

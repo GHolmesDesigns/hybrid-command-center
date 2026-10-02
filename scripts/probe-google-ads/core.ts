@@ -3,6 +3,18 @@ import { z } from 'zod';
 export const ADS_API_VERSION = 'v25';
 export const ADS_SCOPE = 'https://www.googleapis.com/auth/adwords';
 export const ADS_REQUEST_CAP = 8;
+export class AdsRequestBudget {
+  private count = 0;
+
+  take(): number {
+    if (this.count >= ADS_REQUEST_CAP) throw new Error('request cap reached');
+    return ++this.count;
+  }
+
+  get used(): number {
+    return this.count;
+  }
+}
 const customerId = z
   .string()
   .regex(/^\d{10}$/, 'account must be a 10-digit customer ID without dashes');
@@ -101,16 +113,16 @@ const streamSchema = z
   .max(100);
 
 export async function runAdsProbe(config: AdsProbeConfig, transport: AdsTransport) {
-  let requests = 0;
+  const budget = new AdsRequestBudget();
   async function request(url: string, init: RequestInit): Promise<unknown> {
-    if (++requests > ADS_REQUEST_CAP) throw new Error('request cap reached');
+    const requestNumber = budget.take();
     let response: Pick<Response, 'ok' | 'status' | 'json'>;
     try {
       response = await transport(url, init);
     } catch {
       throw new Error('network request failed');
     }
-    if (!response.ok) throw new Error(`HTTP ${response.status} at request ${requests}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status} at request ${requestNumber}`);
     try {
       return await response.json();
     } catch {
@@ -163,7 +175,7 @@ export async function runAdsProbe(config: AdsProbeConfig, transport: AdsTranspor
   const campaignRows = await search(ADS_QUERIES.campaign);
   const metricRows = await search(ADS_QUERIES.metrics(config.start, config.end));
   return {
-    requests,
+    requests: budget.used,
     accessibleCount: accessible.data.resourceNames.length,
     approvedAccountPresent,
     metadataRows,
