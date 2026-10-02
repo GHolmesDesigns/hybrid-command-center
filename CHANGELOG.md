@@ -1,5 +1,15 @@
 # Changelog
 
+## [7.0.14] - 2026-10-02
+
+### Added
+
+- **Settings → Google Ads** connects and disconnects Google Ads as its own grant, separate from Drive. Connect sends you through Google's consent screen; the connection shows as connected only after Google confirms which accounts the grant can reach directly. A refused or failed attempt says why and leaves any existing connection as it was. Disconnect removes only the credential stored here, and the card reminds you to revoke the app in your Google Account.
+- Connecting Google Ads does not approve any ad account for reading performance. The refresh token is stored encrypted under its own Ads key, is never shown in the app, and every connect or disconnect outcome appears in Integration activity without it.
+
+### Breaking changes
+
+None.
 ## [7.0.13] - 2026-10-02
 
 ### Added

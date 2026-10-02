@@ -238,6 +238,9 @@ export const testState = {
   taskReorderError: null as string | null,
   dashboardFailures: 0,
   driveSettingsError: null as string | null,
+  /** Google Ads connection status (C256); never carries a token. */
+  adsStatusPayload: null as import('../../shared/ads').AdsConnectionState | null,
+  adsStatusError: null as string | null,
   driveSettingsPayload: null as {
     configured: boolean;
     pickerConfigured: boolean;
@@ -841,6 +844,18 @@ const payloadFor = (url: string) => {
         url: `/api/manual/${encodeURIComponent(APP_VERSION)}`,
       }
     );
+  if (url.endsWith('/api/ads/status'))
+    return (
+      testState.adsStatusPayload ?? {
+        configured: true,
+        missing: [],
+        status: 'DISCONNECTED',
+        connectedAt: null,
+        scope: null,
+        viaManager: false,
+        problem: null,
+      }
+    );
   if (url.endsWith('/api/settings/drive'))
     return (
       testState.driveSettingsPayload ?? {
@@ -906,6 +921,8 @@ const respondTo = (url: string, init?: RequestInit) => {
     testState.dashboardFailures -= 1;
     return reply(503, { error: 'Dashboard refresh is temporarily unavailable.' });
   }
+  if (url.endsWith('/api/ads/status') && testState.adsStatusError)
+    return reply(503, { error: testState.adsStatusError });
   if (url.endsWith('/api/settings/drive') && testState.driveSettingsError)
     return reply(503, { error: testState.driveSettingsError });
   if (url.endsWith('/api/mcp/health/test') && method === 'POST') {
@@ -1019,6 +1036,25 @@ const respondTo = (url: string, init?: RequestInit) => {
     return {
       rootFolderId: body.folderId,
       rootFolderUrl: `https://drive.test/folder/${body.folderId}`,
+    };
+  }
+  if (url.endsWith('/api/ads/oauth/start'))
+    return { url: 'https://accounts.test/ads-authorize?state=mock' };
+  if (url.endsWith('/api/ads/disconnect') && method === 'POST') {
+    testState.adsStatusPayload = {
+      configured: true,
+      missing: [],
+      status: 'DISCONNECTED',
+      connectedAt: null,
+      scope: null,
+      viaManager: false,
+      problem: null,
+    };
+    return {
+      ok: true,
+      wasConnected: true,
+      googleRevocationRequired: true,
+      googlePermissionsUrl: 'https://myaccount.google.com/permissions',
     };
   }
   if (url.endsWith('/api/settings/drive/disconnect') && method === 'POST') {
@@ -2004,6 +2040,8 @@ beforeEach(() => {
   testState.dashboardFailures = 0;
   testState.driveSettingsError = null;
   testState.driveSettingsPayload = null;
+  testState.adsStatusPayload = null;
+  testState.adsStatusError = null;
   testState.importReceiptsPayload = [];
   testState.importPreviewPayload = null;
   testState.importCommitPayload = null;

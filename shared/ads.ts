@@ -134,3 +134,56 @@ export const adsAccountLocalSettingsSchema = z.object({
   clientId: z.string().min(1).nullable(),
 });
 export type AdsAccountLocalSettings = z.infer<typeof adsAccountLocalSettingsSchema>;
+
+/** The Ads API version this build speaks; a connect makes exactly one call against it. */
+export const ADS_API_VERSION = 'v25';
+
+/** Where a person revokes the grant at Google; disconnecting here removes only the local copy. */
+export const ADS_GOOGLE_PERMISSIONS_URL = 'https://myaccount.google.com/permissions';
+
+/**
+ * Why a connect attempt did not complete. Fixed codes only: the browser maps each to its own
+ * words, and nothing a provider said — a body, a message, a token — travels with one.
+ */
+export const ADS_CONNECT_FAILURES = [
+  'denied',
+  'missing_code',
+  'exchange_failed',
+  'no_refresh_token',
+  'scope_mismatch',
+  'account_list_failed',
+  'encryption_unavailable',
+] as const;
+export type AdsConnectFailure = (typeof ADS_CONNECT_FAILURES)[number];
+
+export const ADS_CONNECT_FAILURE_MESSAGE: Record<AdsConnectFailure, string> = {
+  denied: 'Google did not grant access, so nothing changed.',
+  missing_code: 'Google returned without an authorization code, so nothing changed.',
+  exchange_failed: 'Google refused the authorization code, so nothing changed.',
+  no_refresh_token:
+    'Google did not issue a refresh token. Remove this app under Google Account permissions and connect again.',
+  scope_mismatch: 'Google did not grant the Google Ads scope, so nothing changed.',
+  account_list_failed:
+    'Google Ads did not list any directly accessible accounts, so the connection was not saved.',
+  encryption_unavailable:
+    'The Google Ads encryption key is missing or unusable, so the connection was not saved.',
+};
+
+export const isAdsConnectFailure = (value: unknown): value is AdsConnectFailure =>
+  typeof value === 'string' && (ADS_CONNECT_FAILURES as readonly string[]).includes(value);
+
+/**
+ * What the browser may know about the Ads connection. There is no token, no ciphertext, and no
+ * client secret in it: `problem` is the one place the server explains a state it cannot use.
+ */
+export const adsConnectionStatusSchema = z.object({
+  configured: z.boolean(),
+  /** Names of the required variables still blank; never their values. */
+  missing: z.array(z.string()),
+  status: z.enum(ADS_CONNECTION_STATUSES),
+  connectedAt: z.string().nullable(),
+  scope: z.string().nullable(),
+  viaManager: z.boolean(),
+  problem: z.string().nullable(),
+});
+export type AdsConnectionState = z.infer<typeof adsConnectionStatusSchema>;

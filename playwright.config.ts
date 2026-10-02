@@ -44,6 +44,12 @@ export default defineConfig({
         PUBLISH_NOW_EVIDENCE: '1',
         HCC_ASSISTANT_PROVIDER: 'stub',
         ASSISTANT_KEY_ENCRYPTION_KEY: 'e2e-assistant-encryption-key-32chars!!',
+        // Google Ads (C256): dummy values so the connect flow is reachable. The authorization
+        // server is `MockAdsOAuthClient` in e2e/start-server.ts; no run contacts Google.
+        GOOGLE_ADS_CLIENT_ID: 'e2e-ads-client-id',
+        GOOGLE_ADS_CLIENT_SECRET: 'e2e-ads-client-secret',
+        GOOGLE_ADS_REDIRECT_URI: `${e2eWebOrigin}/api/ads/oauth/callback`,
+        GOOGLE_ADS_TOKEN_ENCRYPTION_KEY: 'e2e-ads-encryption-key-that-is-32-chars!!',
       },
       url: `${e2eApiOrigin}/api/health`,
       reuseExistingServer: false,

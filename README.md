@@ -159,6 +159,7 @@ Required environment variables:
 | `GOOGLE_ADS_REDIRECT_URI` | Optional. `http://localhost` or `127.0.0.1` on `/api/ads/oauth/callback`, or `https://…` on that same path — no query or hash |
 | `GOOGLE_ADS_TOKEN_ENCRYPTION_KEY` | Optional Ads token-encryption secret; at least 32 characters and different from `GOOGLE_TOKEN_ENCRYPTION_KEY`. Back it up separately |
 | `GOOGLE_ADS_LOGIN_CUSTOMER_ID` | Optional 10-digit manager account ID, only when access goes through a manager account |
+| Google Ads connection | With the four Ads variables set, **Settings -> Google Ads** connects and disconnects a read-only Google Ads grant that is separate from Drive. It counts as connected only after Google lists the accounts the grant can reach directly; connecting approves no account. Disconnecting removes the local credential only, so revoke the grant in your Google Account too |
 | `GOOGLE_API_KEY` | Browser Picker developer key; restrict by HTTP referrer in Cloud Console |
 | `GOOGLE_APP_ID` | Numeric Google Cloud project number (Picker `setAppId`) |
 | `POST_BRIDGE_API_KEY` | Optional Post Bridge API key; server-side only |

@@ -9,7 +9,7 @@ import type { AgentHubTipRegistry } from '../server/agent-hub/tips.ts';
 import { config } from '../server/config.ts';
 import { getDb } from '../server/db.ts';
 import { resetE2eDatabase } from './database.ts';
-import { handleE2eStopRequest } from './endpoints.ts';
+import { e2eWebOrigin, handleE2eStopRequest } from './endpoints.ts';
 import { stopWhenTheRunEnds } from './shutdown.ts';
 import {
   MockAnalyticsProvider,
@@ -20,6 +20,7 @@ import {
   MockBufferWriteProvider,
 } from '../server/publish/mock-provider.ts';
 import { MockDriveMediaProvider } from '../server/drive/mock-provider.ts';
+import { MockAdsOAuthClient } from '../server/ads/mock-oauth.ts';
 
 const databasePath = resetE2eDatabase();
 console.log(`Reset E2E database at ${databasePath}`);
@@ -189,6 +190,16 @@ analyticsWindow.pages = [
 ];
 analyticsWindow.failureAt = 2;
 
+/**
+ * The Google Ads authorization server (C256). Google's consent screen is replaced by an immediate
+ * redirect to the app's own callback through the web origin, carrying the state the app minted and
+ * a fixed code, so the spec drives the real start, callback, state, and storage code with no live
+ * Google call. The account list answers from here too.
+ */
+const adsOauth = new MockAdsOAuthClient();
+adsOauth.consentUrl = ({ state }) =>
+  `${e2eWebOrigin}/api/ads/oauth/callback?${new URLSearchParams({ state, code: 'e2e-ads-code' })}`;
+
 const bufferWrite = new MockBufferWriteProvider();
 bufferWrite.createdStateByChannel.set('e2e-buffer-youtube', 'FAILED');
 
@@ -208,6 +219,7 @@ const app = createApp(db, {
   // A build a person uses never gets this option; see the option's own comment in `server/app.ts`.
   analyticsWindows: ['30d'],
   driveMedia: () => driveMedia,
+  adsOauth: () => adsOauth,
   onAgentHubLiveContext: (ctx) => {
     agentHubLiveContext = ctx;
   },
