@@ -247,6 +247,14 @@ export const testState = {
     discoveredAt: null,
     accounts: [],
   } as import('../../shared/ads').AdsAccountsState,
+  /** The stored Ads performance snapshot (C259), and what a refresh answers or refuses with. */
+  adsPerformancePayload: {
+    connectionStatus: 'DISCONNECTED',
+    lastSync: { at: null, outcome: null, error: null },
+    lastAttemptFailed: false,
+    accounts: [],
+  } as import('../../shared/ads').AdsPerformanceState,
+  adsRefreshError: null as string | null,
   /** What the mapping preview answers, so a case can make the hash stale. */
   adsMappingPreview: null as import('../../shared/ads').AdsMappingPreview | null,
   adsMappingCommitError: null as string | null,
@@ -930,6 +938,12 @@ const respondTo = (url: string, init?: RequestInit) => {
     testState.dashboardFailures -= 1;
     return reply(503, { error: 'Dashboard refresh is temporarily unavailable.' });
   }
+  if (url.endsWith('/api/ads/performance') && method === 'GET')
+    return testState.adsPerformancePayload;
+  if (url.endsWith('/api/ads/performance/refresh') && method === 'POST')
+    return testState.adsRefreshError
+      ? reply(502, { error: testState.adsRefreshError })
+      : { result: {}, performance: testState.adsPerformancePayload };
   if (url.endsWith('/api/ads/accounts') && method === 'GET') return testState.adsAccountsPayload;
   if (url.endsWith('/api/ads/accounts/discover') && method === 'POST')
     return testState.adsAccountsPayload;
@@ -2075,6 +2089,13 @@ beforeEach(() => {
     discoveredAt: null,
     accounts: [],
   };
+  testState.adsPerformancePayload = {
+    connectionStatus: 'DISCONNECTED',
+    lastSync: { at: null, outcome: null, error: null },
+    lastAttemptFailed: false,
+    accounts: [],
+  };
+  testState.adsRefreshError = null;
   testState.adsMappingPreview = null;
   testState.adsMappingCommitError = null;
   testState.importReceiptsPayload = [];

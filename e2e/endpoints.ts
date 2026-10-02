@@ -1,6 +1,7 @@
 export const E2E_API_PORT = 8788;
 export const E2E_WEB_PORT = 5174;
 export const E2E_STOP_PATH = '/__e2e/stop';
+export const E2E_RESET_ADS_PATH = '/__e2e/reset-ads';
 
 export const e2eApiOrigin = `http://127.0.0.1:${E2E_API_PORT}`;
 export const e2eWebOrigin = `http://127.0.0.1:${E2E_WEB_PORT}`;
@@ -29,5 +30,23 @@ export function handleE2eStopRequest(
   }
   res.statusCode = 204;
   res.end(() => stop('stop endpoint'));
+  return true;
+}
+
+/**
+ * Loopback-only reset of the Google Ads rows a spec created, so a spec that connects and approves
+ * accounts does not change what a later spec sees on Settings. Same shape as the stop handler, and
+ * likewise never installed by production `createApp`.
+ */
+export function handleE2eResetAdsRequest(req: StopRequest, res: StopResponse, reset: () => void) {
+  if (req.method !== 'POST' || req.url?.split('?')[0] !== E2E_RESET_ADS_PATH) return false;
+  if (!isLoopbackAddress(req.socket.remoteAddress)) {
+    res.statusCode = 404;
+    res.end();
+    return true;
+  }
+  reset();
+  res.statusCode = 204;
+  res.end();
   return true;
 }

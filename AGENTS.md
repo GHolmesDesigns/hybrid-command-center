@@ -31,7 +31,12 @@
   `snapshot_at`; any failure leaves the prior generation untouched and writes its `FAILURE` event and
   last-sync record afterwards. It stores the four provider figures as reported, computes no rate and
   no cross-account or cross-currency sum, and never touches approval, mapping, or tokens. No MCP tool exposes any of
-  it. A client merge retargets the source's accounts to the survivor in its own transaction.
+  it.
+  Page (C259): `/ads` (`AdsView.tsx`) reads only `GET /api/ads/performance` on load and on every
+  filter change; its Refresh button is the one path to Google. Its only arithmetic is
+  `shared/ads-performance-view.ts` adding the provider's own daily rows over the chosen accounts and
+  account-local dates, separately per currency, with no totals (not zeros) for a set with no measured
+  day. Filters `client`, `account`, `from`, `to` are durable URL state read defensively. A client merge retargets the source's accounts to the survivor in its own transaction.
 - `server/signal/`: Signal Campaign's schedule, split the same way Drive is. `provider.ts` is the
   `SignalProvider` interface and `read.ts` is its implementation — the read-only half everything
   outside Signal consumes; writes live in `service.ts`. `campaigns.ts` is the campaign vocabulary —
