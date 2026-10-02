@@ -22,6 +22,7 @@ import { formatDate, initials } from './formatting';
 import { DriveBadge, Empty, SearchBox } from './Primitives';
 import { PageHead } from './Shell';
 import { DiscussionPanel } from './DiscussionPanel';
+import { ClientAdsSummary } from './ClientAdsSummary';
 
 export function Clients({
   clients,
@@ -376,6 +377,7 @@ export function ClientDetail({
             />
           )}
         </section>
+        <ClientAdsSummary clientId={client.id} mergedIntoName={client.mergedInto?.name} />
       </div>
       <DiscussionPanel
         scopeType="client"

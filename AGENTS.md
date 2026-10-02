@@ -37,6 +37,9 @@
   `shared/ads-performance-view.ts` adding the provider's own daily rows over the chosen accounts and
   account-local dates, separately per currency, with no totals (not zeros) for a set with no measured
   day. Filters `client`, `account`, `from`, `to` are durable URL state read defensively. A client merge retargets the source's accounts to the survivor in its own transaction.
+  Client detail (C260): `ClientAdsSummary.tsx` reads the same `GET /api/ads/performance` and the same
+  `buildAdsPerformanceView` filtered to one client — stored data only, no provider call, no write —
+  and links to `/ads?client=<id>` only when the client has an account.
 - `server/signal/`: Signal Campaign's schedule, split the same way Drive is. `provider.ts` is the
   `SignalProvider` interface and `read.ts` is its implementation — the read-only half everything
   outside Signal consumes; writes live in `service.ts`. `campaigns.ts` is the campaign vocabulary —

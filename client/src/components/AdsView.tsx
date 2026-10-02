@@ -47,7 +47,7 @@ const FILTER_NOTICE: Record<(typeof ADS_FILTER_PARAMS)[number], string> = {
   to: 'end date',
 };
 
-function Figures({
+export function Figures({
   totals,
   currencyCode,
   label,
