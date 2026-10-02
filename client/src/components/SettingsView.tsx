@@ -14,6 +14,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { api, send } from '../api';
+import { AdsAccountsCard } from './AdsAccountsCard';
 import { AdsConnectionCard } from './AdsConnectionCard';
 import { useServerSeeded } from '../useServerSeeded';
 import { DrivePickerCancelled, pickDriveFolder, type DrivePickerConfig } from '../drivePicker';
@@ -1245,6 +1246,7 @@ export function SettingsView({
             )}
           </section>
           <AdsConnectionCard flash={flash} />
+          <AdsAccountsCard flash={flash} />
           <section className="panel settings-card">
             <div className="settings-icon neutral">
               <Clock3 />

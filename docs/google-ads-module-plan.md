@@ -124,8 +124,10 @@ tables.
 accounts are grouped, never hidden — the same rule as "No campaign" for Signal posts. Archiving a
 client does not delete its account link or its figures. Merging clients retargets any linked Ads
 account from the source to the survivor in the merge transaction; a refresh never changes that
-local choice. Disconnecting or losing account access needs an explicit local retention policy in
-B1: keep the last snapshot visibly stale or remove it through a separately confirmed local action.
+local choice. Decided in B1: disconnecting, or a later account listing that no longer reaches an approved
+account, keeps the last snapshot **visibly stale** and stops every provider read for it; approval and
+client mapping stay. Removing retained local Ads data would be a separately confirmed action and is
+not an implicit side effect of disconnecting.
 
 **Activity log.** Add source `google-ads` and operations such as `ads.connect`, `ads.disconnect`,
 `ads.sync` to `shared/integration-log.ts`. Each records one `integration_events` row in the same

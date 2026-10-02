@@ -68,6 +68,10 @@ export const INTEGRATION_OPERATIONS = [
   // response, or a campaign name; a failure's words pass through `redactSecrets`.
   'ads.connect',
   'ads.disconnect',
+  // Listing the accounts the grant reaches, and approving one for a metadata read (C257). Mapping an
+  // approved account to a client is local workspace data, like merging clients, and logs nothing.
+  'ads.discover',
+  'ads.approve',
   'ads.sync',
 ] as const;
 export type IntegrationOperation = (typeof INTEGRATION_OPERATIONS)[number];
@@ -172,6 +176,8 @@ export const INTEGRATION_OPERATION_LABEL: Record<IntegrationOperation, string> =
   'agent.cost-refresh': 'Agent cost refresh',
   'ads.connect': 'Google Ads connect',
   'ads.disconnect': 'Google Ads disconnect',
+  'ads.discover': 'Google Ads account list',
+  'ads.approve': 'Google Ads account approval',
   'ads.sync': 'Google Ads sync',
 };
 

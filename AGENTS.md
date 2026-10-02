@@ -15,6 +15,16 @@
   callback and disconnects. Connected means a refresh token for the Ads scope **and** a successful
   account-list call; a failed attempt records one `ads.connect` FAILURE event and leaves any prior
   connection untouched. Connecting approves no account. Nothing in it reads a Drive setting.
+  Account selection (C257): listing (`accounts.ts`) records the directly accessible IDs as
+  *discoverable* in `ads_discovered_accounts` and reads no metadata; approval is a person naming one
+  exact ID twice, and only then does `AdsProvider.readAccount` (the read-only `provider.ts`, with no
+  write method) run for that ID. A manager or non-enabled account is never marked approved. What the
+  provider reports lives in `ads_accounts`, what a person decided in `ads_account_settings`;
+  approval upserts the first and never deletes it. `mapping.ts` is a hash-checked preview and
+  commit that changes one `client_id` and writes no `integration_events` row; `read.ts` is
+  SELECT-only. Disconnect or a listing that no longer reaches an account leaves its snapshot
+  visibly stale and stops provider reads; nothing deletes retained data. No MCP tool exposes any of
+  it. A client merge retargets the source's accounts to the survivor in its own transaction.
 - `server/signal/`: Signal Campaign's schedule, split the same way Drive is. `provider.ts` is the
   `SignalProvider` interface and `read.ts` is its implementation — the read-only half everything
   outside Signal consumes; writes live in `service.ts`. `campaigns.ts` is the campaign vocabulary —

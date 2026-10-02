@@ -131,6 +131,24 @@ const accessibleSchema = z.object({
     .default([]),
 });
 
+/**
+ * The one account-list request, shared by the connect callback and a person's re-listing. It sends
+ * no developer-token header and no login-customer-id: it lists what the grant reaches directly.
+ */
+export async function fetchAccessibleCustomers(accessToken: string): Promise<string[]> {
+  const response = await fetch(
+    `https://googleads.googleapis.com/${ADS_API_VERSION}/customers:listAccessibleCustomers`,
+    {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(ADS_REQUEST_TIMEOUT_MS),
+    },
+  );
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const parsed = accessibleSchema.parse(await response.json());
+  return parsed.resourceNames.map((name) => name.slice('customers/'.length));
+}
+
 export function createGoogleAdsOAuthClient(credentials: AdsOAuthCredentials): AdsOAuthClient {
   const oauth = new google.auth.OAuth2(
     credentials.clientId,
@@ -155,20 +173,7 @@ export function createGoogleAdsOAuthClient(credentials: AdsOAuthCredentials): Ad
         scope: tokens.scope ?? null,
       };
     },
-    listAccessibleCustomers: async (accessToken) => {
-      // The one Ads call a connect makes. It sends no developer-token header and no
-      // login-customer-id: the call lists what the grant reaches directly.
-      const response = await fetch(
-        `https://googleads.googleapis.com/${ADS_API_VERSION}/customers:listAccessibleCustomers`,
-        {
-          method: 'GET',
-          headers: { Authorization: `Bearer ${accessToken}` },
-          signal: AbortSignal.timeout(ADS_REQUEST_TIMEOUT_MS),
-        },
-      );
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const parsed = accessibleSchema.parse(await response.json());
-      return parsed.resourceNames.map((name) => name.slice('customers/'.length));
-    },
+    // The one Ads call a connect makes.
+    listAccessibleCustomers: fetchAccessibleCustomers,
   };
 }
