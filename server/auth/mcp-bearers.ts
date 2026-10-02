@@ -139,14 +139,28 @@ export function revokeAllMcpBearers(db: Db, now: number = Date.now()): void {
   ).run(iso(now));
 }
 
-/** Parse `Authorization: Bearer hcc_mcp_…` when present. */
+/**
+ * Parse the MCP credential from an `Authorization` header.
+ *
+ * The standard form is `Bearer hcc_mcp_…`. A bare `hcc_mcp_…` value with no scheme is accepted
+ * too: client settings screens that take a raw header value (Codex's static headers, for one)
+ * save exactly what was pasted, and a credential copied from Agents carries no `Bearer` word.
+ * Before this rule that header read as *no credential at all*, so the server answered with the
+ * OAuth challenge rather than a credential error, and the client hid the failure behind "tool
+ * not available". The prefix makes the bare form unambiguous, and the token is resolved and
+ * checked exactly as a `Bearer` one is — nothing about what it may do changes. Any other
+ * scheme-less value, and any other scheme, still reads as no credential.
+ */
 export function readMcpBearerToken(
   authorizationHeader: string | string[] | undefined,
 ): string | null {
   const raw = Array.isArray(authorizationHeader) ? authorizationHeader[0] : authorizationHeader;
-  if (!raw?.trim()) return null;
-  const match = /^Bearer\s+(\S+)\s*$/i.exec(raw.trim());
-  return match?.[1] ?? null;
+  const value = raw?.trim();
+  if (!value) return null;
+  const match = /^Bearer\s+(\S+)$/i.exec(value);
+  if (match) return match[1] ?? null;
+  if (value.startsWith(MCP_BEARER_TOKEN_PREFIX) && !/\s/.test(value)) return value;
+  return null;
 }
 
 export { hashSessionToken };

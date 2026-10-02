@@ -1,5 +1,14 @@
 # Changelog
 
+## [7.0.11] - 2026-10-02
+
+### Fixed
+
+- An MCP client that sends the agent credential as the whole `Authorization` header value — `hcc_mcp_…` with no `Bearer` in front, which is what Codex's static-header setting saves when a credential is pasted into it — now connects. That header used to read as no credential at all, so the server answered with a sign-in challenge and the client reported the Hybrid Command Center tools as unavailable instead of naming the problem. The credential is checked exactly as a `Bearer` one is; any other value without a scheme is still refused.
+
+### Breaking changes
+
+None.
 ## [7.0.10] - 2026-10-01
 
 ### Added

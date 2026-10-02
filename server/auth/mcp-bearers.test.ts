@@ -109,6 +109,19 @@ describe('mcp bearers', () => {
     expect(readMcpBearerToken(['Bearer token-one', 'Bearer token-two'])).toBe('token-one');
   });
 
+  it('accepts a bare hcc_mcp_ credential with no scheme, and nothing else bare', () => {
+    // A client settings screen that saves the pasted credential as the whole header value.
+    expect(readMcpBearerToken(`${MCP_BEARER_TOKEN_PREFIX}abc`)).toBe(
+      `${MCP_BEARER_TOKEN_PREFIX}abc`,
+    );
+    expect(readMcpBearerToken(`  ${MCP_BEARER_TOKEN_PREFIX}abc  `)).toBe(
+      `${MCP_BEARER_TOKEN_PREFIX}abc`,
+    );
+    expect(readMcpBearerToken('some-other-token')).toBeNull();
+    expect(readMcpBearerToken(`${MCP_BEARER_TOKEN_PREFIX}abc extra`)).toBeNull();
+    expect(readMcpBearerToken(`Basic ${MCP_BEARER_TOKEN_PREFIX}abc`)).toBeNull();
+  });
+
   it('rejects wrong-prefix and expired-session bearers', () => {
     expect(resolveMcpBearer(db, { rawToken: 'not-a-bearer', sessionSecret: SECRET })).toBeNull();
 

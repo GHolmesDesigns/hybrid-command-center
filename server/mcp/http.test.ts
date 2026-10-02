@@ -296,6 +296,31 @@ describe('network MCP (C113)', () => {
     });
   });
 
+  it('authenticates a scoped credential sent as a bare Authorization value', async () => {
+    // Codex's static header field saves the pasted credential without the word Bearer. That used
+    // to read as no credential, so the client got an OAuth challenge and hid the tools.
+    const { cookie, csrfToken } = await login();
+    const issued = await issueScopedBearer(cookie, csrfToken, 'codex-desktop', [
+      'coordination:read',
+    ]);
+
+    const listed = await request(app())
+      .post(MCP_HTTP_PATH)
+      .set('Authorization', issued.bearerToken)
+      .send({ jsonrpc: '2.0', id: 30, method: 'tools/list' });
+    expect(listed.status).toBe(200);
+    expect(listed.body.result.tools.map((tool: { name: string }) => tool.name)).toContain(
+      'coordination_list_handoffs',
+    );
+
+    const unknown = await request(app())
+      .post(MCP_HTTP_PATH)
+      .set('Authorization', 'hcc_mcp_not-in-database')
+      .send({ jsonrpc: '2.0', id: 31, method: 'ping' });
+    expect(unknown.status).toBe(401);
+    expect(unknown.body).toMatchObject({ code: 'MCP_CREDENTIAL_INVALID' });
+  });
+
   it('allows reads but refuses writes without coordination:write', async () => {
     const { cookie, csrfToken } = await login();
     const issued = await issueScopedBearer(cookie, csrfToken, 'read-only-agent', [
