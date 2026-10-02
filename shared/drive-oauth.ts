@@ -13,13 +13,22 @@ export const DRIVE_OAUTH_SCOPE = 'https://www.googleapis.com/auth/drive.file';
  * fixed path `/api/drive/oauth/callback` and no query or hash.
  */
 export function isAllowedGoogleRedirectUri(value: string): boolean {
+  return isAllowedOAuthRedirectUri(value, '/api/drive/oauth/callback');
+}
+
+/**
+ * The shape rule behind every Google OAuth callback this app registers: loopback http or any
+ * https host, one fixed path, and no query, hash, or credentials. Drive and Google Ads differ
+ * only in the path, so the rule lives once and a change to it reaches both.
+ */
+export function isAllowedOAuthRedirectUri(value: string, pathname: string): boolean {
   let url: URL;
   try {
     url = new URL(value);
   } catch {
     return false;
   }
-  if (url.pathname !== '/api/drive/oauth/callback') return false;
+  if (url.pathname !== pathname) return false;
   if (url.search !== '' || url.hash !== '') return false;
   if (url.username || url.password) return false;
 

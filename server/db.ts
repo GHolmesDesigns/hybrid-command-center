@@ -280,6 +280,59 @@ CREATE TABLE IF NOT EXISTS integration_events (
   summary TEXT NOT NULL, entities TEXT NOT NULL DEFAULT '[]', entity_count INTEGER NOT NULL DEFAULT 0,
   correlation_id TEXT, error TEXT, created_at TEXT NOT NULL
 );
+-- Google Ads (C255): an isolated, read-only mirror of what the provider reports, plus what a person
+-- decided about it. It shares nothing with Drive or Signal: no foreign key reaches a post, a Drive
+-- row, or a token of theirs, and the only link into the rest of the workspace is a nullable client.
+--
+-- One row, enforced by the key. The refresh token is ciphertext under GOOGLE_ADS_TOKEN_ENCRYPTION_KEY
+-- and is never returned to the browser.
+CREATE TABLE IF NOT EXISTS ads_connection (
+  id TEXT PRIMARY KEY CHECK(id = 'google-ads'),
+  status TEXT NOT NULL DEFAULT 'DISCONNECTED' CHECK(status IN ('DISCONNECTED','CONNECTED','ERROR')),
+  scope TEXT, refresh_token_encrypted TEXT, login_customer_id TEXT, connected_at TEXT,
+  last_sync_at TEXT, last_sync_outcome TEXT CHECK(last_sync_outcome IN ('SUCCESS','FAILURE')),
+  last_sync_error TEXT, updated_at TEXT NOT NULL
+);
+-- The provider's own account fields, replaced by a refresh. Nothing a person chose lives here: a
+-- refresh that rewrites or even deletes and re-inserts one of these rows cannot lose an approval or a
+-- client mapping. The customer ID is the Google Ads customer ID, 10 digits, kept as text.
+CREATE TABLE IF NOT EXISTS ads_accounts (
+  customer_id TEXT PRIMARY KEY CHECK(length(customer_id) = 10 AND customer_id NOT GLOB '*[^0-9]*'),
+  descriptive_name TEXT NOT NULL, currency_code TEXT NOT NULL, time_zone TEXT NOT NULL,
+  manager INTEGER NOT NULL DEFAULT 0 CHECK(manager IN (0,1)), status TEXT NOT NULL,
+  snapshot_at TEXT NOT NULL
+);
+-- What a person decided about an account: whether its metadata and performance may be read, and
+-- which client it belongs to. Keyed by customer ID with no foreign key to ads_accounts on purpose, so
+-- the provider's snapshot and a person's choice have separate lifetimes. A NULL client is
+-- Unassigned, a group rather than a hidden account. Clients are archived, never deleted, so this
+-- reference only fires if one ever is, and then the account goes back to Unassigned.
+CREATE TABLE IF NOT EXISTS ads_account_settings (
+  customer_id TEXT PRIMARY KEY CHECK(length(customer_id) = 10 AND customer_id NOT GLOB '*[^0-9]*'),
+  approved INTEGER NOT NULL DEFAULT 0 CHECK(approved IN (0,1)), approved_at TEXT,
+  client_id TEXT REFERENCES clients(id) ON DELETE SET NULL, updated_at TEXT NOT NULL
+);
+-- Campaign identity is account plus campaign: Google's campaign IDs are only unique inside one
+-- account, so a campaign ID alone would let two accounts collide. Provider-owned, replaced whole by
+-- a refresh. The name is a bounded excerpt, never the provider's raw text.
+CREATE TABLE IF NOT EXISTS ads_campaigns (
+  customer_id TEXT NOT NULL REFERENCES ads_accounts(customer_id) ON DELETE CASCADE,
+  campaign_id TEXT NOT NULL CHECK(length(campaign_id) BETWEEN 1 AND 20 AND campaign_id NOT GLOB '*[^0-9]*'),
+  name TEXT NOT NULL, status TEXT NOT NULL, channel_type TEXT NOT NULL, snapshot_at TEXT NOT NULL,
+  PRIMARY KEY (customer_id, campaign_id)
+);
+-- One reported day. The date is the account's own local YYYY-MM-DD, so there is no instant to
+-- convert. A day the provider did not report has no row; nothing stores a zero for it. Cost is the
+-- provider's integer micros, never a formatted amount. Conversions is REAL because the provider
+-- documents it as a double that can be fractional. Impressions, clicks, and cost micros are integers.
+CREATE TABLE IF NOT EXISTS ads_campaign_days (
+  customer_id TEXT NOT NULL, campaign_id TEXT NOT NULL,
+  date TEXT NOT NULL CHECK(date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+  impressions INTEGER NOT NULL CHECK(impressions >= 0), clicks INTEGER NOT NULL CHECK(clicks >= 0),
+  cost_micros INTEGER NOT NULL CHECK(cost_micros >= 0), conversions REAL NOT NULL CHECK(conversions >= 0),
+  PRIMARY KEY (customer_id, campaign_id, date),
+  FOREIGN KEY (customer_id, campaign_id) REFERENCES ads_campaigns(customer_id, campaign_id) ON DELETE CASCADE
+);
 CREATE TABLE IF NOT EXISTS drive_steps (
   entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, step_key TEXT NOT NULL, folder_id TEXT NOT NULL,
   folder_url TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(entity_type, entity_id, step_key)
@@ -931,6 +984,11 @@ CREATE INDEX IF NOT EXISTS idx_assistant_pending_approvals_conversation
  */
 const indexSchema = `
 CREATE INDEX IF NOT EXISTS idx_projects_client ON projects(client_id);
+-- Ads: a client's accounts are read for grouping and retargeted when clients merge. The campaign and
+-- day keys already lead with the account; the per-account date index serves the window filter and the
+-- rollover delete, which the key's campaign column sits in the way of.
+CREATE INDEX IF NOT EXISTS idx_ads_account_settings_client ON ads_account_settings(client_id);
+CREATE INDEX IF NOT EXISTS idx_ads_campaign_days_account_date ON ads_campaign_days(customer_id, date);
 -- Retargeting a merge reads every alias pointing at the client being merged away, and the
 -- client list joins the survivor of each one.
 CREATE INDEX IF NOT EXISTS idx_client_merges_surviving ON client_merges(surviving_client_id);

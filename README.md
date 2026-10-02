@@ -155,6 +155,10 @@ Required environment variables:
 | `GOOGLE_CLIENT_SECRET` | OAuth web client secret |
 | `GOOGLE_REDIRECT_URI` | Must match the Cloud Console URI exactly. `http://localhost` or `127.0.0.1` on `/api/drive/oauth/callback`, or `https://â€¦` on that same path â€” no query or hash |
 | `GOOGLE_TOKEN_ENCRYPTION_KEY` | Local token-encryption secret; at least 32 characters |
+| `GOOGLE_ADS_CLIENT_ID` / `GOOGLE_ADS_CLIENT_SECRET` | Optional Google Ads OAuth web client, separate from Drive's. Server-side only |
+| `GOOGLE_ADS_REDIRECT_URI` | Optional. `http://localhost` or `127.0.0.1` on `/api/ads/oauth/callback`, or `https://…` on that same path — no query or hash |
+| `GOOGLE_ADS_TOKEN_ENCRYPTION_KEY` | Optional Ads token-encryption secret; at least 32 characters and different from `GOOGLE_TOKEN_ENCRYPTION_KEY`. Back it up separately |
+| `GOOGLE_ADS_LOGIN_CUSTOMER_ID` | Optional 10-digit manager account ID, only when access goes through a manager account |
 | `GOOGLE_API_KEY` | Browser Picker developer key; restrict by HTTP referrer in Cloud Console |
 | `GOOGLE_APP_ID` | Numeric Google Cloud project number (Picker `setAppId`) |
 | `POST_BRIDGE_API_KEY` | Optional Post Bridge API key; server-side only |
