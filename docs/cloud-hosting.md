@@ -377,6 +377,9 @@ parameter leaf names.
 | `/hcc/production/GOOGLE_TOKEN_ENCRYPTION_KEY` | `GOOGLE_TOKEN_ENCRYPTION_KEY` | Operator | ≥32 characters. **Never** stored in the backup bucket or beside a snapshot. |
 | `/hcc/production/POST_BRIDGE_API_KEY` | `POST_BRIDGE_API_KEY` | Operator | Optional publishing. |
 | `/hcc/production/BUFFER_API_KEY` | `BUFFER_API_KEY` | Operator | Optional Buffer reads. |
+| `/hcc/production/GOOGLE_ADS_CLIENT_ID` | `GOOGLE_ADS_CLIENT_ID` | Operator | Optional Google Ads OAuth client id; separate from Drive's. See §11.4.1. |
+| `/hcc/production/GOOGLE_ADS_CLIENT_SECRET` | `GOOGLE_ADS_CLIENT_SECRET` | Operator | Optional Google Ads OAuth client secret. |
+| `/hcc/production/GOOGLE_ADS_TOKEN_ENCRYPTION_KEY` | `GOOGLE_ADS_TOKEN_ENCRYPTION_KEY` | Operator | ≥32 characters and **different from** `GOOGLE_TOKEN_ENCRYPTION_KEY`. Back it up separately; losing it makes the stored Ads token unreadable (reconnect). |
 
 Non-secret production env that is **not** in Parameter Store (set on the unit / drop-in):
 
@@ -387,6 +390,8 @@ Non-secret production env that is **not** in Parameter Store (set on the unit / 
 | `DATABASE_PATH` | `/var/lib/hybrid-command-center/command-center.db` |
 | `APP_ORIGIN` | `https://<public-host>` (§11.5) |
 | `GOOGLE_REDIRECT_URI` | `https://<public-host>/api/drive/oauth/callback` |
+| `GOOGLE_ADS_REDIRECT_URI` | `https://<public-host>/api/ads/oauth/callback` (only when Ads is enabled; §11.4.1) |
+| `GOOGLE_ADS_LOGIN_CUSTOMER_ID` | Optional. Only when access goes through a manager account; omit otherwise. |
 | `PRODUCTION_TLS_TERMINATED` | `true` |
 | `TRUSTED_PROXY_HOPS` | `1` |
 | `LOG_LEVEL` | `info` (or `warn`) |
@@ -399,6 +404,41 @@ the service after changing this file because application configuration is read a
 
 SSM parameters staged by §12 hold the sentinel **`UNSET`** (SSM rejects a blank string). That
 sentinel is not a secret. C53 boot must refuse required secrets still set to `UNSET`.
+
+#### 11.4.1 Enabling Google Ads in production
+
+Google Ads is optional and a separate grant from Drive. The deployed process never reads a
+developer's `.env`, so the Ads variables set on a laptop have no effect on production. Until all
+four required ones are present in `runtime.env`, `/settings` shows **Credentials required** and
+the Connect button stays disabled. That panel is the app correctly reporting a missing environment,
+not a fault. Settings shows `Ads offline`.
+
+Required: `GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_CLIENT_SECRET`, `GOOGLE_ADS_REDIRECT_URI`,
+`GOOGLE_ADS_TOKEN_ENCRYPTION_KEY`. Half-configuration never counts as available.
+
+1. **Google Cloud.** On the "HCC Google Ads" OAuth web client, add the authorized redirect URI
+   `https://<public-host>/api/ads/oauth/callback`. It must match `GOOGLE_ADS_REDIRECT_URI` exactly,
+   with the same host as `APP_ORIGIN`, no query, and no hash.
+2. **Parameter Store.** Write the three secrets from §11.4 with `--type SecureString --overwrite`
+   in `us-east-1`. Generate a fresh encryption key for production (32+ characters, never the Drive
+   key, never copied from a laptop `.env`). Do not paste values into chat, tickets, or git.
+3. **IAM.** Confirm `hcc-production-ec2` can read `/hcc/production/*` so the new leaves are
+   readable without a policy change. If the policy lists parameters individually, add the three.
+4. **`runtime.env`.** Over SSM Session Manager (port 22 stays closed), add the three secrets plus
+   `GOOGLE_ADS_REDIRECT_URI` to `/etc/hybrid-command-center/runtime.env`, root-owned and not
+   world-readable. If a script or unit step assembles that file from Parameter Store, add the new
+   leaf names there too, or the next regeneration silently drops them.
+5. **Restart.** `sudo systemctl restart hybrid-command-center`. Configuration is read at startup.
+   A value that is present but unusable (a wrong callback path, a key shorter than 32 characters,
+   or a key reused from Drive) stops startup with a message naming the Ads variable, never its
+   value: check `journalctl -u hybrid-command-center -n 50`.
+6. **Verify.** Reload `/settings`. The credentials warning should be gone and Connect Google Ads
+   enabled. Connecting is a person's action; it approves no account.
+
+Rollback: remove the four variables from `runtime.env` and restart. Ads returns to unavailable and
+Drive, Signal, and everything else are unaffected. Stored Ads data is retained, not deleted.
+Rotating `GOOGLE_ADS_TOKEN_ENCRYPTION_KEY` makes the stored refresh token unreadable, so disconnect
+and reconnect afterwards. It does not touch Drive's key.
 
 ### 11.5 Public origin and Google redirect shape
 
