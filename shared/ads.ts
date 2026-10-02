@@ -332,10 +332,10 @@ export function adsSyncWindow(now: Date, timeZone: string): AdsSyncWindow {
     month: '2-digit',
     day: '2-digit',
   }).formatToParts(now);
-  const part = (type: string) => parts.find((entry) => entry.type === type)?.value ?? '';
-  const endDate = `${part('year')}-${part('month')}-${part('day')}`;
+  // An unknown zone makes Intl throw a RangeError above, so every date here is a real one.
+  const value = Object.fromEntries(parts.map((entry) => [entry.type, entry.value]));
+  const endDate = `${value.year}-${value.month}-${value.day}`;
   const end = new Date(`${endDate}T00:00:00.000Z`);
-  if (Number.isNaN(end.getTime())) throw new Error('the account time zone is not usable');
   const start = new Date(end.getTime() - (ADS_SYNC_WINDOW_DAYS - 1) * 86_400_000);
   return { startDate: start.toISOString().slice(0, 10), endDate };
 }
