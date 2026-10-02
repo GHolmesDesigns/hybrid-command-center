@@ -9,6 +9,7 @@ import {
   useSearchParams,
 } from 'react-router-dom';
 import {
+  BarChart3,
   Bot,
   Bell,
   HeartPulse,
@@ -63,6 +64,7 @@ import { ProjectDetail } from './ProjectDetail';
 import { Projects } from './Projects';
 import { AgentsView } from './AgentsView';
 import { SettingsView } from './SettingsView';
+import { AdsView } from './AdsView';
 import { SignalView } from './SignalView';
 import { TasksView } from './TasksView';
 import { HealthView } from './HealthView';
@@ -458,6 +460,7 @@ export function App() {
               <Nav icon={<FileText />} to="/files" label="Files" collapsed={collapsed} />
               <Nav icon={<CalendarDays />} to="/calendar" label="Calendar" collapsed={collapsed} />
               <Nav icon={<Megaphone />} to="/signal" label="Signal" collapsed={collapsed} />
+              <Nav icon={<BarChart3 />} to="/ads" label="Ads" collapsed={collapsed} />
               <Nav icon={<HeartPulse />} to="/health" label="Health" collapsed={collapsed} />
               <Nav
                 icon={
@@ -664,6 +667,7 @@ export function App() {
                 />
                 <Route path="/calendar" element={<CalendarView viewDefaults={viewDefaults} />} />
                 <Route path="/signal" element={<SignalView viewDefaults={viewDefaults} />} />
+                <Route path="/ads" element={<AdsView flash={flash} />} />
                 <Route path="/agents" element={<AgentsView tasks={tasks} flash={flash} />} />
                 <Route
                   path="/agents/conversations"

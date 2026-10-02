@@ -1,5 +1,17 @@
 # Changelog
 
+## [7.1.2] - 2026-10-02
+
+### Added
+
+- **Ads** page (`/ads`) shows the Google Ads figures stored by the last refresh: impressions, clicks, cost, and conversions for each approved account's campaigns, grouped by client with **Unassigned** accounts as a group of their own. Each account shows its currency and time zone, and dates are that account's own calendar days within the stored 90-day window.
+- Filter by client, account, and date range. The filters live in the address, so they survive a reload and Back/Forward, and a link naming a client, account, or date that no longer exists is ignored with a note instead of failing.
+- Totals add only Google's own daily values, with one total per currency and no combined amount. A campaign with no reported day, or a range with no measured day, shows no figures rather than zeros.
+- **Refresh from Google** is the only action that contacts Google; opening the page and filtering read stored data only. If a refresh fails, the last good figures stay on screen under a banner that gives the reason and the time of the last successful snapshot. The page also explains the disconnected, empty, not-yet-refreshed, and loading states.
+
+### Breaking changes
+
+None.
 ## [7.1.1] - 2026-10-02
 
 ### Added

@@ -9,7 +9,7 @@ import type { AgentHubTipRegistry } from '../server/agent-hub/tips.ts';
 import { config } from '../server/config.ts';
 import { getDb } from '../server/db.ts';
 import { resetE2eDatabase } from './database.ts';
-import { e2eWebOrigin, handleE2eStopRequest } from './endpoints.ts';
+import { e2eWebOrigin, handleE2eResetAdsRequest, handleE2eStopRequest } from './endpoints.ts';
 import { stopWhenTheRunEnds } from './shutdown.ts';
 import {
   MockAnalyticsProvider,
@@ -22,6 +22,7 @@ import {
 import { MockDriveMediaProvider } from '../server/drive/mock-provider.ts';
 import { MockAdsOAuthClient } from '../server/ads/mock-oauth.ts';
 import { MockAdsProvider } from '../server/ads/mock-provider.ts';
+import { adsSyncWindow } from '../shared/ads.ts';
 
 const databasePath = resetE2eDatabase();
 console.log(`Reset E2E database at ${databasePath}`);
@@ -200,6 +201,80 @@ analyticsWindow.failureAt = 2;
 const adsOauth = new MockAdsOAuthClient();
 // Account listing and approval answer from a mock too, so no browser run can reach Google.
 const adsProvider = new MockAdsProvider();
+// Ads performance (C259): two accounts in two currencies and zones, a campaign with daily figures,
+// one with none, and a day-read that fails once on the third call. All from the mock, so no run
+// reads Google. Dates are relative to the account's own today, which keeps them inside the window.
+{
+  const localDates = (timeZone: string) => {
+    const { endDate } = adsSyncWindow(new Date(), timeZone);
+    const previous = new Date(new Date(`${endDate}T00:00:00.000Z`).getTime() - 86_400_000);
+    return { today: endDate, yesterday: previous.toISOString().slice(0, 10) };
+  };
+  const ny = localDates('America/New_York');
+  const berlin = localDates('Europe/Berlin');
+  adsProvider.accessible = ['1234567890', '2345678901'];
+  adsProvider.accounts.set('2345678901', {
+    customerId: '2345678901',
+    descriptiveName: 'Berlin account',
+    currencyCode: 'EUR',
+    timeZone: 'Europe/Berlin',
+    manager: false,
+    status: 'ENABLED',
+  });
+  const campaign = (customerId: string, campaignId: string, name: string) => ({
+    customerId,
+    campaignId,
+    name,
+    status: 'ENABLED',
+    channelType: 'SEARCH',
+  });
+  adsProvider.campaigns.set('1234567890', [
+    campaign('1234567890', '111', 'E2E Search'),
+    campaign('1234567890', '112', 'E2E Idle'),
+  ]);
+  adsProvider.campaigns.set('2345678901', [campaign('2345678901', '221', 'E2E Berlin Brand')]);
+  adsProvider.days.set('1234567890', [
+    {
+      customerId: '1234567890',
+      campaignId: '111',
+      date: ny.yesterday,
+      impressions: 1000,
+      clicks: 100,
+      costMicros: 20_000_000,
+      conversions: 4,
+    },
+    {
+      customerId: '1234567890',
+      campaignId: '111',
+      date: ny.today,
+      impressions: 500,
+      clicks: 50,
+      costMicros: 10_000_000,
+      conversions: 1,
+    },
+  ]);
+  adsProvider.days.set('2345678901', [
+    {
+      customerId: '2345678901',
+      campaignId: '221',
+      date: berlin.today,
+      impressions: 70,
+      clicks: 7,
+      costMicros: 3_000_000,
+      conversions: 2,
+    },
+  ]);
+  // Refresh one reads each account's days once, in customer-ID order; the third call is the first
+  // account of refresh two, which fails so the page's stale state can be driven. Later calls succeed.
+  const readDays = adsProvider.readCampaignDays.bind(adsProvider);
+  adsProvider.readCampaignDays = async (...args) => {
+    if (adsProvider.dayCalls.length === 2) {
+      adsProvider.dayCalls.push({ customerId: args[1], window: args[2] });
+      throw new Error('e2e scripted day-query failure');
+    }
+    return readDays(...args);
+  };
+}
 adsOauth.consentUrl = ({ state }) =>
   `${e2eWebOrigin}/api/ads/oauth/callback?${new URLSearchParams({ state, code: 'e2e-ads-code' })}`;
 
@@ -258,4 +333,23 @@ const stop = stopWhenTheRunEnds(
 
 app.use((req, res, next) => {
   if (!handleE2eStopRequest(req, res, stop)) next();
+});
+// The Ads spec connects and approves accounts; this puts the Ads tables back where a later spec
+// (Settings' card layout) expects them. Local data only: it never reaches the provider.
+app.use((req, res, next) => {
+  const reset = () => {
+    for (const table of [
+      'ads_campaign_days',
+      'ads_campaigns',
+      'ads_sync_windows',
+      'ads_accounts',
+      'ads_account_settings',
+      'ads_discovered_accounts',
+    ])
+      db.exec(`DELETE FROM ${table}`);
+    db.exec(
+      `UPDATE ads_connection SET last_sync_at = NULL, last_sync_outcome = NULL, last_sync_error = NULL`,
+    );
+  };
+  if (!handleE2eResetAdsRequest(req, res, reset)) next();
 });

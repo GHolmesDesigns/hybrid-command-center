@@ -57,6 +57,7 @@ resolving even when they contain an unknown or retired value.
 | Status | Workflow board | Canonical task-status order | Project, client, priority, type, focus, and tag filters |
 | Calendar | Time view | Current month | View and selected date/month when away from the default |
 | Signal | Time view | Current month | View and selected date/month when away from the default, `post` for an open post, `new` for the shared Add Post form, `lifecycle` for active / retired / all plans (lifecycle dimension, not planning status), `client`, `project`, and `campaign` for the planner's own scope, and `campaigns`, `channels`, `accounts`, `from`, and `to` for the campaign-figures filters |
+| Ads | Context browser | Every approved account over the stored 90-day window | `client` (a client id, or `unassigned`), `account` (a customer id), and `from` / `to` (account-local dates inside the stored window) |
 | Files | Context browser | Explicit project, remembered project, then first live project | Project and folder selections |
 | Tasks | Context browser | First active task in the filtered list | `task` for the selected Pomodoro task; client, project, priority, type, focus, and tag filters |
 
@@ -111,3 +112,11 @@ dated to that local calendar day, never an instant, so a cell's date survives ev
 invalid value is ignored. Closing, saving, or opening an existing post drops `new` and leaves
 month, view, and campaign-figure filters alone. When both `post` and `new` are present, `post`
 wins so an alert link still opens the post it named.
+
+Ads' `client`, `account`, `from`, and `to` (C259) are each omitted when empty, so the unfiltered page
+keeps a short address, and each is read defensively: a client or account the snapshot no longer has, a
+date that is not a real day or falls outside the stored 90-day window, or a range that runs backwards is
+ignored — the page says which filter it did not apply — rather than failing. `client=unassigned` is the
+reserved value for accounts mapped to no client. Choosing another client clears `account`, because the
+account may no longer be inside it. The filters narrow what is shown and summed; they never trigger a
+read from Google.

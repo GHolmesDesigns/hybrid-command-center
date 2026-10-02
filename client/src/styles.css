@@ -7516,3 +7516,174 @@ button.tag-chip.toggle.active {
     bottom: 16px;
   }
 }
+
+/* Google Ads performance page (C259). Status colour is always paired with an icon and words. */
+.ads-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.ads-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--paper);
+  color: var(--muted);
+  font-size: 13px;
+}
+.ads-banner svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+}
+.ads-banner.is-warning {
+  border-color: var(--amber, var(--line));
+  color: var(--ink);
+}
+.ads-banner.is-error {
+  border-color: var(--theme-danger-line);
+  background: var(--theme-error-surface);
+  color: var(--theme-error-ink);
+}
+.ads-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+.ads-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  min-width: 0;
+}
+.ads-filters .field-hint {
+  flex-basis: 100%;
+  margin: 0;
+}
+.ads-summary,
+.ads-account {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ads-summary h2,
+.ads-group h2 {
+  margin: 0;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ads-account h3,
+.ads-currency h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.ads-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ads-group.is-unassigned {
+  border-left: 3px dashed var(--line);
+  padding-left: 12px;
+}
+.ads-account-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.ads-account-meta svg {
+  width: 12px;
+  height: 12px;
+  vertical-align: -1px;
+}
+.ads-figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+.ads-figure {
+  min-width: 0;
+}
+.ads-figure dt {
+  color: var(--muted);
+  font-size: 11px;
+}
+.ads-figure dd {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.ads-none,
+.ads-no-days {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.ads-no-days {
+  display: table-cell;
+}
+.ads-none svg,
+.ads-no-days svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  vertical-align: -2px;
+}
+.ads-table-wrap {
+  overflow-x: auto;
+}
+.ads-campaigns {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.ads-campaigns caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+.ads-campaigns th,
+.ads-campaigns td {
+  padding: 6px 8px;
+  border-top: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+.ads-campaigns thead th {
+  border-top: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+.ads-campaigns .num {
+  text-align: right;
+  white-space: nowrap;
+}
+.ads-fresh svg {
+  width: 12px;
+  height: 12px;
+  vertical-align: -1px;
+}
