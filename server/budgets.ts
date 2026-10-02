@@ -123,6 +123,17 @@ export const DRIVE_OAUTH_BUDGET: Budget = {
 };
 
 /**
+ * Google Ads connect, callback, and disconnect under `/api/ads`. Its own window, so Ads retries
+ * never spend Drive's. Twenty in fifteen minutes is above a person retrying a refused consent
+ * screen and far below a loop hammering Google.
+ */
+export const ADS_OAUTH_BUDGET: Budget = {
+  limit: 20,
+  windowMs: 15 * 60_000,
+  message: 'Too many Google Ads connection attempts. Wait a few minutes and try again.',
+};
+
+/**
  * Operator MCP health panel under `/api/mcp/health`. Uses `express-rate-limit` in `app.ts` (like
  * auth) so CodeQL's missing-rate-limiting query can see the limiter. Sixty a minute is above a
  * person opening Settings and pressing Test connection a few times.

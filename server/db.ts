@@ -293,6 +293,16 @@ CREATE TABLE IF NOT EXISTS ads_connection (
   last_sync_at TEXT, last_sync_outcome TEXT CHECK(last_sync_outcome IN ('SUCCESS','FAILURE')),
   last_sync_error TEXT, updated_at TEXT NOT NULL
 );
+-- Pending Ads consent attempts (C256). Same shape as oauth_pending_states, in a table of its own so
+-- an Ads state can never be spent at the Drive callback or the other way round: the two grants share
+-- no row, no key, and no pending authorization.
+CREATE TABLE IF NOT EXISTS ads_oauth_pending_states (
+  state TEXT PRIMARY KEY,
+  verifier TEXT NOT NULL,
+  session_token_hash TEXT,
+  issued_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
 -- The provider's own account fields, replaced by a refresh. Nothing a person chose lives here: a
 -- refresh that rewrites or even deletes and re-inserts one of these rows cannot lose an approval or a
 -- client mapping. The customer ID is the Google Ads customer ID, 10 digits, kept as text.

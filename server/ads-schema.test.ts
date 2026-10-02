@@ -178,6 +178,7 @@ describe('Google Ads migration', () => {
       'ads_campaign_days',
       'ads_campaigns',
       'ads_connection',
+      'ads_oauth_pending_states',
     ]);
     expect(upgraded.prepare('SELECT name FROM clients').all()).toEqual([{ name: 'Acme' }]);
     upgraded.close();

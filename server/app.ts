@@ -244,6 +244,20 @@ import {
   type OAuthCredentials,
 } from './drive/oauth.ts';
 import { encryptJson } from './drive/tokens.ts';
+import {
+  AdsOAuthStateError,
+  beginAdsAuthorization,
+  createGoogleAdsOAuthClient,
+  purgeExpiredAdsAuthorizations,
+  type AdsOAuthClient,
+  type AdsOAuthCredentials,
+} from './ads/oauth.ts';
+import {
+  completeAdsAuthorization,
+  disconnectAds,
+  readAdsConnectionState,
+} from './ads/connection.ts';
+import { ADS_GOOGLE_PERMISSIONS_URL } from '../shared/ads.ts';
 import { DRIVE_PAGE_SIZE, DRIVE_PAGE_SIZE_MAX } from '../shared/drive.ts';
 import {
   IMPORT_BODY_LIMIT_BYTES,
@@ -268,6 +282,7 @@ import {
   AUTH_LOGIN_BUDGET,
   AUTH_ROUTE_BUDGET,
   DRIVE_BUDGET,
+  ADS_OAUTH_BUDGET,
   DRIVE_OAUTH_BUDGET,
   DRIVE_SYNC_BUDGET,
   MCP_HEALTH_BUDGET,
@@ -586,6 +601,13 @@ export type AppOptions = {
    */
   oauth?: (credentials: OAuthCredentials) => OAuthAuthorizationClient;
   /**
+   * The Google Ads authorization server, separate from Drive's. Tests and the browser suite supply
+   * `MockAdsOAuthClient`, so a whole Ads connect runs without a live Google call.
+   */
+  adsOauth?: (credentials: AdsOAuthCredentials) => AdsOAuthClient;
+  /** Overrides the Ads configuration read from the environment, for tests. */
+  adsConfig?: typeof config.ads;
+  /**
    * The clock the OAuth state lifetime is measured against, so an expired state can be
    * exercised on a fixed one rather than by waiting ten minutes.
    */
@@ -792,6 +814,8 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   const production = options.production ?? isProductionRuntime();
   const clock = options.now ?? (() => new Date());
   const oauthClient = options.oauth ?? createGoogleOAuthClient;
+  const adsOauthClient = options.adsOauth ?? createGoogleAdsOAuthClient;
+  const adsConfig = options.adsConfig ?? config.ads;
   const driveMedia = () => (options.driveMedia ?? driveMediaProvider)(db);
   const publishProvider =
     options.publish ??
@@ -992,6 +1016,21 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       standardHeaders: 'draft-7',
       legacyHeaders: false,
       message: { error: DRIVE_OAUTH_BUDGET.message },
+      keyGenerator: (req) => authKey(req),
+      validate: { xForwardedForHeader: false },
+    }),
+  );
+  // Ads OAuth start/callback/disconnect: its own window, apart from Drive's, so one grant's
+  // retries cannot spend the other's allowance. The read-only status call is not counted: Settings
+  // loads it on every visit.
+  app.use(
+    ['/api/ads/oauth', '/api/ads/disconnect'],
+    rateLimit({
+      windowMs: ADS_OAUTH_BUDGET.windowMs,
+      limit: ADS_OAUTH_BUDGET.limit,
+      standardHeaders: 'draft-7',
+      legacyHeaders: false,
+      message: { error: ADS_OAUTH_BUDGET.message },
       keyGenerator: (req) => authKey(req),
       validate: { xForwardedForHeader: false },
     }),
@@ -3659,6 +3698,77 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       googleRevocationRequired: true,
       googlePermissionsUrl: 'https://myaccount.google.com/permissions',
     });
+  });
+
+  // Google Ads connection (C256): a separate grant, separate client, state table, and key from
+  // Drive's. Nothing below reads or writes a Drive setting, and nothing returns a token.
+  app.get('/api/ads/status', (_req, res) => res.json(readAdsConnectionState(db, adsConfig)));
+  app.get('/api/ads/oauth/start', (req, res, next) => {
+    try {
+      const session = (req as AuthedRequest).operatorSession;
+      if (authRequired && !session) {
+        res.status(401).json({ error: 'Authentication required.' });
+        return;
+      }
+      const state = readAdsConnectionState(db, adsConfig);
+      if (!state.configured) {
+        res.status(409).json({
+          error: `Add ${state.missing.join(', ')} to .env first, then restart.`,
+        });
+        return;
+      }
+      const { state: nonce, challenge } = beginAdsAuthorization(db, clock(), {
+        sessionTokenHash: session?.tokenHash ?? null,
+      });
+      res.json({
+        url: adsOauthClient(adsConfig).authorizationUrl({ state: nonce, challenge }),
+      });
+    } catch (e) {
+      next(e);
+    }
+  });
+  app.get('/api/ads/oauth/callback', async (req, res, next) => {
+    try {
+      // A state this app did not issue, or one that expired, was replayed, or belongs to another
+      // session, gets the same bare 400 Drive's callback gives and writes nothing: the redirect
+      // below is only for an attempt this server started.
+      const session = (req as AuthedRequest).operatorSession;
+      let result;
+      try {
+        result = await completeAdsAuthorization(db, {
+          query: req.query,
+          client: adsOauthClient(adsConfig),
+          ads: adsConfig,
+          now: clock(),
+          sessionTokenHash: session?.tokenHash ?? null,
+        });
+      } catch (error) {
+        if (!(error instanceof AdsOAuthStateError)) throw error;
+        req.log.warn({ reason: error.name }, 'Rejected a Google Ads OAuth callback');
+        return res.status(400).send('Invalid OAuth state.');
+      }
+      res.redirect(
+        result.ok
+          ? `${config.appOrigin}/settings?ads=connected`
+          : `${config.appOrigin}/settings?ads=error&reason=${result.reason}`,
+      );
+    } catch (e) {
+      next(e);
+    }
+  });
+  app.post('/api/ads/disconnect', (_req, res, next) => {
+    try {
+      const { wasConnected } = disconnectAds(db, clock());
+      purgeExpiredAdsAuthorizations(db, clock());
+      res.json({
+        ok: true,
+        wasConnected,
+        googleRevocationRequired: wasConnected,
+        googlePermissionsUrl: ADS_GOOGLE_PERMISSIONS_URL,
+      });
+    } catch (e) {
+      next(e);
+    }
   });
 
   /**

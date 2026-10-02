@@ -9,6 +9,12 @@
   narrower capability with a provider interface of its own — one user-supplied Drive link resolved
   to metadata and version evidence for a Signal media reference, reading no bytes. Files receives
   `DriveProvider` and cannot reach it.
+- `server/ads/`: Google Ads, a separate grant from Drive. `oauth.ts` holds the pending-state table and
+  `AdsOAuthClient` (authorize, exchange, list accessible customers - no write method), `tokens.ts` wraps
+  the Drive cipher under `GOOGLE_ADS_TOKEN_ENCRYPTION_KEY` only, and `connection.ts` completes the
+  callback and disconnects. Connected means a refresh token for the Ads scope **and** a successful
+  account-list call; a failed attempt records one `ads.connect` FAILURE event and leaves any prior
+  connection untouched. Connecting approves no account. Nothing in it reads a Drive setting.
 - `server/signal/`: Signal Campaign's schedule, split the same way Drive is. `provider.ts` is the
   `SignalProvider` interface and `read.ts` is its implementation — the read-only half everything
   outside Signal consumes; writes live in `service.ts`. `campaigns.ts` is the campaign vocabulary —
