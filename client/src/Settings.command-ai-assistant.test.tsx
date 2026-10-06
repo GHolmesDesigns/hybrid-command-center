@@ -54,7 +54,20 @@ describe('Command AI assistant settings', () => {
   });
 
   it('lists assistant credential scopes and lowers daily caps', async () => {
+    testState.commandAiAssistantPayload = {
+      assistant: {
+        enabled: false,
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        dailyTurnCap: 75,
+        dailyTokenCap: 300_000,
+        scopes: ['workspace:read', 'workspace:write'],
+      },
+      key: { provider: 'openai', hasKey: false, keyLast4: null },
+      ready: false,
+    };
     await renderSettings();
+    await waitFor(() => expect(screen.getByLabelText('Daily turn cap')).toHaveValue(75));
 
     expect(screen.getByLabelText('Read workspace and Signal data')).toBeVisible();
     expect(screen.getByLabelText('Write workspace tasks and projects')).toBeVisible();
