@@ -1,5 +1,14 @@
 # Changelog
 
+## [7.1.5] - 2026-10-06
+
+## Changed
+
+- Update production dependencies and refresh vulnerable transitive packages to keep dependency security checks passing.
+
+## Breaking changes
+
+None.
 ## [7.1.4] - 2026-10-02
 
 ### Changed
