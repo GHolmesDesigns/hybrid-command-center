@@ -41,7 +41,8 @@ jobs:
           **Suggested next version (patch):** \`${NEXT_VERSION}\`
 
           - Keep this pull request **draft** until synchronize CI is green.
-          - Run \`npm run finalize:card -- <issue> [--milestone \"<title>\"]\` immediately before \`gh pr ready\`.
+          - Human-authored implementation PRs: run \`npm run finalize:card -- <issue> [--milestone \"<title>\"]\` immediately before \`gh pr ready\`.
+          - Dependabot PRs skip per-PR release finalization; keep the version, changelog, and manual stamps unchanged.
           - **One implementing PR at a time** — ${OPEN_OTHERS} other open PR(s) exist in this repo right now.
           - Do not pre-assign version numbers; re-run \`finalize:card\` if \`main\` moves before merge.
 

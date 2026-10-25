@@ -268,9 +268,13 @@
   doc-only edits into **one card** (one version bump), or open a docs pull request with the
   `no-version-bump` label when the diff touches only `docs/` and `.github/*.md` and carries **no**
   `changes/<issue>.md` fragment.
-- A ready pull request must contain the finalized version and no fragment for its card. A draft
-  pull request must contain the fragment and must leave the four shared release locations alone.
-  Dependabot and other automated branches follow the same draft-then-finalize path.
+- A ready human-authored pull request must contain the finalized version and no fragment for its
+  card. A draft pull request must contain the fragment and must leave the four shared release
+  locations alone.
+- Dependabot PRs are exempt from per-PR release finalization. CI skips their version-bump and
+  manual-stamp checks; leave `CHANGELOG.md`, `package.json`, `package-lock.json`,
+  `shared/branding.ts`, and the manual stamps unchanged. Other automated branches follow the
+  ordinary draft-then-finalize path.
 - Settle the branch name before opening a pull request. Renaming a head branch closes the open PR, and it cannot be reopened once the old ref is gone.
 - Changelog fragments and finalized entries say what changed for someone using the app, not which
   files moved. State breaking changes explicitly — including their absence, so a major digit is

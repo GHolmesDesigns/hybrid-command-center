@@ -102,11 +102,12 @@ jobs:
       - name: Check formatting
         run: npm run format:check
 
-      # Draft PRs deliberately carry a per-issue changelog fragment and do not claim a version.
-      # Once review is complete, the merge owner refreshes main, finalizes the version and
-      # changelog, removes the fragment, and marks the PR ready. Enforce the version then and on
-      # main; branch-push runs defer to the corresponding pull_request run because push events do
-      # not expose draft state.
+      # Draft implementation PRs deliberately carry a per-issue changelog fragment and do not
+      # claim a version. Once review is complete, the merge owner refreshes main, finalizes the
+      # version and changelog, removes the fragment, and marks the PR ready. Dependabot PRs are
+      # dependency maintenance: they skip per-PR release metadata and keep the current version.
+      # Enforce the version for ready human-authored PRs and on main; branch-push runs defer to
+      # the corresponding pull_request run because push events do not expose draft state.
       #
       # *Then* is the `ready_for_review` event, which the trigger above now lists — without it this
       # condition was unreachable in the only state that satisfies it. The `main` arm stays, and it
@@ -119,19 +120,19 @@ jobs:
         id: version_bump
         if: >-
           github.ref == 'refs/heads/main' ||
-          (github.event_name == 'pull_request' && github.event.pull_request.draft == false)
+          (github.event_name == 'pull_request' && github.event.pull_request.draft == false &&
+          github.event.pull_request.user.login != 'dependabot[bot]')
         env:
           HCC_PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
         run: npm run check:version-bump
 
-      # Same "only once a version claim is real" condition as the step above: during draft,
-      # package.json legitimately still carries the last-released version, and so does the
-      # manual, so there is nothing to compare yet. Enforcing this any earlier would fail
-      # every draft pull request for a reason that has nothing to do with the card.
+      # Match the version check above: draft implementation PRs and all Dependabot PRs keep the
+      # release manual unchanged, so neither has new version stamps to validate.
       - name: Check the manual's version stamps
         if: >-
           github.ref == 'refs/heads/main' ||
-          (github.event_name == 'pull_request' && github.event.pull_request.draft == false)
+          (github.event_name == 'pull_request' && github.event.pull_request.draft == false &&
+          github.event.pull_request.user.login != 'dependabot[bot]')
         env:
           HCC_PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
         run: npm run check:manual-version
