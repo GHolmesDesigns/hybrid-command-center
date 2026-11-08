@@ -10,6 +10,19 @@ const dateSchema = z
     'Use a valid calendar date.',
   );
 const idSchema = z.string().uuid();
+const timeZoneSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(64)
+  .refine((value) => {
+    try {
+      new Intl.DateTimeFormat('en-CA', { timeZone: value });
+      return true;
+    } catch {
+      return false;
+    }
+  }, 'Use a valid IANA time zone.');
 
 export const mcpTimeListEntriesArgsSchema = z
   .object({
@@ -18,7 +31,7 @@ export const mcpTimeListEntriesArgsSchema = z
     categoryId: idSchema.optional(),
     from: dateSchema.optional(),
     to: dateSchema.optional(),
-    timeZone: z.string().trim().min(1).max(64).default('UTC'),
+    timeZone: timeZoneSchema.default('UTC'),
     limit: z.number().int().min(1).max(MCP_TIME_ENTRY_LIST_MAX_LIMIT).default(50),
     offset: z.number().int().min(0).default(0),
   })
@@ -40,7 +53,7 @@ const mcpTimeEntryInput = z.object({
   startTime: z.string().min(1).max(20),
   endDate: dateSchema.optional(),
   endTime: z.string().min(1).max(20),
-  timeZone: z.string().trim().min(1).max(64),
+  timeZone: timeZoneSchema,
   startAmbiguity: z.enum(['earlier', 'later']).optional(),
   endAmbiguity: z.enum(['earlier', 'later']).optional(),
   notes: z.string().max(2000).default(''),
