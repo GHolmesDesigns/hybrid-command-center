@@ -2711,6 +2711,10 @@ button.tag-chip.toggle.active {
 .workspace-time-report-column > .panel {
   min-width: 0;
 }
+.workspace-time-report-column .table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
 .time-zone-setting {
   display: flex;
   flex-wrap: wrap;

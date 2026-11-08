@@ -91,6 +91,15 @@ test('time report shows the live timer without saving and stacks cleanly on narr
   await expect(timerPanel.getByRole('combobox').nth(1).locator('option').nth(1)).toBeAttached();
   await timerPanel.getByRole('button', { name: 'Start timer' }).click();
   await expect(timerPanel.getByText('Running')).toBeVisible();
+  await page.waitForTimeout(1100);
+  await timerPanel.getByRole('button', { name: 'Stop and save' }).click();
+  await expect(page.getByRole('button', { name: 'Work timer' })).toBeVisible();
+  await page.getByRole('button', { name: 'Work timer' }).click();
+  await page
+    .getByRole('region', { name: 'Work timer' })
+    .getByRole('button', { name: 'Start timer' })
+    .click();
+  await expect(page.getByRole('region', { name: 'Work timer' }).getByText('Running')).toBeVisible();
 
   const beforeTimer = await page.request
     .get('/api/operator-timer')
@@ -98,6 +107,9 @@ test('time report shows the live timer without saving and stacks cleanly on narr
   const beforeEntries = await page.request
     .get('/api/time/entries')
     .then((response) => response.json());
+  expect(
+    beforeEntries.entries.some((entry: { projectId: string }) => entry.projectId === project.id),
+  ).toBe(true);
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/time');
   const clock = page.getByLabel('Elapsed work time');
@@ -143,6 +155,18 @@ test('time report shows the live timer without saving and stacks cleanly on narr
       reportTop: report.top,
       viewportWidth: window.innerWidth,
       documentWidth: document.documentElement.scrollWidth,
+      overflowing: [...document.querySelectorAll('body *')]
+        .map((element) => {
+          const rect = element.getBoundingClientRect();
+          return {
+            tag: element.tagName,
+            className: String(element.className),
+            right: rect.right,
+            width: rect.width,
+          };
+        })
+        .filter((element) => element.right > window.innerWidth + 1)
+        .slice(0, 12),
       filtersLeft: filters.left,
       filtersRight: filters.right,
       controls: controls.map((control) => {
@@ -152,18 +176,17 @@ test('time report shows the live timer without saving and stacks cleanly on narr
     };
   });
   expect(narrow.reportTop).toBeGreaterThanOrEqual(narrow.clockBottom);
-  expect(narrow.documentWidth).toBeLessThanOrEqual(narrow.viewportWidth);
+  expect(narrow.documentWidth, JSON.stringify(narrow.overflowing)).toBeLessThanOrEqual(
+    narrow.viewportWidth,
+  );
   expect(
     narrow.controls.every(
       (control) => control.left >= narrow.filtersLeft && control.right <= narrow.filtersRight,
     ),
   ).toBe(true);
 
-  await page.getByRole('button', { name: /Work timer|Running/ }).click();
-  const openTimer = page.getByRole('region', { name: 'Work timer' });
-  if (await openTimer.getByRole('button', { name: 'Pause' }).isVisible()) {
-    await openTimer.getByRole('button', { name: 'Pause' }).click();
-    await openTimer.getByRole('button', { name: 'Discard…' }).click();
-    await openTimer.getByRole('button', { name: 'Confirm discard' }).click();
-  }
+  const cleanup = await page.request.post('/api/operator-timer/discard', {
+    data: { timerId: afterTimer.timerId, revision: afterTimer.revision },
+  });
+  expect(cleanup.ok()).toBe(true);
 });
