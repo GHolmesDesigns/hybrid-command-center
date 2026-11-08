@@ -1,5 +1,14 @@
 # Changelog
 
+## [7.1.10] - 2026-11-08
+
+### Added
+
+- Show the persistent work timer to the second beside the workspace time report, with a responsive two column layout and clear timer availability states.
+
+### Breaking changes
+
+None.
 ## [7.1.9] - 2026-11-08
 
 ### Added

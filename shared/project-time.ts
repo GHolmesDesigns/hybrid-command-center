@@ -97,3 +97,11 @@ export function formatDuration(seconds: number): string {
   const wholeMinutes = Math.floor(Math.max(0, seconds) / 60);
   return `${Math.floor(wholeMinutes / 60)}h ${String(wholeMinutes % 60).padStart(2, '0')}m`;
 }
+
+export function formatElapsedClock(seconds: number): string {
+  const elapsed = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(elapsed / 3600);
+  const minutes = Math.floor((elapsed % 3600) / 60);
+  const remainder = elapsed % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
+}

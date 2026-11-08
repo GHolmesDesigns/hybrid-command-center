@@ -6,8 +6,11 @@ import {
   describe,
   expect,
   it,
+  requests,
   testState,
 } from './App.test-setup';
+import { act } from '@testing-library/react';
+import { afterEach, vi } from 'vitest';
 import { WorkspaceTimeView } from './components/WorkspaceTimeView';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { TimeEntry } from '../../shared/types';
@@ -42,6 +45,97 @@ const entry: TimeEntry = {
 };
 
 describe('Workspace time report', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('shows a running timer advancing by seconds without writing timer or entry data', async () => {
+    const serverTime = '2026-11-08T12:00:00.000Z';
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(serverTime));
+    testState.operatorTimerPayload = {
+      state: 'RUNNING',
+      timerId: 'timer-1',
+      elapsedSeconds: 10,
+      accumulatedSeconds: 10,
+      runningSince: serverTime,
+      serverTime,
+      revision: 3,
+    };
+    testState.workspaceTimePayload.entries = [entry];
+    const snapshot = { ...testState.operatorTimerPayload };
+    render(
+      <MemoryRouter initialEntries={['/time?from=2026-11-02&to=2026-11-08']}>
+        <WorkspaceTimeView />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByLabelText('Elapsed work time')).toHaveTextContent('00:00:10');
+    expect(screen.getByText('Running')).toBeVisible();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(screen.getByLabelText('Elapsed work time')).toHaveTextContent('00:00:11');
+    expect(screen.getByText('Draft review')).toBeVisible();
+    expect(requests.filter((request) => request.method !== 'GET')).toEqual([]);
+    expect(testState.operatorTimerPayload).toEqual(snapshot);
+  });
+
+  it('holds a paused timer steady and keeps the ready state clear', async () => {
+    const serverTime = '2026-11-08T12:00:00.000Z';
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(serverTime));
+    testState.operatorTimerPayload = {
+      state: 'PAUSED',
+      timerId: 'timer-1',
+      elapsedSeconds: 95,
+      accumulatedSeconds: 95,
+      serverTime,
+      revision: 4,
+    };
+    render(
+      <MemoryRouter initialEntries={['/time']}>
+        <WorkspaceTimeView />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByLabelText('Elapsed work time')).toHaveTextContent('00:01:35');
+    expect(screen.getByText('Paused')).toBeVisible();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+    expect(screen.getByLabelText('Elapsed work time')).toHaveTextContent('00:01:35');
+  });
+
+  it('shows a ready timer as zero elapsed', async () => {
+    render(
+      <MemoryRouter initialEntries={['/time']}>
+        <WorkspaceTimeView />
+      </MemoryRouter>,
+    );
+    await screen.findByText('Ready');
+    expect(screen.getByLabelText('Elapsed work time')).toHaveTextContent('00:00:00');
+  });
+
+  it('shows timer failure while leaving the saved-entry report usable', async () => {
+    testState.workspaceTimePayload.entries = [entry];
+    testState.operatorTimerError = 'Timer service is unavailable.';
+    render(
+      <MemoryRouter initialEntries={['/time?from=2026-11-02&to=2026-11-08']}>
+        <WorkspaceTimeView />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByText(/Timer unavailable: Timer service is unavailable/),
+    ).toBeVisible();
+    expect(screen.getByText('Draft review')).toBeVisible();
+    expect(screen.getByRole('button', { name: /Export CSV/ })).toBeEnabled();
+  });
+
   it('keeps filters in browser history and restores the prior selection', async () => {
     testState.workspaceTimePayload.entries = [entry];
     render(

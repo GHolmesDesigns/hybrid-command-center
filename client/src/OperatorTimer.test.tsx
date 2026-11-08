@@ -135,6 +135,19 @@ describe('OperatorTimer', () => {
     await waitFor(() => expect(document.title).toBe(title));
   });
 
+  it('shows elapsed seconds in the global timer summary and detail clock', async () => {
+    mocks.api.mockResolvedValueOnce({
+      ...running,
+      elapsedSeconds: 10,
+      serverTime: new Date().toISOString(),
+    });
+    render(<OperatorTimer projects={[project]} tasks={[task]} />);
+    const trigger = await screen.findByRole('button', { name: /Running/ });
+    expect(trigger).toHaveTextContent('00:00:10');
+    fireEvent.click(trigger);
+    expect(screen.getByLabelText('Elapsed work time')).toHaveTextContent('00:00:10');
+  });
+
   it('refreshes after a transition error and reports the server message', async () => {
     mocks.api.mockImplementation((path: string) =>
       path === '/operator-timer' ? Promise.resolve(running) : Promise.resolve([category]),

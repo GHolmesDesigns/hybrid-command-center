@@ -14,6 +14,7 @@ import type {
   Category,
   Client,
   DashboardData,
+  OperatorTimer,
   Project,
   Tag,
   Task,
@@ -243,6 +244,14 @@ export const testState = {
       categories: [{ id: 'category-1', name: 'Design', archived: 0 }],
     },
   },
+  operatorTimerPayload: {
+    state: 'READY',
+    accumulatedSeconds: 0,
+    elapsedSeconds: 0,
+    serverTime: new Date().toISOString(),
+    revision: 0,
+  } as OperatorTimer,
+  operatorTimerError: null as string | null,
   brandingPayload: null as Branding | null,
   viewDefaultsPayload: null as ViewDefaults | null,
   liveTipsPayload: null as AgentHubLiveTipsSettings | null,
@@ -926,14 +935,7 @@ const payloadFor = (url: string) => {
     };
   if (/\/api\/projects\/[^/]+\/time\/categories$/.test(url))
     return [{ id: '00000000-0000-4000-8000-000000000001', name: 'General', selectable: true }];
-  if (url.endsWith('/api/operator-timer'))
-    return {
-      state: 'READY',
-      accumulatedSeconds: 0,
-      elapsedSeconds: 0,
-      serverTime: new Date().toISOString(),
-      revision: 0,
-    };
+  if (url.endsWith('/api/operator-timer')) return testState.operatorTimerPayload;
   if (url.endsWith('/api/tags')) return testState.tagsPayload;
   if (url.endsWith('/api/categories')) return testState.categoriesPayload;
   return [];
@@ -971,6 +973,8 @@ const respondTo = (url: string, init?: RequestInit) => {
   const method = init?.method ?? 'GET';
   const body = init?.body ? JSON.parse(String(init.body)) : undefined;
   requests.push({ url, method, body });
+  if (url.endsWith('/api/operator-timer') && testState.operatorTimerError)
+    return reply(503, { error: testState.operatorTimerError });
   if (url.endsWith('/api/dashboard') && testState.dashboardFailures > 0) {
     testState.dashboardFailures -= 1;
     return reply(503, { error: 'Dashboard refresh is temporarily unavailable.' });
@@ -2119,6 +2123,14 @@ beforeEach(() => {
       categories: [{ id: 'category-1', name: 'Design', archived: 0 }],
     },
   };
+  testState.operatorTimerPayload = {
+    state: 'READY',
+    accumulatedSeconds: 0,
+    elapsedSeconds: 0,
+    serverTime: new Date().toISOString(),
+    revision: 0,
+  };
+  testState.operatorTimerError = null;
   testState.brandingPayload = null;
   testState.viewDefaultsPayload = null;
   testState.liveTipsPayload = null;

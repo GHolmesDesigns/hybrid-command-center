@@ -70,3 +70,123 @@ test('discard requires a second in-page confirmation and writes no entry', async
   const entries = await page.request.get(`/api/projects/${project.id}/time/entries`);
   expect(await entries.json()).toEqual([]);
 });
+
+test('time report shows the live timer without saving and stacks cleanly on narrow screens', async ({
+  page,
+}) => {
+  const run = Date.now();
+  const client = await (
+    await page.request.post('/api/clients', { data: { name: `Time report ${run}` } })
+  ).json();
+  const project = await (
+    await page.request.post('/api/projects', {
+      data: { clientId: client.id, name: `Time report project ${run}` },
+    })
+  ).json();
+
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Work timer' }).click();
+  const timerPanel = page.getByRole('region', { name: 'Work timer' });
+  await timerPanel.getByRole('combobox').nth(0).selectOption(project.id);
+  await expect(timerPanel.getByRole('combobox').nth(1).locator('option').nth(1)).toBeAttached();
+  await timerPanel.getByRole('button', { name: 'Start timer' }).click();
+  await expect(timerPanel.getByText('Running')).toBeVisible();
+  await page.waitForTimeout(1100);
+  await timerPanel.getByRole('button', { name: 'Stop and save' }).click();
+  await expect(page.getByRole('button', { name: 'Work timer' })).toBeVisible();
+  await page.getByRole('button', { name: 'Work timer' }).click();
+  await page
+    .getByRole('region', { name: 'Work timer' })
+    .getByRole('button', { name: 'Start timer' })
+    .click();
+  await expect(page.getByRole('region', { name: 'Work timer' }).getByText('Running')).toBeVisible();
+
+  const beforeTimer = await page.request
+    .get('/api/operator-timer')
+    .then((response) => response.json());
+  const beforeEntries = await page.request
+    .get('/api/time/entries')
+    .then((response) => response.json());
+  expect(
+    beforeEntries.entries.some((entry: { projectId: string }) => entry.projectId === project.id),
+  ).toBe(true);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/time');
+  const clock = page.getByLabel('Elapsed work time');
+  await expect(clock).toHaveText(/\d{2}:\d{2}:\d{2}/);
+  const initialClock = await clock.textContent();
+  await expect.poll(() => clock.textContent()).not.toBe(initialClock);
+
+  const afterTimer = await page.request
+    .get('/api/operator-timer')
+    .then((response) => response.json());
+  const afterEntries = await page.request
+    .get('/api/time/entries')
+    .then((response) => response.json());
+  expect(afterTimer).toMatchObject({
+    state: beforeTimer.state,
+    timerId: beforeTimer.timerId,
+    revision: beforeTimer.revision,
+    runningSince: beforeTimer.runningSince,
+  });
+  expect(afterEntries.entries).toEqual(beforeEntries.entries);
+
+  const wide = await page.evaluate(() => {
+    const clockPanel = document
+      .querySelector('.workspace-time-clock-panel')!
+      .getBoundingClientRect();
+    const report = document.querySelector('.workspace-time-report-column')!.getBoundingClientRect();
+    return { clockRight: clockPanel.right, reportLeft: report.left };
+  });
+  expect(wide.clockRight).toBeLessThan(wide.reportLeft);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const narrow = await page.evaluate(() => {
+    const clockPanel = document
+      .querySelector('.workspace-time-clock-panel')!
+      .getBoundingClientRect();
+    const report = document.querySelector('.workspace-time-report-column')!.getBoundingClientRect();
+    const filters = document.querySelector('.workspace-time-filters')!.getBoundingClientRect();
+    const controls = [
+      ...document.querySelectorAll('.workspace-time-filters input, .workspace-time-filters select'),
+    ];
+    return {
+      clockBottom: clockPanel.bottom,
+      reportTop: report.top,
+      viewportWidth: window.innerWidth,
+      documentWidth: document.documentElement.scrollWidth,
+      overflowing: [...document.querySelectorAll('body *')]
+        .map((element) => {
+          const rect = element.getBoundingClientRect();
+          return {
+            tag: element.tagName,
+            className: String(element.className),
+            right: rect.right,
+            width: rect.width,
+          };
+        })
+        .filter((element) => element.right > window.innerWidth + 1)
+        .slice(0, 12),
+      filtersLeft: filters.left,
+      filtersRight: filters.right,
+      controls: controls.map((control) => {
+        const rect = control.getBoundingClientRect();
+        return { left: rect.left, right: rect.right };
+      }),
+    };
+  });
+  expect(narrow.reportTop).toBeGreaterThanOrEqual(narrow.clockBottom);
+  expect(narrow.documentWidth, JSON.stringify(narrow.overflowing)).toBeLessThanOrEqual(
+    narrow.viewportWidth,
+  );
+  expect(
+    narrow.controls.every(
+      (control) => control.left >= narrow.filtersLeft && control.right <= narrow.filtersRight,
+    ),
+  ).toBe(true);
+
+  const cleanup = await page.request.post('/api/operator-timer/discard', {
+    data: { timerId: afterTimer.timerId, revision: afterTimer.revision },
+  });
+  expect(cleanup.ok()).toBe(true);
+});
