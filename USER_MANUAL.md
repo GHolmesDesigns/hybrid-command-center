@@ -12,7 +12,7 @@ Hybrid Command Center divides information between your computer and Google Drive
 - Google Drive stores the actual client and project files.
 - The application stores Drive folder IDs and links locally. It does not copy file contents into the database.
 
-The application is designed for one user on one computer. It does not include team accounts, client portals, billing, time tracking, or permissions.
+The application is designed for one user on one computer. It does not include team accounts, client portals, billing, or permissions.
 
 ## 2. Before you begin
 
@@ -541,6 +541,31 @@ Use Projects to:
 - Open the connected Drive folder
 - Archive completed or inactive projects
 - Delete a project and its tasks from the application
+
+#### Project time
+
+Open a project and choose **Time** to review and manage its saved time. The page shows exact logged
+time by task and category, and compares the total with the project's optional minute budget:
+below 80% is **On track**, 80% through the budget is **Approaching budget**, and any time above
+the budget is **Over budget**. The comparison uses exact seconds, including when a logged entry
+lands one second over the budget.
+
+Choose **Log time** to add a manual entry with a category, optional task, start and end date/time,
+and notes. The operator time zone is shown on the page and can be changed there. Times are stored
+as UTC. If a local time does not exist during a daylight-saving clock change, choose another time;
+if it occurs twice, select the earlier or later occurrence. Enter an end date when the entry crosses
+midnight. Entries can be edited or deleted from the list.
+
+Workspace time categories are available until a project has an active category of its own. Then
+that project's active categories replace the defaults in the entry picker. Add categories, move
+them up or down, or archive them in **Time categories**. Archived categories remain on prior entries
+and cannot be selected for new ones.
+
+Use the task, category, and date filters to narrow the entry list, then choose **Export CSV** to
+download those matching rows in the operator time zone. The export includes date, start time, end
+date, end time, duration in decimal hours, project, task, category, and notes. A project with saved
+time entries cannot be deleted; export or remove the entries first. Deleting a task keeps its time
+entries on the project without a task, and moving a task moves its entries with it.
 
 #### Grid and list
 

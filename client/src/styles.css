@@ -2485,6 +2485,146 @@ button.tag-chip.toggle.active {
   flex-direction: column;
   gap: 14px;
 }
+
+.project-detail-tabs {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--line);
+  margin: 1rem 0;
+}
+.project-detail-tabs button[aria-selected='true'] {
+  border-bottom: 3px solid var(--theme-accent-link);
+  color: var(--theme-text-primary);
+  font-weight: 700;
+}
+.project-time {
+  display: grid;
+  gap: 1rem;
+}
+.time-budget-row,
+.time-date-fields,
+.time-category-create,
+.time-filters {
+  display: flex;
+  align-items: end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.time-zone-setting {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.75rem;
+  margin: 0 0 1rem;
+}
+.time-zone-setting label {
+  display: grid;
+  gap: 0.35rem;
+}
+.time-zone-setting span {
+  color: var(--muted);
+  padding-bottom: 0.55rem;
+}
+.time-budget-row > label,
+.time-date-fields > label,
+.time-category-create > label,
+.time-filters > label {
+  display: grid;
+  gap: 0.35rem;
+}
+.time-budget-status {
+  padding: 0.6rem 0.8rem;
+  border-radius: 0.45rem;
+}
+.time-budget-status.normal {
+  background: var(--theme-success-surface);
+  color: var(--theme-success-ink);
+}
+.time-budget-status.warning {
+  background: var(--theme-warning-surface);
+  color: var(--theme-warning-ink);
+}
+.time-budget-status.over {
+  background: var(--theme-danger-surface);
+  color: var(--theme-danger-ink);
+}
+.project-time-totals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem;
+}
+.project-time-totals h3 {
+  margin: 0 0 0.6rem;
+}
+.project-time-totals p {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  border-bottom: 1px solid var(--line);
+  padding: 0.45rem 0;
+}
+.time-entry-list,
+.time-category-list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 1rem 0 0;
+  padding: 0;
+}
+.time-entry,
+.time-category-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.55rem;
+  padding: 0.8rem;
+}
+.time-entry > div:first-child {
+  display: grid;
+  gap: 0.3rem;
+}
+.time-entry > div:last-child,
+.time-category-list li > div {
+  display: flex;
+  gap: 0.4rem;
+}
+.time-entry span,
+.time-entry p {
+  color: var(--muted);
+  margin: 0;
+}
+.time-category-list {
+  padding-left: 1.25rem;
+}
+.time-category-list li span {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+.time-category-list small {
+  color: var(--muted);
+}
+.project-time-modal {
+  max-height: min(90vh, 52rem);
+  overflow-y: auto;
+}
+.project-time-modal form {
+  display: grid;
+  gap: 0.75rem;
+}
+.project-time-modal label {
+  display: grid;
+  gap: 0.35rem;
+}
+@media (max-width: 700px) {
+  .project-time-totals {
+    grid-template-columns: 1fr;
+  }
+  .time-entry {
+    align-items: flex-start;
+  }
+}
 /* Cancelled here rather than in the shared rules: `.tag-list` also spaces the chips under a
    board card and inside the chip input, `.card-actions` spaces a client card's buttons, and
    `.keyboard-move` its own select. Outside these two columns those margins are still the only

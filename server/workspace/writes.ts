@@ -225,6 +225,16 @@ export function deleteProject(db: Db, projectId: string) {
     { id: string; name: string } | undefined;
   if (!project) throw new WorkspaceNotFoundError('Project not found.');
   const detachedSignalPosts = transaction(db, () => {
+    const timeEntryCount = (
+      db.prepare('SELECT COUNT(*) count FROM time_entries WHERE project_id=?').get(project.id) as {
+        count: number;
+      }
+    ).count;
+    if (timeEntryCount > 0)
+      throw new WorkspaceConflictError(
+        `This project has ${timeEntryCount} time ${timeEntryCount === 1 ? 'entry' : 'entries'}. Export or delete them before deleting the project.`,
+        'PROJECT_HAS_TIME_ENTRIES',
+      );
     const assigned = db
       .prepare('SELECT id, revision FROM signal_posts WHERE project_id=?')
       .all(project.id) as { id: string; revision: number }[];
@@ -334,6 +344,60 @@ export function updateTask(db: Db, taskId: string, data: TaskPatch, revision: nu
       stamp,
       taskId,
     );
+    if (nextProjectId !== t.project_id) {
+      // A task's saved time follows the task. Keep its category meaningful in the destination
+      // project by reusing a same-name category there or carrying a scoped category across.
+      const categories = db
+        .prepare(
+          `SELECT DISTINCT c.id,c.name,c.archived_at FROM time_entries e
+        JOIN time_categories c ON c.id=e.category_id WHERE e.task_id=? AND c.project_id=?`,
+        )
+        .all(taskId, t.project_id as string) as {
+        id: string;
+        name: string;
+        archived_at: string | null;
+      }[];
+      for (const category of categories) {
+        const existing = db
+          .prepare(
+            `SELECT id FROM time_categories
+          WHERE project_id=? AND name=? COLLATE NOCASE`,
+          )
+          .get(nextProjectId, category.name) as { id: string } | undefined;
+        let categoryId = existing?.id;
+        if (!categoryId) {
+          categoryId = id();
+          const position = (
+            db
+              .prepare(
+                'SELECT COALESCE(MAX(position),-1)+1 next FROM time_categories WHERE project_id=?',
+              )
+              .get(nextProjectId) as { next: number }
+          ).next;
+          db.prepare(
+            `INSERT INTO time_categories(id,scope_key,project_id,name,position,archived_at,created_at,updated_at)
+            VALUES(?,?,?,?,?,?,?,?)`,
+          ).run(
+            categoryId,
+            nextProjectId,
+            nextProjectId,
+            category.name,
+            position,
+            category.archived_at,
+            stamp,
+            stamp,
+          );
+        }
+        db.prepare(
+          'UPDATE time_entries SET project_id=?,category_id=?,updated_at=? WHERE task_id=? AND category_id=?',
+        ).run(nextProjectId, categoryId, stamp, taskId, category.id);
+      }
+      db.prepare('UPDATE time_entries SET project_id=?,updated_at=? WHERE task_id=?').run(
+        nextProjectId,
+        stamp,
+        taskId,
+      );
+    }
     touchProjectActivity(db, t.project_id as string, stamp);
     if (nextProjectId !== t.project_id) touchProjectActivity(db, nextProjectId, stamp);
     advanceRevision(

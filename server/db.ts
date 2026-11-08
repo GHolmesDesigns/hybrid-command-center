@@ -51,7 +51,8 @@ CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY, client_id TEXT NOT NULL REFERENCES clients(id), name TEXT NOT NULL, description TEXT,
   status TEXT NOT NULL DEFAULT 'ACTIVE', start_date TEXT, launch_date TEXT, target_deadline TEXT, priority TEXT NOT NULL DEFAULT 'MEDIUM',
   notes TEXT, position INTEGER NOT NULL DEFAULT 0, drive_folder_id TEXT, drive_folder_url TEXT,
-  drive_status TEXT NOT NULL DEFAULT 'DISCONNECTED', drive_error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+  drive_status TEXT NOT NULL DEFAULT 'DISCONNECTED', drive_error TEXT, time_budget_minutes INTEGER,
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
   last_activity_at TEXT, revision INTEGER NOT NULL DEFAULT 1
 );
 CREATE TABLE IF NOT EXISTS tasks (
@@ -59,6 +60,29 @@ CREATE TABLE IF NOT EXISTS tasks (
   status TEXT NOT NULL DEFAULT 'BACKLOG', priority TEXT NOT NULL DEFAULT 'MEDIUM', task_type TEXT,
   due_date TEXT, start_date TEXT, notes TEXT, position INTEGER NOT NULL DEFAULT 0, completed_at TEXT,
   created_at TEXT NOT NULL, updated_at TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1
+);
+CREATE TABLE IF NOT EXISTS time_categories (
+  id TEXT PRIMARY KEY,
+  scope_key TEXT NOT NULL,
+  project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  position INTEGER NOT NULL DEFAULT 0,
+  archived_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS time_entries (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
+  task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+  category_id TEXT NOT NULL REFERENCES time_categories(id) ON DELETE RESTRICT,
+  started_at TEXT NOT NULL,
+  ended_at TEXT NOT NULL,
+  duration_seconds INTEGER NOT NULL CHECK(duration_seconds > 0),
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  revision INTEGER NOT NULL DEFAULT 1
 );
 CREATE TABLE IF NOT EXISTS checklist_items (
   id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, text TEXT NOT NULL,
@@ -1010,6 +1034,13 @@ CREATE INDEX IF NOT EXISTS idx_assistant_pending_approvals_conversation
  */
 const indexSchema = `
 CREATE INDEX IF NOT EXISTS idx_projects_client ON projects(client_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_time_categories_scope_name
+  ON time_categories(scope_key, name COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_time_categories_project_position
+  ON time_categories(project_id, position, name COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_time_entries_project_started
+  ON time_entries(project_id, started_at DESC, id);
+CREATE INDEX IF NOT EXISTS idx_time_entries_task ON time_entries(task_id);
 -- Ads: a client's accounts are read for grouping and retargeted when clients merge. The campaign and
 -- day keys already lead with the account; the per-account date index serves the window filter and the
 -- rollover delete, which the key's campaign column sits in the way of.
@@ -1191,9 +1222,41 @@ END;`,
     )
     .join('');
 
-export const triggerSchema = `${mediaSourceTriggers('signal_post_media')}${mediaSourceTriggers(
+export const signalMediaTriggerSchema = `${mediaSourceTriggers('signal_post_media')}${mediaSourceTriggers(
   'signal_post_variant_media',
-)}
+)}`;
+
+export const triggerSchema = `${signalMediaTriggerSchema}
+CREATE TRIGGER IF NOT EXISTS time_categories_scope_insert
+BEFORE INSERT ON time_categories FOR EACH ROW
+WHEN NEW.scope_key <> COALESCE(NEW.project_id, 'workspace')
+BEGIN
+  SELECT RAISE(ABORT, 'time_categories: scope must match project ownership.');
+END;
+CREATE TRIGGER IF NOT EXISTS time_categories_scope_update
+BEFORE UPDATE OF scope_key,project_id ON time_categories FOR EACH ROW
+WHEN NEW.scope_key <> COALESCE(NEW.project_id, 'workspace')
+BEGIN
+  SELECT RAISE(ABORT, 'time_categories: scope must match project ownership.');
+END;
+CREATE TRIGGER IF NOT EXISTS time_entries_category_insert
+BEFORE INSERT ON time_entries FOR EACH ROW
+WHEN NOT EXISTS (
+  SELECT 1 FROM time_categories c WHERE c.id=NEW.category_id
+    AND (c.project_id IS NULL OR c.project_id=NEW.project_id)
+)
+BEGIN
+  SELECT RAISE(ABORT, 'time_entries: category must be a workspace default or belong to the project.');
+END;
+CREATE TRIGGER IF NOT EXISTS time_entries_category_update
+BEFORE UPDATE OF project_id,category_id ON time_entries FOR EACH ROW
+WHEN NOT EXISTS (
+  SELECT 1 FROM time_categories c WHERE c.id=NEW.category_id
+    AND (c.project_id IS NULL OR c.project_id=NEW.project_id)
+)
+BEGIN
+  SELECT RAISE(ABORT, 'time_entries: category must be a workspace default or belong to the project.');
+END;
 `;
 
 const conversationMessageTriggers = `
@@ -2000,6 +2063,7 @@ export function createDb(
     new Date().toISOString(),
   );
   const applied = applyAdditiveMigrations(db);
+  seedTimeCategories(db);
   backfillConversationMessageSenderKind(db);
   migrateMcpCredentialWorkspaceWriteScopes(db);
   migrateDriveWriteRequestStatuses(db);
@@ -2023,6 +2087,34 @@ export function createDb(
   db.exec('PRAGMA optimize');
   onMigration?.(applied);
   return db;
+}
+
+/** Workspace-wide choices offered when a project has no active custom time categories. */
+export const DEFAULT_TIME_CATEGORIES = [
+  'Administration',
+  'Client work',
+  'Design',
+  'Development',
+  'Meetings',
+] as const;
+
+function seedTimeCategories(db: Db): void {
+  const insert = db.prepare(
+    `INSERT OR IGNORE INTO time_categories(id,scope_key,project_id,name,position,created_at,updated_at)
+     VALUES(?,?,?,?,?,?,?)`,
+  );
+  const stamp = new Date().toISOString();
+  DEFAULT_TIME_CATEGORIES.forEach((name, position) =>
+    insert.run(
+      `00000000-0000-4000-8000-${String(position + 1).padStart(12, '0')}`,
+      'workspace',
+      null,
+      name,
+      position,
+      stamp,
+      stamp,
+    ),
+  );
 }
 
 let singleton: Db | undefined;

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   DndContext,
   KeyboardSensor,
@@ -35,6 +35,7 @@ import { STATUS_LABEL } from './ui-shared';
 import { PageHead } from './Shell';
 import { DiscussionPanel } from './DiscussionPanel';
 import { ProjectSummary } from './ProjectSummary';
+import { ProjectTimeTab } from './ProjectTimeTab';
 import { projectDescription } from './project-description';
 import {
   projectDeleteConfirmation,
@@ -61,6 +62,26 @@ export function ProjectDetail({
 }) {
   const { id } = useParams();
   const nav = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') === 'time' ? 'time' : 'overview';
+  const selectTab = (tab: 'overview' | 'time') => {
+    const next = new URLSearchParams(searchParams);
+    if (tab === 'time') next.set('tab', 'time');
+    else next.delete('tab');
+    setSearchParams(next);
+  };
+  const onTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
+    event.preventDefault();
+    const tabs = Array.from(
+      event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]') ?? [],
+    );
+    const currentIndex = tabs.indexOf(event.currentTarget);
+    const nextIndex =
+      (currentIndex + (event.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length;
+    tabs[nextIndex]?.focus();
+    tabs[nextIndex]?.click();
+  };
   const p = projects.find((x) => x.id === id);
   const projectId = p?.id;
   useEffect(() => {
@@ -192,64 +213,117 @@ export function ProjectDetail({
             links to outlives the record, and that is easiest to believe before the prompt. */}
         <p className="field-hint">
           Deleting this project removes it and its tasks from Command Center only. Its Drive folder
-          and every file in it are left exactly as they are.{' '}
+          and every file in it are left exactly as they are. Projects with time entries must have
+          those entries exported or deleted before the project can be deleted.{' '}
           {signalPostDetachmentCopy(p.signalPostCount)}
         </p>
       </div>
-      <DiscussionPanel
-        scopeType="project"
-        scopeId={p.id}
-        subjectLabel={p.name}
-        subjectPath={`/projects/${p.id}`}
-      />
-      <section className="panel">
-        <div className="section-title">
-          <div>
-            <span className="eyebrow">Execution</span>
-            <h2>All project tasks</h2>
-          </div>
+      <div className="project-detail-tabs" role="tablist" aria-label="Project sections">
+        <button
+          id="project-overview-tab"
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'overview'}
+          aria-controls="project-overview-panel"
+          tabIndex={activeTab === 'overview' ? 0 : -1}
+          onClick={() => selectTab('overview')}
+          onKeyDown={onTabKeyDown}
+        >
+          Overview
+        </button>
+        <button
+          id="project-time-tab"
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'time'}
+          aria-controls="project-time-panel"
+          tabIndex={activeTab === 'time' ? 0 : -1}
+          onClick={() => selectTab('time')}
+          onKeyDown={onTabKeyDown}
+        >
+          Time
+        </button>
+      </div>
+      {activeTab === 'time' ? (
+        <div
+          id="project-time-panel"
+          role="tabpanel"
+          aria-labelledby="project-time-tab"
+          tabIndex={0}
+        >
+          <ProjectTimeTab project={p} tasks={tasks} flash={flash} refresh={refresh} />
         </div>
-        {mine.length ? (
-          <>
-            {/* One order per stage, shared with the board: this page hides the other projects'
+      ) : (
+        <div
+          id="project-overview-panel"
+          role="tabpanel"
+          aria-labelledby="project-overview-tab"
+          tabIndex={0}
+        >
+          <DiscussionPanel
+            scopeType="project"
+            scopeId={p.id}
+            subjectLabel={p.name}
+            subjectPath={`/projects/${p.id}`}
+          />
+          <section className="panel">
+            <div className="section-title">
+              <div>
+                <span className="eyebrow">Execution</span>
+                <h2>All project tasks</h2>
+              </div>
+            </div>
+            {mine.length ? (
+              <>
+                {/* One order per stage, shared with the board: this page hides the other projects'
                 tasks in the same column but never keeps a second arrangement of its own. */}
-            <p className="field-hint">
-              Tasks are grouped by workflow stage. Drag a row by its grip, or use its position
-              selector, to arrange work within a stage — the same order the Status board shows.
-            </p>
-            <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={dragEnd}>
-              {stages.map((stage) => (
-                <section key={stage.status} className="task-stage" data-status={stage.status}>
-                  <h3>
-                    <StatusDot status={stage.status} />
-                    {STATUS_LABEL[stage.status]}
-                    <span>{stage.tasks.length}</span>
-                  </h3>
-                  <SortableContext
-                    items={stage.tasks.map((t) => t.id)}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    <div className="task-table">
-                      {stage.tasks.map((t, index) => (
-                        <TaskRow
-                          key={t.id}
-                          task={t}
-                          index={index}
-                          total={stage.tasks.length}
-                          open={open}
-                          moveToIndex={moveToIndex}
-                        />
-                      ))}
-                    </div>
-                  </SortableContext>
-                </section>
-              ))}
-            </DndContext>
-          </>
-        ) : (
-          <Empty compact title="No tasks yet" body="Create a task to start planning the work." />
-        )}
-      </section>
+                <p className="field-hint">
+                  Tasks are grouped by workflow stage. Drag a row by its grip, or use its position
+                  selector, to arrange work within a stage — the same order the Status board shows.
+                </p>
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCorners}
+                  onDragEnd={dragEnd}
+                >
+                  {stages.map((stage) => (
+                    <section key={stage.status} className="task-stage" data-status={stage.status}>
+                      <h3>
+                        <StatusDot status={stage.status} />
+                        {STATUS_LABEL[stage.status]}
+                        <span>{stage.tasks.length}</span>
+                      </h3>
+                      <SortableContext
+                        items={stage.tasks.map((t) => t.id)}
+                        strategy={verticalListSortingStrategy}
+                      >
+                        <div className="task-table">
+                          {stage.tasks.map((t, index) => (
+                            <TaskRow
+                              key={t.id}
+                              task={t}
+                              index={index}
+                              total={stage.tasks.length}
+                              open={open}
+                              moveToIndex={moveToIndex}
+                            />
+                          ))}
+                        </div>
+                      </SortableContext>
+                    </section>
+                  ))}
+                </DndContext>
+              </>
+            ) : (
+              <Empty
+                compact
+                title="No tasks yet"
+                body="Create a task to start planning the work."
+              />
+            )}
+          </section>
+        </div>
+      )}
     </>
   );
 }
