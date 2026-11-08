@@ -23,6 +23,63 @@ async function setup() {
 }
 
 describe('project time HTTP routes', () => {
+  it('reports task time summaries and updates a task budget through revision-checked routes', async () => {
+    const { app, project } = await setup();
+    const categories = await request(app)
+      .get(`/api/projects/${project.id}/time/categories`)
+      .expect(200);
+    const task = await request(app)
+      .post('/api/tasks')
+      .send({ projectId: project.id, title: 'Track implementation' })
+      .expect(201);
+
+    await request(app)
+      .patch(`/api/tasks/${task.body.id}/time-budget`)
+      .send({ minutes: 60, revision: task.body.revision })
+      .expect(200)
+      .expect(({ body }) => expect(body).toEqual({ budgetMinutes: 60 }));
+    await request(app)
+      .post(`/api/projects/${project.id}/time/entries`)
+      .send({
+        categoryId: categories.body[0].id,
+        taskId: task.body.id,
+        startDate: '2026-01-02',
+        startTime: '09:00',
+        endTime: '10:30',
+        timeZone: 'UTC',
+      })
+      .expect(201);
+
+    const summary = await request(app).get(`/api/tasks/${task.body.id}/time-summary`).expect(200);
+    expect(summary.body).toMatchObject({
+      taskId: task.body.id,
+      totalSeconds: 90 * 60,
+      budgetMinutes: 60,
+      budgetStatus: 'OVER',
+    });
+    expect(summary.body.entries).toHaveLength(1);
+    expect(
+      db.prepare('SELECT time_budget_minutes,revision FROM tasks WHERE id=?').get(task.body.id),
+    ).toMatchObject({ time_budget_minutes: 60, revision: task.body.revision + 1 });
+
+    await request(app)
+      .patch(`/api/tasks/${task.body.id}/time-budget`)
+      .send({ minutes: 90, revision: task.body.revision })
+      .expect(409);
+    expect(
+      db.prepare('SELECT time_budget_minutes,revision FROM tasks WHERE id=?').get(task.body.id),
+    ).toMatchObject({ time_budget_minutes: 60, revision: task.body.revision + 1 });
+    await request(app)
+      .patch(`/api/tasks/${task.body.id}/time-budget`)
+      .send({ minutes: 0, revision: task.body.revision + 1 })
+      .expect(400);
+    await request(app).get(`/api/tasks/${crypto.randomUUID()}/time-summary`).expect(404);
+    await request(app)
+      .patch(`/api/tasks/${crypto.randomUUID()}/time-budget`)
+      .send({ minutes: 30, revision: 1 })
+      .expect(404);
+  });
+
   it('saves a manual entry and budget, reports exact totals, and blocks project deletion unchanged', async () => {
     const { app, project } = await setup();
     const categories = await request(app)
