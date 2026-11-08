@@ -305,4 +305,5 @@ export interface DashboardData {
    */
   upcomingTasks: Task[];
   recentProjects: Project[];
+  timeThisWeek?: { loggedSeconds: number; overBudgetTasks: number };
 }

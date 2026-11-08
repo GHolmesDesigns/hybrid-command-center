@@ -77,6 +77,12 @@ import { commitClientMerge, isMergedSource, previewClientMerge } from './client-
 import { ClientMergeError } from './domain/client-merge.ts';
 import { touchProjectActivity, touchProjectRecord } from './domain/activity.ts';
 import { buildDashboardSummary } from './domain/dashboard.ts';
+import {
+  filterWorkspaceTimeEntries,
+  listWorkspaceTimeEntries,
+  workspaceTimeDashboard,
+  workspaceTimeOptions,
+} from './workspace-time.ts';
 import { buildWaitingInbox } from './agent-waiting.ts';
 import { buildClientSlug } from './domain/client-slugs.ts';
 import {
@@ -2482,7 +2488,43 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   });
 
   app.get('/api/dashboard', (_req, res) => {
-    res.json(buildDashboardSummary(db));
+    const timeZone = getSetting(db, 'operator_time_zone') ?? 'UTC';
+    res.json({
+      ...buildDashboardSummary(db),
+      timeThisWeek: workspaceTimeDashboard(db, new Date(), timeZone),
+    });
+  });
+
+  app.get('/api/time/entries', (req, res, next) => {
+    try {
+      const filters = z
+        .object({
+          from: z.string().optional(),
+          to: z.string().optional(),
+          projectId: z.string().uuid().optional(),
+          taskId: z.string().uuid().optional(),
+          categoryId: z.string().uuid().optional(),
+        })
+        .parse(req.query);
+      const configuredZone = getSetting(db, 'operator_time_zone') ?? 'UTC';
+      let timeZone = 'UTC';
+      try {
+        new Intl.DateTimeFormat('en', { timeZone: configuredZone }).format(0);
+        timeZone = configuredZone;
+      } catch {
+        // A manually edited legacy setting must not make the report unavailable.
+      }
+      const entries = listWorkspaceTimeEntries(db);
+      const matches = filterWorkspaceTimeEntries(entries, { ...filters, timeZone });
+      res.json({
+        entries: matches,
+        totalSeconds: matches.reduce((total, entry) => total + entry.durationSeconds, 0),
+        timeZone,
+        options: workspaceTimeOptions(db),
+      });
+    } catch (error) {
+      next(error);
+    }
   });
 
   app.get('/api/settings/branding', (_req, res) =>

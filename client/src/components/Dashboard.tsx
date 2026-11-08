@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { send } from '../api';
 import type { DashboardData } from '../../../shared/types';
+import { formatDuration } from '../../../shared/project-time';
 import { type Modal } from './App';
 import { formatDataAge, formatDate, initials } from './formatting';
 import { Due, Empty, StatusDot } from './Primitives';
@@ -133,12 +134,36 @@ export function Dashboard({
   // tiles reach the board through the same filters the panel's Open board uses, and those
   // filters are calculated by the rules the counts come from, so a tile and its
   // destination cannot disagree.
-  const cards = [
-    ['Active clients', dashboard.counts.activeClients, <Users />, '/clients'],
-    ['Active projects', dashboard.counts.activeProjects, <BriefcaseBusiness />, '/projects'],
-    ['Due today', dashboard.counts.dueToday, <Clock3 />, '/status?filter=today'],
-    ['Next 7 days', dashboard.counts.dueNextSevenDays, <CalendarDays />, '/status?filter=week'],
-  ] as const;
+  const cards: [string, string, ReactNode, string][] = [
+    ['Active clients', String(dashboard.counts.activeClients), <Users />, '/clients'],
+    [
+      'Active projects',
+      String(dashboard.counts.activeProjects),
+      <BriefcaseBusiness />,
+      '/projects',
+    ],
+    ['Due today', String(dashboard.counts.dueToday), <Clock3 />, '/status?filter=today'],
+    [
+      'Next 7 days',
+      String(dashboard.counts.dueNextSevenDays),
+      <CalendarDays />,
+      '/status?filter=week',
+    ],
+  ];
+  if (dashboard.timeThisWeek) {
+    cards.push([
+      'Time this week',
+      formatDuration(dashboard.timeThisWeek.loggedSeconds),
+      <Clock3 />,
+      '/time',
+    ]);
+    cards.push([
+      'Over-budget tasks',
+      String(dashboard.timeThisWeek.overBudgetTasks),
+      <Clock3 />,
+      '/time',
+    ]);
+  }
   const syncFolders = async () => {
     setSyncing(true);
     try {

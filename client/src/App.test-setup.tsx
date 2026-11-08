@@ -10,7 +10,15 @@ import {
   DEFAULT_AGENT_HUB_LIVE_TIPS_SETTINGS,
   type AgentHubLiveTipsSettings,
 } from '../../shared/agent-hub-tips';
-import type { Category, Client, DashboardData, Project, Tag, Task } from '../../shared/types';
+import type {
+  Category,
+  Client,
+  DashboardData,
+  Project,
+  Tag,
+  Task,
+  TimeEntry,
+} from '../../shared/types';
 import { sameTagName } from '../../shared/types';
 import {
   DUPLICATE_RULE,
@@ -225,6 +233,16 @@ export const testState = {
   tagsPayload: [] as Tag[],
   categoriesPayload: [] as Category[],
   dashboardPayload: emptyDashboard as DashboardData,
+  workspaceTimePayload: {
+    entries: [] as TimeEntry[],
+    totalSeconds: 0,
+    timeZone: 'America/New_York',
+    options: {
+      projects: [{ id: 'project-1', name: 'Studio', status: 'ACTIVE' }],
+      tasks: [{ id: 'task-1', title: 'Research', status: 'TODO', projectId: 'project-1' }],
+      categories: [{ id: 'category-1', name: 'Design', archived: 0 }],
+    },
+  },
   brandingPayload: null as Branding | null,
   viewDefaultsPayload: null as ViewDefaults | null,
   liveTipsPayload: null as AgentHubLiveTipsSettings | null,
@@ -832,6 +850,7 @@ export const calendarRange = (overrides: Partial<CalendarRange> = {}): CalendarR
 const payloadFor = (url: string) => {
   if (url.endsWith('/api/import/receipts')) return testState.importReceiptsPayload;
   if (url.endsWith('/api/dashboard')) return testState.dashboardPayload;
+  if (url.endsWith('/api/time/entries')) return testState.workspaceTimePayload;
   if (url.endsWith('/api/settings/branding'))
     return { branding: testState.brandingPayload ?? branding };
   if (url.endsWith('/api/settings/view-defaults'))
@@ -2090,6 +2109,16 @@ beforeEach(() => {
   testState.tagsPayload = [];
   testState.categoriesPayload = [];
   testState.dashboardPayload = emptyDashboard;
+  testState.workspaceTimePayload = {
+    entries: [],
+    totalSeconds: 0,
+    timeZone: 'America/New_York',
+    options: {
+      projects: [{ id: 'project-1', name: 'Studio', status: 'ACTIVE' }],
+      tasks: [{ id: 'task-1', title: 'Research', status: 'TODO', projectId: 'project-1' }],
+      categories: [{ id: 'category-1', name: 'Design', archived: 0 }],
+    },
+  };
   testState.brandingPayload = null;
   testState.viewDefaultsPayload = null;
   testState.liveTipsPayload = null;
