@@ -967,6 +967,148 @@ button svg,
   padding: 9px 13px;
   flex-shrink: 0;
 }
+.operator-timer-control {
+  position: relative;
+}
+.operator-timer-trigger {
+  white-space: nowrap;
+}
+.operator-timer-trigger.is-running {
+  color: var(--theme-eyebrow-ink);
+  font-variant-numeric: tabular-nums;
+}
+.operator-timer-panel {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 12px);
+  right: 0;
+  width: min(360px, calc(100vw - 24px));
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--theme-surface-panel);
+  box-shadow: 0 16px 44px var(--theme-modal-shadow);
+  color: var(--ink);
+}
+.operator-timer-heading,
+.operator-timer-heading > div,
+.operator-timer-actions {
+  display: flex;
+  align-items: center;
+}
+.operator-timer-heading {
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.operator-timer-heading > div {
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.operator-timer-state {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--theme-neutral-badge-surface);
+  font-size: 11px;
+  font-weight: 700;
+}
+.operator-timer-state.state-running {
+  color: var(--theme-success-ink);
+}
+.operator-timer-state.state-paused {
+  color: var(--theme-warning-ink);
+}
+.operator-timer-clock {
+  font-size: 23px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.operator-timer-form,
+.operator-timer-details {
+  display: grid;
+  gap: 11px;
+}
+.operator-timer-form label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.operator-timer-form select {
+  width: 100%;
+  min-height: 38px;
+}
+.operator-timer-details p {
+  margin: 0;
+}
+.operator-timer-details p b {
+  display: inline-block;
+  width: 74px;
+}
+.operator-timer-actions {
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+.operator-timer-actions button,
+.operator-timer-start {
+  min-height: 38px;
+  padding: 8px 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--theme-control-surface);
+  font: inherit;
+  cursor: pointer;
+}
+.operator-timer-actions button svg,
+.operator-timer-start svg {
+  width: 15px;
+  height: 15px;
+}
+.operator-timer-actions button.danger {
+  color: var(--theme-danger-ink);
+}
+.operator-timer-start {
+  width: 100%;
+  color: var(--theme-text-on-strong);
+  background: var(--theme-accent-link);
+}
+.operator-timer-hint,
+.operator-timer-warning,
+.operator-timer-error {
+  margin: 0;
+  font-size: 12px;
+}
+.operator-timer-hint {
+  color: var(--muted);
+}
+.operator-timer-warning {
+  color: var(--theme-warning-ink);
+  font-weight: 700;
+}
+.operator-timer-error {
+  margin-top: 12px;
+  color: var(--theme-danger-ink);
+}
+.operator-timer-control button:focus-visible,
+.operator-timer-control select:focus-visible {
+  outline: 3px solid var(--theme-focus-ring);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .operator-timer-panel,
+  .operator-timer-control * {
+    scroll-behavior: auto !important;
+    animation: none !important;
+    transition: none !important;
+  }
+}
 .page-wrap {
   max-width: 1500px;
   margin: auto;

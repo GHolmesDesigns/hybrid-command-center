@@ -84,6 +84,27 @@ CREATE TABLE IF NOT EXISTS time_entries (
   updated_at TEXT NOT NULL,
   revision INTEGER NOT NULL DEFAULT 1
 );
+CREATE TABLE IF NOT EXISTS operator_time_timer (
+  operator_id TEXT PRIMARY KEY CHECK(operator_id='operator'),
+  state TEXT NOT NULL CHECK(state IN ('READY','RUNNING','PAUSED')),
+  timer_id TEXT UNIQUE,
+  project_id TEXT REFERENCES projects(id) ON DELETE RESTRICT,
+  category_id TEXT REFERENCES time_categories(id) ON DELETE RESTRICT,
+  task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+  started_at TEXT,
+  running_since TEXT,
+  accumulated_seconds INTEGER NOT NULL DEFAULT 0 CHECK(accumulated_seconds >= 0),
+  revision INTEGER NOT NULL DEFAULT 0,
+  CHECK((state='READY' AND timer_id IS NULL AND project_id IS NULL AND category_id IS NULL AND started_at IS NULL AND running_since IS NULL AND accumulated_seconds=0)
+    OR (state='RUNNING' AND timer_id IS NOT NULL AND project_id IS NOT NULL AND category_id IS NOT NULL AND started_at IS NOT NULL AND running_since IS NOT NULL)
+    OR (state='PAUSED' AND timer_id IS NOT NULL AND project_id IS NOT NULL AND category_id IS NOT NULL AND started_at IS NOT NULL AND running_since IS NULL))
+);
+INSERT OR IGNORE INTO operator_time_timer(operator_id,state) VALUES('operator','READY');
+CREATE TABLE IF NOT EXISTS operator_time_timer_stops (
+  timer_id TEXT PRIMARY KEY,
+  entry_id TEXT NOT NULL UNIQUE REFERENCES time_entries(id) ON DELETE RESTRICT,
+  stopped_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS checklist_items (
   id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, text TEXT NOT NULL,
   completed INTEGER NOT NULL DEFAULT 0, position INTEGER NOT NULL DEFAULT 0
