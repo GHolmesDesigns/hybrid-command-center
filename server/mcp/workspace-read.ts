@@ -12,6 +12,9 @@ import { DisconnectedDriveMediaProvider } from '../drive/media.ts';
 import { PublishService, PublishRequestError } from '../publish/service.ts';
 import { UnavailablePublishProvider } from '../publish/provider.ts';
 import { listTasksPage } from '../repositories.ts';
+import { getOperatorTimer } from '../operator-timer.ts';
+import { projectTimeSummary, ProjectTimeError } from '../project-time.ts';
+import { filterWorkspaceTimeEntries, listWorkspaceTimeEntries } from '../workspace-time.ts';
 import { listPostsInRange, signalProvider } from '../signal/read.ts';
 import { readQueueHealth } from '../signal/queue-health.ts';
 import { listQueuePage } from '../signal/service.ts';
@@ -34,6 +37,11 @@ import {
   mcpTaskListArgsSchema,
   mcpWorkspaceSearchArgsSchema,
 } from '../../shared/mcp-read-tools.ts';
+import {
+  mcpTimeActiveArgsSchema,
+  mcpTimeListEntriesArgsSchema,
+  mcpTimeProjectSummaryArgsSchema,
+} from '../../shared/mcp-time-tools.ts';
 import type { McpToolCallResult } from './coordination.ts';
 import { redactToolResult } from './redact.ts';
 import { buildSubjectContext, buildWorkspaceSearch } from './workspace-subject-context.ts';
@@ -47,6 +55,18 @@ const success = (data: unknown): McpToolCallResult => ({
   outcome: 'SUCCESS',
   data: redactToolResult(data),
 });
+
+function withProjectTimeTotal<T extends { id: string }>(
+  db: Db,
+  project: T,
+): T & { loggedSeconds: number } {
+  const row = db
+    .prepare(
+      'SELECT COALESCE(SUM(duration_seconds),0) logged_seconds FROM time_entries WHERE project_id=?',
+    )
+    .get(project.id) as { logged_seconds: number };
+  return { ...project, loggedSeconds: Number(row.logged_seconds) };
+}
 
 const failed = (error: string, errorDetail: McpCoordinationErrorDetail): McpToolCallResult => ({
   outcome: 'FAILURE',
@@ -120,8 +140,33 @@ export async function callWorkspaceReadTool(
   const now = deps.now ?? new Date();
   try {
     switch (tool) {
-      case 'workspace_dashboard_summary':
-        return success(buildBoundedDashboardSummary(db, now, MCP_DASHBOARD_TASK_LIMIT));
+      case 'time_list_entries': {
+        const args = mcpTimeListEntriesArgsSchema.parse(rawArgs ?? {});
+        const entries = filterWorkspaceTimeEntries(listWorkspaceTimeEntries(db), args);
+        return success({
+          entries: entries.slice(args.offset, args.offset + args.limit),
+          limit: args.limit,
+          offset: args.offset,
+          total: entries.length,
+          truncated: args.offset + args.limit < entries.length,
+        });
+      }
+      case 'time_project_summary': {
+        const args = mcpTimeProjectSummaryArgsSchema.parse(rawArgs ?? {});
+        return success(projectTimeSummary(db, args.projectId));
+      }
+      case 'time_get_active':
+        mcpTimeActiveArgsSchema.parse(rawArgs ?? {});
+        return success(getOperatorTimer(db));
+      case 'workspace_dashboard_summary': {
+        const summary = buildBoundedDashboardSummary(db, now, MCP_DASHBOARD_TASK_LIMIT);
+        return success({
+          ...summary,
+          recentProjects: summary.recentProjects.map((project) =>
+            withProjectTimeTotal(db, project),
+          ),
+        });
+      }
       case 'workspace_list_tasks': {
         const args = mcpTaskListArgsSchema.parse(rawArgs ?? {});
         return success(listActiveTasksForMcp(db, args));
@@ -177,7 +222,20 @@ export async function callWorkspaceReadTool(
         if (!context) {
           return failed('Subject not found.', mcpCoordinationNotFound());
         }
-        return success(context);
+        return success({
+          ...context,
+          ...(context.subjectType === 'project' && 'id' in context.entity
+            ? { entity: withProjectTimeTotal(db, context.entity) }
+            : {}),
+          ...(context.parents.project
+            ? {
+                parents: {
+                  ...context.parents,
+                  project: withProjectTimeTotal(db, context.parents.project),
+                },
+              }
+            : {}),
+        });
       }
       case 'workspace_search': {
         const args = mcpWorkspaceSearchArgsSchema.parse(rawArgs ?? {});
@@ -187,6 +245,14 @@ export async function callWorkspaceReadTool(
         return failed(`Unknown workspace read tool: ${tool}.`, mcpCoordinationToolFailed());
     }
   } catch (error) {
+    if (error instanceof ProjectTimeError) {
+      const errorDetail =
+        error.status === 404 ? mcpCoordinationNotFound() : mcpCoordinationInvalidArguments();
+      return failed(error.message, errorDetail);
+    }
+    if (error instanceof RangeError) {
+      return failed('Use a valid IANA time zone.', mcpCoordinationInvalidArguments());
+    }
     if (error instanceof PublishRequestError) {
       const errorDetail =
         error.status === 404 ? mcpCoordinationNotFound() : mcpCoordinationInvalidArguments();

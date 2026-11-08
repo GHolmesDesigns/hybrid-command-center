@@ -7,6 +7,8 @@ import { callMcpTool } from './dispatch.ts';
 import { DEFAULT_BRANDING } from '../../shared/branding.ts';
 import { CANONICAL_VIEW_DEFAULTS } from '../../shared/view-defaults.ts';
 import { seedSignalPost } from '../signal/test-fixture.ts';
+import { listProjectTimeCategories } from '../project-time.ts';
+import { getOperatorTimer, startOperatorTimer } from '../operator-timer.ts';
 
 let db: Db;
 
@@ -35,6 +37,111 @@ const seedProject = (projectId: string, clientId: string, name = 'Launch') => {
 const session = () => createMcpSession({ agentLabel: 'codex' });
 
 describe('workspace MCP writes', () => {
+  it('uses time:write to create, update, and delete operator-owned manual entries with agent audit', async () => {
+    const clientId = seedClient();
+    const projectId = '33333333-3333-4333-8333-333333333333';
+    seedProject(projectId, clientId, 'Time project');
+    const category = listProjectTimeCategories(db, projectId)[0]!;
+    const mcpSession = session();
+    const input = {
+      projectId,
+      categoryId: category.id,
+      startDate: '2026-08-29',
+      startTime: '09:00',
+      endTime: '10:00',
+      timeZone: 'UTC',
+      notes: 'Operator-owned manual entry',
+    };
+    const startedTimer = startOperatorTimer(db, {
+      projectId,
+      categoryId: category.id,
+      revision: getOperatorTimer(db).revision,
+    });
+    const created = await callMcpTool(
+      db,
+      mcpSession,
+      'time_create_entry',
+      { ...input, clientRequestId: 'time-create-1' },
+      { grantedScopes: ['time:write'] },
+    );
+    expect(created.outcome).toBe('SUCCESS');
+    const entry = (created.data as { after: { id: string; revision: number } }).after;
+    expect(db.prepare('SELECT project_id FROM time_entries WHERE id=?').get(entry.id)).toEqual({
+      project_id: projectId,
+    });
+    expect(getOperatorTimer(db)).toMatchObject({
+      state: 'RUNNING',
+      timerId: startedTimer.timerId,
+      revision: startedTimer.revision,
+    });
+
+    const updated = await callMcpTool(
+      db,
+      mcpSession,
+      'time_update_entry',
+      {
+        ...input,
+        entryId: entry.id,
+        revision: entry.revision,
+        clientRequestId: 'time-update-1',
+        notes: 'Updated manual entry',
+      },
+      { grantedScopes: ['time:write'] },
+    );
+    expect(updated.outcome).toBe('SUCCESS');
+    expect(db.prepare('SELECT notes,revision FROM time_entries WHERE id=?').get(entry.id)).toEqual({
+      notes: 'Updated manual entry',
+      revision: 2,
+    });
+
+    const deleted = await callMcpTool(
+      db,
+      mcpSession,
+      'time_delete_entry',
+      { entryId: entry.id, revision: 2, clientRequestId: 'time-delete-1' },
+      { grantedScopes: ['time:write'] },
+    );
+    expect(deleted.outcome).toBe('SUCCESS');
+    expect(db.prepare('SELECT id FROM time_entries WHERE id=?').get(entry.id)).toBeUndefined();
+    expect(getOperatorTimer(db)).toMatchObject({
+      state: 'RUNNING',
+      timerId: startedTimer.timerId,
+      revision: startedTimer.revision,
+    });
+    expect(db.prepare('SELECT COUNT(*) n FROM integration_events').get()).toEqual({ n: 0 });
+    expect(listMcpAgentEvents(db, { tool: 'time_create_entry' })[0]).toMatchObject({
+      agentLabel: 'codex',
+      outcome: 'SUCCESS',
+      entityType: 'time_entry',
+    });
+  });
+
+  it('refuses time writes without time:write and leaves entries unchanged', async () => {
+    const clientId = seedClient();
+    const projectId = '33333333-3333-4333-8333-333333333333';
+    seedProject(projectId, clientId);
+    const category = listProjectTimeCategories(db, projectId)[0]!;
+    const before = db.prepare('SELECT COUNT(*) n FROM time_entries').get();
+    const result = await callMcpTool(
+      db,
+      session(),
+      'time_create_entry',
+      {
+        clientRequestId: 'time-readonly-attempt',
+        projectId,
+        categoryId: category.id,
+        startDate: '2026-08-29',
+        startTime: '09:00',
+        endTime: '10:00',
+        timeZone: 'UTC',
+      },
+      { grantedScopes: ['time:read'] },
+    );
+    expect(result.outcome).toBe('REFUSED');
+    expect(result.errorDetail?.code).toBe('MCP_SCOPE_REQUIRED');
+    expect(db.prepare('SELECT COUNT(*) n FROM time_entries').get()).toEqual(before);
+  });
+
   it('refuses without workspace:write at dispatch', async () => {
     const result = await callMcpTool(
       db,

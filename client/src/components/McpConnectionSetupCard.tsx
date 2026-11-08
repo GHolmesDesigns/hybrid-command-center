@@ -53,6 +53,8 @@ const SCOPE_LABEL: Record<McpAgentScope, string> = {
   'coordination:write': 'Write coordination',
   'workspace:read': 'Read workspace and Signal data',
   'workspace:write': 'Write workspace tasks and projects',
+  'time:read': 'Read project time and the active timer',
+  'time:write': 'Create, update, and delete manual time entries',
   'signal:write': 'Write Signal posts and provider refreshes',
   'settings:write': 'Write workspace settings',
   'import:write': 'Commit campaign and Signal imports',

@@ -25,6 +25,7 @@ import {
 import { SIGNAL_ASSIGN_POSTS_MAX, SIGNAL_LIFECYCLE_FILTERS } from '../../shared/signal.ts';
 import { TASK_PRIORITIES, TASK_STATUSES } from '../../shared/types.ts';
 import { MCP_TASK_LIST_MAX_LIMIT } from '../../shared/mcp-read-tools.ts';
+import { MCP_TIME_ENTRY_LIST_MAX_LIMIT } from '../../shared/mcp-time-tools.ts';
 
 export type McpToolRegistryEntry = {
   name: string;
@@ -487,6 +488,52 @@ const agentTools: McpToolRegistryEntry[] = [
 
 const workspaceReadTools: McpToolRegistryEntry[] = [
   {
+    name: 'time_list_entries',
+    description:
+      'List operator-owned project time entries using optional project, task, category, and local-date filters.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: { type: 'string', format: 'uuid' },
+        taskId: { type: 'string', format: 'uuid' },
+        categoryId: { type: 'string', format: 'uuid' },
+        from: { type: 'string', description: 'Inclusive YYYY-MM-DD in timeZone' },
+        to: { type: 'string', description: 'Inclusive YYYY-MM-DD in timeZone' },
+        timeZone: { type: 'string', default: 'UTC' },
+        limit: { type: 'integer', minimum: 1, maximum: MCP_TIME_ENTRY_LIST_MAX_LIMIT, default: 50 },
+        offset: { type: 'integer', minimum: 0, default: 0 },
+      },
+      additionalProperties: false,
+    },
+    class: 'R',
+    requiredScope: 'time:read',
+    owner: 'server/project-time.ts',
+    handler: 'workspace_read',
+  },
+  {
+    name: 'time_project_summary',
+    description: 'Read the stored entry totals and budget summary for one project.',
+    inputSchema: {
+      type: 'object',
+      properties: { projectId: { type: 'string', format: 'uuid' } },
+      required: ['projectId'],
+      additionalProperties: false,
+    },
+    class: 'R',
+    requiredScope: 'time:read',
+    owner: 'server/project-time.ts',
+    handler: 'workspace_read',
+  },
+  {
+    name: 'time_get_active',
+    description: 'Read the operator-owned active timer state without changing it.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    class: 'R',
+    requiredScope: 'time:read',
+    owner: 'server/operator-timer.ts',
+    handler: 'workspace_read',
+  },
+  {
     name: 'workspace_dashboard_summary',
     description: 'Dashboard counts and capped task buckets for active clients and projects.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
@@ -631,6 +678,101 @@ const systemConnectionStatusTool: McpToolRegistryEntry = {
 };
 
 const workspaceWriteTools: McpToolRegistryEntry[] = [
+  {
+    name: 'time_create_entry',
+    description:
+      'Create a manual time entry owned by the operator. Does not start or alter the active timer.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        clientRequestId: { type: 'string' },
+        projectId: { type: 'string', format: 'uuid' },
+        categoryId: { type: 'string', format: 'uuid' },
+        taskId: { type: ['string', 'null'], format: 'uuid' },
+        startDate: { type: 'string', description: 'YYYY-MM-DD' },
+        startTime: { type: 'string' },
+        endDate: { type: 'string', description: 'YYYY-MM-DD' },
+        endTime: { type: 'string' },
+        timeZone: { type: 'string' },
+        startAmbiguity: { type: 'string', enum: ['earlier', 'later'] },
+        endAmbiguity: { type: 'string', enum: ['earlier', 'later'] },
+        notes: { type: 'string', maxLength: 2000 },
+      },
+      required: [
+        'clientRequestId',
+        'projectId',
+        'categoryId',
+        'startDate',
+        'startTime',
+        'endTime',
+        'timeZone',
+      ],
+      additionalProperties: false,
+    },
+    class: 'L',
+    requiredScope: 'time:write',
+    owner: 'server/project-time.ts',
+    handler: 'workspace_write',
+  },
+  {
+    name: 'time_update_entry',
+    description:
+      'Update a manual time entry by revision. Timer-generated entries cannot be edited.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        clientRequestId: { type: 'string' },
+        entryId: { type: 'string', format: 'uuid' },
+        projectId: { type: 'string', format: 'uuid' },
+        categoryId: { type: 'string', format: 'uuid' },
+        taskId: { type: ['string', 'null'], format: 'uuid' },
+        startDate: { type: 'string', description: 'YYYY-MM-DD' },
+        startTime: { type: 'string' },
+        endDate: { type: 'string' },
+        endTime: { type: 'string' },
+        timeZone: { type: 'string' },
+        startAmbiguity: { type: 'string', enum: ['earlier', 'later'] },
+        endAmbiguity: { type: 'string', enum: ['earlier', 'later'] },
+        notes: { type: 'string', maxLength: 2000 },
+        revision: { type: 'integer', minimum: 1 },
+      },
+      required: [
+        'clientRequestId',
+        'entryId',
+        'projectId',
+        'categoryId',
+        'startDate',
+        'startTime',
+        'endTime',
+        'timeZone',
+        'revision',
+      ],
+      additionalProperties: false,
+    },
+    class: 'L',
+    requiredScope: 'time:write',
+    owner: 'server/project-time.ts',
+    handler: 'workspace_write',
+  },
+  {
+    name: 'time_delete_entry',
+    description:
+      'Delete a manual time entry by revision. Timer-generated entries cannot be deleted.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        clientRequestId: { type: 'string' },
+        entryId: { type: 'string', format: 'uuid' },
+        revision: { type: 'integer', minimum: 1 },
+      },
+      required: ['clientRequestId', 'entryId', 'revision'],
+      additionalProperties: false,
+    },
+    class: 'L',
+    requiredScope: 'time:write',
+    owner: 'server/project-time.ts',
+    handler: 'workspace_write',
+  },
   {
     name: 'workspace_create_task',
     description: 'Create a task under an active project. Local SQLite only.',
