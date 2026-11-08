@@ -113,6 +113,75 @@ export function startOperatorTimer(
   return getOperatorTimer(db);
 }
 
+export function switchOperatorTimer(
+  db: Db,
+  input: { projectId: string; categoryId: string; taskId: string; revision: number },
+) {
+  const categories = listProjectTimeCategories(db, input.projectId);
+  if (!categories.some((category) => category.id === input.categoryId && category.selectable))
+    throw new ProjectTimeError('Choose an active category for this project.');
+  const task = db.prepare('SELECT project_id FROM tasks WHERE id=?').get(input.taskId) as
+    { project_id: string } | undefined;
+  if (!task || task.project_id !== input.projectId)
+    throw new ProjectTimeError('Choose a task that belongs to this project.');
+
+  const at = new Date();
+  const iso = at.toISOString();
+  const nextTimerId = crypto.randomUUID();
+  const entryId = crypto.randomUUID();
+  transaction(db, () => {
+    const current = assertRevision(db, input.revision);
+    if (current.state === 'READY') {
+      db.prepare(
+        `UPDATE operator_time_timer SET state='RUNNING',timer_id=?,project_id=?,category_id=?,task_id=?,started_at=?,running_since=?,accumulated_seconds=0,revision=revision+1 WHERE operator_id='operator' AND revision=?`,
+      ).run(nextTimerId, input.projectId, input.categoryId, input.taskId, iso, iso, input.revision);
+      change(db, 'operator_timer_started', nextTimerId, iso);
+      return;
+    }
+    if (!current.timer_id) throw new OperatorTimerConflict();
+    const duration = elapsed(current, at);
+    if (duration <= 0)
+      throw new ProjectTimeError('Run the current timer for at least one second before switching.');
+    db.prepare(
+      `INSERT INTO time_entries(id,project_id,task_id,category_id,started_at,ended_at,duration_seconds,notes,created_at,updated_at)
+       VALUES(?,?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      entryId,
+      current.project_id,
+      current.task_id,
+      current.category_id,
+      current.started_at,
+      iso,
+      duration,
+      'Timer entry',
+      iso,
+      iso,
+    );
+    db.prepare(
+      'INSERT INTO operator_time_timer_stops(timer_id,entry_id,stopped_at) VALUES(?,?,?)',
+    ).run(current.timer_id, entryId, iso);
+    db.prepare(
+      `UPDATE operator_time_timer SET state='RUNNING',timer_id=?,project_id=?,category_id=?,task_id=?,started_at=?,running_since=?,accumulated_seconds=0,revision=revision+1 WHERE operator_id='operator' AND revision=?`,
+    ).run(nextTimerId, input.projectId, input.categoryId, input.taskId, iso, iso, input.revision);
+    db.prepare('UPDATE projects SET updated_at=?,last_activity_at=? WHERE id=?').run(
+      iso,
+      iso,
+      current.project_id,
+    );
+    change(db, 'operator_timer_stopped', current.timer_id, iso);
+    recordChangeFeedEvent(db, {
+      feed: 'workspace',
+      kind: 'project.time_entry_created',
+      entityType: 'time_entry',
+      entityId: entryId,
+      summary: 'Timer time entry added.',
+      at: iso,
+    });
+    change(db, 'operator_timer_started', nextTimerId, iso);
+  });
+  return getOperatorTimer(db);
+}
+
 export function pauseOperatorTimer(db: Db, revision: number) {
   const at = new Date();
   const iso = at.toISOString();

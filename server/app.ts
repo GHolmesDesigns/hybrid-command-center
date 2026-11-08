@@ -356,9 +356,11 @@ import {
   listProjectTimeCategories,
   listProjectTimeEntries,
   projectTimeSummary,
+  taskTimeSummary,
   ProjectTimeError,
   reorderProjectTimeCategories,
   updateProjectTimeBudget,
+  updateTaskTimeBudget,
   updateProjectTimeEntry,
 } from './project-time.ts';
 import {
@@ -368,6 +370,7 @@ import {
   pauseOperatorTimer,
   resumeOperatorTimer,
   startOperatorTimer,
+  switchOperatorTimer,
   stopOperatorTimer,
 } from './operator-timer.ts';
 import {
@@ -1711,6 +1714,27 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       next(error);
     }
   });
+  app.post('/api/operator-timer/switch', (req, res, next) => {
+    try {
+      const input = z
+        .object({
+          projectId: z.string().uuid(),
+          categoryId: z.string().uuid(),
+          taskId: z.string().uuid(),
+          revision: z.number().int().min(0),
+        })
+        .parse(req.body);
+      res.json(switchOperatorTimer(db, input));
+    } catch (error) {
+      if (error instanceof OperatorTimerConflict) {
+        res
+          .status(409)
+          .json({ error: error.message, code: error.code, timer: getOperatorTimer(db) });
+        return;
+      }
+      next(error);
+    }
+  });
   app.post('/api/operator-timer/pause', (req, res, next) => {
     try {
       const { revision } = z.object({ revision: z.number().int().min(0) }).parse(req.body);
@@ -2153,6 +2177,21 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       res.json(deleteTask(db, req.params.id));
     } catch (e) {
       next(e);
+    }
+  });
+  app.get('/api/tasks/:id/time-summary', (req, res, next) => {
+    try {
+      res.json(taskTimeSummary(db, req.params.id));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.patch('/api/tasks/:id/time-budget', (req, res, next) => {
+    try {
+      const revision = revisionPrecondition.parse(req.body?.revision);
+      res.json(updateTaskTimeBudget(db, req.params.id, req.body, revision));
+    } catch (error) {
+      next(error);
     }
   });
 

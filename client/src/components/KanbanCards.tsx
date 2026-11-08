@@ -6,6 +6,7 @@ import { AlertCircle, GripVertical, ListChecks, Play, ShieldAlert } from 'lucide
 import type { Task, TaskStatus } from '../../../shared/types';
 import { startTaskPath } from '../../../shared/start-task';
 import { TASK_STATUSES } from '../../../shared/types';
+import { formatDuration } from '../../../shared/project-time';
 import { type Modal } from './App';
 import { TagChip } from './FormControls';
 import { Due, PriorityBadge, TaskTypeBadge } from './Primitives';
@@ -112,6 +113,13 @@ function KanbanCard({
       )}
       <div className="card-foot">
         <Due task={task} />
+        {(task.loggedSeconds ?? 0) > 0 && (
+          <span className={`task-time-badge ${task.budgetStatus?.toLowerCase() ?? ''}`}>
+            {formatDuration(task.loggedSeconds!)}
+            {task.budgetStatus === 'WARNING' ? ' · Approaching budget' : ''}
+            {task.budgetStatus === 'OVER' ? ' · Over budget' : ''}
+          </span>
+        )}
         {task.checklistTotal > 0 && (
           <span>
             <ListChecks />
