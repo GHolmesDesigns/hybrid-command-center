@@ -105,13 +105,30 @@ describe('Command AI assistant settings', () => {
   });
 
   it('toggles assistant credential scopes before saving', async () => {
+    testState.commandAiAssistantPayload = {
+      assistant: {
+        enabled: false,
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        dailyTurnCap: 100,
+        dailyTokenCap: 300_000,
+        scopes: ['workspace:read', 'workspace:write'],
+      },
+      key: { provider: 'openai', hasKey: false, keyLast4: null },
+      ready: false,
+    };
     await renderSettings();
-    const writeScope = screen.getByLabelText('Write workspace tasks and projects');
-    expect(writeScope).toBeChecked();
-    fireEvent.click(writeScope);
-    expect(writeScope).not.toBeChecked();
-    fireEvent.click(writeScope);
-    expect(writeScope).toBeChecked();
+    await waitFor(() =>
+      expect(screen.getByLabelText('Write workspace tasks and projects')).toBeChecked(),
+    );
+    fireEvent.click(screen.getByLabelText('Write workspace tasks and projects'));
+    await waitFor(() =>
+      expect(screen.getByLabelText('Write workspace tasks and projects')).not.toBeChecked(),
+    );
+    fireEvent.click(screen.getByLabelText('Write workspace tasks and projects'));
+    await waitFor(() =>
+      expect(screen.getByLabelText('Write workspace tasks and projects')).toBeChecked(),
+    );
   });
 
   it('switches provider models when the provider changes', async () => {
