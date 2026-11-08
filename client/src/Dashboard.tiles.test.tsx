@@ -49,6 +49,27 @@ describe('Dashboard stat tiles', () => {
     }
   });
 
+  it('shows the configured-zone weekly time and over-budget task figures', async () => {
+    testState.dashboardPayload = {
+      ...emptyDashboard,
+      counts,
+      timeThisWeek: { loggedSeconds: 5400, overBudgetTasks: 2 },
+    };
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('link', { name: 'Time this week: 1h 30m' })).toHaveAttribute(
+      'href',
+      '/time',
+    );
+    expect(screen.getByRole('link', { name: 'Over-budget tasks: 2' })).toHaveAttribute(
+      'href',
+      '/time',
+    );
+  });
+
   it('navigates on click, and is a real anchor so Enter and Tab work', async () => {
     testState.tasksPayload = [task('tile-week', 'Recap draft', { dueDate: day(3) })];
     await renderDashboard();

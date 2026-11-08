@@ -15,6 +15,7 @@ import {
   HeartPulse,
   BriefcaseBusiness,
   CalendarDays,
+  Clock3,
   CheckCircle2,
   CircleAlert,
   FilePlus2,
@@ -65,6 +66,7 @@ import { Projects } from './Projects';
 import { AgentsView } from './AgentsView';
 import { SettingsView } from './SettingsView';
 import { AdsView } from './AdsView';
+import { WorkspaceTimeView } from './WorkspaceTimeView';
 import { SignalView } from './SignalView';
 import { TasksView } from './TasksView';
 import { OperatorTimer } from './OperatorTimer';
@@ -457,6 +459,7 @@ export function App() {
               />
               <Nav icon={<FolderKanban />} to="/status" label="Status" collapsed={collapsed} />
               <Nav icon={<Timer />} to="/tasks" label="Tasks" collapsed={collapsed} />
+              <Nav icon={<Clock3 />} to="/time" label="Time" collapsed={collapsed} />
               <Nav icon={<Upload />} to="/import" label="Import" collapsed={collapsed} />
               <Nav icon={<FileText />} to="/files" label="Files" collapsed={collapsed} />
               <Nav icon={<CalendarDays />} to="/calendar" label="Calendar" collapsed={collapsed} />
@@ -633,6 +636,7 @@ export function App() {
                     <TasksView tasks={tasks} clients={clients} projects={projects} tags={tags} />
                   }
                 />
+                <Route path="/time" element={<WorkspaceTimeView />} />
                 <Route
                   path="/tasks/:taskId"
                   element={

@@ -567,6 +567,21 @@ date, end time, duration in decimal hours, project, task, category, and notes. A
 time entries cannot be deleted; export or remove the entries first. Deleting a task keeps its time
 entries on the project without a task, and moving a task moves its entries with it.
 
+#### Workspace time report
+
+Choose **Time** in the sidebar to review saved entries across projects. The report opens to the
+current Monday–Sunday in the operator time zone. Filter by dates, project, task, or category; the
+filters are kept in the address, so reload and Back or Forward return to the same view. Archived
+projects and categories remain available when they have saved entries. Unknown or stale filter
+values are ignored with a notice.
+
+The total and list cover only matching entries. A range with no matching rows has no time total.
+**Export CSV** downloads the filtered rows using the same column order, date/time zone, and
+four-place decimal-hour formatting as project time. **Copy CSV** copies that data directly for
+browsers that cannot download it. The dashboard shows hours logged this week and the count of
+currently active tasks that exceed their saved budgets. Both figures are based on local saved
+entries and do not contact an outside provider.
+
 #### Grid and list
 
 **Grid** and **List** show the same filtered projects. Grid is the default tile layout. List is a

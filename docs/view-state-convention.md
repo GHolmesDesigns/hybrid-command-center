@@ -60,6 +60,7 @@ resolving even when they contain an unknown or retired value.
 | Ads | Context browser | Every approved account over the stored 90-day window | `client` (a client id, or `unassigned`), `account` (a customer id), and `from` / `to` (account-local dates inside the stored window) |
 | Files | Context browser | Explicit project, remembered project, then first live project | Project and folder selections |
 | Tasks | Context browser | First active task in the filtered list | `task` for the selected Pomodoro task; client, project, priority, type, focus, and tag filters |
+| Time | Time view | Current Monday–Sunday in the operator time zone | `from`, `to`, `project`, `task`, and `category` |
 
 Projects uses `live`, `archived`, and `all`; Clients uses its domain term `active` in place of
 `live`. The default live/active value is omitted from the address; choosing Archived or All is
