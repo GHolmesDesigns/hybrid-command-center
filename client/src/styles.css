@@ -2652,6 +2652,65 @@ button.tag-chip.toggle.active {
   gap: 0.75rem;
   flex-wrap: wrap;
 }
+.workspace-time-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.7fr) minmax(0, 1.8fr);
+  gap: 18px;
+  align-items: start;
+}
+.workspace-time-report-column {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+.workspace-time-clock-panel {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  min-width: 0;
+  padding: clamp(20px, 3vw, 36px);
+}
+.workspace-time-clock {
+  max-width: 100%;
+  color: var(--theme-text-primary);
+  font-size: clamp(2.35rem, 5vw, 4rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  line-height: 1.05;
+  letter-spacing: -0.045em;
+}
+.workspace-time-timer-state,
+.workspace-time-timer-error {
+  margin: 0;
+  color: var(--muted);
+}
+.workspace-time-timer-state.state-running {
+  color: var(--theme-success-ink);
+}
+.workspace-time-timer-state.state-paused,
+.workspace-time-timer-error {
+  color: var(--theme-warning-ink);
+}
+.workspace-time-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  min-width: 0;
+  padding: 18px;
+}
+.workspace-time-filters > label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.workspace-time-filters input,
+.workspace-time-filters select {
+  width: 100%;
+  min-width: 0;
+}
+.workspace-time-report-column > .panel {
+  min-width: 0;
+}
 .time-zone-setting {
   display: flex;
   flex-wrap: wrap;
@@ -8015,4 +8074,17 @@ button.tag-chip.toggle.active {
   width: 12px;
   height: 12px;
   vertical-align: -1px;
+}
+
+@media (max-width: 900px) {
+  .workspace-time-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 520px) {
+  .workspace-time-filters {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 14px;
+  }
 }

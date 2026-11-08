@@ -7,7 +7,7 @@ import type {
   Task,
   TimeCategory,
 } from '../../../shared/types';
-import { formatDuration } from '../../../shared/project-time';
+import { formatElapsedClock } from '../../../shared/project-time';
 
 export function OperatorTimer({ projects, tasks }: { projects: Project[]; tasks: Task[] }) {
   const [snapshot, setSnapshot] = useState<TimerSnapshot | null>(null);
@@ -72,7 +72,7 @@ export function OperatorTimer({ projects, tasks }: { projects: Project[]; tasks:
 
   useEffect(() => {
     if (snapshot?.state === 'RUNNING') {
-      document.title = `${formatDuration(elapsed)} · HCC`;
+      document.title = `${formatElapsedClock(elapsed)} · HCC`;
       return () => {
         document.title = previousTitle;
       };
@@ -150,7 +150,7 @@ export function OperatorTimer({ projects, tasks }: { projects: Project[]; tasks:
         <Timer aria-hidden="true" />
         {snapshot?.state === 'READY' || !snapshot
           ? 'Work timer'
-          : `${formatDuration(elapsed)} · ${snapshot.state === 'RUNNING' ? 'Running' : 'Paused'}`}
+          : `${formatElapsedClock(elapsed)} · ${snapshot.state === 'RUNNING' ? 'Running' : 'Paused'}`}
       </button>
       {open && (
         <section className="operator-timer-panel" id="operator-timer-panel" aria-label="Work timer">
@@ -166,7 +166,7 @@ export function OperatorTimer({ projects, tasks }: { projects: Project[]; tasks:
               </span>
             </div>
             <output aria-live="off" aria-label="Elapsed work time" className="operator-timer-clock">
-              {formatDuration(elapsed)}
+              {formatElapsedClock(elapsed)}
             </output>
           </div>
           {snapshot?.state !== 'READY' ? (
