@@ -187,9 +187,22 @@ describe('Command AI assistant settings', () => {
   });
 
   it('lowers the daily token cap before saving assistant settings', async () => {
+    testState.commandAiAssistantPayload = {
+      assistant: {
+        enabled: false,
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        dailyTurnCap: 100,
+        dailyTokenCap: 275_000,
+        scopes: ['workspace:read', 'workspace:write'],
+      },
+      key: { provider: 'openai', hasKey: false, keyLast4: null },
+      ready: false,
+    };
     await renderSettings();
+    await waitFor(() => expect(screen.getByLabelText('Daily token cap')).toHaveValue(275_000));
     fireEvent.change(screen.getByLabelText('Daily token cap'), { target: { value: '250000' } });
-    expect(screen.getByLabelText('Daily token cap')).toHaveValue(250000);
+    await waitFor(() => expect(screen.getByLabelText('Daily token cap')).toHaveValue(250_000));
     fireEvent.click(screen.getByRole('button', { name: 'Save assistant' }));
     expect(await screen.findByText(/Command AI assistant saved/i)).toBeVisible();
   });
