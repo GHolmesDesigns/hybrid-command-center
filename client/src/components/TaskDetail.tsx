@@ -10,6 +10,7 @@ import { PriorityBadge, TaskTypeBadge } from './Primitives';
 import { TaskChecklist, TaskDependencies } from './TaskDetailSections';
 import { STATUS_LABEL, syncTaskTags } from './ui-shared';
 import { DiscussionPanel } from './DiscussionPanel';
+import { TaskTimeSection } from './TaskTimeSection';
 
 export function TaskDetail({
   task,
@@ -350,6 +351,7 @@ export function TaskDetail({
         />
       </section>
       <TaskDependencies task={task} tasks={tasks} dep={dep} setDep={setDep} mutate={mutate} />
+      <TaskTimeSection task={task} refresh={refresh} flash={flash} />
       <DiscussionPanel
         scopeType="task"
         scopeId={task.id}

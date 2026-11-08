@@ -23,7 +23,10 @@ export function OperatorTimer({ projects, tasks }: { projects: Project[]; tasks:
   const [error, setError] = useState('');
   const [previousTitle] = useState(() => document.title);
   const activeProjects = useMemo(
-    () => projects.filter((project) => project.status !== 'ARCHIVED'),
+    () =>
+      projects
+        .filter((project) => project.status !== 'ARCHIVED')
+        .sort((a, b) => Number(b.status === 'ACTIVE') - Number(a.status === 'ACTIVE')),
     [projects],
   );
   const elapsed = snapshot

@@ -16,8 +16,10 @@ import {
   listProjectTimeCategories,
   listProjectTimeEntries,
   projectTimeSummary,
+  taskTimeSummary,
   reorderProjectTimeCategories,
   updateProjectTimeBudget,
+  updateTaskTimeBudget,
   updateProjectTimeEntry,
 } from './project-time.ts';
 
@@ -50,6 +52,58 @@ function entryInput(projectId: string, categoryId: string, taskId?: string) {
 }
 
 describe('project time persistence', () => {
+  it('isolates task entries and uses exact seconds for each task budget status', () => {
+    const p = project('Task budgets');
+    const first = createTask(db, {
+      projectId: p.id,
+      title: 'First',
+      status: 'COMPLETE',
+      priority: 'MEDIUM',
+    });
+    const second = createTask(db, {
+      projectId: p.id,
+      title: 'Second',
+      status: 'TODO',
+      priority: 'MEDIUM',
+    });
+    const category = listProjectTimeCategories(db, p.id)[0]!;
+    createProjectTimeEntry(db, p.id, {
+      ...entryInput(p.id, category.id, first.id),
+      startDate: '2026-01-01',
+      startTime: '09:00',
+      endTime: '10:00',
+      timeZone: 'UTC',
+    });
+    createProjectTimeEntry(db, p.id, {
+      ...entryInput(p.id, category.id, second.id),
+      startDate: '2026-01-01',
+      startTime: '10:00',
+      endTime: '10:40',
+      timeZone: 'UTC',
+    });
+    updateTaskTimeBudget(db, first.id, { minutes: 60 }, first.revision);
+    const summary = taskTimeSummary(db, first.id);
+    expect(summary).toMatchObject({
+      totalSeconds: 3600,
+      budgetMinutes: 60,
+      budgetStatus: 'WARNING',
+    });
+    expect(summary.entries).toHaveLength(1);
+    expect(summary.entries[0]?.taskId).toBe(first.id);
+    const revised = taskTimeSummary(db, second.id);
+    expect(revised).toMatchObject({
+      totalSeconds: 2400,
+      budgetMinutes: null,
+      budgetStatus: 'UNSET',
+    });
+    expect(revised.entries).toHaveLength(1);
+    expect(() => updateTaskTimeBudget(db, first.id, { minutes: 30 }, first.revision)).toThrow();
+    expect(updateTaskTimeBudget(db, first.id, { minutes: 30 }, first.revision + 1)).toEqual({
+      budgetMinutes: 30,
+    });
+    expect(taskTimeSummary(db, first.id).budgetStatus).toBe('OVER');
+  });
+
   it('replaces default categories with active project categories and keeps archived labels readable', () => {
     const p = project('Studio');
     const defaults = listProjectTimeCategories(db, p.id);

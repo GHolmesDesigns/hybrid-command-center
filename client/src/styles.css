@@ -2690,6 +2690,53 @@ button.tag-chip.toggle.active {
   background: var(--theme-danger-surface);
   color: var(--theme-danger-ink);
 }
+.task-time-badge {
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  background: var(--theme-count-surface);
+  color: var(--theme-text-primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.task-time-badge.warning {
+  background: var(--theme-warning-surface);
+  color: var(--theme-warning-ink);
+}
+.task-time-badge.over {
+  background: var(--theme-danger-surface);
+  color: var(--theme-danger-ink);
+}
+.task-time-section {
+  display: grid;
+  gap: 0.75rem;
+}
+.task-time-budget {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.75rem;
+}
+.task-time-budget > label {
+  display: grid;
+  gap: 0.35rem;
+}
+.task-time-entries ul {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.task-time-entries li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--theme-list-line);
+}
+.task-time-error {
+  color: var(--theme-danger-ink);
+}
 .project-time-totals {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

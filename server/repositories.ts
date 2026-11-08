@@ -1,5 +1,6 @@
 ﻿import type { Db } from './db.ts';
 import { blockingDependencies } from './domain/dependencies.ts';
+import { projectTimeBudgetStatus } from '../shared/project-time.ts';
 import { isOverdue } from '../shared/deadlines.ts';
 import { TASK_STATUSES, type Category, type Tag, type Task } from '../shared/types.ts';
 import type { TaskFilter } from '../shared/task-filters.ts';
@@ -119,6 +120,15 @@ export function getTag(db: Db, id: string): Tag | undefined {
 }
 export function hydrateTask(db: Db, raw: any): Task {
   const task: any = camel(raw);
+  const loggedSeconds =
+    (task.loggedSeconds as number | undefined) ??
+    (
+      db
+        .prepare(
+          'SELECT COALESCE(SUM(duration_seconds),0) logged_seconds FROM time_entries WHERE task_id=?',
+        )
+        .get(task.id) as { logged_seconds: number }
+    ).logged_seconds;
   const tags = (
     db
       .prepare(
@@ -149,6 +159,9 @@ export function hydrateTask(db: Db, raw: any): Task {
     overdue: isOverdue(task),
     checklistCompleted: checklist.filter((i) => i.completed).length,
     checklistTotal: checklist.length,
+    ...(task.timeBudgetMinutes == null ? {} : { timeBudgetMinutes: task.timeBudgetMinutes }),
+    loggedSeconds,
+    budgetStatus: projectTimeBudgetStatus(loggedSeconds, task.timeBudgetMinutes),
   } as Task;
 }
 
@@ -213,8 +226,12 @@ function hydrateTaskPage(db: Db, rows: any[]): Task[] {
       id: row.dependency_id as string,
       title: row.title as string,
     }));
+    const loggedSeconds = (task.loggedSeconds as number | undefined) ?? 0;
     return {
       ...task,
+      ...(task.timeBudgetMinutes == null ? {} : { timeBudgetMinutes: task.timeBudgetMinutes }),
+      loggedSeconds,
+      budgetStatus: projectTimeBudgetStatus(loggedSeconds, task.timeBudgetMinutes),
       tags: taskTags,
       checklist: items,
       dependencyIds: ids,
@@ -249,7 +266,8 @@ export function listTasksPage(
 ): TaskPage {
   const rows = db
     .prepare(
-      `SELECT t.*, p.name project_name, p.client_id, c.name client_name FROM tasks t
+      `SELECT t.*, p.name project_name, p.client_id, c.name client_name,
+       COALESCE((SELECT SUM(e.duration_seconds) FROM time_entries e WHERE e.task_id=t.id),0) logged_seconds FROM tasks t
        JOIN projects p ON p.id=t.project_id JOIN clients c ON c.id=p.client_id ${where}
        ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
     )
@@ -260,7 +278,8 @@ export function listTasksPage(
 export function listTasks(db: Db, where = '', params: (string | number | null)[] = []) {
   const rows = db
     .prepare(
-      `SELECT t.*, p.name project_name, p.client_id, c.name client_name FROM tasks t
+      `SELECT t.*, p.name project_name, p.client_id, c.name client_name,
+       COALESCE((SELECT SUM(e.duration_seconds) FROM time_entries e WHERE e.task_id=t.id),0) logged_seconds FROM tasks t
     JOIN projects p ON p.id=t.project_id JOIN clients c ON c.id=p.client_id ${where}
     ORDER BY ${STATUS_RANK}, t.position, t.updated_at DESC`,
     )

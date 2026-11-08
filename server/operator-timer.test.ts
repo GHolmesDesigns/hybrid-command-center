@@ -9,6 +9,7 @@ import {
   pauseOperatorTimer,
   resumeOperatorTimer,
   startOperatorTimer,
+  switchOperatorTimer,
   stopOperatorTimer,
 } from './operator-timer.ts';
 
@@ -35,6 +36,131 @@ async function setup() {
 }
 
 describe('persistent operator timer', () => {
+  it('starts through the switch action from READY and can switch a paused timer using banked seconds', async () => {
+    const { app, project, category, task } = await setup();
+    const started = switchOperatorTimer(db, {
+      projectId: project.id,
+      categoryId: category.id,
+      taskId: task.id,
+      revision: 0,
+    });
+    expect(started).toMatchObject({ state: 'RUNNING', taskId: task.id, revision: 1 });
+    const paused = pauseOperatorTimer(db, started.revision);
+    db.prepare('UPDATE operator_time_timer SET accumulated_seconds=? WHERE operator_id=?').run(
+      45,
+      'operator',
+    );
+    const other = await request(app)
+      .post('/api/tasks')
+      .send({ projectId: project.id, title: 'Second task' })
+      .expect(201);
+    const switched = switchOperatorTimer(db, {
+      projectId: project.id,
+      categoryId: category.id,
+      taskId: other.body.id,
+      revision: paused.revision,
+    });
+    expect(switched).toMatchObject({ state: 'RUNNING', taskId: other.body.id, revision: 3 });
+    expect(db.prepare('SELECT task_id,duration_seconds FROM time_entries').get()).toEqual({
+      task_id: task.id,
+      duration_seconds: 45,
+    });
+  });
+
+  it('leaves a running timer unchanged when the selected context is invalid or elapsed time is zero', async () => {
+    const { project, category, task } = await setup();
+    const started = startOperatorTimer(db, {
+      projectId: project.id,
+      categoryId: category.id,
+      taskId: task.id,
+      revision: 0,
+    });
+    expect(() =>
+      switchOperatorTimer(db, {
+        projectId: project.id,
+        categoryId: '00000000-0000-4000-8000-000000000099',
+        taskId: task.id,
+        revision: started.revision,
+      }),
+    ).toThrow(/active category/);
+    expect(() =>
+      switchOperatorTimer(db, {
+        projectId: project.id,
+        categoryId: category.id,
+        taskId: '00000000-0000-4000-8000-000000000099',
+        revision: started.revision,
+      }),
+    ).toThrow(/task that belongs/);
+    db.prepare('UPDATE operator_time_timer SET running_since=? WHERE operator_id=?').run(
+      new Date().toISOString(),
+      'operator',
+    );
+    expect(() =>
+      switchOperatorTimer(db, {
+        projectId: project.id,
+        categoryId: category.id,
+        taskId: task.id,
+        revision: started.revision,
+      }),
+    ).toThrow(/at least one second/);
+    expect(getOperatorTimer(db)).toMatchObject({
+      state: 'RUNNING',
+      timerId: started.timerId,
+      revision: 1,
+    });
+    expect(db.prepare('SELECT COUNT(*) count FROM time_entries').get()).toEqual({ count: 0 });
+  });
+
+  it('switches timers atomically, saves the outgoing task, and rejects a stale revision unchanged', async () => {
+    const { app, project, category, task } = await setup();
+    const nextTask = await request(app)
+      .post('/api/tasks')
+      .send({ projectId: project.id, title: 'Next task' })
+      .expect(201);
+    const started = startOperatorTimer(db, {
+      projectId: project.id,
+      categoryId: category.id,
+      taskId: task.id,
+      revision: 0,
+    });
+    db.prepare('UPDATE operator_time_timer SET running_since=? WHERE operator_id=?').run(
+      new Date(Date.now() - 5_000).toISOString(),
+      'operator',
+    );
+    const switched = switchOperatorTimer(db, {
+      projectId: project.id,
+      categoryId: category.id,
+      taskId: nextTask.body.id,
+      revision: started.revision,
+    });
+    expect(switched).toMatchObject({ state: 'RUNNING', taskId: nextTask.body.id, revision: 2 });
+    const saved = db.prepare('SELECT task_id,duration_seconds FROM time_entries').get() as {
+      task_id: string;
+      duration_seconds: number;
+    };
+    expect(saved).toMatchObject({ task_id: task.id });
+    expect(saved.duration_seconds).toBeGreaterThanOrEqual(4);
+    expect(db.prepare('SELECT COUNT(*) count FROM operator_time_timer_stops').get()).toEqual({
+      count: 1,
+    });
+
+    const conflict = await request(app)
+      .post('/api/operator-timer/switch')
+      .send({ projectId: project.id, categoryId: category.id, taskId: task.id, revision: 1 })
+      .expect(409);
+    expect(conflict.body.timer).toMatchObject({
+      state: 'RUNNING',
+      taskId: nextTask.body.id,
+      revision: 2,
+    });
+    expect(db.prepare('SELECT COUNT(*) count FROM time_entries').get()).toEqual({ count: 1 });
+    expect(getOperatorTimer(db)).toMatchObject({
+      state: 'RUNNING',
+      taskId: nextTask.body.id,
+      revision: 2,
+    });
+  });
+
   it('banks pause time, resumes against server time, and saves one linked entry for stop retries', async () => {
     const { project, category, task } = await setup();
     const started = startOperatorTimer(db, {

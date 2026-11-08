@@ -897,6 +897,24 @@ const payloadFor = (url: string) => {
   if (url.endsWith('/api/projects')) return testState.projectsPayload;
   if (url.endsWith('/api/clients')) return testState.clientsPayload;
   if (url.endsWith('/api/tasks')) return testState.tasksPayload;
+  if (/\/api\/tasks\/[^/]+\/time-summary$/.test(url))
+    return {
+      taskId: url.split('/').at(-2),
+      entries: [],
+      totalSeconds: 0,
+      budgetMinutes: null,
+      budgetStatus: 'UNSET',
+    };
+  if (/\/api\/projects\/[^/]+\/time\/categories$/.test(url))
+    return [{ id: '00000000-0000-4000-8000-000000000001', name: 'General', selectable: true }];
+  if (url.endsWith('/api/operator-timer'))
+    return {
+      state: 'READY',
+      accumulatedSeconds: 0,
+      elapsedSeconds: 0,
+      serverTime: new Date().toISOString(),
+      revision: 0,
+    };
   if (url.endsWith('/api/tags')) return testState.tagsPayload;
   if (url.endsWith('/api/categories')) return testState.categoriesPayload;
   return [];

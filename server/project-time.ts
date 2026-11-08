@@ -445,3 +445,40 @@ export function updateProjectTimeBudget(db: Db, projectId: string, raw: unknown,
   });
   return { budgetMinutes: data.minutes };
 }
+
+export function taskTimeSummary(db: Db, taskId: string) {
+  const task = db
+    .prepare('SELECT id,project_id,time_budget_minutes FROM tasks WHERE id=?')
+    .get(taskId) as
+    { id: string; project_id: string; time_budget_minutes: number | null } | undefined;
+  if (!task) throw new ProjectTimeError('Task not found.', 404, 'TASK_NOT_FOUND');
+  const entries = listProjectTimeEntries(db, task.project_id, { taskId });
+  const totalSeconds = entries.reduce((total, entry) => total + entry.durationSeconds, 0);
+  return {
+    taskId,
+    entries,
+    totalSeconds,
+    budgetMinutes: task.time_budget_minutes,
+    budgetStatus: projectTimeBudgetStatus(totalSeconds, task.time_budget_minutes),
+  };
+}
+
+export function updateTaskTimeBudget(db: Db, taskId: string, raw: unknown, revision: number) {
+  const data = z.object({ minutes: z.number().int().min(1).max(1_000_000).nullable() }).parse(raw);
+  const task = db.prepare('SELECT id,project_id FROM tasks WHERE id=?').get(taskId) as
+    { id: string; project_id: string } | undefined;
+  if (!task) throw new ProjectTimeError('Task not found.', 404, 'TASK_NOT_FOUND');
+  const at = stamp();
+  transaction(db, () => {
+    requireRevision(db, 'task', taskId, revision);
+    db.prepare('UPDATE tasks SET time_budget_minutes=?,updated_at=? WHERE id=?').run(
+      data.minutes,
+      at,
+      taskId,
+    );
+    advanceRevision(db, 'task', taskId, revision, ['timeBudgetMinutes'], at);
+    touchProjectActivity(db, task.project_id, at);
+    change(db, 'task.updated', 'task', taskId, 'Task time budget updated.', at);
+  });
+  return { budgetMinutes: data.minutes };
+}

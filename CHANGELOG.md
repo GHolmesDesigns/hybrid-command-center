@@ -1,5 +1,12 @@
 # Changelog
 
+## [7.1.7] - 2026-11-08
+
+### Added
+- Task details show logged time and budget status, let you set a task budget, and can start or switch the persistent work timer with that task selected. Task cards show logged time and over-budget status.
+
+### Breaking changes
+None.
 ## [7.1.6] - 2026-11-08
 
 ### Added

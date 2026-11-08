@@ -60,6 +60,26 @@ describe('Task detail inline editing', () => {
     await waitFor(() => expect(heading).toHaveFocus());
   });
 
+  it('shows task time, saves its budget, and starts the work timer with task context', async () => {
+    testState.tasksPayload = [task('t1', 'Budgeted task')];
+    await openTask('Budgeted task');
+    const detailView = detail();
+    expect(await detailView.findByRole('heading', { name: 'Time' })).toBeVisible();
+    expect(detailView.getByText('No time logged for this task yet.')).toBeVisible();
+    fireEvent.change(detailView.getByLabelText('Budget (minutes)'), { target: { value: '45' } });
+    fireEvent.click(detailView.getByRole('button', { name: 'Save budget' }));
+    await waitFor(() =>
+      expect(
+        requests.some((r) => r.url.endsWith('/api/tasks/t1/time-budget') && r.body.minutes === 45),
+      ).toBe(true),
+    );
+    fireEvent.click(detailView.getByRole('button', { name: 'Start timer for this task' }));
+    await waitFor(() => {
+      const call = requests.find((r) => r.url.endsWith('/api/operator-timer/switch'));
+      expect(call?.body).toMatchObject({ projectId: 'p1', taskId: 't1', revision: 0 });
+    });
+  });
+
   it('does not render dead links when the task relationships no longer exist', async () => {
     testState.projectsPayload = [];
     testState.clientsPayload = [];
@@ -84,6 +104,7 @@ describe('Task detail inline editing', () => {
       'Notes',
       'Tags',
       'Dependencies',
+      'Time',
       ' Threads',
     ]);
   });

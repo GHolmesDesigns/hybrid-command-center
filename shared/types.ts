@@ -259,6 +259,11 @@ export interface Task {
   updatedAt: string;
   /** Monotonic optimistic-concurrency token required by every persisted mutation. */
   revision: number;
+  /** Optional task-level planned time, in whole minutes. */
+  timeBudgetMinutes?: number;
+  /** Logged time across this task's entries, measured in exact seconds. */
+  loggedSeconds?: number;
+  budgetStatus?: 'NORMAL' | 'WARNING' | 'OVER' | 'UNSET';
   tags: Tag[];
   checklist: ChecklistItem[];
   dependencyIds: string[];

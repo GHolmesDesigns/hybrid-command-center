@@ -356,9 +356,11 @@ import {
   listProjectTimeCategories,
   listProjectTimeEntries,
   projectTimeSummary,
+  taskTimeSummary,
   ProjectTimeError,
   reorderProjectTimeCategories,
   updateProjectTimeBudget,
+  updateTaskTimeBudget,
   updateProjectTimeEntry,
 } from './project-time.ts';
 import {
@@ -368,6 +370,7 @@ import {
   pauseOperatorTimer,
   resumeOperatorTimer,
   startOperatorTimer,
+  switchOperatorTimer,
   stopOperatorTimer,
 } from './operator-timer.ts';
 import {
@@ -1711,6 +1714,27 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       next(error);
     }
   });
+  app.post('/api/operator-timer/switch', (req, res, next) => {
+    try {
+      const input = z
+        .object({
+          projectId: z.string().uuid(),
+          categoryId: z.string().uuid(),
+          taskId: z.string().uuid(),
+          revision: z.number().int().min(0),
+        })
+        .parse(req.body);
+      res.json(switchOperatorTimer(db, input));
+    } catch (error) {
+      if (error instanceof OperatorTimerConflict) {
+        res
+          .status(409)
+          .json({ error: error.message, code: error.code, timer: getOperatorTimer(db) });
+        return;
+      }
+      next(error);
+    }
+  });
   app.post('/api/operator-timer/pause', (req, res, next) => {
     try {
       const { revision } = z.object({ revision: z.number().int().min(0) }).parse(req.body);
@@ -2153,6 +2177,21 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       res.json(deleteTask(db, req.params.id));
     } catch (e) {
       next(e);
+    }
+  });
+  app.get('/api/tasks/:id/time-summary', (req, res, next) => {
+    try {
+      res.json(taskTimeSummary(db, req.params.id));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.patch('/api/tasks/:id/time-budget', (req, res, next) => {
+    try {
+      const revision = revisionPrecondition.parse(req.body?.revision);
+      res.json(updateTaskTimeBudget(db, req.params.id, req.body, revision));
+    } catch (error) {
+      next(error);
     }
   });
 
@@ -4112,64 +4151,65 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
     // An unreadable upload is the caller's problem, not a 500: the message already says
     // what to do about it, and the import modal shows it verbatim.
     const status =
-      error instanceof z.ZodError ||
-      error instanceof ImportInputError ||
-      error instanceof DriveScopeError ||
-      error instanceof DriveWriteConfirmationError ||
-      // An override the capability contract will not carry is the caller naming something the
-      // provider cannot do, which is their problem to fix and not a failure of the write.
-      error instanceof SignalVariantError ||
-      // A target the provider's current account list does not support: disconnected, on another
-      // platform, or on a channel the provider cannot reach. The account list moved under a
-      // preview that was taken before it did, so the fix is a new preview rather than a retry.
-      error instanceof SignalPublishTargetError ||
-      // A link that is not a Drive file link, or a file this app will not bind a reference to.
-      // Both carry the specific reason and both are answered rather than logged as a fault: the
-      // person pasted something, and what to paste instead is the whole content of the message.
-      error instanceof DriveMediaError ||
-      error instanceof SignalMediaError ||
-      error instanceof ProjectTimeError ||
-      error instanceof WorkspaceValidationError
-        ? 400
-        : // Editing or deleting a post that is not there is the caller addressing something
-          // that does not exist, not a failure of the write.
-          error instanceof SignalPostNotFoundError ||
-            error instanceof SignalPostRelationshipError ||
-            // Acknowledging an alert that is not in the summary is the same kind of miss: the
-            // summary is derived, so an id with nothing behind it names a fact that has moved on.
-            error instanceof QueueAlertNotFoundError ||
-            error instanceof SignalCampaignNotFoundError ||
-            error instanceof WorkspaceNotFoundError
-          ? 404
-          : // A refused merge is the caller's problem — the wrong pair, or a preview the
-            // workspace moved out from under — and each case carries its own status. A slot
-            // that is no longer free is the same kind of refusal.
-            error instanceof PublishRequestError ||
-              error instanceof PublishConfirmationError ||
-              error instanceof ClientMergeError ||
-              error instanceof AdsAccountError ||
-              error instanceof AgentCoordinationError ||
-              error instanceof AgentScheduleError ||
-              error instanceof RevisionConflictError ||
-              error instanceof SignalSlotConflictError ||
-              error instanceof SignalPostProtectedError ||
-              error instanceof WorkspaceConflictError
-            ? error.status
-            : // A rename onto a name another campaign holds, and a deletion that would detach
-              // posts before the caller has confirmed it: both are the same *this needs an answer
-              // first* that tags and categories already answer with a 409 and a code.
-              error instanceof SignalCampaignNameTakenError ||
-                error instanceof SignalCampaignInUseError ||
-                error instanceof McpAgentLabelTakenError ||
-                error?.code === 'SQLITE_CONSTRAINT_UNIQUE'
-              ? 409
-              : // Simple "this id does not exist" refusals across the app throw a plain Error
-                // tagged with `status` (agent conversations, agent memory, agent summaries)
-                // rather than a dedicated class each. Read that tag as a last resort, after
-                // every specific class above has had a chance to claim the error.
-                typeof error?.status === 'number' && error.status >= 400 && error.status < 500
-                ? error.status
-                : 500;
+      error instanceof ProjectTimeError
+        ? error.status
+        : error instanceof z.ZodError ||
+            error instanceof ImportInputError ||
+            error instanceof DriveScopeError ||
+            error instanceof DriveWriteConfirmationError ||
+            // An override the capability contract will not carry is the caller naming something the
+            // provider cannot do, which is their problem to fix and not a failure of the write.
+            error instanceof SignalVariantError ||
+            // A target the provider's current account list does not support: disconnected, on another
+            // platform, or on a channel the provider cannot reach. The account list moved under a
+            // preview that was taken before it did, so the fix is a new preview rather than a retry.
+            error instanceof SignalPublishTargetError ||
+            // A link that is not a Drive file link, or a file this app will not bind a reference to.
+            // Both carry the specific reason and both are answered rather than logged as a fault: the
+            // person pasted something, and what to paste instead is the whole content of the message.
+            error instanceof DriveMediaError ||
+            error instanceof SignalMediaError ||
+            error instanceof WorkspaceValidationError
+          ? 400
+          : // Editing or deleting a post that is not there is the caller addressing something
+            // that does not exist, not a failure of the write.
+            error instanceof SignalPostNotFoundError ||
+              error instanceof SignalPostRelationshipError ||
+              // Acknowledging an alert that is not in the summary is the same kind of miss: the
+              // summary is derived, so an id with nothing behind it names a fact that has moved on.
+              error instanceof QueueAlertNotFoundError ||
+              error instanceof SignalCampaignNotFoundError ||
+              error instanceof WorkspaceNotFoundError
+            ? 404
+            : // A refused merge is the caller's problem — the wrong pair, or a preview the
+              // workspace moved out from under — and each case carries its own status. A slot
+              // that is no longer free is the same kind of refusal.
+              error instanceof PublishRequestError ||
+                error instanceof PublishConfirmationError ||
+                error instanceof ClientMergeError ||
+                error instanceof AdsAccountError ||
+                error instanceof AgentCoordinationError ||
+                error instanceof AgentScheduleError ||
+                error instanceof RevisionConflictError ||
+                error instanceof SignalSlotConflictError ||
+                error instanceof SignalPostProtectedError ||
+                error instanceof WorkspaceConflictError
+              ? error.status
+              : // A rename onto a name another campaign holds, and a deletion that would detach
+                // posts before the caller has confirmed it: both are the same *this needs an answer
+                // first* that tags and categories already answer with a 409 and a code.
+                error instanceof SignalCampaignNameTakenError ||
+                  error instanceof SignalCampaignInUseError ||
+                  error instanceof McpAgentLabelTakenError ||
+                  error?.code === 'SQLITE_CONSTRAINT_UNIQUE'
+                ? 409
+                : // Simple "this id does not exist" refusals across the app throw a plain Error
+                  // tagged with `status` (agent conversations, agent memory, agent summaries)
+                  // rather than a dedicated class each. Read that tag as a last resort, after
+                  // every specific class above has had a chance to claim the error.
+                  typeof error?.status === 'number' && error.status >= 400 && error.status < 500
+                  ? error.status
+                  : 500;
     /**
      * A 500 is the one status whose message has no reader who benefits: it is whatever SQLite
      * or googleapis said, which means table names, absolute paths, and provider detail going
