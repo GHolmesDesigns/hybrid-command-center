@@ -24,6 +24,7 @@ If IDE agents should plan Signal and workspace work through MCP, read [Multi-Age
 - **Merge one client into another** — a previewed, confirmed, single-transaction move of every project from a duplicate client to the client you are keeping. The source is archived and recorded as merged, never deleted; each of the six contact fields is chosen field by field — keep the survivor's, take the duplicate's, or type a value — with the survivor's own the default for every one of them; no Drive folder moves; and a later playbook naming the merged client resolves to the survivor. There is no undo
 - Project creation, editing, archival, and **record-only delete** that cascades to tasks (Drive files untouched)
 - Projects view with grid or list presentation, search, client filter, live-status multi-filter, category filter, and seven sort modes, including a **Custom order** where grid tiles are rearranged by drag or keyboard and the arrangement persists
+- Project Time tab for manual entry CRUD, task and category totals, project budgets, custom categories, and filtered CSV export
 - Shared **project categories** — many per project, created from a project or from Settings, reused case-insensitively, filtered from the page address, renamed everywhere at once, and deleted with an affected-project count that never deletes a project
 - Five-stage **Status** board with persistent ordering, drag-and-drop, client/project/priority/task-type/focus filters carried in the page address, tag filtering, title/tag search, and keyboard status controls
 - Shared **task tags** created straight from a task, reused case-insensitively, shown as named chips on cards, and deleted from Settings with an affected-task count
@@ -755,7 +756,7 @@ Schedule `db:backup` the same way if you want unattended snapshots — same comm
 
 ## Current MVP limitations
 
-- Single local user; no collaboration, portals, permissions, billing, or time tracking
+- Single local user; no collaboration, portals, permissions, or billing
 - No automatic Drive-folder rename after local name edits
 - Clients can only be archived; there is no client delete. Merging one client into another archives the source rather than removing it, and cannot be undone or unmerged in the app. Projects and tasks delete permanently from SQLite with no in-app undo — recover from a database backup
 - A merge moves one client at a time. It settles each contact field from one record or the other rather than combining the two, never combines same-named projects, and moves no Drive folder, so a merged client's folder stays beside the survivor's in Drive

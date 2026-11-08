@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../app.ts';
-import { applyAdditiveMigrations, createDb, triggerSchema, type Db } from '../db.ts';
+import { applyAdditiveMigrations, createDb, signalMediaTriggerSchema, type Db } from '../db.ts';
 import { MockDriveMediaProvider } from '../drive/mock-provider.ts';
 import { DisconnectedDriveMediaProvider } from '../drive/media.ts';
 import {
@@ -109,7 +109,7 @@ describe('the additive migration and the contract it carries', () => {
         PRIMARY KEY(post_id, position));
     `,
     );
-    legacy.exec(triggerSchema);
+    legacy.exec(signalMediaTriggerSchema);
 
     expect(statements.some((sql) => sql.includes('ADD COLUMN "source"'))).toBe(true);
     expect(

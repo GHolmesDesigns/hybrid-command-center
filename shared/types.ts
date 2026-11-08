@@ -118,6 +118,8 @@ export interface Project {
   launchDate?: string;
   targetDeadline?: string;
   priority: Priority;
+  /** Optional project-level planned time, in whole minutes. */
+  timeBudgetMinutes?: number;
   notes?: string;
   /** Manual tile order on the Projects view, honoured by the Custom sort mode. */
   position: number;
@@ -191,6 +193,31 @@ export interface Category {
   id: string;
   name: string;
   color?: string;
+}
+export interface TimeCategory {
+  id: string;
+  name: string;
+  projectId?: string;
+  position: number;
+  archivedAt?: string;
+  isDefault: boolean;
+  selectable: boolean;
+}
+export interface TimeEntry {
+  id: string;
+  projectId: string;
+  projectName: string;
+  taskId?: string;
+  taskTitle?: string;
+  categoryId: string;
+  categoryName: string;
+  startedAt: string;
+  endedAt: string;
+  durationSeconds: number;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+  revision: number;
 }
 /** Categories follow the tag rule for names, aliased so call sites read in their own terms. */
 export const normalizeCategoryName = normalizeTagName;

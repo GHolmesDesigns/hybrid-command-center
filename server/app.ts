@@ -349,6 +349,19 @@ import {
   WorkspaceValidationError,
 } from './workspace/writes.ts';
 import {
+  archiveProjectTimeCategory,
+  createProjectTimeCategory,
+  createProjectTimeEntry,
+  deleteProjectTimeEntry,
+  listProjectTimeCategories,
+  listProjectTimeEntries,
+  projectTimeSummary,
+  ProjectTimeError,
+  reorderProjectTimeCategories,
+  updateProjectTimeBudget,
+  updateProjectTimeEntry,
+} from './project-time.ts';
+import {
   agentHandoffCancelInputSchema,
   agentHandoffListFilterSchema,
   agentHandoffPostInputSchema,
@@ -1660,6 +1673,89 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       next(error);
     }
   });
+  app.get('/api/projects/:id/time/categories', (req, res, next) => {
+    try {
+      res.json(listProjectTimeCategories(db, req.params.id));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/projects/:id/time/categories', (req, res, next) => {
+    try {
+      res.status(201).json(createProjectTimeCategory(db, req.params.id, req.body));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.put('/api/projects/:id/time/categories/order', (req, res, next) => {
+    try {
+      const body = z.object({ categoryIds: z.array(z.string().uuid()) }).parse(req.body);
+      res.json(reorderProjectTimeCategories(db, req.params.id, body.categoryIds));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/projects/:id/time/categories/:categoryId/archive', (req, res, next) => {
+    try {
+      res.json(archiveProjectTimeCategory(db, req.params.id, req.params.categoryId));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.get('/api/projects/:id/time/summary', (req, res, next) => {
+    try {
+      res.json(projectTimeSummary(db, req.params.id));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.get('/api/projects/:id/time/entries', (req, res, next) => {
+    try {
+      const filters = z
+        .object({
+          taskId: z.string().uuid().optional(),
+          categoryId: z.string().uuid().optional(),
+          from: z.string().optional(),
+          to: z.string().optional(),
+          timeZone: z.string().optional(),
+        })
+        .parse(req.query);
+      res.json(listProjectTimeEntries(db, req.params.id, filters));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/projects/:id/time/entries', (req, res, next) => {
+    try {
+      res.status(201).json(createProjectTimeEntry(db, req.params.id, req.body));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.patch('/api/projects/:id/time/entries/:entryId', (req, res, next) => {
+    try {
+      const revision = revisionPrecondition.parse(req.body?.revision);
+      res.json(updateProjectTimeEntry(db, req.params.id, req.params.entryId, req.body, revision));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.delete('/api/projects/:id/time/entries/:entryId', (req, res, next) => {
+    try {
+      const revision = revisionPrecondition.parse(req.body?.revision);
+      res.json(deleteProjectTimeEntry(db, req.params.id, req.params.entryId, revision));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.patch('/api/projects/:id/time-budget', (req, res, next) => {
+    try {
+      const revision = revisionPrecondition.parse(req.body?.revision);
+      res.json(updateProjectTimeBudget(db, req.params.id, req.body, revision));
+    } catch (error) {
+      next(error);
+    }
+  });
   app.post('/api/projects/reorder', (req, res, next) => {
     try {
       const data = z.object({ orderedIds: z.array(z.string().uuid()).min(1) }).parse(req.body);
@@ -2286,6 +2382,23 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   app.get('/api/settings/branding', (_req, res) =>
     res.json({ version: APP_VERSION, branding: readBranding(db) }),
   );
+  app.get('/api/settings/time-zone', (_req, res) =>
+    res.json({ timeZone: getSetting(db, 'operator_time_zone') ?? null }),
+  );
+  app.put('/api/settings/time-zone', (req, res, next) => {
+    try {
+      const { timeZone } = z.object({ timeZone: z.string().min(1).max(64) }).parse(req.body);
+      try {
+        new Intl.DateTimeFormat('en', { timeZone }).format(0);
+      } catch {
+        throw new ProjectTimeError('Choose a valid operator time zone.');
+      }
+      setSetting(db, 'operator_time_zone', timeZone);
+      res.json({ timeZone });
+    } catch (error) {
+      next(error);
+    }
+  });
   const manualLimiter = rateLimit({
     windowMs: MANUAL_BUDGET.windowMs,
     limit: MANUAL_BUDGET.limit,
@@ -3948,6 +4061,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
       // person pasted something, and what to paste instead is the whole content of the message.
       error instanceof DriveMediaError ||
       error instanceof SignalMediaError ||
+      error instanceof ProjectTimeError ||
       error instanceof WorkspaceValidationError
         ? 400
         : // Editing or deleting a post that is not there is the caller addressing something
@@ -4037,6 +4151,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
           }
         : {}),
       ...(error instanceof McpAgentLabelTakenError ? { code: 'MCP_AGENT_LABEL_TAKEN' } : {}),
+      ...(error instanceof ProjectTimeError ? { code: error.code } : {}),
     });
   });
   options.onAgentHubLiveContext?.({
