@@ -1,5 +1,14 @@
 # Changelog
 
+## [7.1.8] - 2026-11-08
+
+### Added
+
+- Add a workspace time report with durable filters, matching-entry CSV export, and weekly logged-time and over-budget figures on the dashboard.
+
+### Breaking changes
+
+None.
 ## [7.1.7] - 2026-11-08
 
 ### Added
