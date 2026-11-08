@@ -362,6 +362,15 @@ import {
   updateProjectTimeEntry,
 } from './project-time.ts';
 import {
+  discardOperatorTimer,
+  getOperatorTimer,
+  OperatorTimerConflict,
+  pauseOperatorTimer,
+  resumeOperatorTimer,
+  startOperatorTimer,
+  stopOperatorTimer,
+} from './operator-timer.ts';
+import {
   agentHandoffCancelInputSchema,
   agentHandoffListFilterSchema,
   agentHandoffPostInputSchema,
@@ -1676,6 +1685,64 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   app.get('/api/projects/:id/time/categories', (req, res, next) => {
     try {
       res.json(listProjectTimeCategories(db, req.params.id));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.get('/api/operator-timer', (_req, res, next) => {
+    try {
+      res.json(getOperatorTimer(db));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/operator-timer/start', (req, res, next) => {
+    try {
+      const input = z
+        .object({
+          projectId: z.string().uuid(),
+          categoryId: z.string().uuid(),
+          taskId: z.string().uuid().nullable().optional(),
+          revision: z.number().int().min(0),
+        })
+        .parse(req.body);
+      res.status(201).json(startOperatorTimer(db, input));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/operator-timer/pause', (req, res, next) => {
+    try {
+      const { revision } = z.object({ revision: z.number().int().min(0) }).parse(req.body);
+      res.json(pauseOperatorTimer(db, revision));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/operator-timer/resume', (req, res, next) => {
+    try {
+      const { revision } = z.object({ revision: z.number().int().min(0) }).parse(req.body);
+      res.json(resumeOperatorTimer(db, revision));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/operator-timer/stop', (req, res, next) => {
+    try {
+      const body = z
+        .object({ timerId: z.string().uuid(), revision: z.number().int().min(0) })
+        .parse(req.body);
+      res.json(stopOperatorTimer(db, body.timerId, body.revision));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post('/api/operator-timer/discard', (req, res, next) => {
+    try {
+      const body = z
+        .object({ timerId: z.string().uuid(), revision: z.number().int().min(0) })
+        .parse(req.body);
+      res.json(discardOperatorTimer(db, body.timerId, body.revision));
     } catch (error) {
       next(error);
     }
@@ -4142,6 +4209,7 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
             changedFields: error.changedFields,
           }
         : {}),
+      ...(error instanceof OperatorTimerConflict ? { code: error.code } : {}),
       ...(error instanceof WorkspaceConflictError
         ? {
             code: error.code,

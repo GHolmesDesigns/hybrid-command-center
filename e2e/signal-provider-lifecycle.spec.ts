@@ -52,7 +52,7 @@ test('a Signal edit asks for a provider update, previews the difference, and res
 
   // The Signal edit. It moves the plan and it is allowed to; what it must not do is change what
   // the provider is holding.
-  await editor.getByLabel('Time').fill('15:30');
+  await editor.getByLabel('Time', { exact: true }).fill('15:30');
   await editor.getByRole('button', { name: 'Save post' }).click();
   await expect(page.getByRole('dialog')).toBeHidden();
 

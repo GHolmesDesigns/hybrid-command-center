@@ -67,6 +67,7 @@ import { SettingsView } from './SettingsView';
 import { AdsView } from './AdsView';
 import { SignalView } from './SignalView';
 import { TasksView } from './TasksView';
+import { OperatorTimer } from './OperatorTimer';
 import { HealthView } from './HealthView';
 import { ConversationsView } from './ConversationsView';
 import { CommandAiFab, CommandAiPanel, CommandAiTopbarToggle } from './CommandAiPanel';
@@ -516,6 +517,7 @@ export function App() {
               </button>
               <BreadcrumbTrail clients={clients} projects={projects} tasks={tasks} />
               <div className="top-actions">
+                <OperatorTimer projects={projects} tasks={tasks} />
                 <TopbarStartTask
                   modal={modal}
                   tasks={tasks}

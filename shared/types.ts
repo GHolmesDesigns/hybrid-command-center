@@ -219,6 +219,23 @@ export interface TimeEntry {
   updatedAt: string;
   revision: number;
 }
+export type OperatorTimerState = 'READY' | 'RUNNING' | 'PAUSED';
+export interface OperatorTimer {
+  state: OperatorTimerState;
+  timerId?: string;
+  projectId?: string;
+  projectName?: string;
+  taskId?: string;
+  taskTitle?: string;
+  categoryId?: string;
+  categoryName?: string;
+  startedAt?: string;
+  runningSince?: string;
+  accumulatedSeconds: number;
+  elapsedSeconds: number;
+  serverTime: string;
+  revision: number;
+}
 /** Categories follow the tag rule for names, aliased so call sites read in their own terms. */
 export const normalizeCategoryName = normalizeTagName;
 export const sameCategoryName = sameTagName;
