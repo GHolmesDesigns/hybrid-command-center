@@ -67,10 +67,13 @@ describe('callWorkspaceReadTool', () => {
     const otherProjectId = '22222222-2222-4222-8222-222222222222';
     addProject(projectId, 'c1', 'Measured project');
     addProject(otherProjectId, 'c1', 'Other project');
+    const taskId = '33333333-3333-4333-8333-333333333333';
+    addTask(taskId, projectId, 'Measured task');
     db.prepare('UPDATE projects SET time_budget_minutes=90 WHERE id=?').run(projectId);
     const category = listProjectTimeCategories(db, projectId)[0]!;
     createProjectTimeEntry(db, projectId, {
       categoryId: category.id,
+      taskId,
       startDate: '2026-08-10',
       startTime: '09:00',
       endTime: '10:00',
@@ -88,14 +91,24 @@ describe('callWorkspaceReadTool', () => {
 
     const listed = await callWorkspaceReadTool(db, 'time_list_entries', {
       projectId,
+      taskId,
+      categoryId: category.id,
       from: '2026-08-10',
       to: '2026-08-10',
     });
     expect(listed.outcome).toBe('SUCCESS');
     expect(listed.data).toMatchObject({
       total: 1,
-      entries: [{ projectId, durationSeconds: 3600, notes: 'Scoped work' }],
+      entries: [{ projectId, taskId, durationSeconds: 3600, notes: 'Scoped work' }],
     });
+
+    const firstPage = await callWorkspaceReadTool(db, 'time_list_entries', { limit: 1 });
+    expect(firstPage.data).toMatchObject({ limit: 1, total: 2, truncated: true });
+    const badZone = await callWorkspaceReadTool(db, 'time_list_entries', {
+      timeZone: 'Mars/Olympus',
+    });
+    expect(badZone.outcome).toBe('FAILURE');
+    expect(badZone.error).toMatch(/time zone/i);
 
     const summary = await callWorkspaceReadTool(db, 'time_project_summary', { projectId });
     expect(summary.data).toMatchObject({
@@ -103,6 +116,13 @@ describe('callWorkspaceReadTool', () => {
       totalSeconds: 3600,
       entryCount: 1,
       budgetMinutes: 90,
+    });
+    const context = await callWorkspaceReadTool(db, 'workspace_get_subject_context', {
+      subjectType: 'project',
+      subjectId: projectId,
+    });
+    expect(context.data).toMatchObject({
+      entity: { id: projectId, timeBudgetMinutes: 90, loggedSeconds: 3600 },
     });
     const dashboard = await callWorkspaceReadTool(
       db,
@@ -127,6 +147,12 @@ describe('callWorkspaceReadTool', () => {
     });
     expect(invalid.outcome).toBe('FAILURE');
     expect(invalid.errorDetail?.code).toBe('COORDINATION_INVALID_ARGUMENTS');
+
+    const missing = await callWorkspaceReadTool(db, 'time_project_summary', {
+      projectId: '99999999-9999-4999-8999-999999999999',
+    });
+    expect(missing.outcome).toBe('FAILURE');
+    expect(missing.errorDetail?.code).toBe('COORDINATION_NOT_FOUND');
   });
 
   it('returns dashboard summary with capped task buckets', async () => {

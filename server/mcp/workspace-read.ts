@@ -246,12 +246,7 @@ export async function callWorkspaceReadTool(
     }
   } catch (error) {
     if (error instanceof ProjectTimeError) {
-      const errorDetail =
-        error.status === 404 ? mcpCoordinationNotFound() : mcpCoordinationInvalidArguments();
-      return failed(error.message, errorDetail);
-    }
-    if (error instanceof RangeError) {
-      return failed('Use a valid IANA time zone.', mcpCoordinationInvalidArguments());
+      return failed(error.message, mcpCoordinationNotFound());
     }
     if (error instanceof PublishRequestError) {
       const errorDetail =
