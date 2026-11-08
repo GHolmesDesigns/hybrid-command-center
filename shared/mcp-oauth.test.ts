@@ -16,6 +16,8 @@ describe('shared mcp oauth metadata', () => {
         'coordination:write',
         'workspace:read',
         'workspace:write',
+        'time:read',
+        'time:write',
         'signal:write',
         'settings:write',
         'import:write',

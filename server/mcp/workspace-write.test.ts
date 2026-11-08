@@ -7,6 +7,9 @@ import { callMcpTool } from './dispatch.ts';
 import { DEFAULT_BRANDING } from '../../shared/branding.ts';
 import { CANONICAL_VIEW_DEFAULTS } from '../../shared/view-defaults.ts';
 import { seedSignalPost } from '../signal/test-fixture.ts';
+import { listProjectTimeCategories } from '../project-time.ts';
+import { getOperatorTimer, startOperatorTimer } from '../operator-timer.ts';
+import { createProjectTimeEntry } from '../project-time.ts';
 
 let db: Db;
 
@@ -35,6 +38,188 @@ const seedProject = (projectId: string, clientId: string, name = 'Launch') => {
 const session = () => createMcpSession({ agentLabel: 'codex' });
 
 describe('workspace MCP writes', () => {
+  it('uses time:write to create, update, and delete operator-owned manual entries with agent audit', async () => {
+    const clientId = seedClient();
+    const projectId = '33333333-3333-4333-8333-333333333333';
+    seedProject(projectId, clientId, 'Time project');
+    const category = listProjectTimeCategories(db, projectId)[0]!;
+    const mcpSession = session();
+    const input = {
+      projectId,
+      categoryId: category.id,
+      startDate: '2026-08-29',
+      startTime: '09:00',
+      endTime: '10:00',
+      timeZone: 'UTC',
+      notes: 'Operator-owned manual entry',
+    };
+    const startedTimer = startOperatorTimer(db, {
+      projectId,
+      categoryId: category.id,
+      revision: getOperatorTimer(db).revision,
+    });
+    const created = await callMcpTool(
+      db,
+      mcpSession,
+      'time_create_entry',
+      { ...input, clientRequestId: 'time-create-1' },
+      { grantedScopes: ['time:write'] },
+    );
+    expect(created.outcome).toBe('SUCCESS');
+    const entry = (created.data as { after: { id: string; revision: number } }).after;
+    expect(db.prepare('SELECT project_id FROM time_entries WHERE id=?').get(entry.id)).toEqual({
+      project_id: projectId,
+    });
+    expect(getOperatorTimer(db)).toMatchObject({
+      state: 'RUNNING',
+      timerId: startedTimer.timerId,
+      revision: startedTimer.revision,
+    });
+
+    const updated = await callMcpTool(
+      db,
+      mcpSession,
+      'time_update_entry',
+      {
+        ...input,
+        entryId: entry.id,
+        revision: entry.revision,
+        clientRequestId: 'time-update-1',
+        notes: 'Updated manual entry',
+      },
+      { grantedScopes: ['time:write'] },
+    );
+    expect(updated.outcome).toBe('SUCCESS');
+    expect(db.prepare('SELECT notes,revision FROM time_entries WHERE id=?').get(entry.id)).toEqual({
+      notes: 'Updated manual entry',
+      revision: 2,
+    });
+
+    const deleted = await callMcpTool(
+      db,
+      mcpSession,
+      'time_delete_entry',
+      { entryId: entry.id, revision: 2, clientRequestId: 'time-delete-1' },
+      { grantedScopes: ['time:write'] },
+    );
+    expect(deleted.outcome).toBe('SUCCESS');
+    expect(db.prepare('SELECT id FROM time_entries WHERE id=?').get(entry.id)).toBeUndefined();
+    expect(getOperatorTimer(db)).toMatchObject({
+      state: 'RUNNING',
+      timerId: startedTimer.timerId,
+      revision: startedTimer.revision,
+    });
+    expect(db.prepare('SELECT COUNT(*) n FROM integration_events').get()).toEqual({ n: 0 });
+    expect(listMcpAgentEvents(db, { tool: 'time_create_entry' })[0]).toMatchObject({
+      agentLabel: 'codex',
+      outcome: 'SUCCESS',
+      entityType: 'time_entry',
+    });
+  });
+
+  it('refuses time writes without time:write and leaves entries unchanged', async () => {
+    const clientId = seedClient();
+    const projectId = '33333333-3333-4333-8333-333333333333';
+    seedProject(projectId, clientId);
+    const category = listProjectTimeCategories(db, projectId)[0]!;
+    const before = db.prepare('SELECT COUNT(*) n FROM time_entries').get();
+    const result = await callMcpTool(
+      db,
+      session(),
+      'time_create_entry',
+      {
+        clientRequestId: 'time-readonly-attempt',
+        projectId,
+        categoryId: category.id,
+        startDate: '2026-08-29',
+        startTime: '09:00',
+        endTime: '10:00',
+        timeZone: 'UTC',
+      },
+      { grantedScopes: ['time:read'] },
+    );
+    expect(result.outcome).toBe('REFUSED');
+    expect(result.errorDetail?.code).toBe('MCP_SCOPE_REQUIRED');
+    expect(db.prepare('SELECT COUNT(*) n FROM time_entries').get()).toEqual(before);
+  });
+
+  it('refuses missing or timer-generated entries and rejects invalid manual entries without mutation', async () => {
+    const clientId = seedClient();
+    const projectId = '33333333-3333-4333-8333-333333333333';
+    seedProject(projectId, clientId);
+    const category = listProjectTimeCategories(db, projectId)[0]!;
+    const manual = createProjectTimeEntry(db, projectId, {
+      categoryId: category.id,
+      startDate: '2026-08-29',
+      startTime: '09:00',
+      endTime: '10:00',
+      timeZone: 'UTC',
+      notes: 'Fixture entry',
+    });
+    db.prepare(
+      'INSERT INTO operator_time_timer_stops(timer_id,entry_id,stopped_at) VALUES(?,?,?)',
+    ).run('fixture-timer', manual.id, '2026-08-29T10:00:00.000Z');
+    const before = db.prepare('SELECT notes,revision FROM time_entries WHERE id=?').get(manual.id);
+    const input = {
+      projectId,
+      categoryId: category.id,
+      startDate: '2026-08-29',
+      startTime: '09:00',
+      endTime: '11:00',
+      timeZone: 'UTC',
+    };
+
+    const timerUpdate = await callWorkspaceWriteTool(db, session(), 'time_update_entry', {
+      ...input,
+      entryId: manual.id,
+      revision: manual.revision,
+      clientRequestId: 'time-update-timer-entry',
+    });
+    expect(timerUpdate.outcome).toBe('REFUSED');
+    const timerDelete = await callWorkspaceWriteTool(db, session(), 'time_delete_entry', {
+      entryId: manual.id,
+      revision: manual.revision,
+      clientRequestId: 'time-delete-timer-entry',
+    });
+    expect(timerDelete.outcome).toBe('REFUSED');
+
+    const missingId = '99999999-9999-4999-8999-999999999999';
+    const missingUpdate = await callWorkspaceWriteTool(db, session(), 'time_update_entry', {
+      ...input,
+      entryId: missingId,
+      revision: 1,
+      clientRequestId: 'time-update-missing-entry',
+    });
+    expect(missingUpdate.outcome).toBe('FAILURE');
+    const missingDelete = await callWorkspaceWriteTool(db, session(), 'time_delete_entry', {
+      entryId: missingId,
+      revision: 1,
+      clientRequestId: 'time-delete-missing-entry',
+    });
+    expect(missingDelete.outcome).toBe('FAILURE');
+
+    const invalidDuration = await callWorkspaceWriteTool(db, session(), 'time_create_entry', {
+      ...input,
+      startTime: '11:00',
+      endTime: '10:00',
+      clientRequestId: 'time-create-invalid-duration',
+    });
+    expect(invalidDuration.outcome).toBe('REFUSED');
+    expect(invalidDuration.errorDetail?.code).toBe('COORDINATION_INVALID_ARGUMENTS');
+
+    const invalid = await callWorkspaceWriteTool(db, session(), 'time_create_entry', {
+      ...input,
+      projectId: '99999999-9999-4999-8999-999999999999',
+      clientRequestId: 'time-create-missing-project',
+    });
+    expect(invalid.outcome).toBe('FAILURE');
+    expect(invalid.errorDetail?.code).toBe('COORDINATION_NOT_FOUND');
+    expect(db.prepare('SELECT notes,revision FROM time_entries WHERE id=?').get(manual.id)).toEqual(
+      before,
+    );
+    expect(db.prepare('SELECT COUNT(*) n FROM time_entries').get()).toEqual({ n: 1 });
+  });
+
   it('refuses without workspace:write at dispatch', async () => {
     const result = await callMcpTool(
       db,

@@ -50,6 +50,13 @@ import {
 import { QueueAlertNotFoundError, acknowledgeQueueAlert } from '../signal/queue-health.ts';
 import { getTask } from '../repositories.ts';
 import {
+  createProjectTimeEntry,
+  deleteProjectTimeEntry,
+  listProjectTimeEntries,
+  ProjectTimeError,
+  updateProjectTimeEntry,
+} from '../project-time.ts';
+import {
   brandingInput,
   checklistAddInput,
   checklistUpdateInput,
@@ -86,6 +93,11 @@ import { recordMcpAgentEvent } from './events.ts';
 import { redactToolResult } from './redact.ts';
 import type { McpSession } from './session.ts';
 import { findWriteMutation, recordWriteMutation } from './write-mutations.ts';
+import {
+  mcpTimeCreateEntryArgsSchema,
+  mcpTimeDeleteEntryArgsSchema,
+  mcpTimeUpdateEntryArgsSchema,
+} from '../../shared/mcp-time-tools.ts';
 
 export type McpWorkspaceWriteDeps = {
   now?: Date;
@@ -164,6 +176,7 @@ function mapDomainError(error: unknown): McpToolCallResult {
   }
   if (
     error instanceof WorkspaceValidationError ||
+    error instanceof ProjectTimeError ||
     error instanceof SignalPostRelationshipError ||
     error instanceof SignalVariantError ||
     error instanceof SignalPublishTargetError ||
@@ -174,6 +187,9 @@ function mapDomainError(error: unknown): McpToolCallResult {
       error instanceof z.ZodError
         ? (error.issues[0]?.message ?? 'Invalid arguments.')
         : error.message;
+    if (error instanceof ProjectTimeError && error.status === 404) {
+      return failed(error.message, mcpCoordinationNotFound());
+    }
     return refused(message, mcpCoordinationInvalidArguments());
   }
   if (error instanceof WorkspaceConflictError || error instanceof SignalSlotConflictError) {
@@ -301,6 +317,102 @@ export async function callWorkspaceWriteTool(
     const connectedAccounts = deps.connectedAccounts ?? (async () => defaultConnectedAccounts(db));
 
     switch (tool as WorkspaceWriteTool) {
+      case 'time_create_entry': {
+        const args = mcpTimeCreateEntryArgsSchema.parse(rawArgs ?? {});
+        const { clientRequestId: _request, projectId, ...input } = args;
+        void _request;
+        const after = createProjectTimeEntry(db, projectId, input);
+        return finish(db, session, tool, success(mutationSummary(null, after)), {
+          entityType: 'time_entry',
+          entityId: after.id,
+          summary: `Created manual time entry ${after.id} for the operator.`,
+          clientRequestId,
+          persistIdempotency: true,
+        });
+      }
+      case 'time_update_entry': {
+        const args = mcpTimeUpdateEntryArgsSchema.parse(rawArgs ?? {});
+        const { clientRequestId: _request, entryId, revision, projectId, ...input } = args;
+        void _request;
+        const timerEntry = db
+          .prepare('SELECT 1 FROM operator_time_timer_stops WHERE entry_id=?')
+          .get(entryId);
+        if (timerEntry) {
+          return finish(
+            db,
+            session,
+            tool,
+            refused(
+              'Timer-generated entries cannot be edited through MCP.',
+              mcpCoordinationInvalidArguments(),
+            ),
+            { summary: 'Refused: timer-generated entry is immutable through MCP.' },
+          );
+        }
+        const before = listProjectTimeEntries(db, projectId).find((entry) => entry.id === entryId);
+        if (!before) {
+          return finish(
+            db,
+            session,
+            tool,
+            failed('Time entry not found.', mcpCoordinationNotFound()),
+            {
+              summary: 'Time entry not found.',
+            },
+          );
+        }
+        const after = updateProjectTimeEntry(db, projectId, entryId, input, revision);
+        return finish(db, session, tool, success(mutationSummary(before, after)), {
+          entityType: 'time_entry',
+          entityId: entryId,
+          summary: `Updated manual time entry ${entryId}.`,
+          clientRequestId,
+          persistIdempotency: true,
+        });
+      }
+      case 'time_delete_entry': {
+        const args = mcpTimeDeleteEntryArgsSchema.parse(rawArgs ?? {});
+        const timerEntry = db
+          .prepare('SELECT 1 FROM operator_time_timer_stops WHERE entry_id=?')
+          .get(args.entryId);
+        if (timerEntry) {
+          return finish(
+            db,
+            session,
+            tool,
+            refused(
+              'Timer-generated entries cannot be deleted through MCP.',
+              mcpCoordinationInvalidArguments(),
+            ),
+            { summary: 'Refused: timer-generated entry is immutable through MCP.' },
+          );
+        }
+        const row = db
+          .prepare('SELECT project_id FROM time_entries WHERE id=?')
+          .get(args.entryId) as { project_id: string } | undefined;
+        if (!row) {
+          return finish(
+            db,
+            session,
+            tool,
+            failed('Time entry not found.', mcpCoordinationNotFound()),
+            {
+              summary: 'Time entry not found.',
+            },
+          );
+        }
+        const before = listProjectTimeEntries(db, row.project_id).find(
+          (entry) => entry.id === args.entryId,
+        );
+        const after = deleteProjectTimeEntry(db, row.project_id, args.entryId, args.revision);
+        return finish(db, session, tool, success(mutationSummary(before, after)), {
+          entityType: 'time_entry',
+          entityId: args.entryId,
+          summary: `Deleted manual time entry ${args.entryId}.`,
+          clientRequestId,
+          persistIdempotency: true,
+        });
+      }
       case 'workspace_create_task': {
         const args = taskInput
           .extend(clientRequestIdField)

@@ -16,6 +16,7 @@ import {
 import { SIGNAL_RANGE_LIMIT } from '../../shared/signal.ts';
 import { listTasks } from '../repositories.ts';
 import { buildDashboardSummary } from '../domain/dashboard.ts';
+import { createProjectTimeEntry, listProjectTimeCategories } from '../project-time.ts';
 
 const NOW = new Date('2026-08-11T12:00:00.000Z');
 
@@ -61,6 +62,99 @@ beforeEach(() => {
 });
 
 describe('callWorkspaceReadTool', () => {
+  it('lists project time only within the requested filters and exposes stored summary fields', async () => {
+    const projectId = '11111111-1111-4111-8111-111111111111';
+    const otherProjectId = '22222222-2222-4222-8222-222222222222';
+    addProject(projectId, 'c1', 'Measured project');
+    addProject(otherProjectId, 'c1', 'Other project');
+    const taskId = '33333333-3333-4333-8333-333333333333';
+    addTask(taskId, projectId, 'Measured task');
+    db.prepare('UPDATE projects SET time_budget_minutes=90 WHERE id=?').run(projectId);
+    const category = listProjectTimeCategories(db, projectId)[0]!;
+    createProjectTimeEntry(db, projectId, {
+      categoryId: category.id,
+      taskId,
+      startDate: '2026-08-10',
+      startTime: '09:00',
+      endTime: '10:00',
+      timeZone: 'UTC',
+      notes: 'Scoped work',
+    });
+    createProjectTimeEntry(db, otherProjectId, {
+      categoryId: listProjectTimeCategories(db, otherProjectId)[0]!.id,
+      startDate: '2026-08-10',
+      startTime: '09:00',
+      endTime: '11:00',
+      timeZone: 'UTC',
+      notes: 'Other project work',
+    });
+
+    const listed = await callWorkspaceReadTool(db, 'time_list_entries', {
+      projectId,
+      taskId,
+      categoryId: category.id,
+      from: '2026-08-10',
+      to: '2026-08-10',
+    });
+    expect(listed.outcome).toBe('SUCCESS');
+    expect(listed.data).toMatchObject({
+      total: 1,
+      entries: [{ projectId, taskId, durationSeconds: 3600, notes: 'Scoped work' }],
+    });
+
+    const firstPage = await callWorkspaceReadTool(db, 'time_list_entries', { limit: 1 });
+    expect(firstPage.data).toMatchObject({ limit: 1, total: 2, truncated: true });
+    const badZone = await callWorkspaceReadTool(db, 'time_list_entries', {
+      timeZone: 'Mars/Olympus',
+    });
+    expect(badZone.outcome).toBe('FAILURE');
+    expect(badZone.error).toMatch(/time zone/i);
+
+    const summary = await callWorkspaceReadTool(db, 'time_project_summary', { projectId });
+    expect(summary.data).toMatchObject({
+      projectId,
+      totalSeconds: 3600,
+      entryCount: 1,
+      budgetMinutes: 90,
+    });
+    const context = await callWorkspaceReadTool(db, 'workspace_get_subject_context', {
+      subjectType: 'project',
+      subjectId: projectId,
+    });
+    expect(context.data).toMatchObject({
+      entity: { id: projectId, timeBudgetMinutes: 90, loggedSeconds: 3600 },
+    });
+    const dashboard = await callWorkspaceReadTool(
+      db,
+      'workspace_dashboard_summary',
+      {},
+      { now: NOW },
+    );
+    const project = (
+      dashboard.data as { recentProjects: Array<Record<string, unknown>> }
+    ).recentProjects.find((row) => row.id === projectId);
+    expect(project).toMatchObject({ timeBudgetMinutes: 90, loggedSeconds: 3600 });
+  });
+
+  it('returns the operator timer as a read-only snapshot and rejects invalid time filters clearly', async () => {
+    const active = await callWorkspaceReadTool(db, 'time_get_active', {});
+    expect(active.outcome).toBe('SUCCESS');
+    expect(active.data).toMatchObject({ state: 'READY', revision: 0 });
+
+    const invalid = await callWorkspaceReadTool(db, 'time_list_entries', {
+      from: '2026-08-20',
+      to: '2026-08-10',
+    });
+    expect(invalid.outcome).toBe('FAILURE');
+    expect(invalid.errorDetail?.code).toBe('COORDINATION_INVALID_ARGUMENTS');
+
+    const missing = await callWorkspaceReadTool(db, 'time_project_summary', {
+      projectId: '99999999-9999-4999-8999-999999999999',
+    });
+    expect(missing.outcome).toBe('FAILURE');
+    expect(missing.errorDetail?.code).toBe('COORDINATION_NOT_FOUND');
+  });
+
   it('returns dashboard summary with capped task buckets', async () => {
     for (let index = 0; index < MCP_DASHBOARD_TASK_LIMIT + 5; index += 1) {
       addTask(`t-${index}`, 'p1', `Task ${index}`);
@@ -87,7 +181,7 @@ describe('callWorkspaceReadTool', () => {
     const queuePrepare = vi.spyOn(db, 'prepare');
     await callWorkspaceReadTool(db, 'signal_queue_snapshot', {}, { now: NOW });
 
-    expect(dashboardQueries).toBe(9);
+    expect(dashboardQueries).toBe(10);
     expect(queuePrepare).toHaveBeenCalledTimes(5);
   });
 
@@ -306,6 +400,10 @@ describe('callWorkspaceReadTool', () => {
   it('returns an uncapped dashboard when buckets stay under the limit', async () => {
     addTask('small-1', 'p1', 'One overdue');
     const expected = buildDashboardSummary(db, NOW);
+    expected.recentProjects = expected.recentProjects.map((project) => ({
+      ...project,
+      loggedSeconds: 0,
+    }));
     const result = await callWorkspaceReadTool(db, 'workspace_dashboard_summary', {}, { now: NOW });
     expect(result.outcome).toBe('SUCCESS');
     expect(result.data).toEqual(expected);

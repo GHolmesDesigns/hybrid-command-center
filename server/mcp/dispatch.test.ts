@@ -215,6 +215,48 @@ describe('callMcpTool', () => {
     expect(result.errorDetail?.code).toBe('WORKSPACE_SCOPE_REQUIRED');
   });
 
+  it('requires time:read for time tools and keeps time scope separate from workspace:read', async () => {
+    const session = createMcpSession({ agentLabel: 'time-reader' });
+    const refused = await callMcpTool(
+      db,
+      session,
+      'time_get_active',
+      {},
+      {
+        grantedScopes: ['workspace:read'],
+        now: NOW,
+      },
+    );
+    expect(refused.outcome).toBe('REFUSED');
+    expect(refused.error).toContain('time:read');
+
+    const allowed = await callMcpTool(
+      db,
+      session,
+      'time_get_active',
+      {},
+      {
+        grantedScopes: ['time:read'],
+        now: NOW,
+      },
+    );
+    expect(allowed.outcome).toBe('SUCCESS');
+    expect(allowed.data).toMatchObject({ state: 'READY' });
+
+    const workspace = await callMcpTool(
+      db,
+      session,
+      'workspace_dashboard_summary',
+      {},
+      {
+        grantedScopes: ['time:read'],
+        now: NOW,
+      },
+    );
+    expect(workspace.outcome).toBe('REFUSED');
+    expect(workspace.errorDetail?.code).toBe('WORKSPACE_SCOPE_REQUIRED');
+  });
+
   it('routes system_capabilities through the registry handler', async () => {
     const session = createMcpSession();
     const result = await callMcpTool(

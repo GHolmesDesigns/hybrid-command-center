@@ -44,6 +44,11 @@ const expectedRequiredScope = (name: string): McpAgentScope | null => {
   }
   if (name === 'import_playbook_commit' || name === 'import_signal_commit') return 'import:write';
   if (name === 'drive_sync') return 'drive:sync';
+  if (name.startsWith('time_')) {
+    return ['time_create_entry', 'time_update_entry', 'time_delete_entry'].includes(name)
+      ? 'time:write'
+      : 'time:read';
+  }
   if ((SIGNAL_WRITE_TOOLS as readonly string[]).includes(name)) return 'signal:write';
   if (
     name.startsWith('workspace_') &&
@@ -80,6 +85,12 @@ describe('mcp tool registry', () => {
     expect(names).toContain('signal_queue_health');
     expect(names).toContain('signal_create_post');
     expect(names).toContain('workspace_create_task');
+    expect(names).toContain('time_list_entries');
+    expect(names).toContain('time_project_summary');
+    expect(names).toContain('time_get_active');
+    expect(names).toContain('time_create_entry');
+    expect(names).toContain('time_update_entry');
+    expect(names).toContain('time_delete_entry');
     expect(names).toContain('workspace_merge_clients_preview');
     expect(names).toContain('drive_sync');
     expect(names).toContain('drive_request_write');
@@ -90,7 +101,7 @@ describe('mcp tool registry', () => {
     expect(names).toContain('agent_list_notifications');
     expect(
       names.filter((name) => name !== 'system_capabilities' && name !== 'system_connection_status'),
-    ).toHaveLength(84);
+    ).toHaveLength(90);
     expect(names).toContain('system_connection_status');
     expect(isRegisteredMcpTool('system_capabilities')).toBe(true);
     expect(isRegisteredMcpTool('not_a_tool')).toBe(false);

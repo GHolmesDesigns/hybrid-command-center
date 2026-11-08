@@ -6,6 +6,8 @@ export const MCP_AGENT_SCOPES = [
   'coordination:write',
   'workspace:read',
   'workspace:write',
+  'time:read',
+  'time:write',
   'signal:write',
   'settings:write',
   'import:write',

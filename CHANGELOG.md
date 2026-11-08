@@ -1,5 +1,14 @@
 # Changelog
 
+## [7.1.9] - 2026-11-08
+
+### Added
+
+- MCP agents can read operator-owned project time with `time:read` and create, update, or delete manual entries with `time:write`. Timer controls remain operator-only, and MCP writes retain the agent label in the activity trail.
+
+### Breaking changes
+
+None.
 ## [7.1.8] - 2026-11-08
 
 ### Added

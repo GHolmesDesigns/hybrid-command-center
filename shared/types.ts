@@ -120,6 +120,8 @@ export interface Project {
   priority: Priority;
   /** Optional project-level planned time, in whole minutes. */
   timeBudgetMinutes?: number;
+  /** Total duration of stored time entries attributed to this project. */
+  loggedSeconds?: number;
   notes?: string;
   /** Manual tile order on the Projects view, honoured by the Custom sort mode. */
   position: number;

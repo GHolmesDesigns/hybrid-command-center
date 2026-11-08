@@ -27,6 +27,8 @@ carries; a tool call succeeds only when the credential grants that scope.
 | `coordination:write` | Post, claim, complete, cancel handoffs; work-session lifecycle |
 | `workspace:read` | Read workspace, Signal schedule, queue health, files browse, integration activity |
 | `workspace:write` | Create and update tasks, projects, checklists, dependencies; merge clients; agent conversation writes |
+| `time:read` | List operator-owned time entries, read project totals, inspect the active timer |
+| `time:write` | Create, update, or delete manual time entries owned by the operator |
 | `signal:write` | Create and update Signal posts, slots, variants, targets; provider inventory and analytics refresh |
 | `settings:write` | Update branding and view defaults |
 | `import:write` | Commit campaign playbook and Signal schedule imports |
@@ -35,6 +37,9 @@ carries; a tool call succeeds only when the credential grants that scope.
 
 Credentials issued before the scope split that held `workspace:write` also receive
 `signal:write`, `settings:write`, `import:write`, and `drive:sync` automatically.
+The time scopes are separate grants and are not added to existing credentials automatically.
+MCP time writes never start or change the active timer, and timer-generated entries cannot be
+edited or deleted through MCP.
 
 The reserved label `command-ai` names the in-app Command AI assistant. It cannot register as an
 ordinary MCP agent. Issue an **assistant credential** on **Agents** when Phase 3 assistant turns
