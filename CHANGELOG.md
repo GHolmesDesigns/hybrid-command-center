@@ -1,5 +1,14 @@
 # Changelog
 
+## [7.1.6] - 2026-11-08
+
+### Added
+
+- Added a persistent global work timer that can be paused, resumed, discarded, or saved to project time with an optional task.
+
+### Breaking changes
+
+None.
 ## [7.1.5] - 2026-10-06
 
 ## Changed
