@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Download, Copy } from 'lucide-react';
+import { Download, Copy, Trash2 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import type { OperatorTimer, TimeEntry } from '../../../shared/types';
@@ -23,12 +23,20 @@ type Report = {
   };
 };
 
+const formatEntryDateTime = (entry: TimeEntry, timeZone: string) =>
+  new Intl.DateTimeFormat(undefined, {
+    timeZone,
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(entry.startedAt));
+
 export function WorkspaceTimeView() {
   const [params, setParams] = useSearchParams();
   const [report, setReport] = useState<Report | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [deleteError, setDeleteError] = useState('');
   const [timer, setTimer] = useState<OperatorTimer | null>(null);
   const [timerLoading, setTimerLoading] = useState(true);
   const [timerError, setTimerError] = useState('');
@@ -155,6 +163,43 @@ export function WorkspaceTimeView() {
       setNotice('Clipboard access is unavailable in this browser.');
     }
   };
+  const deleteEntry = async (entry: TimeEntry) => {
+    const when = formatEntryDateTime(entry, report?.timeZone ?? 'UTC');
+    if (
+      !window.confirm(
+        `Delete this ${formatDuration(entry.durationSeconds)} time entry for ${entry.projectName} on ${when}?`,
+      )
+    )
+      return;
+
+    setDeleteError('');
+    setNotice('');
+    try {
+      await api(`/projects/${entry.projectId}/time/entries/${entry.id}`, {
+        method: 'DELETE',
+        body: JSON.stringify({ revision: entry.revision }),
+      });
+      setReport((current) =>
+        current
+          ? {
+              ...current,
+              entries: current.entries.filter((candidate) => candidate.id !== entry.id),
+            }
+          : current,
+      );
+      try {
+        setReport(await api<Report>('/time/entries'));
+        setError('');
+        setNotice('Time entry deleted.');
+      } catch (cause) {
+        setDeleteError(
+          `The time entry was deleted, but the report could not refresh: ${(cause as Error).message}`,
+        );
+      }
+    } catch (cause) {
+      setDeleteError((cause as Error).message);
+    }
+  };
 
   return (
     <>
@@ -276,6 +321,7 @@ export function WorkspaceTimeView() {
                   </div>
                 </div>
                 {notice && <p role="status">{notice}</p>}
+                {deleteError && <p role="alert">{deleteError}</p>}
                 {!entries.length ? (
                   <Empty
                     compact
@@ -293,6 +339,7 @@ export function WorkspaceTimeView() {
                           <th>Category</th>
                           <th>Duration</th>
                           <th>Notes</th>
+                          <th>Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -309,6 +356,15 @@ export function WorkspaceTimeView() {
                             <td>{entry.categoryName}</td>
                             <td>{formatDuration(entry.durationSeconds)}</td>
                             <td>{entry.notes}</td>
+                            <td>
+                              <button
+                                className="icon-btn danger"
+                                aria-label={`Delete time entry for ${entry.projectName} on ${formatEntryDateTime(entry, report.timeZone)}`}
+                                onClick={() => void deleteEntry(entry)}
+                              >
+                                <Trash2 aria-hidden="true" />
+                              </button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>

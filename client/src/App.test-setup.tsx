@@ -244,6 +244,7 @@ export const testState = {
       categories: [{ id: 'category-1', name: 'Design', archived: 0 }],
     },
   },
+  workspaceTimeDeleteFailure: null as { status: number; error: string } | null,
   operatorTimerPayload: {
     state: 'READY',
     accumulatedSeconds: 0,
@@ -973,6 +974,21 @@ const respondTo = (url: string, init?: RequestInit) => {
   const method = init?.method ?? 'GET';
   const body = init?.body ? JSON.parse(String(init.body)) : undefined;
   requests.push({ url, method, body });
+  const timeEntryDelete = url.match(/\/api\/projects\/([^/]+)\/time\/entries\/([^/?]+)$/);
+  if (timeEntryDelete && method === 'DELETE') {
+    if (testState.workspaceTimeDeleteFailure) {
+      return reply(testState.workspaceTimeDeleteFailure.status, {
+        error: testState.workspaceTimeDeleteFailure.error,
+      });
+    }
+    testState.workspaceTimePayload = {
+      ...testState.workspaceTimePayload,
+      entries: testState.workspaceTimePayload.entries.filter(
+        (entry) => entry.id !== timeEntryDelete[2] || entry.projectId !== timeEntryDelete[1],
+      ),
+    };
+    return { ok: true, deleted: 'time-entry' };
+  }
   if (url.endsWith('/api/operator-timer') && testState.operatorTimerError)
     return reply(503, { error: testState.operatorTimerError });
   if (url.endsWith('/api/dashboard') && testState.dashboardFailures > 0) {
@@ -2123,6 +2139,7 @@ beforeEach(() => {
       categories: [{ id: 'category-1', name: 'Design', archived: 0 }],
     },
   };
+  testState.workspaceTimeDeleteFailure = null;
   testState.operatorTimerPayload = {
     state: 'READY',
     accumulatedSeconds: 0,
