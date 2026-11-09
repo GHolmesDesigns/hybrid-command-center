@@ -1,5 +1,14 @@
 # Changelog
 
+## [7.1.11] - 2026-11-09
+
+## Changed
+
+- Operators can delete individual saved entries from the workspace time report after confirmation. The report totals and CSV update while its filters and active timer remain unchanged.
+
+## Breaking changes
+
+None.
 ## [7.1.10] - 2026-11-08
 
 ### Added
