@@ -53,7 +53,7 @@ function renderRoutedPanel(
             }
           />
           <Route
-            path="/tasks"
+            path="/countdown"
             element={
               <CommandAiPanel
                 {...panelProps}
@@ -675,7 +675,7 @@ describe('CommandAiPanel', () => {
     const navigate = getNavigate();
     expect(navigate).toBeTruthy();
     act(() => {
-      navigate!('/tasks');
+      navigate!('/countdown');
     });
 
     expect(await screen.findByText('Still here')).toBeVisible();

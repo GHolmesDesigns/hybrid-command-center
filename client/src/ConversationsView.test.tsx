@@ -128,7 +128,7 @@ describe('ConversationsView', () => {
     );
     expect(screen.getByRole('link', { name: 'Task: task 1' })).toHaveAttribute(
       'href',
-      '/tasks/task%201',
+      '/countdown/task%201',
     );
 
     fireEvent.change(screen.getByLabelText('Conversation state'), {

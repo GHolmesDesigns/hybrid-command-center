@@ -27,10 +27,11 @@ test('the Files page browses a project read-only and states its Drive problem pl
     })
   ).json();
 
-  // The module is in the sidebar. Scoped to the navigation, because a project named after this
-  // spec is a link that says "Files" too.
+  // Files is under the Settings disclosure. Scope to navigation because a project named after
+  // this spec is a link that says "Files" too.
   const nav = page.getByRole('navigation', { name: 'Primary navigation' });
   await page.goto('/');
+  await nav.getByRole('button', { name: 'Expand Settings pages' }).click();
   await expect(nav.getByRole('link', { name: 'Files', exact: true })).toBeVisible();
   await nav.getByRole('link', { name: 'Files', exact: true }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Files' })).toBeVisible();

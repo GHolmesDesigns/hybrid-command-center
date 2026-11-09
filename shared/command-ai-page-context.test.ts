@@ -29,6 +29,10 @@ describe('commandAiPageContextSubject', () => {
       subjectType: 'task',
       subjectId: 't1',
     });
+    expect(commandAiPageContextSubject('/countdown/t1')).toEqual({
+      subjectType: 'task',
+      subjectId: 't1',
+    });
     expect(commandAiPageContextSubject('/status')).toEqual({
       subjectType: null,
       subjectId: null,

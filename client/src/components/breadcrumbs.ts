@@ -81,7 +81,7 @@ const taskAncestors = (
       : []),
     { label: 'Projects', href: '/projects' },
     { label: project.name, href: `/projects/${encodeURIComponent(project.id)}` },
-    { label: 'Tasks', href: '/tasks' },
+    { label: 'Countdown', href: '/countdown' },
   ];
 };
 
@@ -105,9 +105,9 @@ export const BREADCRUMB_ROUTES: readonly BreadcrumbRoute[] = [
     contextualAncestors: statusProjectAncestors,
     preserveSearch: true,
   },
-  { path: '/tasks', label: 'Tasks' },
+  { path: '/countdown', label: 'Countdown' },
   {
-    path: '/tasks/:taskId',
+    path: '/countdown/:taskId',
     label: (params, data) => data.tasks?.find((task) => task.id === params.taskId)?.title ?? 'Task',
     contextualAncestors: taskAncestors,
   },

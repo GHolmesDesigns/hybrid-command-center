@@ -12,6 +12,7 @@ import {
   task,
 } from './App.test-setup';
 import type { Client } from '../../shared/types';
+import { useLocation } from 'react-router-dom';
 
 const acme: Client = {
   id: 'client-p1',
@@ -25,6 +26,13 @@ const acme: Client = {
 };
 
 const trail = () => screen.getByRole('navigation', { name: 'Breadcrumb' });
+
+function LocationProbe() {
+  const location = useLocation();
+  return (
+    <output aria-label="Current location">{`${location.pathname}${location.search}${location.hash}`}</output>
+  );
+}
 
 describe('Breadcrumb trail', () => {
   it('renders client detail with the loaded client name', async () => {
@@ -113,42 +121,57 @@ describe('Breadcrumb trail', () => {
   it('renders a task detail route after reload with client and project context', async () => {
     testState.tasksPayload = [task('t1', 'Reloadable task')];
     render(
-      <MemoryRouter initialEntries={['/tasks/t1']}>
+      <MemoryRouter initialEntries={['/countdown/t1']}>
         <App />
       </MemoryRouter>,
     );
 
     expect(await screen.findByRole('heading', { name: 'Reloadable task' })).toBeVisible();
-    expect(within(trail()).getAllByRole('link', { name: 'Tasks' })[0]).toHaveAttribute(
+    expect(within(trail()).getAllByRole('link', { name: 'Countdown' })[0]).toHaveAttribute(
       'href',
-      '/tasks',
+      '/countdown',
     );
     expect(within(trail()).getByText('Reloadable task')).toHaveAttribute('aria-current', 'page');
     fireEvent.click(screen.getByRole('button', { name: /Edit details/ }));
     expect(await screen.findByRole('dialog')).toBeVisible();
   });
 
+  it('redirects old task detail links to Countdown and retains search and hash', async () => {
+    testState.tasksPayload = [task('t1', 'Reloadable task')];
+    render(
+      <MemoryRouter initialEntries={['/tasks/t1?from=handoff#discussion']}>
+        <App />
+        <LocationProbe />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Reloadable task' })).toBeVisible();
+    expect(screen.getByLabelText('Current location')).toHaveTextContent(
+      '/countdown/t1?from=handoff#discussion',
+    );
+  });
+
   it('shows a readable page when a bookmarked task no longer exists', async () => {
     testState.tasksPayload = [];
     render(
-      <MemoryRouter initialEntries={['/tasks/gone']}>
+      <MemoryRouter initialEntries={['/countdown/gone']}>
         <App />
       </MemoryRouter>,
     );
 
     expect(await screen.findByRole('heading', { name: 'Task not found' })).toBeVisible();
-    expect(screen.getByRole('button', { name: '← All tasks' })).toBeVisible();
+    expect(screen.getByRole('button', { name: '← All Countdown' })).toBeVisible();
   });
 
   it('returns from a task detail route to the task list', async () => {
     testState.tasksPayload = [task('t1', 'Closable task')];
     render(
-      <MemoryRouter initialEntries={['/tasks/t1']}>
+      <MemoryRouter initialEntries={['/countdown/t1']}>
         <App />
       </MemoryRouter>,
     );
     expect(await screen.findByRole('heading', { name: 'Closable task' })).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
-    expect(await screen.findByRole('heading', { name: 'Tasks' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Countdown' })).toBeVisible();
   });
 });

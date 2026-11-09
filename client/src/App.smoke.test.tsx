@@ -3,6 +3,7 @@ import { act } from '@testing-library/react';
 import {
   render,
   screen,
+  fireEvent,
   waitFor,
   within,
   MemoryRouter,
@@ -78,7 +79,7 @@ describe('App', () => {
     expect(screen.getByRole('link', { name: 'Status' })).toHaveAttribute('href', '/status');
   });
 
-  it('keeps Agents immediately before Settings in primary navigation', async () => {
+  it('shows the specified primary navigation order and a separate Settings disclosure', async () => {
     render(
       <MemoryRouter>
         <App />
@@ -86,11 +87,62 @@ describe('App', () => {
     );
 
     const navigation = await screen.findByRole('navigation', { name: 'Primary navigation' });
-    const links = within(navigation).getAllByRole('link');
-    const labels = links.map((link) => link.textContent?.trim());
-    const agentsIndex = labels.indexOf('Agents');
-    expect(agentsIndex).toBeGreaterThanOrEqual(0);
-    expect(labels[agentsIndex + 1]).toBe('Settings');
+    const topLevelLinks = navigation.querySelectorAll(
+      ':scope > a, :scope > .settings-nav-group > a',
+    );
+    expect(Array.from(topLevelLinks, (link) => link.textContent?.trim())).toEqual([
+      'Dashboard',
+      'Clients',
+      'Projects',
+      'Status',
+      'Countdown',
+      'Ads',
+      'Signal',
+      'Calendar',
+      'Time',
+      'Settings',
+    ]);
+    expect(screen.getByRole('button', { name: 'Expand Settings pages' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+  });
+
+  it('expands Settings pages in order and collapses them with an accessible disclosure', async () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    const disclosure = await screen.findByRole('button', { name: 'Expand Settings pages' });
+    fireEvent.click(disclosure);
+    expect(disclosure).toHaveAttribute('aria-expanded', 'true');
+    const children = screen
+      .getByRole('navigation', { name: 'Primary navigation' })
+      .querySelector('.settings-nav-children');
+    expect(
+      Array.from(children?.querySelectorAll('a') ?? [], (link) => link.textContent?.trim()),
+    ).toEqual(['Agents', 'Files', 'Health', 'Import']);
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse Settings pages' }));
+    expect(screen.queryByRole('link', { name: 'Files' })).toBeNull();
+  });
+
+  it('opens Settings automatically for a direct child route and marks that child active', async () => {
+    render(
+      <MemoryRouter initialEntries={['/health']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Application health' }),
+    ).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Collapse Settings pages' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(screen.getByRole('link', { name: 'Health' })).toHaveAttribute('aria-current', 'page');
   });
 
   it('labels the board route Status without exposing the word Kanban', async () => {
@@ -104,26 +156,41 @@ describe('App', () => {
     expect(screen.queryByText(/kanban/i)).toBeNull();
   });
 
-  it('places Tasks below Status and links the Pomodoro timer to project tasks', async () => {
+  it('renders Countdown and links the Pomodoro timer to project tasks', async () => {
     testState.tasksPayload = [
       task('focus-task', 'Draft the homepage', { projectName: 'Website Refresh' }),
     ];
     render(
-      <MemoryRouter initialEntries={['/tasks']}>
+      <MemoryRouter initialEntries={['/countdown']}>
         <App />
       </MemoryRouter>,
     );
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Tasks' })).toBeVisible();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Countdown' })).toBeVisible();
     expect(screen.getByText('Draft the homepage')).toBeVisible();
     expect(screen.getByText('Website Refresh')).toBeVisible();
     const links = within(
       await screen.findByRole('navigation', { name: 'Primary navigation' }),
     ).getAllByRole('link');
-    expect(links.findIndex((link) => link.textContent?.trim() === 'Tasks')).toBe(
-      links.findIndex((link) => link.textContent?.trim() === 'Status') + 1,
+    expect(links.find((link) => link.textContent?.trim() === 'Countdown')).toHaveAttribute(
+      'href',
+      '/countdown',
     );
     await waitFor(() => expect(screen.getByRole('button', { name: /Start/ })).toBeEnabled());
+  });
+
+  it('redirects /tasks to /countdown and preserves the query string', async () => {
+    render(
+      <MemoryRouter initialEntries={['/tasks?task=focus-task']}>
+        <App />
+        <LocationProbe />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Countdown' })).toBeVisible();
+    expect(screen.getByLabelText('Current location')).toHaveTextContent(
+      '/countdown?task=focus-task',
+    );
   });
 
   it('redirects /kanban to /status and keeps the query string', async () => {

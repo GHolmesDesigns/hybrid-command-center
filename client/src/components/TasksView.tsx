@@ -314,7 +314,7 @@ export function TasksView({
     <>
       <PageHead
         eyebrow="Focus"
-        title="Tasks"
+        title="Countdown"
         body="Choose a Project task, then work in focused Pomodoro sessions."
       />
       {taskParamNotice && (

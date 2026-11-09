@@ -57,7 +57,7 @@ const baseTask: Task = {
 
 describe('start-task', () => {
   it('builds a tasks URL with the task id', () => {
-    expect(startTaskPath('abc 123')).toBe('/tasks?task=abc%20123');
+    expect(startTaskPath('abc 123')).toBe('/countdown?task=abc%20123');
   });
 
   it('prefers the modal task over route and saved session', () => {

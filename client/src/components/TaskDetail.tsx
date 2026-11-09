@@ -356,7 +356,7 @@ export function TaskDetail({
         scopeType="task"
         scopeId={task.id}
         subjectLabel={task.title}
-        subjectPath={`/tasks/${task.id}`}
+        subjectPath={`/countdown/${task.id}`}
       />
       <footer>
         <button className="secondary danger-outline" onClick={remove}>

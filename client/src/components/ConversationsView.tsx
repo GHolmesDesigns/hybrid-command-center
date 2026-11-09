@@ -53,7 +53,7 @@ const SCOPE_LABEL = {
 
 const scopePath = (scope: Conversation['scope']): string | null => {
   if (!scope.id || scope.type === 'freeform') return null;
-  return `/${scope.type === 'task' ? 'tasks' : `${scope.type}s`}/${encodeURIComponent(scope.id)}`;
+  return `/${scope.type === 'task' ? 'countdown' : `${scope.type}s`}/${encodeURIComponent(scope.id)}`;
 };
 
 export function ConversationsView({

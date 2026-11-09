@@ -45,7 +45,7 @@ class FakeBroadcastChannel {
 
 const tasks = [task('t1', 'Draft the proposal'), task('t2', 'Review contracts')];
 
-const renderTasks = (route = '/tasks') =>
+const renderTasks = (route = '/countdown') =>
   render(
     <MemoryRouter initialEntries={[route]}>
       <TasksView tasks={tasks} projects={projects} clients={[client('client-p1', 'Acme')]} />
@@ -64,7 +64,7 @@ describe('TasksView timer session conflicts', () => {
       TASK_TIMER_STORAGE_KEY,
       JSON.stringify(startTaskTimer(newTaskTimerSession('t1'), Date.now())),
     );
-    renderTasks('/tasks?task=t2');
+    renderTasks('/countdown?task=t2');
 
     expect(screen.getByText('25:00')).toBeVisible();
     expect(screen.getByRole('status')).toHaveTextContent(
@@ -81,7 +81,7 @@ describe('TasksView timer session conflicts', () => {
       JSON.stringify(startTaskTimer(newTaskTimerSession('t1'), Date.now())),
     );
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
-    renderTasks('/tasks?task=t2');
+    renderTasks('/countdown?task=t2');
 
     fireEvent.click(screen.getByRole('button', { name: /^Start/ }));
 
@@ -98,7 +98,7 @@ describe('TasksView timer session conflicts', () => {
       JSON.stringify(startTaskTimer(newTaskTimerSession('t1'), Date.now())),
     );
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
-    renderTasks('/tasks?task=t2');
+    renderTasks('/countdown?task=t2');
 
     fireEvent.click(screen.getByRole('button', { name: /^Reset/ }));
 
