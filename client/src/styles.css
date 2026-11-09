@@ -595,6 +595,59 @@ button svg,
   border-radius: 3px;
   margin-left: -12px;
 }
+.settings-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.settings-nav-disclosure {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: -2px 4px 2px 42px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--sidebar-muted);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.settings-nav-disclosure:hover,
+.settings-nav-disclosure:focus-visible {
+  background: var(--sidebar-surface);
+  color: var(--sidebar-fg);
+}
+.settings-nav-disclosure svg {
+  width: 15px;
+  height: 15px;
+  transition: transform 120ms ease;
+}
+.settings-nav-disclosure[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+.settings-nav-children {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-left: 12px;
+}
+.settings-nav-children a {
+  font-size: 13px !important;
+  padding-top: 9px !important;
+  padding-bottom: 9px !important;
+}
+.settings-nav-disclosure.collapsed {
+  justify-content: center;
+  margin: 0;
+  padding: 8px;
+}
+.sidebar.collapsed .settings-nav-children {
+  padding-left: 0;
+}
 .sidebar nav svg {
   width: 18px;
   height: 18px;

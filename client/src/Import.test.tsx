@@ -36,7 +36,7 @@ const pasteAndCheck = async (dialog: HTMLElement) => {
 };
 
 describe('Import module', () => {
-  it('links Import from the sidebar, alongside every other shipped module', async () => {
+  it('links Import under Settings, alongside the other Settings pages', async () => {
     render(
       <MemoryRouter>
         <App />
@@ -44,9 +44,8 @@ describe('Import module', () => {
     );
 
     await screen.findByText(branding.title);
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Settings pages' }));
     expect(screen.getByRole('link', { name: 'Import' })).toHaveAttribute('href', '/import');
-    // Calendar was the last stub in the sidebar. Nothing is parked as future work now, so the
-    // "Coming next" divider that held it is gone too.
     expect(screen.getByRole('link', { name: 'Calendar' })).toHaveAttribute('href', '/calendar');
     expect(screen.queryByText('Coming next')).toBeNull();
   });
@@ -62,6 +61,7 @@ describe('Import module', () => {
     await screen.findByText(branding.title);
     // Collapsed, a nav item is its icon and its title attribute — the label text is dropped,
     // so each is found by its accessible name rather than by visible text.
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Settings pages' }));
     for (const label of ['Import', 'Files', 'Calendar']) {
       expect(screen.getByRole('link', { name: label })).toBeVisible();
     }
@@ -78,7 +78,7 @@ describe('Import module', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
     expect(screen.queryByText('Campaign playbook import')).toBeNull();
     // The card that used to list it as future work now points at the built module. The other
-    // link with this name is the sidebar's, which every page carries.
+    // The link in this card remains available even while the sidebar group is collapsed.
     expect(
       within(screen.getByText(/Campaign playbook import has shipped/)).getByRole('link', {
         name: 'Import',

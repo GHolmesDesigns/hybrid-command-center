@@ -13,7 +13,7 @@ export function Nav({
   collapsed: boolean;
 }) {
   return (
-    <NavLink to={to} end={to === '/'} title={label}>
+    <NavLink to={to} end={to === '/'} title={label} aria-label={collapsed ? label : undefined}>
       {icon}
       {!collapsed && <span>{label}</span>}
     </NavLink>

@@ -39,7 +39,7 @@ export function commandAiPageContextSubject(pathname: string): {
   if (parts[0] === 'projects' && parts[1]) {
     return { subjectType: 'project', subjectId: decodeURIComponent(parts[1]) };
   }
-  if (parts[0] === 'tasks' && parts[1]) {
+  if ((parts[0] === 'countdown' || parts[0] === 'tasks') && parts[1]) {
     return { subjectType: 'task', subjectId: decodeURIComponent(parts[1]) };
   }
   return { subjectType: null, subjectId: null };

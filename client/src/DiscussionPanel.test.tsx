@@ -122,7 +122,7 @@ describe('DiscussionPanel', () => {
           scopeType="task"
           scopeId="t1"
           subjectLabel="Task One"
-          subjectPath="/tasks/t1"
+          subjectPath="/countdown/t1"
         />
       </MemoryRouter>,
     );

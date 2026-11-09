@@ -6,7 +6,7 @@ export type StartTaskResolution = {
 };
 
 export function startTaskPath(taskId: string) {
-  return `/tasks?task=${encodeURIComponent(taskId)}`;
+  return `/countdown?task=${encodeURIComponent(taskId)}`;
 }
 
 export function taskStartAvailability(

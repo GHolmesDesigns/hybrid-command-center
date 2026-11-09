@@ -18,7 +18,7 @@ describe('TasksView filters', () => {
     const north = project('project-north', 'North campaign', 'ACTIVE', { clientId: acme.id });
     const other = project('project-other', 'Other work', 'ACTIVE', { clientId: 'client-other' });
     render(
-      <MemoryRouter initialEntries={['/tasks?client=client-acme&priority=URGENT']}>
+      <MemoryRouter initialEntries={['/countdown?client=client-acme&priority=URGENT']}>
         <TasksView
           clients={[acme, client('client-other', 'Other')]}
           projects={[north, other]}

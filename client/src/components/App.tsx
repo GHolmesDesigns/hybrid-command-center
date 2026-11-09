@@ -12,6 +12,7 @@ import {
   BarChart3,
   Bot,
   Bell,
+  ChevronDown,
   HeartPulse,
   BriefcaseBusiness,
   CalendarDays,
@@ -100,6 +101,9 @@ export type Modal =
   | null;
 
 const SIDEBAR_KEY = 'hcc-sidebar-collapsed';
+const SETTINGS_CHILD_ROUTES = ['/agents', '/files', '/health', '/import'];
+const isSettingsChildRoute = (pathname: string) =>
+  SETTINGS_CHILD_ROUTES.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 const COMMAND_AI_KEY = 'hcc-command-ai-open';
 
 const LAST_PROJECT_KEY = 'hcc-last-project';
@@ -108,6 +112,17 @@ const LAST_PROJECT_KEY = 'hcc-last-project';
 function LegacyKanbanRedirect() {
   const { search } = useLocation();
   return <Navigate to={`/status${search}`} replace />;
+}
+
+function LegacyCountdownRedirect() {
+  const { search, hash } = useLocation();
+  return <Navigate to={`/countdown${search}${hash}`} replace />;
+}
+
+function LegacyTaskDetailRedirect() {
+  const { search, hash } = useLocation();
+  const { taskId } = useParams();
+  return <Navigate to={`/countdown/${encodeURIComponent(taskId ?? '')}${search}${hash}`} replace />;
 }
 
 /**
@@ -163,10 +178,9 @@ function TopbarStartTask({
       window.removeEventListener('storage', refresh);
     };
   }, []);
-  const routeTaskId =
-    location.pathname.startsWith('/tasks/') && location.pathname !== '/tasks'
-      ? location.pathname.slice('/tasks/'.length).split('/')[0] || null
-      : null;
+  const routeTaskId = location.pathname.startsWith('/countdown/')
+    ? location.pathname.slice('/countdown/'.length).split('/')[0] || null
+    : null;
   const modalTask = modal?.type === 'taskDetail' ? modal.value : null;
   const { taskId, disabledReason } = resolveGlobalStartTask({
     modalTask,
@@ -219,8 +233,8 @@ function TaskDetailRoute({
     return (
       <>
         <div className="backline">
-          <button className="link-button" onClick={() => navigate('/tasks')}>
-            ← All tasks
+          <button className="link-button" onClick={() => navigate('/countdown')}>
+            ← All Countdown
           </button>
         </div>
         <PageHead
@@ -249,15 +263,15 @@ function TaskDetailRoute({
   return (
     <>
       <div className="backline">
-        <button className="link-button" onClick={() => navigate('/tasks')}>
-          ← All tasks
+        <button className="link-button" onClick={() => navigate('/countdown')}>
+          ← All Countdown
         </button>
       </div>
       <TaskDetail
         task={task}
         tasks={visibleTasks}
         tags={tags}
-        close={() => navigate('/tasks')}
+        close={() => navigate('/countdown')}
         edit={() => edit(task)}
         refresh={refresh}
         flash={flash}
@@ -269,6 +283,7 @@ function TaskDetailRoute({
 }
 
 export function App() {
+  const location = useLocation();
   const [themeMode, setThemeMode] = useState<ThemeMode>(readBrowserThemeMode);
   const [clients, setClients] = useState<Client[]>([]),
     [projects, setProjects] = useState<Project[]>([]),
@@ -284,6 +299,9 @@ export function App() {
   const [notice, setNotice] = useState<{ tone: 'success' | 'error'; text: string } | null>(null),
     [navOpen, setNavOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(() => readBrowserPreference(SIDEBAR_KEY) === '1');
+  const [settingsExpanded, setSettingsExpanded] = useState(() =>
+    isSettingsChildRoute(location.pathname),
+  );
   const [commandAiOpen, setCommandAiOpen] = useState(
     () => readBrowserPreference(COMMAND_AI_KEY) === '1',
   );
@@ -304,7 +322,6 @@ export function App() {
   // When the last import wrote its receipt. The Import page reloads its receipts on it, so a
   // modal that finished in front of the page does not leave a stale list behind it.
   const [importedAt, setImportedAt] = useState(0);
-  const location = useLocation();
   useEffect(() => {
     const preference = systemThemePreference();
     const update = () =>
@@ -394,6 +411,11 @@ export function App() {
     setNavOpen(false);
   }, [location.pathname]);
   useEffect(() => {
+    if (isSettingsChildRoute(location.pathname)) {
+      setSettingsExpanded(true);
+    }
+  }, [location.pathname]);
+  useEffect(() => {
     writeBrowserPreference(SIDEBAR_KEY, collapsed ? '1' : '0');
   }, [collapsed]);
   useEffect(() => {
@@ -458,32 +480,50 @@ export function App() {
                 collapsed={collapsed}
               />
               <Nav icon={<FolderKanban />} to="/status" label="Status" collapsed={collapsed} />
-              <Nav icon={<Timer />} to="/tasks" label="Tasks" collapsed={collapsed} />
-              <Nav icon={<Clock3 />} to="/time" label="Time" collapsed={collapsed} />
-              <Nav icon={<Upload />} to="/import" label="Import" collapsed={collapsed} />
-              <Nav icon={<FileText />} to="/files" label="Files" collapsed={collapsed} />
-              <Nav icon={<CalendarDays />} to="/calendar" label="Calendar" collapsed={collapsed} />
-              <Nav icon={<Megaphone />} to="/signal" label="Signal" collapsed={collapsed} />
+              <Nav icon={<Timer />} to="/countdown" label="Countdown" collapsed={collapsed} />
               <Nav icon={<BarChart3 />} to="/ads" label="Ads" collapsed={collapsed} />
-              <Nav icon={<HeartPulse />} to="/health" label="Health" collapsed={collapsed} />
-              <Nav
-                icon={
-                  <>
-                    <Bot />
-                    <Bell
-                      aria-label={
-                        unreadNotifications
-                          ? `${unreadNotifications} unread notifications`
-                          : 'Notifications'
+              <Nav icon={<Megaphone />} to="/signal" label="Signal" collapsed={collapsed} />
+              <Nav icon={<CalendarDays />} to="/calendar" label="Calendar" collapsed={collapsed} />
+              <Nav icon={<Clock3 />} to="/time" label="Time" collapsed={collapsed} />
+              <div className="settings-nav-group">
+                <Nav icon={<Settings />} to="/settings" label="Settings" collapsed={collapsed} />
+                <button
+                  className={`settings-nav-disclosure ${collapsed ? 'collapsed' : ''}`}
+                  type="button"
+                  aria-label={`${settingsExpanded ? 'Collapse' : 'Expand'} Settings pages`}
+                  aria-expanded={settingsExpanded}
+                  aria-controls="settings-nav-children"
+                  title={`${settingsExpanded ? 'Collapse' : 'Expand'} Settings pages`}
+                  onClick={() => setSettingsExpanded((expanded) => !expanded)}
+                >
+                  {!collapsed && <span>Pages</span>}
+                  <ChevronDown aria-hidden="true" />
+                </button>
+                {settingsExpanded && (
+                  <div className="settings-nav-children" id="settings-nav-children">
+                    <Nav
+                      icon={
+                        <>
+                          <Bot />
+                          <Bell
+                            aria-label={
+                              unreadNotifications
+                                ? `${unreadNotifications} unread notifications`
+                                : 'Notifications'
+                            }
+                          />
+                        </>
                       }
+                      to="/agents"
+                      label="Agents"
+                      collapsed={collapsed}
                     />
-                  </>
-                }
-                to="/agents"
-                label="Agents"
-                collapsed={collapsed}
-              />
-              <Nav icon={<Settings />} to="/settings" label="Settings" collapsed={collapsed} />
+                    <Nav icon={<FileText />} to="/files" label="Files" collapsed={collapsed} />
+                    <Nav icon={<HeartPulse />} to="/health" label="Health" collapsed={collapsed} />
+                    <Nav icon={<Upload />} to="/import" label="Import" collapsed={collapsed} />
+                  </div>
+                )}
+              </div>
             </nav>
             <div className="sidebar-foot">
               <button
@@ -630,15 +670,17 @@ export function App() {
                 />
                 {/* Bookmarks and older dashboard tiles still use /kanban; keep the query string. */}
                 <Route path="/kanban" element={<LegacyKanbanRedirect />} />
+                <Route path="/tasks" element={<LegacyCountdownRedirect />} />
+                <Route path="/tasks/:taskId" element={<LegacyTaskDetailRedirect />} />
                 <Route
-                  path="/tasks"
+                  path="/countdown"
                   element={
                     <TasksView tasks={tasks} clients={clients} projects={projects} tags={tags} />
                   }
                 />
                 <Route path="/time" element={<WorkspaceTimeView />} />
                 <Route
-                  path="/tasks/:taskId"
+                  path="/countdown/:taskId"
                   element={
                     <TaskDetailRoute
                       tasks={tasks}

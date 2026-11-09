@@ -1,5 +1,14 @@
 # Changelog
 
+## [7.2.0] - 2026-11-09
+
+### Changed
+
+- Reorganized sidebar navigation, grouped secondary pages under a keyboard-accessible Settings disclosure, and renamed the task and Pomodoro page to Countdown at `/countdown` while preserving `/tasks` links through redirects.
+
+### Breaking changes
+
+None.
 ## [7.1.11] - 2026-11-09
 
 ## Changed

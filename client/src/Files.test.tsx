@@ -34,7 +34,7 @@ const listingCalls = () =>
   requests.filter((call) => call.method === 'GET' && call.url.includes('/files?'));
 
 describe('Files module', () => {
-  it('links Files from the sidebar, alongside the calendar that used to be unbuilt', async () => {
+  it('links Files under Settings while Calendar stays in the primary navigation', async () => {
     render(
       <MemoryRouter>
         <App />
@@ -42,7 +42,12 @@ describe('Files module', () => {
     );
 
     await screen.findByText(branding.title);
-    expect(screen.getByRole('link', { name: 'Files' })).toHaveAttribute('href', '/files');
+    const navigation = screen.getByRole('navigation', { name: 'Primary navigation' });
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Settings pages' }));
+    expect(within(navigation).getByRole('link', { name: 'Files' })).toHaveAttribute(
+      'href',
+      '/files',
+    );
     expect(screen.getByRole('link', { name: 'Calendar' })).toHaveAttribute('href', '/calendar');
     // Nothing is parked under "Coming next" any more; the divider goes with the last stub.
     expect(screen.queryByText('Coming next')).toBeNull();

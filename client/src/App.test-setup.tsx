@@ -860,6 +860,35 @@ export const calendarRange = (overrides: Partial<CalendarRange> = {}): CalendarR
 const payloadFor = (url: string) => {
   if (url.endsWith('/api/import/receipts')) return testState.importReceiptsPayload;
   if (url.endsWith('/api/dashboard')) return testState.dashboardPayload;
+  if (url.endsWith('/api/health/dashboard'))
+    return {
+      generatedAt: '2026-01-01T00:00:00.000Z',
+      overall: 'healthy',
+      signals: {
+        process: { state: 'healthy', label: 'Process', detail: '', checkedAt: null, freshness: '' },
+        database: {
+          state: 'healthy',
+          label: 'Database',
+          detail: '',
+          checkedAt: null,
+          freshness: '',
+        },
+        agentActivity: {
+          state: 'healthy',
+          label: 'Agent activity',
+          detail: '',
+          checkedAt: null,
+          freshness: '',
+        },
+        remoteAgents: {
+          state: 'healthy',
+          label: 'Remote agents',
+          detail: '',
+          checkedAt: null,
+          freshness: '',
+        },
+      },
+    };
   if (url.endsWith('/api/time/entries')) return testState.workspaceTimePayload;
   if (url.endsWith('/api/settings/branding'))
     return { branding: testState.brandingPayload ?? branding };
