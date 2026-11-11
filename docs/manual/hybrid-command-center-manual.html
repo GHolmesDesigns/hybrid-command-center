@@ -969,7 +969,7 @@
 
     <div class="railfoot">
       <b>G.Holmes Designs</b><br />
-      Version 7.4.0<br />
+      Version 7.4.1<br />
       Local-first &middot; hosted-capable
     </div>
   </aside>
@@ -979,7 +979,7 @@
       <div class="inner">
         <p class="eyebrow">
           <span>G.Holmes Designs &middot; Studio operations</span>
-          <span class="draft">Release 7.4.0</span>
+          <span class="draft">Release 7.4.1</span>
         </p>
         <h1>Hybrid Command Center</h1>
         <p class="deck">
@@ -990,7 +990,7 @@
         <dl class="stats">
           <div class="stat">
             <dt>Version</dt>
-            <dd>7.4.0</dd>
+            <dd>7.4.1</dd>
           </div>
           <div class="stat">
             <dt>Runtime</dt>
@@ -4225,7 +4225,7 @@ npm run cutover:rehearse -- --plan</code></pre>
               </table>
               <h4>MCP tool surface</h4>
               <p>
-                The registry contains 96 scoped tools. Discover the current subset with
+                The registry contains 97 scoped tools. Discover the current subset with
                 <code>tools/list</code>; do not hard-code availability because each credential may
                 receive a different scope set. The surface covers coordination and work leases,
                 bounded workspace and Signal reads, selected local writes, imports, settings,
@@ -4236,7 +4236,8 @@ npm run cutover:rehearse -- --plan</code></pre>
               </p>
               <p>
                 The <code>time:read</code> scope exposes operator-owned time entries, project totals,
-                and the active timer snapshot. The separate <code>time:write</code> scope allows
+                the active timer snapshot, and selectable time categories for one project. The
+                separate <code>time:write</code> scope allows
                 manual entry changes; it cannot start or alter the timer, and timer-generated
                 entries cannot be edited or deleted through MCP.
               </p>
@@ -4281,7 +4282,7 @@ npm run cutover:rehearse -- --plan</code></pre>
     <footer class="footer">
       <div class="inner">
         <p>
-                Hybrid Command Center 7.4.0 &mdash; operating manual, updated 2026-10-02. Compiled from
+                Hybrid Command Center 7.4.1 &mdash; operating manual, updated 2026-10-02. Compiled from
           <code>USER_MANUAL.md</code>, <code>README.md</code>, and <code>AGENTS.md</code>. Where
           this page and those files disagree, the repository is correct.
         </p>

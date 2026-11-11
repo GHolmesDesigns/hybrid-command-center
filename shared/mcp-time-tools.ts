@@ -43,6 +43,7 @@ export const mcpTimeListEntriesArgsSchema = z
   });
 
 export const mcpTimeProjectSummaryArgsSchema = z.object({ projectId: idSchema }).strict();
+export const mcpTimeListCategoriesArgsSchema = z.object({ projectId: idSchema }).strict();
 export const mcpTimeActiveArgsSchema = z.object({}).strict();
 
 const mcpTimeEntryInput = z.object({

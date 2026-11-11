@@ -257,6 +257,18 @@ describe('callMcpTool', () => {
     expect(workspace.errorDetail?.code).toBe('WORKSPACE_SCOPE_REQUIRED');
   });
 
+  it('refuses time_list_categories without time:read', async () => {
+    const result = await callMcpTool(
+      db,
+      createMcpSession({ agentLabel: 'time-reader' }),
+      'time_list_categories',
+      { projectId: '11111111-1111-4111-8111-111111111111' },
+      { grantedScopes: ['workspace:read'], now: NOW },
+    );
+    expect(result.outcome).toBe('REFUSED');
+    expect(result.error).toContain('time:read');
+  });
+
   it('routes system_capabilities through the registry handler', async () => {
     const session = createMcpSession();
     const result = await callMcpTool(

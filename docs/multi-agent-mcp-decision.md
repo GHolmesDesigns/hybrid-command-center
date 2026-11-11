@@ -295,6 +295,25 @@ client metadata; it returns no branding values or Drive folder identifiers. New 
 with `drive_status = 'PENDING'` until an operator provisions Drive from the UI. The HTTP client
 routes and MCP writes share the same schemas, slug builder, and workspace write service.
 
+### Time tools
+
+| Tool | Class | Owner | Authorization | Audit / confirmation |
+| --- | --- | --- | --- | --- |
+| `time_list_entries` | R | `server/workspace-time.ts` | `time:read` | — |
+| `time_project_summary` | R | `server/project-time.ts` | `time:read` | — |
+| `time_list_categories` | R | `server/project-time.ts` | `time:read` | — |
+| `time_get_active` | R | `server/operator-timer.ts` | `time:read` | — |
+| `time_create_entry` | L | `server/project-time.ts` | `time:write` | `mcp_agent_events` |
+| `time_update_entry` | L | `server/project-time.ts` | `time:write` | `mcp_agent_events` |
+| `time_delete_entry` | L | `server/project-time.ts` | `time:write` | `mcp_agent_events` |
+
+C272 adds `time_list_categories(projectId)` to the `time:read` surface. It returns only selectable
+categories from the same project/global scope selected by the manual-entry form, with each ID, name,
+and `global` or `project` scope. Archived and out-of-scope categories are omitted. An unknown project
+is reported as not found; a project with no selectable categories returns an empty array. The tool
+reads stored data only, and its returned category ID is accepted by `time_create_entry` for that
+project.
+
 ### 9.3 Signal — planning and reads
 
 | Tool | Class | Owner | Authorization | Audit / confirmation |

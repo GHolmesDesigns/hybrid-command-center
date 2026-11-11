@@ -1389,6 +1389,10 @@ on Files or **Open Drive** on a project to manage files themselves in Google Dri
 **Agents** is where you connect IDE assistants to this Command Center, hold Conversations with
 them, and watch their handoffs:
 
+Agents granted `time:read` can use the read-only `time_list_categories` MCP tool to get the
+selectable time categories for a project. Its category IDs can be used when creating or updating a
+manual entry; listing categories does not change workspace data.
+
 - **Agent connection setup** — register an agent label, issue or rotate a scoped credential, follow
   numbered steps for Cursor, Claude, or Codex, and copy a ready-to-paste HTTPS setup into that
   client's own settings UI. You should not need a terminal or a text editor. The credential is shown
