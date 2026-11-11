@@ -1,5 +1,14 @@
 # Changelog
 
+## [7.4.1] - 2026-11-11
+
+### Added
+
+- Added a read-only MCP tool for agents to list the selectable time categories for a project and use their IDs in manual time entries.
+
+### Breaking changes
+
+None.
 ## [7.4.0] - 2026-11-11
 
 ### Added
