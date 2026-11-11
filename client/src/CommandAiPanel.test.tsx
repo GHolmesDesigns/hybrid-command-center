@@ -145,9 +145,11 @@ describe('CommandAiPanel', () => {
     const headerGlyph = screen
       .getByRole('complementary', { name: 'Command AI' })
       .querySelector('.command-ai-brand .command-ai-glyph');
-    expect(headerGlyph).toHaveAttribute('viewBox', '0 0 24 24');
-    expect(headerGlyph).toHaveAttribute('stroke', 'currentColor');
     expect(headerGlyph).toHaveAttribute('aria-hidden', 'true');
+    expect(headerGlyph?.querySelector('.command-ai-glyph-primary')).toHaveAttribute(
+      'src',
+      '/command-ai/logo-icon.svg',
+    );
 
     fireEvent.change(screen.getByLabelText('Command AI message'), {
       target: { value: 'Queue health question' },
@@ -166,11 +168,19 @@ describe('CommandAiPanel', () => {
     expect(screen.getAllByText('Queue health question').length).toBeGreaterThanOrEqual(2);
   });
 
-  it('shows the floating opener when the panel is collapsed', () => {
+  it('shows the supplied mark in the accessible floating opener when collapsed', () => {
     render(<CommandAiFab open={false} onClick={() => undefined} />);
     const opener = screen.getByRole('button', { name: 'Open Command AI' });
     expect(opener).toBeVisible();
-    expect(opener.querySelector('.command-ai-glyph')).toHaveAttribute('stroke', 'currentColor');
+    expect(opener).toHaveAttribute('type', 'button');
+    expect(opener.querySelector('.command-ai-glyph-primary')).toHaveAttribute(
+      'src',
+      '/command-ai/logo-icon.svg',
+    );
+    expect(opener.querySelector('.command-ai-glyph-white')).toHaveAttribute(
+      'src',
+      '/command-ai/logo-icon-white.svg',
+    );
   });
 
   it('lists history and returns to a saved thread', async () => {
@@ -291,6 +301,12 @@ describe('CommandAiPanel', () => {
     renderPanel(<CommandAiPanel open onClose={onClose} />);
 
     await screen.findByText('What are you curious about?');
+    const panel = screen.getByRole('complementary', { name: 'Command AI' });
+    expect(panel.querySelector('.command-ai-brand')).toHaveTextContent('Command AI');
+    expect(panel.querySelector('.command-ai-brand .command-ai-glyph-primary')).toHaveAttribute(
+      'src',
+      '/command-ai/logo-icon.svg',
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Close Command AI' }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -299,7 +315,11 @@ describe('CommandAiPanel', () => {
     const onClick = vi.fn();
     render(<CommandAiTopbarToggle open onClick={onClick} />);
     const toggle = screen.getByRole('button', { name: 'Command AI' });
-    expect(toggle.querySelector('.command-ai-glyph')).toHaveAttribute('stroke', 'currentColor');
+    expect(toggle.querySelector('.command-ai-glyph-primary')).toHaveAttribute(
+      'src',
+      '/command-ai/logo-icon.svg',
+    );
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(toggle);
     expect(onClick).toHaveBeenCalledTimes(1);
   });
