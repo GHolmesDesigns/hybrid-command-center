@@ -1,5 +1,14 @@
 # Changelog
 
+## [7.4.2] - 2026-11-11
+
+### Fixed
+
+- Deleting a timer-created time entry now also removes its stop record, so the entry can be deleted without changing the active timer.
+
+### Breaking changes
+
+None.
 ## [7.4.1] - 2026-11-11
 
 ### Added
