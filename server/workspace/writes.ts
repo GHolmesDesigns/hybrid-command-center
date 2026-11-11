@@ -1,7 +1,7 @@
 /**
  * Local workspace writes shared by HTTP and MCP (C130).
  *
- * Drive provisioning stays in the HTTP layer — MCP createProject leaves drive_status PENDING.
+ * Drive provisioning stays in HTTP handlers — local client and project creation leave it pending.
  * Checklist and dependency mutations optionally take a parent-task revision; MCP always passes one.
  */
 import crypto from 'node:crypto';
@@ -14,6 +14,9 @@ import { blockingDependencies, wouldCreateCycle } from '../domain/dependencies.t
 import { advanceRevision, requireRevision, RevisionConflictError } from '../domain/revisions.ts';
 import { getSetting, setSetting } from '../drive/service.ts';
 import { getTask, listProjects } from '../repositories.ts';
+import { listClients } from '../repositories.ts';
+import { buildClientSlug } from '../domain/client-slugs.ts';
+import { normalizeHex } from '../../shared/contrast.ts';
 import {
   APP_VERSION,
   BRANDING_SETTING_KEY,
@@ -29,6 +32,9 @@ import {
 import { TASK_CHECKLIST_TEMPLATES, type Project, type Task } from '../../shared/types.ts';
 import {
   brandingInput,
+  clientBrandingInput,
+  clientInput,
+  clientPatch,
   projectInput,
   taskInput,
   type BrandingInput,
@@ -98,6 +104,93 @@ export { RevisionConflictError };
 export function getProjectById(db: Db, projectId: string): Project | undefined {
   return listProjects(db).find((project) => (project as Project).id === projectId) as
     Project | undefined;
+}
+
+export function createClient(
+  db: Db,
+  raw: z.input<typeof clientInput>,
+): ReturnType<typeof listClients>[number] {
+  const data = clientInput.parse(raw);
+  const clientId = id();
+  const stamp = now();
+  db.prepare(
+    `INSERT INTO clients(id,name,slug,contact_name,email,phone,website,notes,branding_logo_url,branding_color_one,branding_color_two,drive_status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+  ).run(
+    clientId,
+    data.name,
+    buildClientSlug(data.name, clientId),
+    data.contactName ?? null,
+    data.email ?? null,
+    data.phone ?? null,
+    data.website ?? null,
+    data.notes ?? null,
+    data.brandingLogoUrl ?? null,
+    normalizeHex(data.brandingColorOne ?? '') ?? data.brandingColorOne ?? null,
+    normalizeHex(data.brandingColorTwo ?? '') ?? data.brandingColorTwo ?? null,
+    'PENDING',
+    stamp,
+    stamp,
+  );
+  recordWorkspaceChange(db, 'client.created', 'client', clientId, 'Client created.', stamp);
+  const client = listClients(db).find((candidate: { id: string }) => candidate.id === clientId);
+  if (!client) throw new WorkspaceNotFoundError('Client not found.');
+  return client;
+}
+
+export function updateClient(
+  db: Db,
+  clientId: string,
+  raw: z.input<typeof clientPatch>,
+  revision: number,
+): ReturnType<typeof listClients>[number] {
+  const data = clientPatch.parse(raw);
+  const current = db.prepare('SELECT * FROM clients WHERE id=?').get(clientId) as
+    Record<string, unknown> | undefined;
+  if (!current) throw new WorkspaceNotFoundError('Client not found.');
+  const branding = {
+    brandingLogoUrl:
+      data.brandingLogoUrl === undefined
+        ? (current.branding_logo_url as string | null)
+        : data.brandingLogoUrl,
+    brandingColorOne:
+      data.brandingColorOne === undefined
+        ? (current.branding_color_one as string | null)
+        : data.brandingColorOne,
+    brandingColorTwo:
+      data.brandingColorTwo === undefined
+        ? (current.branding_color_two as string | null)
+        : data.brandingColorTwo,
+  };
+  const brandingResult = clientBrandingInput.safeParse(branding);
+  if (!brandingResult.success)
+    throw new WorkspaceValidationError(
+      brandingResult.error.issues[0]?.message ?? 'Invalid client branding.',
+    );
+  const stamp = now();
+  transaction(db, () => {
+    requireRevision(db, 'client', clientId, revision);
+    db.prepare(
+      `UPDATE clients SET name=?,slug=?,contact_name=?,email=?,phone=?,website=?,notes=?,branding_logo_url=?,branding_color_one=?,branding_color_two=?,updated_at=? WHERE id=?`,
+    ).run(
+      data.name === undefined ? (current.name as string) : data.name,
+      data.name === undefined ? (current.slug as string) : buildClientSlug(data.name, clientId),
+      data.contactName === undefined ? (current.contact_name as string | null) : data.contactName,
+      data.email === undefined ? (current.email as string | null) : data.email,
+      data.phone === undefined ? (current.phone as string | null) : data.phone,
+      data.website === undefined ? (current.website as string | null) : data.website,
+      data.notes === undefined ? (current.notes as string | null) : data.notes,
+      branding.brandingLogoUrl,
+      normalizeHex(branding.brandingColorOne ?? '') ?? branding.brandingColorOne,
+      normalizeHex(branding.brandingColorTwo ?? '') ?? branding.brandingColorTwo,
+      stamp,
+      clientId,
+    );
+    advanceRevision(db, 'client', clientId, revision, Object.keys(data), stamp);
+    recordWorkspaceChange(db, 'client.updated', 'client', clientId, 'Client updated.', stamp);
+  });
+  const client = listClients(db).find((candidate: { id: string }) => candidate.id === clientId);
+  if (!client) throw new WorkspaceNotFoundError('Client not found.');
+  return client;
 }
 
 export function readBranding(db: Db): Branding {

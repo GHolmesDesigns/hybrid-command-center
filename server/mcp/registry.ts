@@ -24,7 +24,7 @@ import {
 } from '../../shared/mcp-workspace-context.ts';
 import { SIGNAL_ASSIGN_POSTS_MAX, SIGNAL_LIFECYCLE_FILTERS } from '../../shared/signal.ts';
 import { TASK_PRIORITIES, TASK_STATUSES } from '../../shared/types.ts';
-import { MCP_TASK_LIST_MAX_LIMIT } from '../../shared/mcp-read-tools.ts';
+import { MCP_CLIENT_LIST_MAX_LIMIT, MCP_TASK_LIST_MAX_LIMIT } from '../../shared/mcp-read-tools.ts';
 import { MCP_TIME_ENTRY_LIST_MAX_LIMIT } from '../../shared/mcp-time-tools.ts';
 
 export type McpToolRegistryEntry = {
@@ -488,6 +488,36 @@ const agentTools: McpToolRegistryEntry[] = [
 
 const workspaceReadTools: McpToolRegistryEntry[] = [
   {
+    name: 'workspace_list_clients',
+    description: 'List clients by status. Defaults to active clients and caps the result set.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', enum: ['ACTIVE', 'ARCHIVED', 'ALL'], default: 'ACTIVE' },
+        limit: { type: 'integer', minimum: 1, maximum: MCP_CLIENT_LIST_MAX_LIMIT, default: 50 },
+      },
+      additionalProperties: false,
+    },
+    class: 'R',
+    requiredScope: 'workspace:read',
+    owner: 'server/repositories.ts',
+    handler: 'workspace_read',
+  },
+  {
+    name: 'workspace_get_client',
+    description: 'Read one client by id, without branding or Drive folder identifiers.',
+    inputSchema: {
+      type: 'object',
+      properties: { id: { type: 'string', format: 'uuid' } },
+      required: ['id'],
+      additionalProperties: false,
+    },
+    class: 'R',
+    requiredScope: 'workspace:read',
+    owner: 'server/repositories.ts',
+    handler: 'workspace_read',
+  },
+  {
     name: 'time_list_entries',
     description:
       'List operator-owned project time entries using optional project, task, category, and local-date filters.',
@@ -678,6 +708,52 @@ const systemConnectionStatusTool: McpToolRegistryEntry = {
 };
 
 const workspaceWriteTools: McpToolRegistryEntry[] = [
+  {
+    name: 'workspace_create_client',
+    description: 'Create a local client. Drive provisioning remains pending for the operator.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        clientRequestId: { type: 'string' },
+        name: { type: 'string' },
+        contactName: { type: ['string', 'null'] },
+        email: { type: ['string', 'null'] },
+        phone: { type: ['string', 'null'] },
+        website: { type: ['string', 'null'] },
+        notes: { type: ['string', 'null'] },
+      },
+      required: ['clientRequestId', 'name'],
+      additionalProperties: false,
+    },
+    class: 'L',
+    requiredScope: 'workspace:write',
+    owner: 'server/workspace/writes.ts',
+    handler: 'workspace_write',
+  },
+  {
+    name: 'workspace_update_client',
+    description: 'Update client contact details using a revision from a prior read.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        clientRequestId: { type: 'string' },
+        clientId: { type: 'string', format: 'uuid' },
+        revision: { type: 'integer', minimum: 1 },
+        name: { type: 'string' },
+        contactName: { type: ['string', 'null'] },
+        email: { type: ['string', 'null'] },
+        phone: { type: ['string', 'null'] },
+        website: { type: ['string', 'null'] },
+        notes: { type: ['string', 'null'] },
+      },
+      required: ['clientRequestId', 'clientId', 'revision'],
+      additionalProperties: false,
+    },
+    class: 'L',
+    requiredScope: 'workspace:write',
+    owner: 'server/workspace/writes.ts',
+    handler: 'workspace_write',
+  },
   {
     name: 'time_create_entry',
     description:

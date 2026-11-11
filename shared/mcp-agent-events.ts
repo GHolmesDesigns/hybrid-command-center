@@ -36,6 +36,8 @@ export type CoordinationWriteTool = (typeof COORDINATION_WRITE_TOOLS)[number];
 
 /** Class-L workspace/Signal/settings writes (C130). Share the coordination write budget. */
 export const WORKSPACE_WRITE_TOOLS = [
+  'workspace_create_client',
+  'workspace_update_client',
   'workspace_create_task',
   'workspace_update_task',
   'workspace_add_checklist_item',

@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { format, subDays } from 'date-fns';
 import { createDb, type Db } from '../db.ts';
 import { callWorkspaceReadTool } from './workspace-read.ts';
+import { callMcpTool } from './dispatch.ts';
+import { createMcpSession } from './session.ts';
 import { PublishService } from '../publish/service.ts';
 import { LocalSignalProvider } from '../signal/read.ts';
 import { MockPublishProvider } from '../publish/mock-provider.ts';
@@ -62,6 +64,64 @@ beforeEach(() => {
 });
 
 describe('callWorkspaceReadTool', () => {
+  it('lists and gets clients by status with capped, Drive-id-free results under workspace:read', async () => {
+    addClient('c2', 'Archived client', 'ARCHIVED');
+    const activeId = '11111111-1111-4111-8111-111111111111';
+    addClient(activeId, 'Scoped active client');
+    db.prepare('UPDATE clients SET branding_logo_url=?, drive_folder_id=? WHERE id=?').run(
+      'https://example.com/logo.png',
+      'drive-secret-id',
+      activeId,
+    );
+    const session = createMcpSession({ agentLabel: 'reader' });
+    const active = await callMcpTool(
+      db,
+      session,
+      'workspace_list_clients',
+      { limit: 1 },
+      {
+        grantedScopes: ['workspace:read'],
+      },
+    );
+    expect(active.outcome).toBe('SUCCESS');
+    expect(active.data).toMatchObject({ total: 2, truncated: true });
+    expect(active.data).not.toHaveProperty('clients.0.driveFolderId');
+    expect(active.data).not.toHaveProperty('clients.0.branding');
+    const archived = await callWorkspaceReadTool(db, 'workspace_list_clients', {
+      status: 'ARCHIVED',
+    });
+    expect(archived.data).toMatchObject({ total: 1, clients: [{ name: 'Archived client' }] });
+    const fetched = await callWorkspaceReadTool(db, 'workspace_get_client', { id: activeId });
+    expect(fetched.outcome).toBe('SUCCESS');
+    expect(fetched.data).not.toHaveProperty('driveFolderId');
+    expect(fetched.data).not.toHaveProperty('branding');
+    const refused = await callMcpTool(
+      db,
+      session,
+      'workspace_get_client',
+      { id: activeId },
+      {
+        grantedScopes: [],
+      },
+    );
+    expect(refused.outcome).toBe('REFUSED');
+    const listRefused = await callMcpTool(
+      db,
+      session,
+      'workspace_list_clients',
+      {},
+      {
+        grantedScopes: [],
+      },
+    );
+    expect(listRefused.outcome).toBe('REFUSED');
+    const missing = await callWorkspaceReadTool(db, 'workspace_get_client', {
+      id: '22222222-2222-4222-8222-222222222222',
+    });
+    expect(missing.outcome).toBe('FAILURE');
+    expect(missing.errorDetail?.code).toBe('COORDINATION_NOT_FOUND');
+  });
+
   it('lists project time only within the requested filters and exposes stored summary fields', async () => {
     const projectId = '11111111-1111-4111-8111-111111111111';
     const otherProjectId = '22222222-2222-4222-8222-222222222222';

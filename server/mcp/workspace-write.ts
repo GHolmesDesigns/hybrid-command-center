@@ -58,6 +58,8 @@ import {
 } from '../project-time.ts';
 import {
   brandingInput,
+  clientEditableInput,
+  clientEditablePatch,
   checklistAddInput,
   checklistUpdateInput,
   dependencyAddInput,
@@ -70,6 +72,7 @@ import {
 import {
   addChecklistItem,
   addDependency,
+  createClient,
   createProject,
   createTask,
   deleteProject,
@@ -81,6 +84,7 @@ import {
   removeDependency,
   updateBranding,
   updateChecklistItem,
+  updateClient,
   updateProject,
   updateTask,
   updateViewDefaults,
@@ -252,6 +256,24 @@ function mutationSummary(
   return { before, after, ...extra };
 }
 
+function mcpClientWriteView(client: ReturnType<typeof createClient>) {
+  return {
+    id: client.id,
+    name: client.name,
+    slug: client.slug,
+    contactName: client.contactName ?? null,
+    email: client.email ?? null,
+    phone: client.phone ?? null,
+    website: client.website ?? null,
+    notes: client.notes ?? null,
+    status: client.status,
+    driveStatus: client.driveStatus,
+    createdAt: client.createdAt,
+    updatedAt: client.updatedAt,
+    revision: client.revision,
+  };
+}
+
 export async function callWorkspaceWriteTool(
   db: Db,
   session: McpSession,
@@ -317,6 +339,42 @@ export async function callWorkspaceWriteTool(
     const connectedAccounts = deps.connectedAccounts ?? (async () => defaultConnectedAccounts(db));
 
     switch (tool as WorkspaceWriteTool) {
+      case 'workspace_create_client': {
+        const args = clientEditableInput
+          .extend(clientRequestIdField)
+          .strict()
+          .parse(rawArgs ?? {});
+        const { clientRequestId: _request, ...input } = args;
+        void _request;
+        const after = createClient(db, input);
+        return finish(db, session, tool, success({ client: mcpClientWriteView(after) }), {
+          entityType: 'client',
+          entityId: after.id,
+          summary: `Created client ${after.id}; Drive provisioning remains pending for the operator.`,
+          clientRequestId,
+          persistIdempotency: true,
+        });
+      }
+      case 'workspace_update_client': {
+        const args = clientEditablePatch
+          .extend({
+            ...clientRequestIdField,
+            clientId: z.string().uuid(),
+            revision: revisionPrecondition,
+          })
+          .strict()
+          .parse(rawArgs ?? {});
+        const { clientRequestId: _request, clientId, revision, ...patch } = args;
+        void _request;
+        const after = updateClient(db, clientId, patch, revision);
+        return finish(db, session, tool, success({ client: mcpClientWriteView(after) }), {
+          entityType: 'client',
+          entityId: after.id,
+          summary: `Updated client ${after.id}.`,
+          clientRequestId,
+          persistIdempotency: true,
+        });
+      }
       case 'time_create_entry': {
         const args = mcpTimeCreateEntryArgsSchema.parse(rawArgs ?? {});
         const { clientRequestId: _request, projectId, ...input } = args;

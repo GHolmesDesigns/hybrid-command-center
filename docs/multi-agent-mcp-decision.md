@@ -265,10 +265,10 @@ already owns the behaviour.
 
 | Tool | Class | Owner | Authorization | Audit / confirmation |
 | --- | --- | --- | --- | --- |
-| `workspace_list_clients` | R | `server/domain/clients` | Operator | — |
-| `workspace_get_client` | R | `server/domain/clients` | Operator | — |
-| `workspace_create_client` | L | `server/domain/clients` | Operator | `mcp_agent_events` |
-| `workspace_update_client` | L | `server/domain/clients` | Operator | `mcp_agent_events` |
+| `workspace_list_clients` | R | `server/mcp/workspace-read.ts` | Operator | — |
+| `workspace_get_client` | R | `server/mcp/workspace-read.ts` | Operator | — |
+| `workspace_create_client` | L | `server/workspace/writes.ts` | Operator | `mcp_agent_events` |
+| `workspace_update_client` | L | `server/workspace/writes.ts` | Operator | `mcp_agent_events` |
 | `workspace_archive_client` | L | `server/domain/clients` | Operator | `mcp_agent_events` + confirm flag |
 | `workspace_merge_clients_preview` | R | `server/domain/clients` | Operator | — |
 | `workspace_merge_clients_commit` | L | `server/domain/clients` | Operator | preview hash + `mcp_agent_events` |
@@ -287,6 +287,13 @@ already owns the behaviour.
 | `workspace_manage_category` | L | `server/domain/categories` | Operator | `mcp_agent_events` |
 | `workspace_dashboard_summary` | R | `server/domain/dashboard.ts` | Operator | — |
 | `workspace_calendar_range` | R | `server/calendar.ts` | Operator | — |
+
+C271 implements the four client tools above. Client reads require `workspace:read`; creation and
+revision-checked contact edits require `workspace:write` and an idempotency key. Listing defaults to
+active clients and caps results at 100. MCP exposes only the six editable contact fields and safe
+client metadata; it returns no branding values or Drive folder identifiers. New clients stay local
+with `drive_status = 'PENDING'` until an operator provisions Drive from the UI. The HTTP client
+routes and MCP writes share the same schemas, slug builder, and workspace write service.
 
 ### 9.3 Signal — planning and reads
 

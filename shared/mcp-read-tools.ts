@@ -10,6 +10,14 @@ import { TASK_PRIORITIES, TASK_STATUSES } from './types.ts';
 
 /** Default and maximum page size for `workspace_list_tasks`. */
 export const MCP_TASK_LIST_DEFAULT_LIMIT = 50;
+export const MCP_CLIENT_LIST_MAX_LIMIT = 100;
+export const mcpClientListArgsSchema = z
+  .object({
+    status: z.enum(['ACTIVE', 'ARCHIVED', 'ALL']).default('ACTIVE'),
+    limit: z.number().int().min(1).max(MCP_CLIENT_LIST_MAX_LIMIT).default(50),
+  })
+  .strict();
+export const mcpClientGetArgsSchema = z.object({ id: z.string().uuid() }).strict();
 export const MCP_TASK_LIST_MAX_LIMIT = 100;
 
 /** Maximum tasks returned in each dashboard bucket over MCP. */

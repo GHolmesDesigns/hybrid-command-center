@@ -52,6 +52,8 @@ const expectedRequiredScope = (name: string): McpAgentScope | null => {
   if ((SIGNAL_WRITE_TOOLS as readonly string[]).includes(name)) return 'signal:write';
   if (
     name.startsWith('workspace_') &&
+    name !== 'workspace_list_clients' &&
+    name !== 'workspace_get_client' &&
     !name.endsWith('_preview') &&
     name !== 'workspace_dashboard_summary' &&
     name !== 'workspace_list_tasks' &&
@@ -82,6 +84,10 @@ describe('mcp tool registry', () => {
     expect(names).toContain('system_capabilities');
     expect(names).toContain('coordination_list_handoffs');
     expect(names).toContain('workspace_dashboard_summary');
+    expect(names).toContain('workspace_list_clients');
+    expect(names).toContain('workspace_get_client');
+    expect(names).toContain('workspace_create_client');
+    expect(names).toContain('workspace_update_client');
     expect(names).toContain('signal_queue_health');
     expect(names).toContain('signal_create_post');
     expect(names).toContain('workspace_create_task');
@@ -101,7 +107,7 @@ describe('mcp tool registry', () => {
     expect(names).toContain('agent_list_notifications');
     expect(
       names.filter((name) => name !== 'system_capabilities' && name !== 'system_connection_status'),
-    ).toHaveLength(90);
+    ).toHaveLength(94);
     expect(names).toContain('system_connection_status');
     expect(isRegisteredMcpTool('system_capabilities')).toBe(true);
     expect(isRegisteredMcpTool('not_a_tool')).toBe(false);

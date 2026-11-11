@@ -13,6 +13,7 @@ import {
 import { normalizeHex } from '../../shared/contrast.ts';
 import { TASK_PRIORITIES, TASK_STATUSES, TASK_TYPES } from '../../shared/types.ts';
 import { viewDefaultsIssues, type ViewDefaults } from '../../shared/view-defaults.ts';
+import { clientBrandingIssues } from '../../shared/branding.ts';
 
 export { APP_VERSION };
 
@@ -43,6 +44,83 @@ const nullableTaskType = z
   .transform((v) => (v === undefined ? undefined : v || null));
 
 export const PROJECT_STATUSES = ['PLANNING', 'BUILDING', 'ACTIVE', 'ON_HOLD', 'COMPLETE'] as const;
+
+const nullableText = z
+  .union([z.string(), z.null()])
+  .optional()
+  .transform((value) => {
+    if (value === undefined || value === null) return value;
+    return value.trim() || null;
+  });
+const nullableEmail = z
+  .union([z.literal(''), z.string().email(), z.null()])
+  .optional()
+  .transform((value) => (value === undefined ? undefined : value || null));
+const nullableUrl = z
+  .union([z.literal(''), z.string().url(), z.null()])
+  .optional()
+  .transform((value) => (value === undefined ? undefined : value || null));
+const nullableBranding = z
+  .union([z.string().trim().max(500), z.null()])
+  .optional()
+  .transform((value) => (value === undefined || value === null ? value : value || null));
+
+export const clientFields = {
+  name: z.string().trim().min(2).max(120),
+  contactName: nullableText,
+  email: nullableEmail,
+  phone: nullableText,
+  website: nullableUrl,
+  notes: nullableText,
+  brandingLogoUrl: nullableBranding,
+  brandingColorOne: nullableBranding,
+  brandingColorTwo: nullableBranding,
+};
+const validateClientBranding = (
+  data: {
+    brandingLogoUrl?: string | null;
+    brandingColorOne?: string | null;
+    brandingColorTwo?: string | null;
+  },
+  ctx: z.RefinementCtx,
+) => {
+  for (const issue of clientBrandingIssues({
+    logoUrl: data.brandingLogoUrl ?? '',
+    colorOne: data.brandingColorOne ?? '',
+    colorTwo: data.brandingColorTwo ?? '',
+  }))
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: [issue.field], message: issue.message });
+};
+export const clientInput = z.object(clientFields).superRefine(validateClientBranding);
+export const clientPatch = z.object(clientFields).partial();
+export const clientEditableInput = z.object({
+  name: clientFields.name,
+  contactName: clientFields.contactName,
+  email: clientFields.email,
+  phone: clientFields.phone,
+  website: clientFields.website,
+  notes: clientFields.notes,
+});
+const CLIENT_EDITABLE_FIELDS = [
+  'name',
+  'contactName',
+  'email',
+  'phone',
+  'website',
+  'notes',
+] as const;
+export const clientEditablePatch = clientEditableInput
+  .partial()
+  .refine((value) => CLIENT_EDITABLE_FIELDS.some((field) => value[field] !== undefined), {
+    message: 'Provide at least one client field to update.',
+  });
+export const clientBrandingInput = z
+  .object({
+    brandingLogoUrl: nullableBranding,
+    brandingColorOne: nullableBranding,
+    brandingColorTwo: nullableBranding,
+  })
+  .superRefine(validateClientBranding);
 
 const projectFields = {
   clientId: z.string().uuid(),

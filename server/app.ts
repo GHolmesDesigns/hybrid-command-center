@@ -84,13 +84,7 @@ import {
   workspaceTimeOptions,
 } from './workspace-time.ts';
 import { buildWaitingInbox } from './agent-waiting.ts';
-import { buildClientSlug } from './domain/client-slugs.ts';
-import {
-  advanceRevision,
-  requireRevision,
-  revisionPrecondition,
-  RevisionConflictError,
-} from './domain/revisions.ts';
+import { revisionPrecondition, RevisionConflictError } from './domain/revisions.ts';
 import {
   driveProvider,
   driveWriteProvider,
@@ -326,6 +320,7 @@ import { MANUAL_FILENAME, MANUAL_ROUTE, manualUrlForVersion } from '../shared/ma
 import { listIntegrationEvents } from './integration-log.ts';
 import {
   APP_VERSION,
+  clientFields,
   brandingInput,
   projectInput,
   projectPatch,
@@ -336,6 +331,7 @@ import {
 import {
   addChecklistItem,
   addDependency,
+  createClient,
   createProject,
   createTask,
   deleteProject,
@@ -346,6 +342,7 @@ import {
   removeChecklistItem,
   removeDependency,
   updateBranding,
+  updateClient,
   updateChecklistItem,
   updateProject,
   updateTask,
@@ -442,8 +439,6 @@ import {
   scopedConversationResolutionSchema,
 } from '../shared/agent-conversations.ts';
 import { INTEGRATION_EVENT_PAGE_MAX, INTEGRATION_SOURCES } from '../shared/integration-log.ts';
-import { clientBrandingIssues } from '../shared/branding.ts';
-import { normalizeHex } from '../shared/contrast.ts';
 import { normalizeCategoryName, normalizeTagName } from '../shared/types.ts';
 import {
   getPresence,
@@ -721,68 +716,14 @@ function requestLogger(stream?: DestinationStream) {
 }
 
 /**
- * The three shapes an optional client field is written in, before either of the two ways of
- * sending one is layered on. `nullable*` below is the PATCH form, where an omitted key keeps the
- * stored value; `mergeFieldChoice` below that is the merge form, where the key is always sent and only
- * a blank one clears the field. Both read from these, so a value a client form would refuse is
- * refused just the same when a merge is the thing choosing it.
+ * The merge form sends every client field, and only a blank one clears it. These field schemas
+ * stay shared with the client write service so a merge cannot accept a value the UI rejects.
  */
 const text = z.string().trim();
 const emailText = z.union([z.literal(''), z.string().email()]);
 const urlText = z.union([z.literal(''), z.string().url()]);
-/**
- * Optional text field. An omitted key stays `undefined` so a PATCH keeps the stored
- * value; an empty string becomes `null` so the caller can deliberately clear it.
- */
-const nullable = text.optional().transform((v) => (v === undefined ? undefined : v || null));
-const nullableEmail = emailText
-  .optional()
-  .transform((v) => (v === undefined ? undefined : v || null));
-const nullableUrl = urlText.optional().transform((v) => (v === undefined ? undefined : v || null));
-const nullableBranding = z
-  .union([z.string().trim().max(500), z.null()])
-  .optional()
-  .transform((v) => (v === undefined || v === null ? v : v || null));
-/** Resolve one PATCH field: an omitted key keeps the stored value, `null` clears it. */
+/** Resolve a PATCH field while preserving its stored value when omitted. */
 const patch = <T>(next: T | undefined, current: T): T => (next === undefined ? current : next);
-
-const clientFields = {
-  name: z.string().trim().min(2).max(120),
-  contactName: nullable,
-  email: nullableEmail,
-  phone: nullable,
-  website: nullableUrl,
-  notes: nullable,
-  brandingLogoUrl: nullableBranding,
-  brandingColorOne: nullableBranding,
-  brandingColorTwo: nullableBranding,
-};
-const validateClientBranding = (
-  data: {
-    brandingLogoUrl?: string | null;
-    brandingColorOne?: string | null;
-    brandingColorTwo?: string | null;
-  },
-  ctx: z.RefinementCtx,
-) => {
-  for (const issue of clientBrandingIssues({
-    logoUrl: data.brandingLogoUrl ?? '',
-    colorOne: data.brandingColorOne ?? '',
-    colorTwo: data.brandingColorTwo ?? '',
-  }))
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: [issue.field], message: issue.message });
-};
-const clientInputBase = z.object(clientFields);
-const clientInput = clientInputBase.superRefine(validateClientBranding);
-const clientBrandingInput = z
-  .object({
-    brandingLogoUrl: nullableBranding,
-    brandingColorOne: nullableBranding,
-    brandingColorTwo: nullableBranding,
-  })
-  .superRefine(validateClientBranding);
-const clientPatch = z.object(clientFields).partial();
-
 const normalizedTagName = z.string().transform(normalizeTagName).pipe(z.string().min(1).max(60));
 /** Optional decoration on a tag or category chip. The name always carries the meaning. */
 const chipColor = z
@@ -1520,73 +1461,21 @@ export function createApp(db: Db = getDb(), options: AppOptions = {}) {
   app.get('/api/clients', (_req, res) => res.json(listClients(db)));
   app.post('/api/clients', async (req, res, next) => {
     try {
-      const data = clientInput.parse(req.body);
-      const clientId = id();
-      const stamp = now();
-      db.prepare(
-        `INSERT INTO clients(id,name,slug,contact_name,email,phone,website,notes,branding_logo_url,branding_color_one,branding_color_two,drive_status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      ).run(
-        clientId,
-        data.name,
-        buildClientSlug(data.name, clientId),
-        data.contactName ?? null,
-        data.email ?? null,
-        data.phone ?? null,
-        data.website ?? null,
-        data.notes ?? null,
-        data.brandingLogoUrl ?? null,
-        normalizeHex(data.brandingColorOne ?? '') ?? data.brandingColorOne ?? null,
-        normalizeHex(data.brandingColorTwo ?? '') ?? data.brandingColorTwo ?? null,
-        'PENDING',
-        stamp,
-        stamp,
-      );
+      const client = createClient(db, req.body);
       try {
-        await provisionClient(db, clientId);
+        await provisionClient(db, client.id);
       } catch (error) {
-        req.log.error({ err: error, clientId }, 'Drive client provisioning failed');
+        req.log.error({ err: error, clientId: client.id }, 'Drive client provisioning failed');
       }
-      res.status(201).json(listClients(db).find((c: any) => c.id === clientId));
+      res.status(201).json(listClients(db).find((c: any) => c.id === client.id));
     } catch (error) {
       next(error);
     }
   });
   app.patch('/api/clients/:id', (req, res, next) => {
     try {
-      const data = clientPatch.parse(req.body);
       const revision = revisionPrecondition.parse(req.body?.revision);
-      const current = db.prepare('SELECT * FROM clients WHERE id=?').get(req.params.id) as any;
-      if (!current) return res.status(404).json({ error: 'Client not found.' });
-      const branding = {
-        brandingLogoUrl: patch(data.brandingLogoUrl, current.branding_logo_url),
-        brandingColorOne: patch(data.brandingColorOne, current.branding_color_one),
-        brandingColorTwo: patch(data.brandingColorTwo, current.branding_color_two),
-      };
-      const brandingResult = clientBrandingInput.safeParse(branding);
-      if (!brandingResult.success)
-        throw new WorkspaceValidationError(brandingResult.error.issues[0].message);
-      const stamp = now();
-      transaction(db, () => {
-        requireRevision(db, 'client', current.id, revision);
-        db.prepare(
-          `UPDATE clients SET name=?,slug=?,contact_name=?,email=?,phone=?,website=?,notes=?,branding_logo_url=?,branding_color_one=?,branding_color_two=?,updated_at=? WHERE id=?`,
-        ).run(
-          patch(data.name, current.name),
-          data.name === undefined ? current.slug : buildClientSlug(data.name, current.id),
-          patch(data.contactName, current.contact_name),
-          patch(data.email, current.email),
-          patch(data.phone, current.phone),
-          patch(data.website, current.website),
-          patch(data.notes, current.notes),
-          branding.brandingLogoUrl,
-          normalizeHex(branding.brandingColorOne ?? '') ?? branding.brandingColorOne,
-          normalizeHex(branding.brandingColorTwo ?? '') ?? branding.brandingColorTwo,
-          stamp,
-          req.params.id,
-        );
-        advanceRevision(db, 'client', current.id, revision, Object.keys(data), stamp);
-      });
-      res.json(listClients(db).find((c: any) => c.id === req.params.id));
+      res.json(updateClient(db, req.params.id, req.body, revision));
     } catch (error) {
       next(error);
     }
