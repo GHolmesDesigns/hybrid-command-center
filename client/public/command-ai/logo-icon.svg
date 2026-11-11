@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" color="#101820" role="img" aria-labelledby="command-ai-title">
+  <title id="command-ai-title">Command AI</title>
+  <path d="m4 8 4 4-4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M16 4C16.8 7.8 17.2 8.2 21 9C17.2 9.8 16.8 10.2 16 14C15.2 10.2 14.8 9.8 11 9C14.8 8.2 15.2 7.8 16 4Z" fill="currentColor"/>
+  <path d="M13 18h7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+</svg>

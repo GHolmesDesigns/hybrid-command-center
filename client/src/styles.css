@@ -7525,10 +7525,37 @@ button.tag-chip.toggle.active {
   gap: 8px;
   font: 700 15px Manrope;
 }
-.command-ai-brand svg {
-  width: 20px;
-  height: 20px;
+.command-ai-brand .command-ai-glyph {
+  width: 18px;
+  height: 18px;
   color: var(--accent);
+}
+.command-ai-glyph {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  line-height: 0;
+}
+.command-ai-glyph img {
+  grid-area: 1 / 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.command-ai-glyph-white {
+  display: none !important;
+}
+:root[data-theme='dark'] .command-ai-glyph-primary {
+  display: none;
+}
+:root[data-theme='dark'] .command-ai-glyph-white {
+  display: block !important;
+}
+:root[data-theme='dark'] .command-ai-glyph.inverse-surface .command-ai-glyph-primary {
+  display: block;
+}
+:root[data-theme='dark'] .command-ai-glyph.inverse-surface .command-ai-glyph-white {
+  display: none !important;
 }
 .command-ai-actions {
   display: flex;
@@ -7693,13 +7720,16 @@ button.tag-chip.toggle.active {
   display: grid;
   place-items: center;
 }
-.command-ai-fab svg {
-  width: 24px;
-  height: 24px;
+.command-ai-fab .command-ai-glyph {
+  width: 28px;
+  height: 28px;
 }
 .command-ai-top-toggle .command-ai-glyph {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
+}
+.command-ai-top-toggle .command-ai-glyph img {
+  vertical-align: middle;
 }
 .command-ai-fab:hover {
   transform: translateY(-1px);

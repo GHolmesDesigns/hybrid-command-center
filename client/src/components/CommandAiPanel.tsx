@@ -95,7 +95,7 @@ export function CommandAiFab({ onClick, open }: { onClick: () => void; open: boo
       aria-label="Open Command AI"
       title="Command AI"
     >
-      <CommandAiGlyph />
+      <CommandAiGlyph inverseSurface />
     </button>
   );
 }
