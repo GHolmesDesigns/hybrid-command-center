@@ -207,6 +207,86 @@ describe('persistent operator timer', () => {
     expect(getOperatorTimer(db)).toMatchObject({ state: 'READY', revision: 4 });
   });
 
+  it('deletes a stopped timer entry without changing another entry or the live timer', async () => {
+    const { app, project, category } = await setup();
+    const stopEntry = () => {
+      const started = startOperatorTimer(db, {
+        projectId: project.id,
+        categoryId: category.id,
+        revision: getOperatorTimer(db).revision,
+      });
+      db.prepare('UPDATE operator_time_timer SET running_since=? WHERE operator_id=?').run(
+        new Date(Date.now() - 2_000).toISOString(),
+        'operator',
+      );
+      return {
+        entry: stopOperatorTimer(db, started.timerId!, started.revision),
+        timerId: started.timerId!,
+      };
+    };
+    const { entry: deletedEntry, timerId: deletedTimerId } = stopEntry();
+    const { entry: retainedEntry } = stopEntry();
+    const live = startOperatorTimer(db, {
+      projectId: project.id,
+      categoryId: category.id,
+      revision: getOperatorTimer(db).revision,
+    });
+    db.prepare('UPDATE operator_time_timer SET running_since=? WHERE operator_id=?').run(
+      new Date(Date.now() - 2_000).toISOString(),
+      'operator',
+    );
+    const timerBeforeDelete = db
+      .prepare('SELECT * FROM operator_time_timer WHERE operator_id=?')
+      .get('operator');
+    const retainedStop = db
+      .prepare(
+        'SELECT timer_id,entry_id,stopped_at FROM operator_time_timer_stops WHERE entry_id=?',
+      )
+      .get(retainedEntry.id);
+
+    await request(app)
+      .delete(`/api/projects/${project.id}/time/entries/${deletedEntry.id}`)
+      .send({ revision: deletedEntry.revision })
+      .expect(200);
+
+    const report = await request(app).get(`/api/projects/${project.id}/time/entries`).expect(200);
+    expect(report.body.map((entry: { id: string }) => entry.id)).toEqual([retainedEntry.id]);
+    expect(
+      db.prepare('SELECT id FROM time_entries WHERE id=?').get(deletedEntry.id),
+    ).toBeUndefined();
+    expect(
+      db
+        .prepare('SELECT timer_id FROM operator_time_timer_stops WHERE entry_id=?')
+        .get(deletedEntry.id),
+    ).toBeUndefined();
+    expect(
+      db
+        .prepare(
+          'SELECT timer_id,entry_id,stopped_at FROM operator_time_timer_stops WHERE entry_id=?',
+        )
+        .get(retainedEntry.id),
+    ).toEqual(retainedStop);
+    expect(db.prepare('SELECT id FROM time_entries WHERE id=?').get(retainedEntry.id)).toEqual({
+      id: retainedEntry.id,
+    });
+    expect(
+      db.prepare('SELECT * FROM operator_time_timer WHERE operator_id=?').get('operator'),
+    ).toEqual(timerBeforeDelete);
+
+    await request(app)
+      .post('/api/operator-timer/stop')
+      .send({ timerId: deletedTimerId, revision: live.revision })
+      .expect(409);
+    expect(
+      db.prepare('SELECT COUNT(*) count FROM time_entries WHERE project_id=?').get(project.id),
+    ).toEqual({
+      count: 1,
+    });
+    expect(
+      db.prepare('SELECT * FROM operator_time_timer WHERE operator_id=?').get('operator'),
+    ).toEqual(timerBeforeDelete);
+  });
+
   it('rejects a concurrent second start and discards without saving', async () => {
     const { project, category } = await setup();
     const started = startOperatorTimer(db, {
