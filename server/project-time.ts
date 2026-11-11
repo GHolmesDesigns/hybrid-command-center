@@ -416,6 +416,7 @@ export function deleteProjectTimeEntry(
   if (!existing) throw new ProjectTimeError('Time entry not found.', 404, 'ENTRY_NOT_FOUND');
   if (existing.revision !== revision) throw new RevisionConflictError(existing.revision, []);
   transaction(db, () => {
+    db.prepare('DELETE FROM operator_time_timer_stops WHERE entry_id=?').run(entryId);
     const deleted = db
       .prepare('DELETE FROM time_entries WHERE id=? AND project_id=? AND revision=?')
       .run(entryId, projectId, revision);

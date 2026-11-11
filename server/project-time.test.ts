@@ -352,8 +352,20 @@ describe('project time persistence', () => {
       updateProjectTimeEntry(db, p.id, 'missing', entryInput(p.id, category.id), 1),
     ).toThrow(/not found/i);
     expect(() => deleteProjectTimeEntry(db, p.id, 'missing', 1)).toThrow(/not found/i);
+    const stopAt = '2026-01-01T00:00:00.000Z';
+    db.prepare(
+      'INSERT INTO operator_time_timer_stops(timer_id,entry_id,stopped_at) VALUES(?,?,?)',
+    ).run('timer-stale-delete', entry.id, stopAt);
     expect(() => deleteProjectTimeEntry(db, p.id, entry.id, entry.revision + 1)).toThrow(/changed/);
     expect(listProjectTimeEntries(db, p.id)).toHaveLength(1);
+    expect(
+      db
+        .prepare('SELECT entry_id FROM operator_time_timer_stops WHERE timer_id=?')
+        .get('timer-stale-delete'),
+    ).toEqual({ entry_id: entry.id });
+    expect(db.prepare('SELECT id FROM time_entries WHERE id=?').get(entry.id)).toEqual({
+      id: entry.id,
+    });
     expect(deleteProjectTimeEntry(db, p.id, entry.id, entry.revision)).toMatchObject({ ok: true });
   });
 
