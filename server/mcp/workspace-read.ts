@@ -11,7 +11,7 @@ import { buildBoundedDashboardSummary } from '../domain/dashboard.ts';
 import { DisconnectedDriveMediaProvider } from '../drive/media.ts';
 import { PublishService, PublishRequestError } from '../publish/service.ts';
 import { UnavailablePublishProvider } from '../publish/provider.ts';
-import { listTasksPage } from '../repositories.ts';
+import { listClients, listTasksPage } from '../repositories.ts';
 import { getOperatorTimer } from '../operator-timer.ts';
 import { projectTimeSummary, ProjectTimeError } from '../project-time.ts';
 import { filterWorkspaceTimeEntries, listWorkspaceTimeEntries } from '../workspace-time.ts';
@@ -30,6 +30,8 @@ import {
   MCP_QUEUE_UNSCHEDULED_LIMIT,
   MCP_QUEUE_UPCOMING_DAYS,
   MCP_TASK_LIST_DEFAULT_LIMIT,
+  mcpClientGetArgsSchema,
+  mcpClientListArgsSchema,
   mcpSignalListPostsArgsSchema,
   mcpSignalPublishPreviewArgsSchema,
   mcpSignalQueueSnapshotArgsSchema,
@@ -73,6 +75,24 @@ const failed = (error: string, errorDetail: McpCoordinationErrorDetail): McpTool
   error,
   errorDetail,
 });
+
+function mcpClient(client: ReturnType<typeof listClients>[number]) {
+  return {
+    id: client.id,
+    name: client.name,
+    slug: client.slug,
+    contactName: client.contactName ?? null,
+    email: client.email ?? null,
+    phone: client.phone ?? null,
+    website: client.website ?? null,
+    notes: client.notes ?? null,
+    status: client.status,
+    driveStatus: client.driveStatus,
+    createdAt: client.createdAt,
+    updatedAt: client.updatedAt,
+    revision: client.revision,
+  };
+}
 
 /** Flatten assignment identity on the MCP boundary while keeping the shared Signal shape intact. */
 const mcpSignalPosts = <
@@ -140,6 +160,25 @@ export async function callWorkspaceReadTool(
   const now = deps.now ?? new Date();
   try {
     switch (tool) {
+      case 'workspace_list_clients': {
+        const args = mcpClientListArgsSchema.parse(rawArgs ?? {});
+        const clients = listClients(db).filter(
+          (client) => args.status === 'ALL' || client.status === args.status,
+        );
+        return success({
+          clients: clients.slice(0, args.limit).map(mcpClient),
+          limit: args.limit,
+          total: clients.length,
+          truncated: clients.length > args.limit,
+        });
+      }
+      case 'workspace_get_client': {
+        const args = mcpClientGetArgsSchema.parse(rawArgs ?? {});
+        const client = listClients(db).find((candidate) => candidate.id === args.id);
+        return client
+          ? success(mcpClient(client))
+          : failed('Client not found.', mcpCoordinationNotFound());
+      }
       case 'time_list_entries': {
         const args = mcpTimeListEntriesArgsSchema.parse(rawArgs ?? {});
         const entries = filterWorkspaceTimeEntries(listWorkspaceTimeEntries(db), args);

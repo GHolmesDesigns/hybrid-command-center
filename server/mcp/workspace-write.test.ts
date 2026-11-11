@@ -38,6 +38,142 @@ const seedProject = (projectId: string, clientId: string, name = 'Launch') => {
 const session = () => createMcpSession({ agentLabel: 'codex' });
 
 describe('workspace MCP writes', () => {
+  it('creates a client locally, replays idempotently, and creates a project under it', async () => {
+    const args = {
+      clientRequestId: 'client-create-1',
+      name: 'Northstar Studio',
+      email: 'hello@example.com',
+    };
+    const mcpSession = session();
+    const created = await callMcpTool(db, mcpSession, 'workspace_create_client', args, {
+      grantedScopes: ['workspace:write'],
+    });
+    expect(created.outcome).toBe('SUCCESS');
+    const client = (created.data as { client: { id: string; slug: string; driveStatus: string } })
+      .client;
+    expect(client).toMatchObject({ name: 'Northstar Studio', driveStatus: 'PENDING' });
+    expect(client.slug).toMatch(/^northstar-studio-/);
+    expect(created.data).not.toHaveProperty('client.driveFolderId');
+    expect(created.data).not.toHaveProperty('client.branding');
+    expect(
+      db.prepare('SELECT drive_status,drive_folder_id FROM clients WHERE id=?').get(client.id),
+    ).toEqual({
+      drive_status: 'PENDING',
+      drive_folder_id: null,
+    });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM integration_events').get()).toEqual({
+      count: 0,
+    });
+
+    const replay = await callMcpTool(db, mcpSession, 'workspace_create_client', args, {
+      grantedScopes: ['workspace:write'],
+    });
+    expect(replay.data).toEqual(created.data);
+    expect(db.prepare('SELECT COUNT(*) AS count FROM clients').get()).toEqual({ count: 1 });
+
+    const updated = await callMcpTool(
+      db,
+      mcpSession,
+      'workspace_update_client',
+      {
+        clientRequestId: 'client-update-1',
+        clientId: client.id,
+        revision: 1,
+        contactName: 'Avery',
+        notes: 'Managed over MCP',
+      },
+      { grantedScopes: ['workspace:write'] },
+    );
+    expect(updated.outcome).toBe('SUCCESS');
+    expect(
+      db.prepare('SELECT contact_name,notes,revision FROM clients WHERE id=?').get(client.id),
+    ).toEqual({
+      contact_name: 'Avery',
+      notes: 'Managed over MCP',
+      revision: 2,
+    });
+    expect(db.prepare('SELECT name FROM clients WHERE id=?').get(client.id)).toEqual({
+      name: 'Northstar Studio',
+    });
+
+    const project = await callMcpTool(
+      db,
+      mcpSession,
+      'workspace_create_project',
+      {
+        clientRequestId: 'project-for-client-1',
+        clientId: client.id,
+        name: 'First project',
+      },
+      { grantedScopes: ['workspace:write'] },
+    );
+    expect(project.outcome).toBe('SUCCESS');
+    expect(db.prepare('SELECT client_id FROM projects').get()).toEqual({ client_id: client.id });
+    expect(
+      db
+        .prepare(
+          "SELECT COUNT(*) AS count FROM mcp_agent_events WHERE tool='workspace_create_client'",
+        )
+        .get(),
+    ).toEqual({ count: 2 });
+  });
+
+  it('refuses client writes without workspace:write and leaves sibling clients unchanged', async () => {
+    const siblingId = seedClient();
+    const snapshot = db.prepare('SELECT * FROM clients WHERE id=?').get(siblingId);
+    const create = await callMcpTool(
+      db,
+      session(),
+      'workspace_create_client',
+      {
+        clientRequestId: 'client-create-read-only',
+        name: 'Read Only Client',
+      },
+      { grantedScopes: ['workspace:read'] },
+    );
+    const update = await callMcpTool(
+      db,
+      session(),
+      'workspace_update_client',
+      {
+        clientRequestId: 'client-update-read-only',
+        clientId: siblingId,
+        revision: 1,
+        name: 'Changed',
+      },
+      { grantedScopes: ['workspace:read'] },
+    );
+    expect(create.outcome).toBe('REFUSED');
+    expect(update.outcome).toBe('REFUSED');
+    expect(db.prepare('SELECT * FROM clients WHERE id=?').get(siblingId)).toEqual(snapshot);
+    expect(db.prepare('SELECT COUNT(*) AS count FROM clients').get()).toEqual({ count: 1 });
+  });
+
+  it('rejects stale client revisions without changing the row or siblings', async () => {
+    const clientId = seedClient();
+    const siblingId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    db.prepare(
+      "INSERT INTO clients(id,name,slug,status,drive_status,created_at,updated_at) VALUES(?,?,?,'ACTIVE','DISCONNECTED',?,?)",
+    ).run(siblingId, 'Sibling', 'sibling', '2026-08-29T12:00:00.000Z', '2026-08-29T12:00:00.000Z');
+    db.prepare('UPDATE clients SET revision=2 WHERE id=?').run(clientId);
+    const before = db.prepare('SELECT * FROM clients ORDER BY id').all();
+    const stale = await callMcpTool(
+      db,
+      session(),
+      'workspace_update_client',
+      {
+        clientRequestId: 'client-stale-update',
+        clientId,
+        revision: 1,
+        name: 'Stale Rename',
+      },
+      { grantedScopes: ['workspace:write'] },
+    );
+    expect(stale.outcome).toBe('REFUSED');
+    expect(stale.errorDetail?.code).toBe('WORKSPACE_REVISION_CONFLICT');
+    expect(db.prepare('SELECT * FROM clients ORDER BY id').all()).toEqual(before);
+  });
+
   it('uses time:write to create, update, and delete operator-owned manual entries with agent audit', async () => {
     const clientId = seedClient();
     const projectId = '33333333-3333-4333-8333-333333333333';

@@ -1,5 +1,14 @@
 # Changelog
 
+## [7.4.0] - 2026-11-11
+
+### Added
+
+- Added scoped MCP tools to list, read, create, and update client contact details. New clients remain pending until an operator provisions Drive.
+
+### Breaking changes
+
+None.
 ## [7.3.0] - 2026-11-11
 
 ### Changed
