@@ -1,5 +1,14 @@
 # Changelog
 
+## [7.3.0] - 2026-11-11
+
+### Changed
+
+- Replaced the Command AI control and panel icons with the supplied chevron, spark, and cursor mark, with light and dark variants sized for each control.
+
+### Breaking changes
+
+None.
 ## [7.2.0] - 2026-11-09
 
 ### Changed
