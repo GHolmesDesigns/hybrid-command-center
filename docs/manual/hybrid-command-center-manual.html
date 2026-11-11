@@ -4225,7 +4225,7 @@ npm run cutover:rehearse -- --plan</code></pre>
               </table>
               <h4>MCP tool surface</h4>
               <p>
-                The registry contains 96 scoped tools. Discover the current subset with
+                The registry contains 97 scoped tools. Discover the current subset with
                 <code>tools/list</code>; do not hard-code availability because each credential may
                 receive a different scope set. The surface covers coordination and work leases,
                 bounded workspace and Signal reads, selected local writes, imports, settings,
@@ -4236,7 +4236,8 @@ npm run cutover:rehearse -- --plan</code></pre>
               </p>
               <p>
                 The <code>time:read</code> scope exposes operator-owned time entries, project totals,
-                and the active timer snapshot. The separate <code>time:write</code> scope allows
+                the active timer snapshot, and selectable time categories for one project. The
+                separate <code>time:write</code> scope allows
                 manual entry changes; it cannot start or alter the timer, and timer-generated
                 entries cannot be edited or deleted through MCP.
               </p>

@@ -92,6 +92,7 @@ describe('mcp tool registry', () => {
     expect(names).toContain('signal_create_post');
     expect(names).toContain('workspace_create_task');
     expect(names).toContain('time_list_entries');
+    expect(names).toContain('time_list_categories');
     expect(names).toContain('time_project_summary');
     expect(names).toContain('time_get_active');
     expect(names).toContain('time_create_entry');
@@ -107,7 +108,7 @@ describe('mcp tool registry', () => {
     expect(names).toContain('agent_list_notifications');
     expect(
       names.filter((name) => name !== 'system_capabilities' && name !== 'system_connection_status'),
-    ).toHaveLength(94);
+    ).toHaveLength(95);
     expect(names).toContain('system_connection_status');
     expect(isRegisteredMcpTool('system_capabilities')).toBe(true);
     expect(isRegisteredMcpTool('not_a_tool')).toBe(false);
@@ -136,6 +137,11 @@ describe('mcp tool registry', () => {
       class: 'L',
       requiredScope: 'workspace:write',
       handler: 'workspace_write',
+    });
+    expect(mcpToolRegistryEntry('time_list_categories')).toMatchObject({
+      class: 'R',
+      requiredScope: 'time:read',
+      handler: 'workspace_read',
     });
     expect(MCP_TOOL_REGISTRY.some((tool) => tool.class === 'P')).toBe(false);
     for (const name of [

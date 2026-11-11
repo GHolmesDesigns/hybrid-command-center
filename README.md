@@ -16,6 +16,8 @@ Nothing in this app is reachable off loopback by design, and the server enforces
 
 Scoped MCP client tools can list, get, create, and update contact details; new clients stay pending Drive provisioning until an operator provisions them in the UI.
 
+Agents with `time:read` can call `time_list_categories` for a project to get the selectable category IDs accepted by manual time-entry tools.
+
 If IDE agents should plan Signal and workspace work through MCP, read [Multi-Agent MCP](docs/multi-agent-mcp-decision.md) first. It chooses a local stdio server over Signal — not a provider MCP wrapper — keeps provider publishing on the human-confirmed UI path, and defers any network MCP endpoint until operator authentication ships. For agents handing work to each other through the workspace, see [Agent Coordination Hub](docs/agent-coordination-plan.md) (C109 decided; C110–C112 implement handoffs). Coordination tools ship via `npm run mcp` (set `MCP_AGENT_LABEL` for writes); operators cancel stuck handoffs under **Agents → Agent handoffs**. The broader workspace/Signal MCP surface remains MCP-C106-C108 and now includes the C271 client tools.
 
 ## What is included

@@ -555,6 +555,21 @@ const workspaceReadTools: McpToolRegistryEntry[] = [
     handler: 'workspace_read',
   },
   {
+    name: 'time_list_categories',
+    description:
+      'List the selectable time categories for one project without changing stored data.',
+    inputSchema: {
+      type: 'object',
+      properties: { projectId: { type: 'string', format: 'uuid' } },
+      required: ['projectId'],
+      additionalProperties: false,
+    },
+    class: 'R',
+    requiredScope: 'time:read',
+    owner: 'server/project-time.ts',
+    handler: 'workspace_read',
+  },
+  {
     name: 'time_get_active',
     description: 'Read the operator-owned active timer state without changing it.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },

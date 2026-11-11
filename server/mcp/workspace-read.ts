@@ -13,7 +13,11 @@ import { PublishService, PublishRequestError } from '../publish/service.ts';
 import { UnavailablePublishProvider } from '../publish/provider.ts';
 import { listClients, listTasksPage } from '../repositories.ts';
 import { getOperatorTimer } from '../operator-timer.ts';
-import { projectTimeSummary, ProjectTimeError } from '../project-time.ts';
+import {
+  listProjectTimeCategories,
+  projectTimeSummary,
+  ProjectTimeError,
+} from '../project-time.ts';
 import { filterWorkspaceTimeEntries, listWorkspaceTimeEntries } from '../workspace-time.ts';
 import { listPostsInRange, signalProvider } from '../signal/read.ts';
 import { readQueueHealth } from '../signal/queue-health.ts';
@@ -41,6 +45,7 @@ import {
 } from '../../shared/mcp-read-tools.ts';
 import {
   mcpTimeActiveArgsSchema,
+  mcpTimeListCategoriesArgsSchema,
   mcpTimeListEntriesArgsSchema,
   mcpTimeProjectSummaryArgsSchema,
 } from '../../shared/mcp-time-tools.ts';
@@ -193,6 +198,17 @@ export async function callWorkspaceReadTool(
       case 'time_project_summary': {
         const args = mcpTimeProjectSummaryArgsSchema.parse(rawArgs ?? {});
         return success(projectTimeSummary(db, args.projectId));
+      }
+      case 'time_list_categories': {
+        const args = mcpTimeListCategoriesArgsSchema.parse(rawArgs ?? {});
+        const categories = listProjectTimeCategories(db, args.projectId)
+          .filter((category) => category.selectable)
+          .map((category) => ({
+            id: category.id,
+            name: category.name,
+            scope: category.projectId ? 'project' : 'global',
+          }));
+        return success({ projectId: args.projectId, categories });
       }
       case 'time_get_active':
         mcpTimeActiveArgsSchema.parse(rawArgs ?? {});

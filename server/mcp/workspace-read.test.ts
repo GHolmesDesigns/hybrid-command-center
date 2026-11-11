@@ -196,6 +196,128 @@ describe('callWorkspaceReadTool', () => {
     expect(project).toMatchObject({ timeBudgetMinutes: 90, loggedSeconds: 3600 });
   });
 
+  it('lists exactly the selectable categories for a project and leaves stored data unchanged', async () => {
+    const projectId = '11111111-1111-4111-8111-111111111111';
+    const otherProjectId = '22222222-2222-4222-8222-222222222222';
+    addProject(projectId, 'c1', 'Project with categories');
+    addProject(otherProjectId, 'c1', 'Other project');
+    const at = NOW.toISOString();
+    const addCategory = (
+      id: string,
+      scope: string,
+      name: string,
+      position: number,
+      archivedAt: string | null = null,
+    ) =>
+      db
+        .prepare(
+          `INSERT INTO time_categories(id,scope_key,project_id,name,position,created_at,updated_at,archived_at)
+         VALUES(?,?,?,?,?,?,?,?)`,
+        )
+        .run(id, scope, scope === 'workspace' ? null : scope, name, position, at, at, archivedAt);
+    addCategory('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', projectId, 'Project category', 0);
+    addCategory(
+      'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      projectId,
+      'Archived project category',
+      1,
+      at,
+    );
+    addCategory(
+      'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      otherProjectId,
+      'Other project category',
+      0,
+    );
+    const before = db.prepare('SELECT * FROM time_categories ORDER BY id').all();
+    const eventCountsBefore = db
+      .prepare(
+        `SELECT (SELECT COUNT(*) FROM time_entries) entries,
+                (SELECT COUNT(*) FROM mcp_agent_events) agent_events,
+                (SELECT COUNT(*) FROM mcp_change_feed) change_events`,
+      )
+      .get();
+
+    const result = await callWorkspaceReadTool(db, 'time_list_categories', { projectId });
+    expect(result.outcome).toBe('SUCCESS');
+    expect(result.data).toEqual({
+      projectId,
+      categories: [
+        {
+          id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          name: 'Project category',
+          scope: 'project',
+        },
+      ],
+    });
+    expect(db.prepare('SELECT * FROM time_categories ORDER BY id').all()).toEqual(before);
+    expect(
+      db
+        .prepare(
+          `SELECT (SELECT COUNT(*) FROM time_entries) entries,
+                  (SELECT COUNT(*) FROM mcp_agent_events) agent_events,
+                  (SELECT COUNT(*) FROM mcp_change_feed) change_events`,
+        )
+        .get(),
+    ).toEqual(eventCountsBefore);
+
+    const session = createMcpSession({ agentLabel: 'time-writer' });
+    const roundTripList = await callMcpTool(
+      db,
+      session,
+      'time_list_categories',
+      { projectId },
+      { grantedScopes: ['time:read'] },
+    );
+    const categoryId = (roundTripList.data as { categories: { id: string }[] }).categories[0]!.id;
+    const created = await callMcpTool(
+      db,
+      session,
+      'time_create_entry',
+      {
+        clientRequestId: 'time-category-roundtrip',
+        projectId,
+        categoryId,
+        startDate: '2026-08-10',
+        startTime: '09:00',
+        endTime: '10:00',
+        timeZone: 'UTC',
+      },
+      { grantedScopes: ['time:write'] },
+    );
+    expect(created.outcome).toBe('SUCCESS');
+    expect(
+      db.prepare('SELECT category_id FROM time_entries WHERE project_id=?').get(projectId),
+    ).toEqual({ category_id: categoryId });
+
+    const emptyProjectId = '33333333-3333-4333-8333-333333333333';
+    addProject(emptyProjectId, 'c1', 'Project with defaults');
+    const defaults = await callWorkspaceReadTool(db, 'time_list_categories', {
+      projectId: emptyProjectId,
+    });
+    expect(defaults.data).toEqual({
+      projectId: emptyProjectId,
+      categories: [
+        { id: '00000000-0000-4000-8000-000000000001', name: 'Administration', scope: 'global' },
+        { id: '00000000-0000-4000-8000-000000000002', name: 'Client work', scope: 'global' },
+        { id: '00000000-0000-4000-8000-000000000003', name: 'Design', scope: 'global' },
+        { id: '00000000-0000-4000-8000-000000000004', name: 'Development', scope: 'global' },
+        { id: '00000000-0000-4000-8000-000000000005', name: 'Meetings', scope: 'global' },
+      ],
+    });
+    db.prepare('DELETE FROM time_categories WHERE project_id IS NULL').run();
+    const noCategories = await callWorkspaceReadTool(db, 'time_list_categories', {
+      projectId: emptyProjectId,
+    });
+    expect(noCategories.data).toEqual({ projectId: emptyProjectId, categories: [] });
+
+    const unknown = await callWorkspaceReadTool(db, 'time_list_categories', {
+      projectId: '44444444-4444-4444-8444-444444444444',
+    });
+    expect(unknown.outcome).toBe('FAILURE');
+    expect(unknown.errorDetail?.code).toBe('COORDINATION_NOT_FOUND');
+  });
+
   it('returns the operator timer as a read-only snapshot and rejects invalid time filters clearly', async () => {
     const active = await callWorkspaceReadTool(db, 'time_get_active', {});
     expect(active.outcome).toBe('SUCCESS');
