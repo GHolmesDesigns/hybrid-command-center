@@ -91,7 +91,7 @@ describe('Task detail inline editing', () => {
     expect(detail().getByText(/Acme.*Site refresh/)).toBeVisible();
   });
 
-  it('orders progress, working text, labels, then dependencies', async () => {
+  it('orders checklist, time, notes, labels, and dependencies without writing on open', async () => {
     testState.tasksPayload = [task('t1', 'Recap post')];
     await openTask('Recap post');
 
@@ -101,12 +101,15 @@ describe('Task detail inline editing', () => {
     expect(sectionHeadings).toEqual([
       'Task details',
       'Checklist 0/0',
+      'Time',
       'Notes',
       'Tags',
       'Dependencies',
-      'Time',
       ' Threads',
     ]);
+    expect(
+      requests.filter((request) => ['POST', 'PATCH', 'DELETE'].includes(request.method)),
+    ).toEqual([]);
   });
 
   it('shows empty states that open editors for description, dates, and notes', async () => {
