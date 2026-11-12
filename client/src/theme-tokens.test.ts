@@ -108,7 +108,7 @@ describe('presentation theme tokens', () => {
   });
 
   it('keeps runtime branding and contrast-measured status palettes independent', () => {
-    expect(root).toContain('--sidebar-bg: #18201d');
+    expect(root).toContain('--sidebar-bg: #101820');
     expect(root).toContain('--sidebar-focus: #ffffff');
     expect(rules).toContain('background: var(--status-wash)');
     expect(rules).toContain(

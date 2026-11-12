@@ -11,6 +11,7 @@ import { TaskChecklist, TaskDependencies } from './TaskDetailSections';
 import { STATUS_LABEL, syncTaskTags } from './ui-shared';
 import { DiscussionPanel } from './DiscussionPanel';
 import { TaskTimeSection } from './TaskTimeSection';
+import { GhdButton, GhdInput } from './DesignSystem';
 
 export function TaskDetail({
   task,
@@ -190,25 +191,25 @@ export function TaskDetail({
         </div>
         {renaming ? (
           <form className="rename-form" onSubmit={rename}>
-            <input
+            <GhdInput
+              label="Task title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               autoFocus
-              aria-label="Task title"
             />
-            <button type="submit">
+            <GhdButton type="submit">
               <Check /> Save
-            </button>
-            <button
+            </GhdButton>
+            <GhdButton
               type="button"
-              className="secondary"
+              variant="secondary"
               onClick={() => {
                 setRenaming(false);
                 setTitle(task.title);
               }}
             >
               Cancel
-            </button>
+            </GhdButton>
           </form>
         ) : (
           <div className="title-row">

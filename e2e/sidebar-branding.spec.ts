@@ -85,9 +85,9 @@ test('sidebar colours and logo save, survive a reload, and refuse an unreadable 
   // there is no disabled interval to wait through. Saving before the reset reaches the form
   // submits the custom palette instead — valid, accepted, and wrong. The field is where the
   // reset becomes observable.
-  await expect(hex('Sidebar background')).toHaveValue('#18201d');
+  await expect(hex('Sidebar background')).toHaveValue('#101820');
   await save.click();
   await expect(page.getByText('Sidebar branding saved.')).toBeVisible();
-  await expect.poll(() => colorOf('--sidebar-bg')).toBe('#18201d');
+  await expect.poll(() => colorOf('--sidebar-bg')).toBe('#101820');
   await expect(sidebar.locator('.brand-mark')).toHaveText('HC');
 });

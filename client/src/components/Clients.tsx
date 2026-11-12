@@ -23,6 +23,7 @@ import { DriveBadge, Empty, SearchBox } from './Primitives';
 import { PageHead } from './Shell';
 import { DiscussionPanel } from './DiscussionPanel';
 import { ClientAdsSummary } from './ClientAdsSummary';
+import { GhdButton } from './DesignSystem';
 
 export function Clients({
   clients,
@@ -76,9 +77,9 @@ export function Clients({
         title="Clients"
         body="A clear view of every client, their work, and Drive connection."
         action={
-          <button onClick={() => open({ type: 'client' })}>
+          <GhdButton onClick={() => open({ type: 'client' })}>
             <Plus /> New client
-          </button>
+          </GhdButton>
         }
       />
       <div className="client-tools">
@@ -102,7 +103,10 @@ export function Clients({
       </div>
       <div className="card-grid">
         {visible.map((c) => (
-          <article className={`entity-card ${c.status === 'ARCHIVED' ? 'muted' : ''}`} key={c.id}>
+          <article
+            className={`entity-card ghd-card ${c.status === 'ARCHIVED' ? 'muted' : ''}`}
+            key={c.id}
+          >
             <div className="entity-top">
               <div
                 className="monogram large"

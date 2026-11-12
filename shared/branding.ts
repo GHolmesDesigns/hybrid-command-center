@@ -8,7 +8,7 @@ import {
   softestReadable,
 } from './contrast.ts';
 
-export const APP_VERSION = '7.5.4';
+export const APP_VERSION = '7.6.0';
 
 export interface Branding {
   mark: string;
@@ -39,9 +39,9 @@ export const DEFAULT_BRANDING: Branding = {
   title: 'Hybrid',
   subtitle: 'Command Center',
   tagline: 'Private to this device',
-  background: '#18201d',
+  background: '#101820',
   foreground: '#ffffff',
-  accent: '#d7c5a2',
+  accent: '#f8e000',
   logoUrl: '',
   logoAlt: '',
 };

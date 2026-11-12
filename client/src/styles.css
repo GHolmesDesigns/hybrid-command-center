@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700&display=swap');
+@import '../../docs/design-system/tokens.css';
+@import '../../docs/design-system/components/bundle.css';
 :root {
   font-family: 'DM Sans', system-ui, sans-serif;
   color: var(--theme-text-primary);
@@ -200,10 +201,10 @@
   /* Sidebar palette. Settings overrides these per element via `sidebarPalette()`, which
      derives the muted, surface, hairline, and focus values from the three chosen colours;
      these defaults mirror DEFAULT_BRANDING so the sidebar is painted before it loads. */
-  --sidebar-bg: #18201d;
+  --sidebar-bg: #101820;
   --sidebar-fg: #ffffff;
-  --sidebar-accent: #d7c5a2;
-  --sidebar-mark-ink: #18201d;
+  --sidebar-accent: #f8e000;
+  --sidebar-mark-ink: #101820;
   --sidebar-muted: #aeb8b3;
   --sidebar-surface: #2c3934;
   --sidebar-line: #414a46;
