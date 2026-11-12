@@ -24,6 +24,21 @@ function LocationProbe() {
 }
 
 describe('App', () => {
+  it.each(['/ads', '/signal', '/files', '/health', '/agents', '/settings'])(
+    'applies the shared design-system scope to %s',
+    async (path) => {
+      render(
+        <MemoryRouter initialEntries={[path]}>
+          <App />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() =>
+        expect(document.querySelector('.page-wrap')).toHaveClass('workspace-design-system'),
+      );
+    },
+  );
+
   it('opens the Agent Hub WebSocket when live updates are enabled', async () => {
     testState.liveTipsPayload = { enabled: true };
     const opened: string[] = [];

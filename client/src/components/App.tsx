@@ -119,6 +119,11 @@ const isCoreWorkspacePath = (pathname: string) =>
   pathname.startsWith('/countdown/') ||
   pathname === '/time' ||
   pathname === '/calendar';
+const isDesignSystemPath = (pathname: string) =>
+  isCoreWorkspacePath(pathname) ||
+  ['/files', '/signal', '/ads', '/agents', '/health', '/settings'].some(
+    (path) => pathname === path || pathname.startsWith(`${path}/`),
+  );
 
 /** Old Status URL. Preserves filters so `/kanban?filter=today` still opens today's board. */
 function LegacyKanbanRedirect() {
@@ -601,7 +606,7 @@ export function App() {
               </div>
             </header>
             <div
-              className={`page-wrap${isCoreWorkspacePath(location.pathname) ? ' workspace-design-system' : ''}`}
+              className={`page-wrap${isDesignSystemPath(location.pathname) ? ' workspace-design-system' : ''}`}
             >
               <Routes>
                 <Route
@@ -772,7 +777,7 @@ export function App() {
           {modal && (
             <div
               className={
-                isCoreWorkspacePath(location.pathname)
+                isDesignSystemPath(location.pathname)
                   ? 'workspace-design-system workspace-dialog-scope'
                   : undefined
               }

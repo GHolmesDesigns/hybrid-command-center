@@ -138,6 +138,15 @@
 }
 
 .workspace-design-system .panel,
+.workspace-design-system .card,
+.workspace-design-system .ads-summary,
+.workspace-design-system .ads-account,
+.workspace-design-system .signal-queue,
+.workspace-design-system .signal-calendar,
+.workspace-design-system .health-card,
+.workspace-design-system .settings-card,
+.workspace-design-system .conversation-list-card,
+.workspace-design-system .conversation-detail-card,
 .workspace-design-system .ghd-card,
 .workspace-design-system .metric,
 .workspace-design-system .entity-card,
@@ -157,6 +166,13 @@
 }
 
 .workspace-design-system .panel,
+.workspace-design-system .card,
+.workspace-design-system .ads-summary,
+.workspace-design-system .ads-account,
+.workspace-design-system .health-card,
+.workspace-design-system .settings-card,
+.workspace-design-system .conversation-list-card,
+.workspace-design-system .conversation-detail-card,
 .workspace-design-system .project-overview,
 .workspace-design-system .task-detail,
 .workspace-design-system .workspace-time-clock-panel,
@@ -260,6 +276,74 @@
 
 .workspace-design-system .icon-btn {
   border-radius: var(--radius-md);
+}
+
+.workspace-design-system .primary-btn,
+.workspace-design-system .secondary-btn,
+.workspace-design-system .submit,
+.workspace-design-system .primary-btn:visited {
+  border-radius: var(--radius-md);
+  font-family: var(--font-headline);
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.workspace-design-system .primary-btn,
+.workspace-design-system .submit {
+  color: var(--on-action);
+  background: var(--action);
+}
+
+.workspace-design-system .secondary-btn {
+  color: var(--ink);
+  background: transparent;
+  border-color: var(--line-control);
+}
+
+.workspace-design-system .primary-btn:hover,
+.workspace-design-system .submit:hover {
+  color: var(--surface);
+  background: var(--ink);
+}
+
+.workspace-design-system .secondary-btn:hover {
+  color: var(--surface);
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.workspace-design-system .page,
+.workspace-design-system .ads-page {
+  color: var(--text);
+  font-family: var(--font-body);
+}
+
+.workspace-design-system .card,
+.workspace-design-system .ads-summary,
+.workspace-design-system .ads-account,
+.workspace-design-system .signal-queue,
+.workspace-design-system .signal-calendar,
+.workspace-design-system .health-card,
+.workspace-design-system .settings-card,
+.workspace-design-system .conversation-list-card,
+.workspace-design-system .conversation-detail-card {
+  border-color: var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.workspace-design-system .ads-banner,
+.workspace-design-system .files-status,
+.workspace-design-system .refresh-error,
+.workspace-design-system .notice {
+  border-radius: var(--radius-md);
+}
+
+.workspace-design-system .ads-none,
+.workspace-design-system .signal-loading,
+.workspace-design-system .empty {
+  color: var(--text-muted);
 }
 
 .workspace-design-system input:not([type='checkbox']):not([type='radio']):not([type='color']),
