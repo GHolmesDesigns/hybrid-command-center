@@ -1,5 +1,14 @@
 # Changelog
 
+## [7.5.3] - 2026-11-12
+
+### Changed
+
+- Moved the Settings pages disclosure control onto the Settings navigation item and removed the separate Pages label.
+
+### Breaking changes
+
+None.
 ## [7.5.2] - 2026-11-12
 
 ### Changed

@@ -487,19 +487,20 @@ export function App() {
               <Nav icon={<CalendarDays />} to="/calendar" label="Calendar" collapsed={collapsed} />
               <Nav icon={<Clock3 />} to="/time" label="Time" collapsed={collapsed} />
               <div className="settings-nav-group">
-                <Nav icon={<Settings />} to="/settings" label="Settings" collapsed={collapsed} />
-                <button
-                  className={`settings-nav-disclosure ${collapsed ? 'collapsed' : ''}`}
-                  type="button"
-                  aria-label={`${settingsExpanded ? 'Collapse' : 'Expand'} Settings pages`}
-                  aria-expanded={settingsExpanded}
-                  aria-controls="settings-nav-children"
-                  title={`${settingsExpanded ? 'Collapse' : 'Expand'} Settings pages`}
-                  onClick={() => setSettingsExpanded((expanded) => !expanded)}
-                >
-                  {!collapsed && <span>Pages</span>}
-                  <ChevronDown aria-hidden="true" />
-                </button>
+                <div className="settings-nav-top">
+                  <Nav icon={<Settings />} to="/settings" label="Settings" collapsed={collapsed} />
+                  <button
+                    className={`settings-nav-disclosure ${collapsed ? 'collapsed' : ''}`}
+                    type="button"
+                    aria-label={`${settingsExpanded ? 'Collapse' : 'Expand'} Settings pages`}
+                    aria-expanded={settingsExpanded}
+                    aria-controls="settings-nav-children"
+                    title={`${settingsExpanded ? 'Collapse' : 'Expand'} Settings pages`}
+                    onClick={() => setSettingsExpanded((expanded) => !expanded)}
+                  >
+                    <ChevronDown aria-hidden="true" />
+                  </button>
+                </div>
                 {settingsExpanded && (
                   <div className="settings-nav-children" id="settings-nav-children">
                     <Nav
