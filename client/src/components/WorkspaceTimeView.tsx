@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Download, Copy, Trash2 } from 'lucide-react';
-import { useSearchParams } from 'react-router-dom';
-import { api } from '../api';
-import type { OperatorTimer, TimeEntry } from '../../../shared/types';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { Download, Copy, Pencil, Trash2 } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { api, send } from '../api';
+import type { OperatorTimer, TimeCategory, TimeEntry } from '../../../shared/types';
 import {
   currentWeekRange,
   readWorkspaceTimeFilters,
@@ -23,6 +23,35 @@ type Report = {
   };
 };
 
+type Draft = {
+  categoryId: string;
+  taskId: string;
+  startDate: string;
+  startTime: string;
+  endDate: string;
+  endTime: string;
+  startAmbiguity: string;
+  endAmbiguity: string;
+  notes: string;
+};
+
+const datePart = (value: string, timeZone: string, part: 'date' | 'time') => {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      ...(part === 'time' ? { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' as const } : {}),
+    })
+      .formatToParts(new Date(value))
+      .map((item) => [item.type, item.value]),
+  );
+  return part === 'date'
+    ? `${parts.year}-${parts.month}-${parts.day}`
+    : `${parts.hour}:${parts.minute}`;
+};
+
 const formatEntryDateTime = (entry: TimeEntry, timeZone: string) =>
   new Intl.DateTimeFormat(undefined, {
     timeZone,
@@ -37,6 +66,11 @@ export function WorkspaceTimeView() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [deleteError, setDeleteError] = useState('');
+  const [editing, setEditing] = useState<TimeEntry | null>(null);
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [editCategories, setEditCategories] = useState<TimeCategory[]>([]);
+  const [editError, setEditError] = useState('');
+  const [saving, setSaving] = useState(false);
   const [timer, setTimer] = useState<OperatorTimer | null>(null);
   const [timerLoading, setTimerLoading] = useState(true);
   const [timerError, setTimerError] = useState('');
@@ -201,6 +235,71 @@ export function WorkspaceTimeView() {
     }
   };
 
+  const openEdit = async (entry: TimeEntry) => {
+    setEditing(entry);
+    setEditError('');
+    setDraft({
+      categoryId: entry.categoryId,
+      taskId: entry.taskId ?? '',
+      startDate: datePart(entry.startedAt, report?.timeZone ?? 'UTC', 'date'),
+      startTime: datePart(entry.startedAt, report?.timeZone ?? 'UTC', 'time'),
+      endDate: datePart(entry.endedAt, report?.timeZone ?? 'UTC', 'date'),
+      endTime: datePart(entry.endedAt, report?.timeZone ?? 'UTC', 'time'),
+      startAmbiguity: '',
+      endAmbiguity: '',
+      notes: entry.notes,
+    });
+    try {
+      const categories = await api<TimeCategory[]>(`/projects/${entry.projectId}/time/categories`);
+      setEditCategories(categories);
+    } catch (cause) {
+      setEditError((cause as Error).message);
+      setEditCategories([]);
+    }
+  };
+
+  const saveEdit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!editing || !draft) return;
+    setSaving(true);
+    setEditError('');
+    try {
+      const updated = await send<TimeEntry>(
+        `/projects/${editing.projectId}/time/entries/${editing.id}`,
+        'PATCH',
+        {
+          categoryId: draft.categoryId,
+          taskId: draft.taskId || null,
+          startDate: draft.startDate,
+          startTime: draft.startTime,
+          ...(draft.endDate ? { endDate: draft.endDate } : {}),
+          endTime: draft.endTime,
+          timeZone: report?.timeZone ?? 'UTC',
+          ...(draft.startAmbiguity ? { startAmbiguity: draft.startAmbiguity } : {}),
+          ...(draft.endAmbiguity ? { endAmbiguity: draft.endAmbiguity } : {}),
+          notes: draft.notes,
+          revision: editing.revision,
+        },
+      );
+      setReport((current) =>
+        current
+          ? {
+              ...current,
+              entries: current.entries.map((entry) => (entry.id === updated.id ? updated : entry)),
+            }
+          : current,
+      );
+      setError('');
+      setEditing(null);
+      setDraft(null);
+      setNotice('Time entry updated.');
+    } catch (cause) {
+      setEditError((cause as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <>
       <PageHead
@@ -352,11 +451,27 @@ export function WorkspaceTimeView() {
                               }).format(new Date(entry.startedAt))}
                             </td>
                             <td>{entry.projectName}</td>
-                            <td>{entry.taskTitle ?? 'No task'}</td>
+                            <td>
+                              {entry.taskId &&
+                              report.options.tasks.some((task) => task.id === entry.taskId) ? (
+                                <Link to={`/countdown/${encodeURIComponent(entry.taskId)}`}>
+                                  {entry.taskTitle ?? 'Open task'}
+                                </Link>
+                              ) : (
+                                (entry.taskTitle ?? 'No task')
+                              )}
+                            </td>
                             <td>{entry.categoryName}</td>
                             <td>{formatDuration(entry.durationSeconds)}</td>
                             <td>{entry.notes}</td>
                             <td>
+                              <button
+                                className="icon-btn"
+                                aria-label={`Edit time entry for ${entry.projectName} on ${formatEntryDateTime(entry, report.timeZone)}`}
+                                onClick={() => void openEdit(entry)}
+                              >
+                                <Pencil aria-hidden="true" />
+                              </button>
                               <button
                                 className="icon-btn danger"
                                 aria-label={`Delete time entry for ${entry.projectName} on ${formatEntryDateTime(entry, report.timeZone)}`}
@@ -376,6 +491,139 @@ export function WorkspaceTimeView() {
           )}
         </div>
       </div>
+      {draft && editing && (
+        <div className="modal-backdrop">
+          <section
+            className="modal workspace-time-edit-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="workspace-time-edit-title"
+          >
+            <h2 id="workspace-time-edit-title">Edit time entry</h2>
+            <p>{editing.projectName}</p>
+            {editError && <p role="alert">{editError}</p>}
+            <form onSubmit={(event) => void saveEdit(event)}>
+              <label>
+                Category
+                <select
+                  required
+                  value={draft.categoryId}
+                  onChange={(event) => setDraft({ ...draft, categoryId: event.target.value })}
+                >
+                  {editCategories.map((category) => (
+                    <option
+                      key={category.id}
+                      value={category.id}
+                      disabled={!category.selectable && category.id !== draft.categoryId}
+                    >
+                      {category.name}
+                      {category.archivedAt ? ' (archived)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Task (optional)
+                <select
+                  value={draft.taskId}
+                  onChange={(event) => setDraft({ ...draft, taskId: event.target.value })}
+                >
+                  <option value="">No task</option>
+                  {report?.options.tasks
+                    .filter((task) => task.projectId === editing.projectId)
+                    .map((task) => (
+                      <option key={task.id} value={task.id}>
+                        {task.title}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <div className="workspace-time-edit-date-fields">
+                <label>
+                  Start date
+                  <input
+                    required
+                    type="date"
+                    value={draft.startDate}
+                    onChange={(event) => setDraft({ ...draft, startDate: event.target.value })}
+                  />
+                </label>
+                <label>
+                  Start time
+                  <input
+                    required
+                    type="time"
+                    value={draft.startTime}
+                    onChange={(event) => setDraft({ ...draft, startTime: event.target.value })}
+                  />
+                </label>
+                <label>
+                  End date
+                  <input
+                    type="date"
+                    value={draft.endDate}
+                    onChange={(event) => setDraft({ ...draft, endDate: event.target.value })}
+                  />
+                </label>
+                <label>
+                  End time
+                  <input
+                    required
+                    type="time"
+                    value={draft.endTime}
+                    onChange={(event) => setDraft({ ...draft, endTime: event.target.value })}
+                  />
+                </label>
+              </div>
+              <label>
+                Repeated start time
+                <select
+                  value={draft.startAmbiguity}
+                  onChange={(event) => setDraft({ ...draft, startAmbiguity: event.target.value })}
+                >
+                  <option value="">Choose only if asked</option>
+                  <option value="earlier">Earlier occurrence</option>
+                  <option value="later">Later occurrence</option>
+                </select>
+              </label>
+              <label>
+                Repeated end time
+                <select
+                  value={draft.endAmbiguity}
+                  onChange={(event) => setDraft({ ...draft, endAmbiguity: event.target.value })}
+                >
+                  <option value="">Choose only if asked</option>
+                  <option value="earlier">Earlier occurrence</option>
+                  <option value="later">Later occurrence</option>
+                </select>
+              </label>
+              <label>
+                Notes
+                <textarea
+                  maxLength={2000}
+                  value={draft.notes}
+                  onChange={(event) => setDraft({ ...draft, notes: event.target.value })}
+                />
+              </label>
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => {
+                    setDraft(null);
+                    setEditing(null);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button type="submit" disabled={saving || !editCategories.length}>
+                  {saving ? 'Saving…' : 'Save entry'}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
     </>
   );
 }

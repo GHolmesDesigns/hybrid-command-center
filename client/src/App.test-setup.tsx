@@ -245,6 +245,7 @@ export const testState = {
     },
   },
   workspaceTimeDeleteFailure: null as { status: number; error: string } | null,
+  workspaceTimeUpdateFailure: null as { status: number; error: string } | null,
   operatorTimerPayload: {
     state: 'READY',
     accumulatedSeconds: 0,
@@ -858,6 +859,14 @@ export const calendarRange = (overrides: Partial<CalendarRange> = {}): CalendarR
 
 /** Serves the endpoints App() requests on mount. */
 const payloadFor = (url: string) => {
+  if (/\/api\/projects\/[^/]+\/time\/categories(?:\?|$)/.test(url))
+    return testState.workspaceTimePayload.options.categories.map((category, index) => ({
+      ...category,
+      projectId: 'project-1',
+      position: index,
+      isDefault: false,
+      selectable: true,
+    }));
   if (url.endsWith('/api/import/receipts')) return testState.importReceiptsPayload;
   if (url.endsWith('/api/dashboard')) return testState.dashboardPayload;
   if (url.endsWith('/api/health/dashboard'))
@@ -1017,6 +1026,38 @@ const respondTo = (url: string, init?: RequestInit) => {
       ),
     };
     return { ok: true, deleted: 'time-entry' };
+  }
+  const timeEntryUpdate = url.match(/\/api\/projects\/([^/]+)\/time\/entries\/([^/?]+)$/);
+  if (timeEntryUpdate && method === 'PATCH') {
+    if (testState.workspaceTimeUpdateFailure) {
+      return reply(testState.workspaceTimeUpdateFailure.status, {
+        error: testState.workspaceTimeUpdateFailure.error,
+      });
+    }
+    testState.workspaceTimePayload = {
+      ...testState.workspaceTimePayload,
+      entries: testState.workspaceTimePayload.entries.map((entry) =>
+        entry.id === timeEntryUpdate[2] && entry.projectId === timeEntryUpdate[1]
+          ? {
+              ...entry,
+              ...(body.taskId ? { taskId: body.taskId } : { taskId: undefined }),
+              categoryId: body.categoryId,
+              categoryName:
+                testState.workspaceTimePayload.options.categories.find(
+                  (category) => category.id === body.categoryId,
+                )?.name ?? entry.categoryName,
+              notes: body.notes,
+              taskTitle: testState.workspaceTimePayload.options.tasks.find(
+                (task) => task.id === body.taskId,
+              )?.title,
+              revision: entry.revision + 1,
+            }
+          : entry,
+      ),
+    };
+    return testState.workspaceTimePayload.entries.find(
+      (entry) => entry.id === timeEntryUpdate[2] && entry.projectId === timeEntryUpdate[1],
+    );
   }
   if (url.endsWith('/api/operator-timer') && testState.operatorTimerError)
     return reply(503, { error: testState.operatorTimerError });
@@ -2169,6 +2210,7 @@ beforeEach(() => {
     },
   };
   testState.workspaceTimeDeleteFailure = null;
+  testState.workspaceTimeUpdateFailure = null;
   testState.operatorTimerPayload = {
     state: 'READY',
     accumulatedSeconds: 0,

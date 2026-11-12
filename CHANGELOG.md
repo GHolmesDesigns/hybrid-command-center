@@ -1,5 +1,14 @@
 # Changelog
 
+## [7.5.0] - 2026-11-12
+
+### Added
+
+- Link workspace time entries to their tasks and edit an entry directly from the report.
+
+### Breaking changes
+
+None.
 ## [7.4.2] - 2026-11-11
 
 ### Fixed

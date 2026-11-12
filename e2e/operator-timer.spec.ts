@@ -190,3 +190,88 @@ test('time report shows the live timer without saving and stacks cleanly on narr
   });
   expect(cleanup.ok()).toBe(true);
 });
+
+test('workspace time report edits an entry and keeps the change after reload', async ({ page }) => {
+  const run = Date.now();
+  const client = await (
+    await page.request.post('/api/clients', { data: { name: `Time edit ${run}` } })
+  ).json();
+  const project = await (
+    await page.request.post('/api/projects', {
+      data: { clientId: client.id, name: `Time edit project ${run}` },
+    })
+  ).json();
+  const task = await (
+    await page.request.post('/api/tasks', {
+      data: { projectId: project.id, title: `Time edit task ${run}` },
+    })
+  ).json();
+  const categoriesResponse = await page.request.get(`/api/projects/${project.id}/time/categories`);
+  expect(categoriesResponse.ok()).toBe(true);
+  const categories = await categoriesResponse.json();
+  const category = categories.find((item: { selectable: boolean }) => item.selectable);
+  expect(category).toBeTruthy();
+
+  const created = await page.request.post(`/api/projects/${project.id}/time/entries`, {
+    data: {
+      categoryId: category.id,
+      taskId: task.id,
+      startDate: new Date().toISOString().slice(0, 10),
+      startTime: '09:00',
+      endTime: '10:00',
+      timeZone: 'UTC',
+      notes: `Original note ${run}`,
+    },
+  });
+  expect(created.ok()).toBe(true);
+
+  await page.goto('/time');
+  await expect(page.getByRole('link', { name: task.title })).toHaveAttribute(
+    'href',
+    `/countdown/${task.id}`,
+  );
+  await page.getByRole('link', { name: task.title }).click();
+  await expect(page.getByRole('heading', { name: task.title })).toBeVisible();
+  await page.goto('/time');
+  const taskRow = page
+    .getByRole('row')
+    .filter({ has: page.getByRole('link', { name: task.title }) });
+  await taskRow.getByRole('button', { name: /Edit time entry for/ }).click();
+  const dialog = page.getByRole('dialog', { name: 'Edit time entry' });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const desktopSpacing = await dialog.evaluate((element) => {
+    const form = element.querySelector('form')!;
+    const dateFields = element.querySelector('.workspace-time-edit-date-fields')!;
+    const actions = element.querySelector('.modal-actions')!;
+    return {
+      padding: parseFloat(getComputedStyle(element).paddingLeft),
+      formGap: parseFloat(getComputedStyle(form).rowGap),
+      dateColumns: getComputedStyle(dateFields).gridTemplateColumns.split(' ').length,
+      actionGap: parseFloat(getComputedStyle(actions).columnGap),
+    };
+  });
+  expect(desktopSpacing.padding).toBeGreaterThanOrEqual(24);
+  expect(desktopSpacing.formGap).toBeGreaterThanOrEqual(12);
+  expect(desktopSpacing.dateColumns).toBe(2);
+  expect(desktopSpacing.actionGap).toBeGreaterThanOrEqual(12);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const narrowSpacing = await dialog.evaluate((element) => ({
+    padding: parseFloat(getComputedStyle(element).paddingLeft),
+    dateColumns: getComputedStyle(
+      element.querySelector('.workspace-time-edit-date-fields')!,
+    ).gridTemplateColumns.split(' ').length,
+    buttonsInside: [...element.querySelectorAll('.modal-actions button')].every((button) => {
+      const rect = button.getBoundingClientRect();
+      const modal = element.getBoundingClientRect();
+      return rect.left >= modal.left && rect.right <= modal.right;
+    }),
+  }));
+  expect(narrowSpacing.padding).toBeGreaterThanOrEqual(16);
+  expect(narrowSpacing.dateColumns).toBe(1);
+  expect(narrowSpacing.buttonsInside).toBe(true);
+  await dialog.getByLabel('Notes').fill(`Updated note ${run}`);
+  await dialog.getByRole('button', { name: 'Save entry' }).click();
+  await expect(page.getByText(`Updated note ${run}`)).toBeVisible();
+  await page.reload();
+  await expect(page.getByText(`Updated note ${run}`)).toBeVisible();
+});
