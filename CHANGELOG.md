@@ -1,5 +1,14 @@
 # Changelog
 
+## [7.5.4] - 2026-11-12
+
+### Fixed
+
+- Corrected the Command AI icon on its floating launcher so it stays readable in light and dark themes.
+
+### Breaking changes
+
+None.
 ## [7.5.3] - 2026-11-12
 
 ### Changed

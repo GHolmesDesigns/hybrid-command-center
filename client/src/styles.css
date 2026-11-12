@@ -7605,6 +7605,12 @@ button.tag-chip.toggle.active {
 :root[data-theme='dark'] .command-ai-glyph.inverse-surface .command-ai-glyph-white {
   display: none !important;
 }
+:root:not([data-theme='dark']) .command-ai-glyph.inverse-surface .command-ai-glyph-primary {
+  display: none;
+}
+:root:not([data-theme='dark']) .command-ai-glyph.inverse-surface .command-ai-glyph-white {
+  display: block !important;
+}
 .command-ai-actions {
   display: flex;
   align-items: center;
