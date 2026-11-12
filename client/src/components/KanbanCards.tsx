@@ -1,12 +1,11 @@
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useNavigate } from 'react-router-dom';
 import { AlertCircle, GripVertical, ListChecks, Play, ShieldAlert } from 'lucide-react';
-import type { Task, TaskStatus } from '../../../shared/types';
-import { startTaskPath } from '../../../shared/start-task';
+import type { Client, Project, Task, TaskStatus } from '../../../shared/types';
 import { TASK_STATUSES } from '../../../shared/types';
 import { formatDuration } from '../../../shared/project-time';
+import { taskStartAvailability } from '../../../shared/start-task';
 import { type Modal } from './App';
 import { TagChip } from './FormControls';
 import { Due, PriorityBadge, TaskTypeBadge } from './Primitives';
@@ -15,11 +14,15 @@ import { STATUS_HELP, STATUS_LABEL } from './ui-shared';
 export function KanbanColumn({
   status,
   tasks,
+  projects,
+  clients,
   open,
   move,
 }: {
   status: TaskStatus;
   tasks: Task[];
+  projects: Project[];
+  clients: Client[];
   open: (m: Modal) => void;
   move: (t: Task, s: TaskStatus) => void;
 }) {
@@ -37,7 +40,14 @@ export function KanbanColumn({
       <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
         <div ref={setNodeRef} className="column-body">
           {tasks.map((t) => (
-            <KanbanCard key={t.id} task={t} open={open} move={move} />
+            <KanbanCard
+              key={t.id}
+              task={t}
+              projects={projects}
+              clients={clients}
+              open={open}
+              move={move}
+            />
           ))}
           {!tasks.length && <div className="column-empty">Drop tasks here</div>}
         </div>
@@ -48,17 +58,21 @@ export function KanbanColumn({
 
 function KanbanCard({
   task,
+  projects,
+  clients,
   open,
   move,
 }: {
   task: Task;
+  projects: Project[];
+  clients: Client[];
   open: (m: Modal) => void;
   move: (t: Task, s: TaskStatus) => void;
 }) {
-  const navigate = useNavigate();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
   });
+  const availability = taskStartAvailability(task, projects, clients);
   return (
     <article
       ref={setNodeRef}
@@ -83,10 +97,12 @@ function KanbanCard({
         <button
           type="button"
           className="card-start-task"
-          aria-label={`Start Task for ${task.title}`}
-          onClick={() => navigate(startTaskPath(task.id))}
+          disabled={!availability.available}
+          title={availability.reason ?? 'Start time tracking'}
+          aria-label={`Start Time for ${task.title}`}
+          onClick={() => open({ type: 'taskDetail', value: task, startTimer: true })}
         >
-          <Play /> Start Task
+          <Play /> Start Time
         </button>
       </div>
       <button className="card-title" onClick={() => open({ type: 'taskDetail', value: task })}>

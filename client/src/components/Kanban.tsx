@@ -462,6 +462,8 @@ export function Kanban({
               key={status}
               status={status}
               tasks={filtered.filter((t) => t.status === status)}
+              projects={projects}
+              clients={clients}
               open={open}
               move={move}
             />
