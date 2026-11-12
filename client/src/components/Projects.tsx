@@ -56,6 +56,7 @@ import { DriveBadge, Empty, ProjectStatusChip, SearchBox } from './Primitives';
 import { projectStatusStyle } from './project-status';
 import { tagAccent } from './ui-shared';
 import { PageHead } from './Shell';
+import { GhdButton } from './DesignSystem';
 import {
   projectDeleteConfirmation,
   projectDeleteSuccess,
@@ -275,9 +276,9 @@ export function Projects({
         title="Projects"
         body="Track scope, deadlines, task health, and storage from one view. Projects are owned by Command Center — not by Drive folder names."
         action={
-          <button onClick={() => open({ type: 'project' })}>
+          <GhdButton onClick={() => open({ type: 'project' })}>
             <Plus /> New project
-          </button>
+          </GhdButton>
         }
       />
       <div className="project-toolbar">
@@ -621,7 +622,7 @@ function ProjectTile({
         transform: CSS.Transform.toString(transform),
         transition,
       }}
-      className={`project-tile${isDragging ? ' dragging' : ''}`}
+      className={`project-tile ghd-card${isDragging ? ' dragging' : ''}`}
       data-status={project.status}
     >
       <div className="project-card-head">

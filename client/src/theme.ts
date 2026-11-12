@@ -2,8 +2,8 @@ export const THEME_MODES = ['system', 'light', 'dark'] as const;
 export type ThemeMode = (typeof THEME_MODES)[number];
 
 export const THEME_STORAGE_KEY = 'hcc-theme-mode';
-export const LIGHT_THEME_COLOR = '#f4f3ef';
-export const DARK_THEME_COLOR = '#151a18';
+export const LIGHT_THEME_COLOR = '#f4f6f8';
+export const DARK_THEME_COLOR = '#101820';
 const UNAVAILABLE_STORAGE: Pick<Storage, 'getItem' | 'setItem'> = {
   getItem: () => null,
   setItem: () => undefined,

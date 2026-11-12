@@ -12,25 +12,21 @@ import { expect, type Locator, type Page } from '@playwright/test';
  *
  * ## The layout half, which is what this helper answers
  *
- * `client/src/styles.css` opens with
+ * `client/src/styles.css` loads the self-hosted G.Holmes Designs fonts from
+ * `docs/design-system/fonts/`.
  *
- * ```css
- * @import url('https://fonts.googleapis.com/css2?family=DM+Sans:...&display=swap');
- * ```
- *
- * so a page first renders in the fallback stack and **re-lays out** when DM Sans and Manrope arrive.
- * `display=swap` is the right choice for a person — text is readable immediately — and it is exactly
- * what breaks an automated run: Playwright refuses to click an element that is still moving, and
- * `toBeVisible()` on a heading does not wait for the swap.
+ * so a page first renders in the fallback stack and **re-lays out** when the local font faces arrive.
+ * The fonts remain readable immediately through the fallback stack, and `document.fonts.ready`
+ * keeps layout-sensitive browser checks from running before the self-hosted faces settle.
  *
  * That is #267. The **Import a playbook** button resolved instantly and then spent the entire
  * thirty-second timeout failing the *stable* half of visible-enabled-stable, on Windows, where the
- * font request is slowest. It is also the most likely explanation for #252, which compares two card
- * geometries to the pixel and fails by about one line of a small font.
+ * font faces took longest to settle. It is also the most likely explanation for #252, which compares
+ * two card geometries to the pixel and fails by about one line of a small font.
  *
  * `document.fonts.ready` settles once every face the document uses has loaded or failed, so it
- * covers the offline case too: if the request never lands, the promise still resolves and the run
- * proceeds on the fallback rather than hanging.
+ * covers a missing font file too: the promise still resolves and the run proceeds on the fallback
+ * rather than hanging.
  *
  * ## What this does not answer
  *
@@ -51,7 +47,7 @@ export async function layoutSettled(page: Page): Promise<void> {
  * Navigate, then wait for the layout to stop moving.
  *
  * The pairing most specs want: `page.goto` resolves on the document load event, which is before the
- * fonts have swapped. Waiting for page-specific content is still the spec's job and still comes
+ * local font faces have loaded. Waiting for page-specific content is still the spec's job and still comes
  * after this.
  */
 export async function gotoSettled(page: Page, path: string): Promise<void> {

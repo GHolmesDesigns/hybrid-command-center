@@ -22,6 +22,7 @@ import { formatDataAge, formatDate, initials } from './formatting';
 import { Due, Empty, StatusDot } from './Primitives';
 import { PageHead } from './Shell';
 import { WaitingInboxCard } from './WaitingInboxCard';
+import { GhdButton, GhdCard } from './DesignSystem';
 
 type DeadlineBucket = 'overdue' | 'today' | 'week';
 
@@ -184,7 +185,7 @@ export function Dashboard({
         body="Deadlines, active projects, and the next decisions that need your attention. Projects live in Command Center — Drive folders are storage, not the source of project records."
         action={
           <div className="head-actions">
-            <button className="secondary" onClick={syncFolders} disabled={syncing}>
+            <GhdButton variant="secondary" onClick={syncFolders} disabled={syncing}>
               {syncing ? (
                 <>
                   <RefreshCw className="spin" /> Syncing…
@@ -194,13 +195,13 @@ export function Dashboard({
                   <FolderSync /> Sync to Folder
                 </>
               )}
-            </button>
-            <button className="secondary" onClick={() => open({ type: 'client' })}>
+            </GhdButton>
+            <GhdButton variant="secondary" onClick={() => open({ type: 'client' })}>
               <Users /> New client
-            </button>
-            <button onClick={() => open({ type: 'project' })}>
+            </GhdButton>
+            <GhdButton onClick={() => open({ type: 'project' })}>
               <Plus /> New project
-            </button>
+            </GhdButton>
           </div>
         }
       />
@@ -211,7 +212,7 @@ export function Dashboard({
           // open-in-new-tab all work. The name is spelled out rather than left to the
           // label and figure, which sit in adjacent grid cells with no whitespace between
           // them and run together as "Active clients4"; this announces "Active clients: 4".
-          <Link className="metric" key={label} to={to} aria-label={`${label}: ${value}`}>
+          <Link className="metric ghd-card" key={label} to={to} aria-label={`${label}: ${value}`}>
             <div className="metric-icon">{icon}</div>
             <span>{label}</span>
             <strong>{value}</strong>
@@ -265,7 +266,7 @@ export function Dashboard({
         )}
       </section>
       <div className="dashboard-grid">
-        <section className="panel">
+        <GhdCard className="panel">
           <div className="section-title">
             <div>
               <span className="eyebrow">On the horizon</span>
@@ -291,8 +292,8 @@ export function Dashboard({
           ) : (
             <Empty compact title="A clear week ahead" body="Tasks due soon will appear here." />
           )}
-        </section>
-        <section className="panel">
+        </GhdCard>
+        <GhdCard className="panel">
           <div className="section-title">
             <div>
               <span className="eyebrow">Momentum</span>
@@ -313,27 +314,30 @@ export function Dashboard({
               </Link>
             ))}
           </div>
-        </section>
+        </GhdCard>
       </div>
       <section className="quick-actions">
         <span className="eyebrow">Quick start</span>
         <div>
-          <button onClick={() => open({ type: 'client' })}>
+          <GhdButton variant="secondary" onClick={() => open({ type: 'client' })}>
             <Users />
             New client
-          </button>
-          <button onClick={() => open({ type: 'project' })}>
+          </GhdButton>
+          <GhdButton variant="secondary" onClick={() => open({ type: 'project' })}>
             <BriefcaseBusiness />
             New project
-          </button>
-          <button onClick={() => open({ type: 'task', projectId: defaultProject })}>
+          </GhdButton>
+          <GhdButton
+            variant="secondary"
+            onClick={() => open({ type: 'task', projectId: defaultProject })}
+          >
             <ListChecks />
             New task
-          </button>
-          <button onClick={() => nav('/status')}>
+          </GhdButton>
+          <GhdButton variant="secondary" onClick={() => nav('/status')}>
             <FolderKanban />
             Open Status board
-          </button>
+          </GhdButton>
         </div>
       </section>
       <WaitingInboxCard compact />

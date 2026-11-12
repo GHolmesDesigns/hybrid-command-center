@@ -1,0 +1,445 @@
+/* Core workspace adapts the G.Holmes Designs tokens without changing feature areas outside C279. */
+.sidebar {
+  font-family: var(--font-body);
+}
+
+.sidebar .brand-mark {
+  border-radius: var(--radius-md);
+  font-family: var(--font-headline);
+}
+
+.sidebar .brand strong,
+.sidebar .version-track strong {
+  font-family: var(--font-headline);
+}
+
+.sidebar nav a,
+.sidebar .nav-disabled,
+.sidebar .collapse-btn {
+  border-radius: var(--radius-md);
+}
+
+.topbar {
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  border-color: var(--line);
+}
+
+.topbar :focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.topbar .top-action {
+  height: 38px;
+  padding: 0 var(--space-3);
+  font-family: var(--font-headline);
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+
+.topbar .top-action.ghd-btn-secondary {
+  color: var(--ink);
+  background: transparent;
+  border-color: var(--line-control);
+}
+
+.topbar .top-action.ghd-btn-secondary:hover {
+  color: var(--surface);
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.app-shell > main:has(.workspace-design-system) {
+  background: var(--surface-muted);
+}
+
+.workspace-design-system {
+  --ink: var(--near-black);
+  --muted: var(--cool-gray);
+  --line: var(--hairline-gray);
+  --paper: var(--paper-white);
+  --blue: var(--near-black);
+  --theme-text-primary: var(--near-black);
+  --theme-text-muted: var(--cool-gray);
+  --theme-surface-panel: var(--paper-white);
+  --theme-canvas: var(--light-neutral);
+  --theme-text-on-strong: var(--paper-white);
+  --theme-focus-ring: var(--focus-ring);
+  --theme-interactive-hover: color-mix(in srgb, var(--near-black) 7%, var(--paper-white));
+  --theme-input-line: var(--line-control);
+  --theme-border-default: var(--hairline-gray);
+  --theme-hairline: var(--hairline-gray);
+  --theme-eyebrow-ink: var(--cool-gray);
+  --theme-field-label: var(--cool-gray);
+  --theme-topbar-glass: var(--paper-white);
+  --theme-refresh-glass: var(--paper-white);
+  --theme-modal-header: var(--paper-white);
+  --theme-metric-icon-surface: var(--light-neutral);
+  --theme-metric-icon-ink: var(--near-black);
+  --theme-empty-icon-surface: var(--light-neutral);
+  color: var(--text);
+  background: var(--surface-muted);
+  font-family: var(--font-body);
+}
+
+:root[data-theme='dark'] .workspace-design-system {
+  --ink: var(--paper-white);
+  --muted: var(--soft-gray);
+  --line: var(--charcoal);
+  --paper: var(--near-black);
+  --blue: var(--paper-white);
+  --theme-text-primary: var(--paper-white);
+  --theme-text-muted: var(--soft-gray);
+  --theme-surface-panel: var(--near-black);
+  --theme-canvas: var(--near-black);
+  --theme-text-on-strong: var(--paper-white);
+  --theme-interactive-hover: color-mix(in srgb, var(--paper-white) 10%, var(--near-black));
+  --theme-input-line: var(--soft-gray);
+  --theme-border-default: var(--charcoal);
+  --theme-hairline: var(--charcoal);
+  --theme-eyebrow-ink: var(--soft-gray);
+  --theme-field-label: var(--soft-gray);
+  --theme-topbar-glass: var(--near-black);
+  --theme-refresh-glass: var(--near-black);
+  --theme-modal-header: var(--near-black);
+  --theme-metric-icon-surface: var(--charcoal);
+  --theme-metric-icon-ink: var(--paper-white);
+  --theme-empty-icon-surface: var(--charcoal);
+}
+
+.workspace-design-system.page-wrap {
+  padding: var(--space-6) 38px var(--space-8);
+}
+
+.workspace-design-system h1,
+.workspace-design-system h2,
+.workspace-design-system h3,
+.workspace-design-system .metric strong,
+.workspace-design-system .modal > header h2,
+.workspace-design-system .title-row h3 {
+  font-family: var(--font-headline);
+  letter-spacing: -0.02em;
+}
+
+.workspace-design-system .page-head h1 {
+  font-size: clamp(30px, 3.4vw, 42px);
+  line-height: 1.12;
+  margin: 7px 0 8px;
+}
+
+.workspace-design-system .eyebrow,
+.workspace-design-system .nav-divider span {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+}
+
+.workspace-design-system .panel,
+.workspace-design-system .ghd-card,
+.workspace-design-system .metric,
+.workspace-design-system .entity-card,
+.workspace-design-system .project-tile,
+.workspace-design-system .project-overview,
+.workspace-design-system .project-row,
+.workspace-design-system .task-row,
+.workspace-design-system .kanban-card,
+.workspace-design-system .task-detail,
+.workspace-design-system .workspace-time-clock-panel,
+.workspace-design-system .workspace-time-filters,
+.workspace-design-system .cal-day {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.workspace-design-system .panel,
+.workspace-design-system .project-overview,
+.workspace-design-system .task-detail,
+.workspace-design-system .workspace-time-clock-panel,
+.workspace-design-system .workspace-time-filters {
+  padding: var(--space-card);
+}
+
+.workspace-design-system .ghd-card-body {
+  display: contents;
+}
+
+.workspace-design-system .metric {
+  padding: var(--space-5);
+  color: var(--text);
+  transition: border-color 120ms ease;
+}
+
+.workspace-design-system .metric:hover,
+.workspace-design-system .metric:focus-visible {
+  border-color: var(--ink);
+  box-shadow: none;
+}
+
+.workspace-design-system .metric-icon {
+  border-radius: var(--radius-md);
+}
+
+.workspace-design-system .overdue-panel {
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+
+.workspace-design-system .entity-card,
+.workspace-design-system .project-tile {
+  padding: var(--space-card);
+}
+
+.workspace-design-system .project-tile:hover,
+.workspace-design-system .entity-card:hover,
+.workspace-design-system .project-row:hover {
+  border-color: var(--ink);
+  box-shadow: none;
+}
+
+.workspace-design-system .task-detail,
+.workspace-design-system .cal-day {
+  color: var(--text);
+}
+
+.workspace-design-system
+  button:not(.icon-btn):not(.text-btn):not(.link-button):not(.drag-handle):not(
+    .settings-nav-disclosure
+  ),
+.workspace-design-system .buttonlike:not(.icon-btn) {
+  border-radius: var(--radius-md);
+  font-family: var(--font-headline);
+  font-weight: 700;
+  box-shadow: none;
+  transition:
+    color 120ms ease,
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+
+.workspace-design-system button.secondary,
+.workspace-design-system .buttonlike.secondary {
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--line-control);
+}
+
+.workspace-design-system button.secondary:hover,
+.workspace-design-system .buttonlike.secondary:hover {
+  color: var(--surface);
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.workspace-design-system .ghd-btn-primary {
+  color: var(--on-action);
+  background: var(--action);
+  border: 2px solid transparent;
+}
+
+.workspace-design-system .ghd-btn-primary:hover {
+  color: var(--surface);
+  background: var(--ink);
+}
+
+.workspace-design-system .ghd-btn-secondary {
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--line-control);
+}
+
+.workspace-design-system .ghd-btn-secondary:hover {
+  color: var(--surface);
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.workspace-design-system .icon-btn {
+  border-radius: var(--radius-md);
+}
+
+.workspace-design-system input:not([type='checkbox']):not([type='radio']):not([type='color']),
+.workspace-design-system select,
+.workspace-design-system textarea {
+  border-color: var(--line-control);
+  border-radius: var(--radius-md);
+  background-color: var(--surface);
+  color: var(--text);
+  font-family: var(--font-body);
+}
+
+.workspace-design-system input::placeholder,
+.workspace-design-system textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.workspace-design-system .ghd-field {
+  gap: var(--space-2);
+}
+
+.workspace-design-system .ghd-input {
+  border-color: var(--line-control);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  background: var(--surface);
+}
+
+.workspace-design-system .rename-form .ghd-field {
+  flex: 1;
+  max-width: none;
+}
+
+.workspace-design-system :focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.workspace-design-system .empty,
+.workspace-design-system .cal-loading {
+  color: var(--text-muted);
+}
+
+.workspace-design-system .empty strong,
+.workspace-design-system .cal-loading strong {
+  color: var(--ink);
+}
+
+.workspace-design-system .refresh-status,
+.workspace-design-system .filterbar,
+.workspace-design-system .project-toolbar,
+.workspace-design-system .client-tools,
+.workspace-design-system .board-filters,
+.workspace-design-system .workspace-time-filters {
+  border-radius: var(--radius-md);
+}
+
+.workspace-design-system .modal {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: 0 24px 64px rgba(16, 24, 32, 0.22);
+}
+
+.workspace-design-system .modal > header {
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+}
+
+.workspace-design-system .form label,
+.workspace-design-system .root-form label {
+  color: var(--text-muted);
+  font-family: var(--font-headline);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.workspace-design-system .page-head p,
+.workspace-design-system .empty p {
+  color: var(--text-muted);
+}
+
+.workspace-design-system .simple-list,
+.workspace-design-system .project-list {
+  border-color: var(--line);
+}
+
+.workspace-design-system .cal-day,
+.workspace-design-system .cal-item {
+  border-color: var(--line);
+}
+
+.workspace-design-system .cal-item {
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.workspace-dialog-scope {
+  display: contents;
+}
+
+.workspace-dialog-scope .modal {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+
+.workspace-dialog-scope .modal > header {
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+}
+
+@media (max-width: 760px) {
+  .topbar {
+    background: var(--surface);
+  }
+
+  .workspace-design-system.page-wrap {
+    padding: var(--space-5) var(--space-4) var(--space-7);
+  }
+
+  .workspace-design-system .page-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .workspace-design-system .head-actions {
+    width: 100%;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+
+  .workspace-design-system .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workspace-design-system .dashboard-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspace-design-system .panel,
+  .workspace-design-system .project-overview,
+  .workspace-design-system .task-detail,
+  .workspace-design-system .workspace-time-clock-panel,
+  .workspace-design-system .workspace-time-filters,
+  .workspace-design-system .entity-card,
+  .workspace-design-system .project-tile {
+    padding: var(--space-4);
+  }
+}
+
+@media (max-width: 780px) {
+  .topbar {
+    gap: var(--space-2);
+    padding-inline: var(--space-3);
+  }
+
+  .top-actions {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 68vw;
+    gap: var(--space-2);
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+
+  .top-actions > * {
+    flex: 0 0 auto;
+  }
+
+  .topbar .top-action {
+    padding-inline: var(--space-2);
+  }
+}
+
+@media (max-width: 420px) {
+  .workspace-design-system .metric-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspace-design-system .form-row,
+  .workspace-design-system .form-row.triple {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

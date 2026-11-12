@@ -78,6 +78,7 @@ import { ConversationSelectionProvider } from './ConversationSelectionProvider';
 import { TaskDetail } from './TaskDetail';
 import { PageHead } from './Shell';
 import { Nav } from './Shell';
+import { GhdButton } from './DesignSystem';
 import { brandStyle } from './ui-shared';
 import {
   applyTheme,
@@ -107,6 +108,17 @@ const isSettingsChildRoute = (pathname: string) =>
 const COMMAND_AI_KEY = 'hcc-command-ai-open';
 
 const LAST_PROJECT_KEY = 'hcc-last-project';
+const isCoreWorkspacePath = (pathname: string) =>
+  pathname === '/' ||
+  pathname === '/clients' ||
+  pathname.startsWith('/clients/') ||
+  pathname === '/projects' ||
+  pathname.startsWith('/projects/') ||
+  pathname === '/status' ||
+  pathname === '/countdown' ||
+  pathname.startsWith('/countdown/') ||
+  pathname === '/time' ||
+  pathname === '/calendar';
 
 /** Old Status URL. Preserves filters so `/kanban?filter=today` still opens today's board. */
 function LegacyKanbanRedirect() {
@@ -147,9 +159,9 @@ function TopbarAddPost() {
     navigate('/signal?new=1');
   };
   return (
-    <button className="top-action" type="button" onClick={open}>
+    <GhdButton className="top-action" variant="secondary" type="button" onClick={open}>
       <FilePlus2 aria-hidden="true" /> Add post
-    </button>
+    </GhdButton>
   );
 }
 
@@ -194,8 +206,9 @@ function TopbarStartTask({
   const disabled = !taskId;
   const title = disabledReason ?? (disabled ? 'No task is available to start' : 'Start Time');
   return (
-    <button
+    <GhdButton
       className="top-action"
+      variant="secondary"
       type="button"
       disabled={disabled}
       title={title}
@@ -206,7 +219,7 @@ function TopbarStartTask({
       }}
     >
       <Play /> Start Time
-    </button>
+    </GhdButton>
   );
 }
 
@@ -572,12 +585,14 @@ export function App() {
                     setModal({ type: 'taskDetail', value: task, startTimer: true })
                   }
                 />
-                <button
+                <GhdButton
                   className="top-action"
+                  variant="secondary"
+                  type="button"
                   onClick={() => setModal({ type: 'task', projectId: defaultProject })}
                 >
                   <Plus /> New task
-                </button>
+                </GhdButton>
                 <TopbarAddPost />
                 <CommandAiTopbarToggle
                   open={commandAiOpen}
@@ -585,7 +600,9 @@ export function App() {
                 />
               </div>
             </header>
-            <div className="page-wrap">
+            <div
+              className={`page-wrap${isCoreWorkspacePath(location.pathname) ? ' workspace-design-system' : ''}`}
+            >
               <Routes>
                 <Route
                   path="/"
@@ -753,20 +770,28 @@ export function App() {
             </div>
           </main>
           {modal && (
-            <ModalHost
-              modal={modal}
-              clients={clients}
-              projects={projects}
-              tasks={tasks}
-              tags={tags}
-              categories={categories}
-              close={() => setModal(null)}
-              edit={(task) => setModal({ type: 'task', value: task })}
-              saved={saved}
-              imported={() => setImportedAt(Date.now())}
-              refresh={refresh}
-              flash={flash}
-            />
+            <div
+              className={
+                isCoreWorkspacePath(location.pathname)
+                  ? 'workspace-design-system workspace-dialog-scope'
+                  : undefined
+              }
+            >
+              <ModalHost
+                modal={modal}
+                clients={clients}
+                projects={projects}
+                tasks={tasks}
+                tags={tags}
+                categories={categories}
+                close={() => setModal(null)}
+                edit={(task) => setModal({ type: 'task', value: task })}
+                saved={saved}
+                imported={() => setImportedAt(Date.now())}
+                refresh={refresh}
+                flash={flash}
+              />
+            </div>
           )}
           <CommandAiPanel
             open={commandAiOpen}
