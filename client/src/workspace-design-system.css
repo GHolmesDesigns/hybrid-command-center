@@ -67,7 +67,7 @@
   --theme-canvas: var(--light-neutral);
   /* Default filled buttons use white --ink in dark mode, so their text needs a dark foreground.
      Explicit primary buttons set their own text color. */
-  --theme-text-on-strong: var(--near-black);
+  --theme-text-on-strong: var(--paper-white);
   --theme-focus-ring: var(--focus-ring);
   --theme-interactive-hover: color-mix(in srgb, var(--near-black) 7%, var(--paper-white));
   --theme-input-line: var(--line-control);
@@ -96,7 +96,7 @@
   --theme-text-muted: var(--soft-gray);
   --theme-surface-panel: var(--near-black);
   --theme-canvas: var(--near-black);
-  --theme-text-on-strong: var(--paper-white);
+  --theme-text-on-strong: var(--near-black);
   --theme-interactive-hover: color-mix(in srgb, var(--paper-white) 10%, var(--near-black));
   --theme-input-line: var(--soft-gray);
   --theme-border-default: var(--charcoal);

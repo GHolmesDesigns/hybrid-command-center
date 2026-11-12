@@ -1,5 +1,14 @@
 # Changelog
 
+## [7.6.1] - 2026-11-12
+
+### Fixed
+
+- Keep labels on filled controls readable in both light and dark themes.
+
+### Breaking changes
+
+None.
 ## [7.6.0] - 2026-11-12
 
 ### Changed
