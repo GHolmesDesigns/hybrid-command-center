@@ -65,7 +65,9 @@
   --theme-text-muted: var(--cool-gray);
   --theme-surface-panel: var(--paper-white);
   --theme-canvas: var(--light-neutral);
-  --theme-text-on-strong: var(--paper-white);
+  /* Default filled buttons use white --ink in dark mode, so their text needs a dark foreground.
+     Explicit primary buttons set their own text color. */
+  --theme-text-on-strong: var(--near-black);
   --theme-focus-ring: var(--focus-ring);
   --theme-interactive-hover: color-mix(in srgb, var(--near-black) 7%, var(--paper-white));
   --theme-input-line: var(--line-control);
