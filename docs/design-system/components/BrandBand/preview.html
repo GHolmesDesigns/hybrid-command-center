@@ -1,0 +1,24 @@
+<!-- @dsCard group="Application" height=170 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>BrandBand preview</title>
+  </head>
+  <body>
+    <div id="root" class="ghd-stage"></div>
+    <script>
+      var G = window.GHolmes,
+        h = React.createElement,
+        F = React.Fragment;
+      ReactDOM.createRoot(document.getElementById('root')).render(
+        h(
+          G.BrandBand,
+          null,
+          'G.Holmes Designs helps small businesses look credible, established and professionally designed ',
+          h(G.Highlight, { tone: 'yellow' }, 'from the first impression.'),
+        ),
+      );
+    </script>
+  </body>
+</html>

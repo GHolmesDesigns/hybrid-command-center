@@ -1,0 +1,25 @@
+<!-- @dsCard group="Brand" height=96 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>AccentLine preview</title>
+  </head>
+  <body>
+    <div id="root" class="ghd-stage"></div>
+    <script>
+      var G = window.GHolmes,
+        h = React.createElement,
+        F = React.Fragment;
+      ReactDOM.createRoot(document.getElementById('root')).render(
+        h(
+          'div',
+          { className: 'ghd-stack' },
+          h(G.AccentLine, { size: 'lg' }),
+          h(G.AccentLine, { size: 'md' }),
+          h(G.AccentLine, { size: 'sm' }),
+        ),
+      );
+    </script>
+  </body>
+</html>

@@ -1,0 +1,32 @@
+<!-- @dsCard group="Forms" height=230 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Input preview</title>
+  </head>
+  <body>
+    <div id="root" class="ghd-stage"></div>
+    <script>
+      var G = window.GHolmes,
+        h = React.createElement,
+        F = React.Fragment;
+      ReactDOM.createRoot(document.getElementById('root')).render(
+        h(
+          'div',
+          { className: 'ghd-stack' },
+          h(G.Input, {
+            label: 'Business name',
+            hint: 'As it appears to your customers.',
+            placeholder: 'Your business',
+          }),
+          h(G.Input, {
+            label: 'Email',
+            defaultValue: 'owner@',
+            error: 'enter a complete email address.',
+          }),
+        ),
+      );
+    </script>
+  </body>
+</html>

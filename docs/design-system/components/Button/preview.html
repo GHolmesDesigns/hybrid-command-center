@@ -1,0 +1,26 @@
+<!-- @dsCard group="Actions" height=84 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Button preview</title>
+  </head>
+  <body>
+    <div id="root" class="ghd-stage"></div>
+    <script>
+      var G = window.GHolmes,
+        h = React.createElement,
+        F = React.Fragment;
+      ReactDOM.createRoot(document.getElementById('root')).render(
+        h(
+          'div',
+          { className: 'ghd-row' },
+          h(G.Button, null, 'Start a Project'),
+          h(G.Button, { variant: 'secondary' }, 'See the Work'),
+          h(G.Button, { variant: 'ghost' }, 'Read the Process'),
+          h(G.Button, { disabled: true }, 'Sending'),
+        ),
+      );
+    </script>
+  </body>
+</html>

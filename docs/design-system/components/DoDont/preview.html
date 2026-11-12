@@ -1,0 +1,30 @@
+<!-- @dsCard group="Containers" height=290 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>DoDont preview</title>
+  </head>
+  <body>
+    <div id="root" class="ghd-stage"></div>
+    <script>
+      var G = window.GHolmes,
+        h = React.createElement,
+        F = React.Fragment;
+      ReactDOM.createRoot(document.getElementById('root')).render(
+        h(G.DoDont, {
+          dos: [
+            'Use the dark logo on white or light neutral backgrounds.',
+            'Keep generous clear space around the mark.',
+            'Preserve the full horizontal composition for professional use.',
+          ],
+          donts: [
+            'Place the logo over busy photography.',
+            'Add shadows, glows, outlines or bevel effects.',
+            'Stretch, compress, rotate or recolor the mark.',
+          ],
+        }),
+      );
+    </script>
+  </body>
+</html>

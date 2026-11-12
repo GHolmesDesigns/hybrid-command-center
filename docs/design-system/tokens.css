@@ -1,0 +1,234 @@
+/* G.Holmes Designs — generated from tokens.json */
+
+:root,
+[data-theme='light'] {
+  --process-cyan: #00a0f0;
+  --process-magenta: #e80078;
+  --process-yellow: #f8e000;
+  --near-black: #101820;
+  --cool-gray: #485060;
+  --paper-white: #ffffff;
+  --charcoal: #26303a;
+  --light-neutral: #f4f6f8;
+  --hairline-gray: #e2e5e9;
+  --soft-gray: #b7babe;
+  --surface: var(--paper-white);
+  --surface-muted: var(--light-neutral);
+  --ink: var(--near-black);
+  --text: var(--charcoal);
+  --text-muted: var(--cool-gray);
+  --line: var(--hairline-gray);
+  --line-control: var(--cool-gray);
+  --action: var(--process-magenta);
+  --on-action: var(--paper-white);
+  --highlight: var(--process-cyan);
+  --accent-k: var(--near-black);
+  --focus-ring: var(--near-black);
+  --shadow-mockup: 0 8px 24px rgba(16, 24, 32, 0.14);
+}
+
+[data-theme='dark'] {
+  --surface: var(--near-black);
+  --surface-muted: var(--charcoal);
+  --ink: var(--paper-white);
+  --text: var(--hairline-gray);
+  --text-muted: var(--soft-gray);
+  --line: var(--charcoal);
+  --line-control: var(--soft-gray);
+  --action: var(--process-magenta);
+  --on-action: var(--paper-white);
+  --highlight: var(--process-cyan);
+  --accent-k: var(--paper-white);
+  --focus-ring: var(--paper-white);
+}
+
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-card: 26px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --space-page: 82px;
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-full: 9999px;
+  --font-headline: 'Outfit', 'Avenir Next', system-ui, sans-serif;
+  --font-body: 'Work Sans', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'DM Mono', ui-monospace, Menlo, monospace;
+}
+
+.hero {
+  font-family: var(--font-headline);
+  font-size: 64px;
+  line-height: 68px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.display {
+  font-family: var(--font-headline);
+  font-size: 45px;
+  line-height: 48px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.title {
+  font-family: var(--font-headline);
+  font-size: 33px;
+  line-height: 36px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.heading-1 {
+  font-family: var(--font-headline);
+  font-size: 29px;
+  line-height: 34px;
+  font-weight: 700;
+  letter-spacing: -0.012em;
+}
+
+.statement {
+  font-family: var(--font-headline);
+  font-size: 25px;
+  line-height: 33px;
+  font-weight: 700;
+  letter-spacing: -0.012em;
+}
+
+.heading-2 {
+  font-family: var(--font-headline);
+  font-size: 20px;
+  line-height: 26px;
+  font-weight: 700;
+  letter-spacing: -0.012em;
+}
+
+.heading-3 {
+  font-family: var(--font-headline);
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 700;
+  letter-spacing: -0.012em;
+}
+
+.heading-4 {
+  font-family: var(--font-headline);
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 700;
+  letter-spacing: -0.012em;
+}
+
+.subhead {
+  font-family: var(--font-headline);
+  font-size: 20px;
+  line-height: 26px;
+  font-weight: 400;
+}
+
+.body-lg {
+  font-family: var(--font-body);
+  font-size: 18px;
+  line-height: 29px;
+  font-weight: 400;
+}
+
+.body {
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 26px;
+  font-weight: 400;
+}
+
+.body-sm {
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 400;
+}
+
+.caption {
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 19px;
+  font-weight: 400;
+}
+
+.spec {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+}
+
+.label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+}
+
+.label-sm {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 14px;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+}
+
+@font-face {
+  font-family: 'Outfit';
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  src: url('fonts/outfit-latin-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Outfit';
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  src: url('fonts/outfit-latin-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Work Sans';
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  src: url('fonts/work-sans-latin-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Work Sans';
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+  src: url('fonts/work-sans-latin-400-italic.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Work Sans';
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  src: url('fonts/work-sans-latin-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'DM Mono';
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  src: url('fonts/dm-mono-latin-400-normal.woff2') format('woff2');
+}

@@ -1,0 +1,23 @@
+<!-- @dsCard group="Text" height=150 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>SectionHeader preview</title>
+  </head>
+  <body>
+    <div id="root" class="ghd-stage"></div>
+    <script>
+      var G = window.GHolmes,
+        h = React.createElement,
+        F = React.Fragment;
+      ReactDOM.createRoot(document.getElementById('root')).render(
+        h(G.SectionHeader, {
+          number: '02',
+          title: 'Logo System',
+          lede: 'The mark combines a lightbulb, a fountain-pen nib and a CMYK color arc: creative thinking translated into professional visual communication.',
+        }),
+      );
+    </script>
+  </body>
+</html>

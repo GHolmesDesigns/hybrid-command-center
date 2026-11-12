@@ -1,0 +1,29 @@
+<!-- @dsCard group="Playbook" height=290 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>PlaybookNav preview</title>
+  </head>
+  <body>
+    <div id="root" class="ghd-stage"></div>
+    <script>
+      var G = window.GHolmes,
+        h = React.createElement,
+        F = React.Fragment;
+      ReactDOM.createRoot(document.getElementById('root')).render(
+        h(G.PlaybookNav, {
+          title: 'Six Weeks of Clarity',
+          activeId: 'week-2',
+          items: [
+            { id: 'overview', label: 'Overview' },
+            { id: 'week-1', label: 'Week 1' },
+            { id: 'week-2', label: 'Week 2' },
+            { id: 'week-3', label: 'Week 3' },
+            { id: 'assets', label: 'Assets' },
+          ],
+        }),
+      );
+    </script>
+  </body>
+</html>

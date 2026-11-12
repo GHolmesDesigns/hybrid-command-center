@@ -1,0 +1,36 @@
+<!-- @dsCard group="Brand" height=190 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Logo preview</title>
+  </head>
+  <body>
+    <div id="root" class="ghd-stage"></div>
+    <script>
+      var G = window.GHolmes,
+        h = React.createElement,
+        F = React.Fragment;
+      ReactDOM.createRoot(document.getElementById('root')).render(
+        h(
+          'div',
+          { className: 'ghd-row' },
+          h(
+            'div',
+            { 'data-theme': 'light', className: 'ghd-plate' },
+            h(G.Logo, { variant: 'primary', width: 220 }),
+          ),
+          h(
+            'div',
+            {
+              'data-theme': 'dark',
+              className: 'ghd-plate',
+              style: { background: 'var(--near-black)' },
+            },
+            h(G.Logo, { variant: 'reverse', width: 220 }),
+          ),
+        ),
+      );
+    </script>
+  </body>
+</html>

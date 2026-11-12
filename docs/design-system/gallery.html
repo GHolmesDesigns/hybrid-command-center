@@ -1,0 +1,595 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>G.Holmes Designs design system</title>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="components/bundle.css" />
+    <style>
+      body {
+        margin: 0;
+        background: var(--surface);
+        color: var(--text);
+        font-family: var(--font-body);
+      }
+      .gal {
+        max-width: 1040px;
+        margin: 0 auto;
+        padding: var(--space-6) var(--space-4) var(--space-8);
+      }
+      .gal-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: var(--space-4);
+        margin-bottom: var(--space-5);
+      }
+      .gal-cover {
+        max-width: 960px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        margin-bottom: var(--space-7);
+      }
+      .gal-cover-inner {
+        transform-origin: 0 0;
+      }
+      #theme {
+        white-space: nowrap;
+        flex: none;
+      }
+      .gal h2 {
+        margin: var(--space-7) 0 var(--space-4);
+      }
+      .gal-item {
+        border-top: 1px solid var(--line);
+        padding: var(--space-5) 0;
+        display: grid;
+        gap: var(--space-3);
+      }
+      .gal-item p {
+        margin: 0;
+        max-width: 72ch;
+      }
+      .gal-demo {
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        overflow-x: auto;
+      }
+      /* Cover, from components/Cover/preview.html */
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: var(--surface);
+      }
+      .cover {
+        position: relative;
+        width: 960px;
+        height: 288px;
+        overflow: hidden;
+        background: var(--surface);
+      }
+      .cover svg {
+        position: absolute;
+        left: 0;
+        top: 0;
+      }
+      .c {
+        fill: var(--process-cyan);
+      }
+      .m {
+        fill: var(--process-magenta);
+      }
+      .y {
+        fill: var(--process-yellow);
+      }
+      .k {
+        fill: var(--accent-k);
+      }
+      .blend {
+        mix-blend-mode: multiply;
+      }
+      .iso {
+        isolation: isolate;
+      }
+      .name {
+        position: absolute;
+        left: 32px;
+        bottom: 56px;
+        width: 420px;
+        margin: 0;
+        font-family: var(--font-headline);
+        font-weight: 700;
+        font-size: 84px;
+        line-height: 0.95;
+        letter-spacing: -0.02em;
+        color: var(--ink);
+      }
+      .tag {
+        position: absolute;
+        left: 32px;
+        bottom: 26px;
+        width: 440px;
+        margin: 0;
+        font-family: var(--font-body);
+        font-size: 14px;
+        line-height: 20px;
+        color: var(--text-muted);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="gal">
+      <div class="gal-top">
+        <span class="ghd-label label ghd-tone-muted">G.Holmes Designs · Design system</span>
+        <button type="button" class="ghd-btn ghd-btn-secondary ghd-btn-sm" id="theme">
+          Dark theme
+        </button>
+      </div>
+      <div class="gal-cover">
+        <div class="gal-cover-inner" id="cover">
+          <div class="cover">
+            <!--
+    blocks: accent-k slab 208 x 288 (space-8 x 3 + 16), process-cyan, process-magenta, process-yellow discs at r 96, four accent-line segments 48 x space-2.
+    arrangement: one tall slab bleeding off the right edge, the three discs overlapping it from the left, the accent line grounding them.
+    pattern row: literal motif. The registration circles and the logo's accent line are what the studio's identity is known by, so the discs are the motif.
+    scales: space-2 8px, space-8 64px, radius-full on the discs, flush square slab to match the flat system.
+  -->
+            <svg width="960" height="288" viewBox="0 0 960 288" aria-hidden="true">
+              <rect class="k" x="752" y="0" width="208" height="288" />
+              <g class="iso">
+                <circle class="y blend" cx="660" cy="104" r="96" />
+                <circle class="c blend" cx="600" cy="186" r="96" />
+                <circle class="m blend" cx="720" cy="186" r="96" />
+              </g>
+            </svg>
+            <h1 class="name">G.Holmes Designs</h1>
+            <p class="tag">Design that makes your business look established, not amateur.</p>
+          </div>
+        </div>
+      </div>
+      <div id="root"></div>
+    </main>
+    <!-- React 18 UMD builds, pinned. The components read window.React and window.ReactDOM. -->
+    <script
+      src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"
+      crossorigin
+    ></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"
+      crossorigin
+    ></script>
+    <script src="components/bundle.js"></script>
+    <script>
+      var G = window.GHolmes,
+        h = React.createElement,
+        F = React.Fragment;
+      var DEMOS = [
+        {
+          group: 'Brand',
+          name: 'Logo',
+          summary: 'The full horizontal logo, and the default mark for formal brand recognition.',
+          render: function () {
+            return h(
+              'div',
+              { className: 'ghd-row' },
+              h(
+                'div',
+                { 'data-theme': 'light', className: 'ghd-plate' },
+                h(G.Logo, { variant: 'primary', width: 220 }),
+              ),
+              h(
+                'div',
+                {
+                  'data-theme': 'dark',
+                  className: 'ghd-plate',
+                  style: { background: 'var(--near-black)' },
+                },
+                h(G.Logo, { variant: 'reverse', width: 220 }),
+              ),
+            );
+          },
+        },
+        {
+          group: 'Brand',
+          name: 'IconMark',
+          summary:
+            'The standalone lightbulb and pen icon, for favicons, social profile images, watermarks and section markers.',
+          render: function () {
+            return h(
+              'div',
+              { className: 'ghd-row' },
+              h(G.IconMark, { tone: 'light', shape: 'tile', size: 72 }),
+              h(G.IconMark, { tone: 'dark', shape: 'tile', size: 72 }),
+              h(G.IconMark, { tone: 'light', shape: 'circle', size: 72 }),
+              h(G.IconMark, { tone: 'dark', shape: 'circle', size: 72 }),
+            );
+          },
+        },
+        {
+          group: 'Brand',
+          name: 'AccentLine',
+          summary:
+            'The short cyan, magenta, yellow and black line from the logo, used as a section divider, page break, portfolio category label and web micro-detail.',
+          render: function () {
+            return h(
+              'div',
+              { className: 'ghd-stack' },
+              h(G.AccentLine, { size: 'lg' }),
+              h(G.AccentLine, { size: 'md' }),
+              h(G.AccentLine, { size: 'sm' }),
+            );
+          },
+        },
+        {
+          group: 'Brand',
+          name: 'Dots',
+          summary: 'Four CMYK dots for lists and labels.',
+          render: function () {
+            return h(G.Dots, null, 'Dot accents for lists & labels');
+          },
+        },
+        {
+          group: 'Brand',
+          name: 'RegistrationMark',
+          summary:
+            'Three overlapping CMYK registration circles: the header mark for playbooks and working deliverables, and a visual through-line inside them.',
+          render: function () {
+            return h(
+              'div',
+              { className: 'ghd-row' },
+              h(G.RegistrationMark, { size: 88 }),
+              h(G.RegistrationMark, { size: 40 }),
+              h(G.RegistrationMark, { size: 88, misregistered: true }),
+            );
+          },
+        },
+        {
+          group: 'Text',
+          name: 'Label',
+          summary:
+            'The DM Mono voice: section labels, spec callouts and running footers, always uppercase with wide letter-spacing.',
+          render: function () {
+            return h(
+              'div',
+              { className: 'ghd-stack' },
+              h(G.Label, { tone: 'muted' }, 'The brand promise'),
+              h(G.Label, { tone: 'ink' }, 'HEX #00A0F0 · RGB 0 160 240'),
+              h(G.Label, { tone: 'highlight' }, '01'),
+              h(G.Label, { tone: 'muted', size: 'sm' }, 'G.Holmes Designs — Brand guide'),
+            );
+          },
+        },
+        {
+          group: 'Text',
+          name: 'Highlight',
+          summary:
+            'One colored word or phrase inside a headline, as in \u201cLook *established*, not amateur.\u201d',
+          render: function () {
+            return h(
+              'div',
+              { className: 'ghd-stack' },
+              h(
+                'p',
+                { className: 'title ghd-ink' },
+                'Look ',
+                h(G.Highlight, null, 'established,'),
+                ' not amateur.',
+              ),
+              h(
+                'div',
+                {
+                  'data-theme': 'dark',
+                  className: 'ghd-plate',
+                  style: { background: 'var(--near-black)', justifyContent: 'flex-start' },
+                },
+                h(
+                  'p',
+                  { className: 'heading-1 ghd-ink' },
+                  'From ',
+                  h(G.Highlight, { tone: 'yellow' }, 'the first impression.'),
+                ),
+              ),
+            );
+          },
+        },
+        {
+          group: 'Text',
+          name: 'SectionHeader',
+          summary:
+            'The numbered section opener: number, accent line, title and a one-sentence lede.',
+          render: function () {
+            return h(G.SectionHeader, {
+              number: '02',
+              title: 'Logo System',
+              lede: 'The mark combines a lightbulb, a fountain-pen nib and a CMYK color arc: creative thinking translated into professional visual communication.',
+            });
+          },
+        },
+        {
+          group: 'Actions',
+          name: 'Button',
+          summary: 'The one action a view is for.',
+          render: function () {
+            return h(
+              'div',
+              { className: 'ghd-row' },
+              h(G.Button, null, 'Start a Project'),
+              h(G.Button, { variant: 'secondary' }, 'See the Work'),
+              h(G.Button, { variant: 'ghost' }, 'Read the Process'),
+              h(G.Button, { disabled: true }, 'Sending'),
+            );
+          },
+        },
+        {
+          group: 'Forms',
+          name: 'Input',
+          summary: 'A labeled text field for project inquiries and contact forms.',
+          render: function () {
+            return h(
+              'div',
+              { className: 'ghd-stack' },
+              h(G.Input, {
+                label: 'Business name',
+                hint: 'As it appears to your customers.',
+                placeholder: 'Your business',
+              }),
+              h(G.Input, {
+                label: 'Email',
+                defaultValue: 'owner@',
+                error: 'enter a complete email address.',
+              }),
+            );
+          },
+        },
+        {
+          group: 'Containers',
+          name: 'Card',
+          summary: 'A container for one idea, with a hairline border and no shadow.',
+          render: function () {
+            return h(
+              'div',
+              { className: 'ghd-stack' },
+              h(
+                G.Card,
+                { title: 'What we are' },
+                'A disciplined design partner, not a generic creative agency.',
+              ),
+              h(
+                G.Card,
+                { title: 'Dark mode treatment', tone: 'dark' },
+                'Black or charcoal grounds with white type and restrained CMYK accents.',
+              ),
+            );
+          },
+        },
+        {
+          group: 'Containers',
+          name: 'Callout',
+          summary: 'A single promise or key takeaway on a muted ground with a magenta edge.',
+          render: function () {
+            return h(
+              G.Callout,
+              { label: 'The brand promise' },
+              'Design that makes your business look established, not amateur.',
+            );
+          },
+        },
+        {
+          group: 'Containers',
+          name: 'RuledList',
+          summary:
+            'A numbered list on hairline rules, for contents pages, service lists and process steps.',
+          render: function () {
+            return h(G.RuledList, {
+              items: [
+                {
+                  title: 'Brand Identity Systems',
+                  description: 'Positioning, marks, color and type.',
+                },
+                {
+                  title: 'Event & Experiential Design',
+                  description: 'Signage, programs and on-site graphics.',
+                },
+                {
+                  title: 'Editorial & Layout Design',
+                  description: 'Reports, publications and proposals.',
+                },
+                {
+                  title: 'Web & Digital Design',
+                  description: 'Sites and assets that stay consistent.',
+                },
+              ],
+            });
+          },
+        },
+        {
+          group: 'Containers',
+          name: 'DoDont',
+          summary:
+            'Paired usage rules, as used across brand guides for the studio and its clients.',
+          render: function () {
+            return h(G.DoDont, {
+              dos: [
+                'Use the dark logo on white or light neutral backgrounds.',
+                'Keep generous clear space around the mark.',
+                'Preserve the full horizontal composition for professional use.',
+              ],
+              donts: [
+                'Place the logo over busy photography.',
+                'Add shadows, glows, outlines or bevel effects.',
+                'Stretch, compress, rotate or recolor the mark.',
+              ],
+            });
+          },
+        },
+        {
+          group: 'Playbook',
+          name: 'CopyBlock',
+          summary:
+            'A post title and caption with copy-to-clipboard on each, the working unit of an HTML playbook.',
+          render: function () {
+            return h(G.CopyBlock, {
+              meta: 'LinkedIn · Week 1',
+              title: 'Your first impression is doing more work than you think',
+              caption:
+                'You have about three seconds before a new customer decides whether your business looks established. Consistent visuals are how you win those three seconds. #ThinkVisually',
+            });
+          },
+        },
+        {
+          group: 'Playbook',
+          name: 'PlaybookNav',
+          summary: 'The fixed sidebar for HTML playbooks, with scroll-spy on the current section.',
+          render: function () {
+            return h(G.PlaybookNav, {
+              title: 'Six Weeks of Clarity',
+              activeId: 'week-2',
+              items: [
+                { id: 'overview', label: 'Overview' },
+                { id: 'week-1', label: 'Week 1' },
+                { id: 'week-2', label: 'Week 2' },
+                { id: 'week-3', label: 'Week 3' },
+                { id: 'assets', label: 'Assets' },
+              ],
+            });
+          },
+        },
+        {
+          group: 'Application',
+          name: 'Hero',
+          summary:
+            'The website hero: reverse logo on a near-black bar above a white, benefit-led headline and a single action.',
+          render: function () {
+            return h(
+              G.Hero,
+              {
+                actionLabel: 'Start a Project',
+                lede: 'We help your business look credible from the first impression.',
+              },
+              'Look ',
+              h(G.Highlight, null, 'established,'),
+              h('br'),
+              'not amateur.',
+            );
+          },
+        },
+        {
+          group: 'Application',
+          name: 'BrandBand',
+          summary: 'A closing band: one statement and the reverse logo on near-black.',
+          render: function () {
+            return h(
+              G.BrandBand,
+              null,
+              'G.Holmes Designs helps small businesses look credible, established and professionally designed ',
+              h(G.Highlight, { tone: 'yellow' }, 'from the first impression.'),
+            );
+          },
+        },
+        {
+          group: 'Application',
+          name: 'BusinessCard',
+          summary: 'The reverse business card at 3.5 \u00d7 2 in proportion.',
+          render: function () {
+            return h(
+              'div',
+              { className: 'ghd-row', style: { justifyContent: 'center', padding: 8 } },
+              h(G.BusinessCard, { name: 'G.Holmes', role: 'Founder · Designer' }),
+            );
+          },
+        },
+        {
+          group: 'Application',
+          name: 'Letterhead',
+          summary:
+            'The letterhead and proposal page: primary logo, generous white space and a footer with the accent line.',
+          render: function () {
+            return h(
+              'div',
+              { className: 'ghd-plate' },
+              h(
+                G.Letterhead,
+                null,
+                h(
+                  'p',
+                  null,
+                  'You asked how to make your brand look consistent across the website, proposals and event materials. This proposal shows what changes first and why.',
+                ),
+              ),
+            );
+          },
+        },
+        {
+          group: 'Application',
+          name: 'SocialCard',
+          summary: 'The dark social template: icon, short headline and accent line, at 1:1.',
+          render: function () {
+            return h(
+              'div',
+              { className: 'ghd-row', style: { justifyContent: 'center', padding: 8 } },
+              h(
+                G.SocialCard,
+                null,
+                'Visual Systems',
+                h('br'),
+                'That Build ',
+                h(G.Highlight, null, 'Trust'),
+              ),
+            );
+          },
+        },
+      ];
+      var groups = [];
+      DEMOS.forEach(function (d) {
+        if (groups.indexOf(d.group) < 0) groups.push(d.group);
+      });
+      ReactDOM.createRoot(document.getElementById('root')).render(
+        h(
+          F,
+          null,
+          groups.map(function (g) {
+            return h(
+              'section',
+              { key: g },
+              h('h2', { className: 'heading-1 ghd-ink' }, g),
+              DEMOS.filter(function (d) {
+                return d.group === g;
+              }).map(function (d) {
+                return h(
+                  'article',
+                  { key: d.name, className: 'gal-item' },
+                  h('h3', { className: 'heading-3 ghd-ink' }, d.name),
+                  h('p', { className: 'body-sm' }, d.summary),
+                  h(
+                    'div',
+                    { className: 'gal-demo' },
+                    h('div', { className: 'ghd-stage' }, d.render()),
+                  ),
+                );
+              }),
+            );
+          }),
+        ),
+      );
+      var root = document.documentElement,
+        btn = document.getElementById('theme');
+      btn.addEventListener('click', function () {
+        var dark = root.getAttribute('data-theme') !== 'dark';
+        root.setAttribute('data-theme', dark ? 'dark' : 'light');
+        btn.textContent = dark ? 'Light theme' : 'Dark theme';
+      });
+      function fitCover() {
+        var el = document.getElementById('cover'),
+          w = el.parentNode.clientWidth;
+        var s = Math.min(1, w / 960);
+        el.style.transform = 'scale(' + s + ')';
+        el.parentNode.style.height = Math.round(288 * s) + 'px';
+      }
+      window.addEventListener('resize', fitCover);
+      fitCover();
+    </script>
+  </body>
+</html>

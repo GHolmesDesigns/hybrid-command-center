@@ -1,0 +1,26 @@
+<!-- @dsCard group="Brand" height=112 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>IconMark preview</title>
+  </head>
+  <body>
+    <div id="root" class="ghd-stage"></div>
+    <script>
+      var G = window.GHolmes,
+        h = React.createElement,
+        F = React.Fragment;
+      ReactDOM.createRoot(document.getElementById('root')).render(
+        h(
+          'div',
+          { className: 'ghd-row' },
+          h(G.IconMark, { tone: 'light', shape: 'tile', size: 72 }),
+          h(G.IconMark, { tone: 'dark', shape: 'tile', size: 72 }),
+          h(G.IconMark, { tone: 'light', shape: 'circle', size: 72 }),
+          h(G.IconMark, { tone: 'dark', shape: 'circle', size: 72 }),
+        ),
+      );
+    </script>
+  </body>
+</html>
