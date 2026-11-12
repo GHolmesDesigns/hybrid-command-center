@@ -310,6 +310,7 @@ export function TaskDetail({
         </div>
       )}
       <TaskChecklist task={task} text={text} setText={setText} mutate={mutate} />
+      <TaskTimeSection task={task} refresh={refresh} flash={flash} />
       <section>
         <div className="section-title">
           <div>
@@ -351,7 +352,6 @@ export function TaskDetail({
         />
       </section>
       <TaskDependencies task={task} tasks={tasks} dep={dep} setDep={setDep} mutate={mutate} />
-      <TaskTimeSection task={task} refresh={refresh} flash={flash} />
       <DiscussionPanel
         scopeType="task"
         scopeId={task.id}

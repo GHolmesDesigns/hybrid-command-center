@@ -1,5 +1,14 @@
 # Changelog
 
+## [7.5.1] - 2026-11-12
+
+### Changed
+
+- Place task time tracking between the checklist and notes in task details.
+
+### Breaking changes
+
+None.
 ## [7.5.0] - 2026-11-12
 
 ### Added
