@@ -40,7 +40,7 @@ import type { Category, Client, DashboardData, Project, Tag, Task } from '../../
 import { APP_VERSION, DEFAULT_BRANDING, type Branding } from '../../../shared/branding';
 import { CANONICAL_VIEW_DEFAULTS, type ViewDefaults } from '../../../shared/view-defaults';
 import { readTaskTimer } from '../../../shared/task-timer';
-import { resolveGlobalStartTask, startTaskPath } from '../../../shared/start-task';
+import { resolveGlobalStartTask } from '../../../shared/start-task';
 import {
   DEFAULT_AGENT_HUB_LIVE_TIPS_SETTINGS,
   type AgentHubLiveTipsSettings,
@@ -95,7 +95,7 @@ export type Modal =
   | { type: 'clientMerge'; source: Client }
   | { type: 'project'; value?: Project; clientId?: string }
   | { type: 'task'; value?: Task; projectId?: string }
-  | { type: 'taskDetail'; value: Task }
+  | { type: 'taskDetail'; value: Task; startTimer?: boolean }
   | { type: 'import' }
   | { type: 'signalImport' }
   | null;
@@ -158,14 +158,15 @@ function TopbarStartTask({
   tasks,
   projects,
   clients,
+  startTask,
 }: {
   modal: Modal;
   tasks: Task[];
   projects: Project[];
   clients: Client[];
+  startTask: (task: Task) => void;
 }) {
   const location = useLocation();
-  const navigate = useNavigate();
   const [savedSessionTaskId, setSavedSessionTaskId] = useState<string | null>(
     () => readTaskTimer(browserStorage())?.taskId ?? null,
   );
@@ -191,20 +192,20 @@ function TopbarStartTask({
     clients,
   });
   const disabled = !taskId;
-  const title = disabledReason ?? (disabled ? 'No task is available to start' : 'Start Task');
+  const title = disabledReason ?? (disabled ? 'No task is available to start' : 'Start Time');
   return (
     <button
       className="top-action"
       type="button"
       disabled={disabled}
       title={title}
-      aria-label={disabled ? title : 'Start Task'}
+      aria-label={disabled ? title : 'Start Time'}
       onClick={() => {
-        if (!taskId) return;
-        navigate(startTaskPath(taskId));
+        const task = tasks.find((candidate) => candidate.id === taskId);
+        if (task) startTask(task);
       }}
     >
-      <Play /> Start Task
+      <Play /> Start Time
     </button>
   );
 }
@@ -566,6 +567,9 @@ export function App() {
                   tasks={tasks}
                   projects={projects}
                   clients={clients}
+                  startTask={(task) =>
+                    setModal({ type: 'taskDetail', value: task, startTimer: true })
+                  }
                 />
                 <button
                   className="top-action"

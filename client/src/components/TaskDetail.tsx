@@ -22,6 +22,7 @@ export function TaskDetail({
   flash,
   projectExists,
   clientExists,
+  startTimer = false,
 }: {
   task: Task;
   tasks: Task[];
@@ -32,6 +33,7 @@ export function TaskDetail({
   flash: (s: string, t?: 'success' | 'error') => void;
   projectExists: boolean;
   clientExists: boolean;
+  startTimer?: boolean;
 }) {
   const [text, setText] = useState(''),
     [dep, setDep] = useState(''),
@@ -310,7 +312,7 @@ export function TaskDetail({
         </div>
       )}
       <TaskChecklist task={task} text={text} setText={setText} mutate={mutate} />
-      <TaskTimeSection task={task} refresh={refresh} flash={flash} />
+      <TaskTimeSection task={task} refresh={refresh} flash={flash} autoStart={startTimer} />
       <section>
         <div className="section-title">
           <div>

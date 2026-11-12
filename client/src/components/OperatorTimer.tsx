@@ -53,14 +53,17 @@ export function OperatorTimer({ projects, tasks }: { projects: Project[]; tasks:
       if (document.visibilityState === 'visible') void refresh();
     }, 30_000);
     const focus = () => void refresh();
+    const timerUpdated = () => void refresh();
     const visible = () => {
       if (document.visibilityState === 'visible') void refresh();
     };
     window.addEventListener('focus', focus);
+    window.addEventListener('hcc:operator-timer-updated', timerUpdated);
     document.addEventListener('visibilitychange', visible);
     return () => {
       window.clearInterval(interval);
       window.removeEventListener('focus', focus);
+      window.removeEventListener('hcc:operator-timer-updated', timerUpdated);
       document.removeEventListener('visibilitychange', visible);
     };
   }, [refresh]);

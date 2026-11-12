@@ -30,9 +30,7 @@ test('Tasks page lets an operator select a Project task and start Pomodoro focus
   await expect(page).toHaveURL(/\/status$/);
 });
 
-test('Project Status Start Task selects a task without auto-starting the timer', async ({
-  page,
-}) => {
+test('task cards and the global header start work time for the selected task', async ({ page }) => {
   const run = Date.now();
   const client = await (
     await page.request.post('/api/clients', { data: { name: `Kanban Timer Client ${run}` } })
@@ -42,19 +40,51 @@ test('Project Status Start Task selects a task without auto-starting the timer',
       data: { clientId: client.id, name: `Kanban Timer Project ${run}` },
     })
   ).json();
-  const task = await (
+  const cardTask = await (
     await page.request.post('/api/tasks', {
       data: { projectId: project.id, title: `Kanban focus task ${run}` },
     })
   ).json();
+  const headerTask = await (
+    await page.request.post('/api/tasks', {
+      data: { projectId: project.id, title: `Header focus task ${run}` },
+    })
+  ).json();
 
   await page.goto('/status');
-  await page.getByRole('button', { name: `Start Task for Kanban focus task ${run}` }).click();
-  await expect(page).toHaveURL(new RegExp(`/countdown\\?task=${task.id}`));
-  await expect(page.getByText(`Working on Kanban focus task ${run}`)).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Start/ })).toBeVisible();
-  await page.getByRole('button', { name: /^Start/ }).click();
-  await expect(page.getByRole('button', { name: /^Pause/ })).toBeVisible();
+  await page.getByRole('button', { name: `Start Time for Kanban focus task ${run}` }).click();
+  const cardDetail = page.getByRole('dialog');
+  await expect(
+    cardDetail.getByRole('button', { name: 'Timer running on this task' }),
+  ).toBeDisabled();
+  const cardTimer = page.getByRole('button', { name: /Running/ });
+  await expect(cardTimer).toBeVisible();
+  await cardDetail.locator('footer').getByRole('button', { name: 'Close' }).click();
+  await cardTimer.click();
+  await expect(page.getByRole('region', { name: 'Work timer' })).toContainText(cardTask.title);
+  await page.waitForTimeout(1_100);
+
+  await page.goto(`/countdown/${headerTask.id}`);
+  const headerSwitch = page.waitForResponse(
+    (response) =>
+      response.url().endsWith('/api/operator-timer/switch') &&
+      response.request().method() === 'POST',
+  );
+  await page.getByRole('button', { name: 'Start Time', exact: true }).click();
+  const headerSwitchResponse = await headerSwitch;
+  const headerSwitchBody = await headerSwitchResponse.json();
+  expect(headerSwitchResponse.status(), JSON.stringify(headerSwitchBody)).toBe(200);
+  expect(headerSwitchBody).toMatchObject({ taskId: headerTask.id });
+  const headerDetail = page.getByRole('dialog');
+  await expect(
+    headerDetail.getByRole('button', { name: 'Timer running on this task' }),
+  ).toBeDisabled();
+  await headerDetail.locator('footer').getByRole('button', { name: 'Close' }).click();
+  const runningTimer = page.getByRole('button', { name: /Running/ });
+  await runningTimer.click();
+  await expect(page.getByRole('region', { name: 'Work timer' })).toContainText(
+    `Header focus task ${run}`,
+  );
 });
 
 test('Start Task confirms before replacing another running session and cancel keeps it', async ({

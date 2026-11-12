@@ -131,6 +131,7 @@ export function ModalHost({
         flash={flash}
         projectExists={projects.some((project) => project.id === task.projectId)}
         clientExists={clients.some((client) => client.id === task.clientId)}
+        startTimer={modal.startTimer}
       />
     </EntityModal>
   );

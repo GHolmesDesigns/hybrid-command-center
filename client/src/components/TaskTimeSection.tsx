@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Play } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api, send } from '../api';
@@ -23,10 +23,12 @@ export function TaskTimeSection({
   task,
   refresh,
   flash,
+  autoStart = false,
 }: {
   task: Task;
   refresh: () => Promise<void>;
   flash: (message: string, tone?: 'success' | 'error') => void;
+  autoStart?: boolean;
 }) {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [timer, setTimer] = useState<OperatorTimer | null>(null);
@@ -34,6 +36,8 @@ export function TaskTimeSection({
   const [budget, setBudget] = useState(task.timeBudgetMinutes?.toString() ?? '');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const autoStartHandled = useRef(false);
   const load = useCallback(async () => {
     setError('');
     try {
@@ -48,6 +52,8 @@ export function TaskTimeSection({
       setBudget(nextSummary.budgetMinutes?.toString() ?? '');
     } catch (cause) {
       setError((cause as Error).message);
+    } finally {
+      setLoaded(true);
     }
   }, [task.id, task.projectId]);
   useEffect(() => void load(), [load]);
@@ -74,9 +80,12 @@ export function TaskTimeSection({
     }
   };
 
-  const startOrSwitch = async () => {
+  const startOrSwitch = useCallback(async () => {
     const category = categories[0];
-    if (!timer || !category) return;
+    if (!timer || !category) {
+      if (!category) setError('No selectable time category is available for this task.');
+      return;
+    }
     setBusy(true);
     setError('');
     try {
@@ -88,6 +97,7 @@ export function TaskTimeSection({
       });
       setTimer(next);
       await load();
+      window.dispatchEvent(new Event('hcc:operator-timer-updated'));
       flash(
         timer.state === 'READY'
           ? 'Work timer started for this task.'
@@ -99,7 +109,22 @@ export function TaskTimeSection({
     } finally {
       setBusy(false);
     }
-  };
+  }, [categories, flash, load, task.id, task.projectId, timer]);
+
+  useEffect(() => {
+    if (!autoStart || !loaded || autoStartHandled.current) return;
+    autoStartHandled.current = true;
+    if (!timer) return;
+    if (timer.state !== 'READY' && timer.taskId === task.id) {
+      flash('The work timer is already running on this task.');
+      return;
+    }
+    if (!categories.length) {
+      setError('No selectable time category is available for this task.');
+      return;
+    }
+    void startOrSwitch();
+  }, [autoStart, categories, flash, loaded, startOrSwitch, task.id, timer]);
 
   const timerOnTask = timer?.state !== 'READY' && timer?.taskId === task.id;
   const actionLabel = timerOnTask
