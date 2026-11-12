@@ -49,5 +49,7 @@ test('core workspace applies the design system across themes and a narrow viewpo
   await expect(workspace.locator('.dashboard-grid .ghd-card').nth(1)).toBeVisible();
 
   await gotoSettled(page, '/settings');
-  await expect(page.locator('.workspace-design-system')).toHaveCount(0);
+  const settingsWorkspace = page.locator('.page-wrap.workspace-design-system');
+  await expect(settingsWorkspace).toBeVisible();
+  await expect(settingsWorkspace.locator('.settings-card').first()).toBeVisible();
 });
