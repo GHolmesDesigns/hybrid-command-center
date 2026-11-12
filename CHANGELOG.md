@@ -1,5 +1,14 @@
 # Changelog
 
+## [7.6.0] - 2026-11-12
+
+### Changed
+
+- Updated the core workspace screens and shared navigation to use the G.Holmes Designs tokens and components in light and dark themes.
+
+### Breaking changes
+
+None.
 ## [7.5.4] - 2026-11-12
 
 ### Fixed
