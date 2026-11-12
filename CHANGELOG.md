@@ -1,5 +1,14 @@
 # Changelog
 
+## [7.5.2] - 2026-11-12
+
+### Changed
+
+- Start task time tracking directly from task cards or the global header, using the task's project and the work timer's existing behavior.
+
+### Breaking changes
+
+None.
 ## [7.5.1] - 2026-11-12
 
 ### Changed
