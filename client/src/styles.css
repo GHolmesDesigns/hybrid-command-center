@@ -2922,12 +2922,54 @@ button.tag-chip.toggle.active {
   display: grid;
   gap: 0.35rem;
 }
+.workspace-time-edit-modal {
+  box-sizing: border-box;
+  padding: 1.5rem;
+  max-height: min(90vh, 52rem);
+}
+.workspace-time-edit-modal > h2 {
+  margin: 0 0 0.5rem;
+}
+.workspace-time-edit-modal > p {
+  margin: 0 0 1rem;
+}
+.workspace-time-edit-modal form {
+  display: grid;
+  gap: 1rem;
+}
+.workspace-time-edit-modal label {
+  display: grid;
+  gap: 0.4rem;
+}
+.workspace-time-edit-date-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.workspace-time-edit-modal .modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding-top: 0.25rem;
+}
 @media (max-width: 700px) {
   .project-time-totals {
     grid-template-columns: 1fr;
   }
   .time-entry {
     align-items: flex-start;
+  }
+}
+@media (max-width: 520px) {
+  .workspace-time-edit-modal {
+    padding: 1rem;
+  }
+  .workspace-time-edit-date-fields {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.75rem;
+  }
+  .workspace-time-edit-modal .modal-actions > button {
+    flex: 1;
   }
 }
 /* Cancelled here rather than in the shared rules: `.tag-list` also spaces the chips under a

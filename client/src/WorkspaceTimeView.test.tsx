@@ -78,6 +78,109 @@ describe('Workspace time report', () => {
     expect(testState.operatorTimerPayload).toEqual(timer);
   });
 
+  it('links resolvable tasks to their details and leaves entries without tasks unlinked', async () => {
+    const noTask: TimeEntry = {
+      ...entry,
+      id: 'entry-no-task',
+      taskId: undefined,
+      taskTitle: undefined,
+      notes: 'Unassigned work',
+    };
+    testState.workspaceTimePayload.entries = [entry, noTask];
+    render(
+      <MemoryRouter initialEntries={['/time?from=2026-11-02&to=2026-11-08']}>
+        <WorkspaceTimeView />
+      </MemoryRouter>,
+    );
+
+    const taskLink = await screen.findByRole('link', { name: 'Research' });
+    expect(taskLink).toHaveAttribute('href', '/countdown/task-1');
+    expect(screen.getByText('No task')).not.toHaveAttribute('href');
+  });
+
+  it('edits only the selected row and keeps the modal values visible after a save failure', async () => {
+    const timer = {
+      state: 'RUNNING' as const,
+      timerId: 'timer-1',
+      elapsedSeconds: 120,
+      accumulatedSeconds: 120,
+      serverTime: '2026-11-08T12:00:00.000Z',
+      revision: 3,
+    };
+    const secondEntry: TimeEntry = {
+      ...entry,
+      id: 'entry-2',
+      notes: 'Second row notes',
+      startedAt: '2026-11-08T07:30:00.000Z',
+      endedAt: '2026-11-08T08:00:00.000Z',
+      durationSeconds: 1800,
+      revision: 4,
+    };
+    testState.operatorTimerPayload = timer;
+    testState.workspaceTimePayload.entries = [entry, secondEntry];
+    testState.workspaceTimeUpdateFailure = {
+      status: 409,
+      error: 'This time entry changed elsewhere.',
+    };
+    render(
+      <MemoryRouter initialEntries={['/time?from=2026-11-02&to=2026-11-08']}>
+        <WorkspaceTimeView />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText('Second row notes');
+    fireEvent.click(screen.getAllByRole('button', { name: /Edit time entry for Studio/ })[1]);
+    const dialog = await screen.findByRole('dialog', { name: 'Edit time entry' });
+    expect((dialog.querySelector('textarea') as HTMLTextAreaElement).value).toBe(
+      'Second row notes',
+    );
+    fireEvent.change(dialog.querySelector('textarea')!, {
+      target: { value: 'Updated second row' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save entry' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'This time entry changed elsewhere.',
+    );
+    expect(screen.getByRole('dialog', { name: 'Edit time entry' })).toBeVisible();
+    expect((dialog.querySelector('textarea') as HTMLTextAreaElement).value).toBe(
+      'Updated second row',
+    );
+    expect(screen.getByText('Draft review')).toBeVisible();
+    expect(testState.operatorTimerPayload).toEqual(timer);
+    expect(requests.filter((request) => request.method === 'PATCH')).toEqual([
+      {
+        url: '/api/projects/project-1/time/entries/entry-2',
+        method: 'PATCH',
+        body: expect.objectContaining({ revision: 4, notes: 'Updated second row' }),
+      },
+    ]);
+    expect(requests.filter((request) => request.method === 'DELETE')).toEqual([]);
+  });
+
+  it('saves the edited row and reloads the updated report', async () => {
+    testState.workspaceTimePayload.entries = [entry];
+    render(
+      <MemoryRouter initialEntries={['/time?from=2026-11-02&to=2026-11-08']}>
+        <WorkspaceTimeView />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText('Draft review');
+    fireEvent.click(screen.getByRole('button', { name: /Edit time entry for Studio/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'Edit time entry' });
+    fireEvent.change(dialog.querySelector('textarea')!, {
+      target: { value: 'Revised review notes' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save entry' }));
+
+    expect(await screen.findByText('Time entry updated.')).toBeVisible();
+    expect(screen.getByText('Revised review notes')).toBeVisible();
+    expect(screen.queryByRole('dialog', { name: 'Edit time entry' })).not.toBeInTheDocument();
+    expect(requests.filter((request) => request.method === 'PATCH')).toHaveLength(1);
+    expect(requests.filter((request) => request.url === '/api/time/entries')).toHaveLength(1);
+  });
+
   it('deletes only the confirmed entry, refreshes the report, and updates CSV with filters intact', async () => {
     const secondEntry: TimeEntry = {
       ...entry,
