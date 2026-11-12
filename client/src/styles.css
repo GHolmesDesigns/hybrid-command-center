@@ -600,20 +600,27 @@ button svg,
   flex-direction: column;
   gap: 5px;
 }
+.settings-nav-top {
+  display: flex;
+  align-items: stretch;
+}
+.settings-nav-top > a {
+  flex: 1;
+  min-width: 0;
+}
 .settings-nav-disclosure {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin: -2px 4px 2px 42px;
-  padding: 5px 8px;
+  flex: none;
+  justify-content: center;
+  width: 42px;
+  margin: 0;
+  padding: 8px;
   border: 0;
   border-radius: 6px;
   background: transparent;
   color: var(--sidebar-muted);
   font: inherit;
-  font-size: 12px;
-  text-align: left;
   cursor: pointer;
 }
 .settings-nav-disclosure:hover,
@@ -641,9 +648,8 @@ button svg,
   padding-bottom: 9px !important;
 }
 .settings-nav-disclosure.collapsed {
-  justify-content: center;
-  margin: 0;
-  padding: 8px;
+  width: 38px;
+  margin-right: 4px;
 }
 .sidebar.collapsed .settings-nav-children {
   padding-left: 0;

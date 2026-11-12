@@ -79,7 +79,7 @@ describe('App', () => {
     expect(screen.getByRole('link', { name: 'Status' })).toHaveAttribute('href', '/status');
   });
 
-  it('shows the specified primary navigation order and a separate Settings disclosure', async () => {
+  it('shows the specified primary navigation order with the disclosure on Settings', async () => {
     render(
       <MemoryRouter>
         <App />
@@ -88,7 +88,7 @@ describe('App', () => {
 
     const navigation = await screen.findByRole('navigation', { name: 'Primary navigation' });
     const topLevelLinks = navigation.querySelectorAll(
-      ':scope > a, :scope > .settings-nav-group > a',
+      ':scope > a, :scope > .settings-nav-group > .settings-nav-top > a',
     );
     expect(Array.from(topLevelLinks, (link) => link.textContent?.trim())).toEqual([
       'Dashboard',
@@ -106,18 +106,23 @@ describe('App', () => {
       'aria-expanded',
       'false',
     );
+    expect(screen.queryByText('Pages')).toBeNull();
   });
 
   it('expands Settings pages in order and collapses them with an accessible disclosure', async () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <App />
+        <LocationProbe />
       </MemoryRouter>,
     );
 
     const disclosure = await screen.findByRole('button', { name: 'Expand Settings pages' });
+    disclosure.focus();
+    expect(document.activeElement).toBe(disclosure);
     fireEvent.click(disclosure);
     expect(disclosure).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByLabelText('Current location')).toHaveTextContent('/');
     const children = screen
       .getByRole('navigation', { name: 'Primary navigation' })
       .querySelector('.settings-nav-children');
@@ -126,6 +131,22 @@ describe('App', () => {
     ).toEqual(['Agents', 'Files', 'Health', 'Import']);
     fireEvent.click(screen.getByRole('button', { name: 'Collapse Settings pages' }));
     expect(screen.queryByRole('link', { name: 'Files' })).toBeNull();
+  });
+
+  it('navigates to Settings without toggling its disclosure', async () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+        <LocationProbe />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole('link', { name: 'Settings' }));
+    expect(screen.getByLabelText('Current location')).toHaveTextContent('/settings');
+    expect(screen.getByRole('button', { name: 'Expand Settings pages' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
   });
 
   it('opens Settings automatically for a direct child route and marks that child active', async () => {

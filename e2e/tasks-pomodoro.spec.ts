@@ -139,7 +139,9 @@ test('legacy task route redirects to Countdown and Settings exposes an accessibl
   await expect(page.getByRole('heading', { level: 1, name: 'Countdown' })).toBeVisible();
 
   const navigation = page.getByRole('navigation', { name: 'Primary navigation' });
-  const topLevel = navigation.locator(':scope > a, :scope > .settings-nav-group > a');
+  const topLevel = navigation.locator(
+    ':scope > a, :scope > .settings-nav-group > .settings-nav-top > a',
+  );
   await expect(topLevel).toHaveCount(10);
   await expect(topLevel.nth(4)).toHaveText('Countdown');
   await expect(topLevel.nth(8)).toHaveText('Time');
