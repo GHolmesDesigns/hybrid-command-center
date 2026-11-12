@@ -1,0 +1,24 @@
+<!-- @dsCard group="Playbook" height=210 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>CopyBlock preview</title>
+  </head>
+  <body>
+    <div id="root" class="ghd-stage"></div>
+    <script>
+      var G = window.GHolmes,
+        h = React.createElement,
+        F = React.Fragment;
+      ReactDOM.createRoot(document.getElementById('root')).render(
+        h(G.CopyBlock, {
+          meta: 'LinkedIn · Week 1',
+          title: 'Your first impression is doing more work than you think',
+          caption:
+            'You have about three seconds before a new customer decides whether your business looks established. Consistent visuals are how you win those three seconds. #ThinkVisually',
+        }),
+      );
+    </script>
+  </body>
+</html>

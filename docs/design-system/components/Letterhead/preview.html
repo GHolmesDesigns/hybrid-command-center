@@ -1,0 +1,31 @@
+<!-- @dsCard group="Application" height=580 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Letterhead preview</title>
+  </head>
+  <body>
+    <div id="root" class="ghd-stage"></div>
+    <script>
+      var G = window.GHolmes,
+        h = React.createElement,
+        F = React.Fragment;
+      ReactDOM.createRoot(document.getElementById('root')).render(
+        h(
+          'div',
+          { className: 'ghd-plate' },
+          h(
+            G.Letterhead,
+            null,
+            h(
+              'p',
+              null,
+              'You asked how to make your brand look consistent across the website, proposals and event materials. This proposal shows what changes first and why.',
+            ),
+          ),
+        ),
+      );
+    </script>
+  </body>
+</html>

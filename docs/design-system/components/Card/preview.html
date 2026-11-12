@@ -1,0 +1,32 @@
+<!-- @dsCard group="Containers" height=240 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Card preview</title>
+  </head>
+  <body>
+    <div id="root" class="ghd-stage"></div>
+    <script>
+      var G = window.GHolmes,
+        h = React.createElement,
+        F = React.Fragment;
+      ReactDOM.createRoot(document.getElementById('root')).render(
+        h(
+          'div',
+          { className: 'ghd-stack' },
+          h(
+            G.Card,
+            { title: 'What we are' },
+            'A disciplined design partner, not a generic creative agency.',
+          ),
+          h(
+            G.Card,
+            { title: 'Dark mode treatment', tone: 'dark' },
+            'Black or charcoal grounds with white type and restrained CMYK accents.',
+          ),
+        ),
+      );
+    </script>
+  </body>
+</html>

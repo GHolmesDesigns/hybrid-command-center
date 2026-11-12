@@ -1,0 +1,43 @@
+<!-- @dsCard group="Text" height=150 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Highlight preview</title>
+  </head>
+  <body>
+    <div id="root" class="ghd-stage"></div>
+    <script>
+      var G = window.GHolmes,
+        h = React.createElement,
+        F = React.Fragment;
+      ReactDOM.createRoot(document.getElementById('root')).render(
+        h(
+          'div',
+          { className: 'ghd-stack' },
+          h(
+            'p',
+            { className: 'title ghd-ink' },
+            'Look ',
+            h(G.Highlight, null, 'established,'),
+            ' not amateur.',
+          ),
+          h(
+            'div',
+            {
+              'data-theme': 'dark',
+              className: 'ghd-plate',
+              style: { background: 'var(--near-black)', justifyContent: 'flex-start' },
+            },
+            h(
+              'p',
+              { className: 'heading-1 ghd-ink' },
+              'From ',
+              h(G.Highlight, { tone: 'yellow' }, 'the first impression.'),
+            ),
+          ),
+        ),
+      );
+    </script>
+  </body>
+</html>

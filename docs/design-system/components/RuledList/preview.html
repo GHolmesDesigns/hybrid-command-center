@@ -1,0 +1,35 @@
+<!-- @dsCard group="Containers" height=220 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>RuledList preview</title>
+  </head>
+  <body>
+    <div id="root" class="ghd-stage"></div>
+    <script>
+      var G = window.GHolmes,
+        h = React.createElement,
+        F = React.Fragment;
+      ReactDOM.createRoot(document.getElementById('root')).render(
+        h(G.RuledList, {
+          items: [
+            { title: 'Brand Identity Systems', description: 'Positioning, marks, color and type.' },
+            {
+              title: 'Event & Experiential Design',
+              description: 'Signage, programs and on-site graphics.',
+            },
+            {
+              title: 'Editorial & Layout Design',
+              description: 'Reports, publications and proposals.',
+            },
+            {
+              title: 'Web & Digital Design',
+              description: 'Sites and assets that stay consistent.',
+            },
+          ],
+        }),
+      );
+    </script>
+  </body>
+</html>

@@ -1,0 +1,23 @@
+<!-- @dsCard group="Containers" height=130 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Callout preview</title>
+  </head>
+  <body>
+    <div id="root" class="ghd-stage"></div>
+    <script>
+      var G = window.GHolmes,
+        h = React.createElement,
+        F = React.Fragment;
+      ReactDOM.createRoot(document.getElementById('root')).render(
+        h(
+          G.Callout,
+          { label: 'The brand promise' },
+          'Design that makes your business look established, not amateur.',
+        ),
+      );
+    </script>
+  </body>
+</html>

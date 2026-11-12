@@ -1,0 +1,23 @@
+<!-- @dsCard group="Application" height=230 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>BusinessCard preview</title>
+  </head>
+  <body>
+    <div id="root" class="ghd-stage"></div>
+    <script>
+      var G = window.GHolmes,
+        h = React.createElement,
+        F = React.Fragment;
+      ReactDOM.createRoot(document.getElementById('root')).render(
+        h(
+          'div',
+          { className: 'ghd-row', style: { justifyContent: 'center', padding: 8 } },
+          h(G.BusinessCard, { name: 'G.Holmes', role: 'Founder · Designer' }),
+        ),
+      );
+    </script>
+  </body>
+</html>

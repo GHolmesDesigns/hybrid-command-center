@@ -1,0 +1,90 @@
+<!-- @dsCard height=288 -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Cover</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: var(--surface);
+      }
+      .cover {
+        position: relative;
+        width: 960px;
+        height: 288px;
+        overflow: hidden;
+        background: var(--surface);
+      }
+      .cover svg {
+        position: absolute;
+        left: 0;
+        top: 0;
+      }
+      .c {
+        fill: var(--process-cyan);
+      }
+      .m {
+        fill: var(--process-magenta);
+      }
+      .y {
+        fill: var(--process-yellow);
+      }
+      .k {
+        fill: var(--accent-k);
+      }
+      .blend {
+        mix-blend-mode: multiply;
+      }
+      .iso {
+        isolation: isolate;
+      }
+      .name {
+        position: absolute;
+        left: 32px;
+        bottom: 56px;
+        width: 420px;
+        margin: 0;
+        font-family: var(--font-headline);
+        font-weight: 700;
+        font-size: 84px;
+        line-height: 0.95;
+        letter-spacing: -0.02em;
+        color: var(--ink);
+      }
+      .tag {
+        position: absolute;
+        left: 32px;
+        bottom: 26px;
+        width: 440px;
+        margin: 0;
+        font-family: var(--font-body);
+        font-size: 14px;
+        line-height: 20px;
+        color: var(--text-muted);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="cover">
+      <!--
+    blocks: accent-k slab 208 x 288 (space-8 x 3 + 16), process-cyan, process-magenta, process-yellow discs at r 96, four accent-line segments 48 x space-2.
+    arrangement: one tall slab bleeding off the right edge, the three discs overlapping it from the left, the accent line grounding them.
+    pattern row: literal motif. The registration circles and the logo's accent line are what the studio's identity is known by, so the discs are the motif.
+    scales: space-2 8px, space-8 64px, radius-full on the discs, flush square slab to match the flat system.
+  -->
+      <svg width="960" height="288" viewBox="0 0 960 288" aria-hidden="true">
+        <rect class="k" x="752" y="0" width="208" height="288" />
+        <g class="iso">
+          <circle class="y blend" cx="660" cy="104" r="96" />
+          <circle class="c blend" cx="600" cy="186" r="96" />
+          <circle class="m blend" cx="720" cy="186" r="96" />
+        </g>
+      </svg>
+      <h1 class="name">G.Holmes Designs</h1>
+      <p class="tag">Design that makes your business look established, not amateur.</p>
+    </div>
+  </body>
+</html>

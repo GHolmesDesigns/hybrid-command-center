@@ -1,0 +1,623 @@
+/* G.Holmes Designs components. Colors, type and spacing come from the system's tokens. */
+:root,
+[data-theme='light'] {
+  --ghd-show-light: inline-block;
+  --ghd-show-dark: none;
+}
+[data-theme='dark'] {
+  --ghd-show-light: none;
+  --ghd-show-dark: inline-block;
+}
+
+.ghd-stage {
+  padding: var(--space-4);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-body);
+  min-height: 100%;
+  box-sizing: border-box;
+}
+.ghd-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: center;
+}
+.ghd-stack {
+  display: grid;
+  gap: var(--space-4);
+}
+.ghd-plate {
+  padding: var(--space-card);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  display: flex;
+  justify-content: center;
+}
+.ghd-ink {
+  color: var(--ink);
+  margin: 0;
+}
+.ghd-on-light {
+  display: var(--ghd-show-light);
+}
+.ghd-on-dark {
+  display: var(--ghd-show-dark);
+}
+
+/* Marks */
+.ghd-logo {
+  display: inline-block;
+  line-height: 0;
+}
+.ghd-logo img {
+  display: inline-block;
+  height: auto;
+}
+.ghd-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  line-height: 0;
+}
+.ghd-icon-tile {
+  border-radius: var(--radius-lg);
+}
+.ghd-icon-circle {
+  border-radius: var(--radius-full);
+}
+.ghd-icon-light {
+  background: var(--light-neutral);
+  border: 1px solid var(--hairline-gray);
+}
+.ghd-icon-dark {
+  background: var(--near-black);
+  border: 1px solid var(--charcoal);
+}
+.ghd-reg {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* Accent line */
+.ghd-rule {
+  display: inline-flex;
+  vertical-align: middle;
+}
+.ghd-rule i {
+  display: block;
+  flex: 1;
+}
+.ghd-rule .c,
+.ghd-dots .c {
+  background: var(--process-cyan);
+}
+.ghd-rule .m,
+.ghd-dots .m {
+  background: var(--process-magenta);
+}
+.ghd-rule .y,
+.ghd-dots .y {
+  background: var(--process-yellow);
+}
+.ghd-rule .k,
+.ghd-dots .k {
+  background: var(--accent-k);
+}
+.ghd-rule-sm {
+  width: 65px;
+  height: 3px;
+  gap: 3px;
+}
+.ghd-rule-md {
+  width: 120px;
+  height: 4px;
+}
+.ghd-rule-lg {
+  width: 249px;
+  height: 5px;
+}
+
+/* Dots */
+.ghd-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+.ghd-dots i {
+  width: 13px;
+  height: 13px;
+  border-radius: var(--radius-full);
+  display: block;
+}
+.ghd-dots .ghd-label {
+  margin-left: var(--space-3);
+  color: var(--text-muted);
+}
+
+/* Labels */
+.ghd-label {
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+}
+.ghd-tone-muted {
+  color: var(--text-muted);
+}
+.ghd-tone-ink {
+  color: var(--ink);
+}
+.ghd-tone-highlight {
+  color: var(--highlight);
+}
+.ghd-hl-cyan {
+  color: var(--process-cyan);
+}
+.ghd-hl-yellow {
+  color: var(--process-yellow);
+}
+.ghd-hl-magenta {
+  color: var(--process-magenta);
+}
+
+/* Section header */
+.ghd-sechead {
+  display: grid;
+  gap: var(--space-2);
+  max-width: 620px;
+}
+.ghd-sechead-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.ghd-sechead-lede {
+  margin: 0;
+  color: var(--text);
+}
+
+/* Button */
+.ghd-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 44px;
+  padding: 0 var(--space-5);
+  border: 2px solid transparent;
+  border-radius: var(--radius-md);
+  font-family: var(--font-headline);
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 20px;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color 0.12s,
+    color 0.12s,
+    border-color 0.12s;
+}
+.ghd-btn-sm {
+  height: 34px;
+  padding: 0 var(--space-3);
+  font-size: 13px;
+}
+.ghd-btn-primary {
+  background: var(--action);
+  color: var(--on-action);
+}
+.ghd-btn-secondary {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--line-control);
+}
+.ghd-btn-ghost {
+  background: transparent;
+  color: var(--ink);
+  padding-left: var(--space-2);
+  padding-right: var(--space-2);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-thickness: 2px;
+  text-decoration-color: var(--process-cyan);
+}
+.ghd-btn-primary:hover {
+  background: var(--ink);
+  color: var(--surface);
+}
+.ghd-btn-secondary:hover {
+  background: var(--ink);
+  color: var(--surface);
+  border-color: var(--ink);
+}
+.ghd-btn-ghost:hover {
+  text-decoration-color: var(--process-magenta);
+}
+.ghd-btn:focus-visible,
+.ghd-input:focus-visible,
+.ghd-copy:focus-visible,
+.ghd-pbnav a:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.ghd-btn[disabled] {
+  background: var(--surface-muted);
+  color: var(--text-muted);
+  border-color: var(--line);
+  cursor: not-allowed;
+}
+
+/* Input */
+.ghd-field {
+  display: grid;
+  gap: var(--space-2);
+  max-width: 420px;
+}
+.ghd-field-label {
+  font-family: var(--font-headline);
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 20px;
+  color: var(--ink);
+}
+.ghd-input {
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 26px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius-md);
+  padding: 8px var(--space-3);
+  box-sizing: border-box;
+  width: 100%;
+}
+.ghd-input::placeholder {
+  color: var(--text-muted);
+}
+.ghd-field-msg {
+  margin: 0;
+  font-size: 12px;
+  line-height: 19px;
+  color: var(--text-muted);
+}
+.ghd-field.is-error .ghd-input {
+  border-color: var(--process-magenta);
+  border-width: 2px;
+}
+.ghd-field.is-error .ghd-field-msg {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* Card */
+.ghd-card {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-card);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line);
+  box-sizing: border-box;
+}
+.ghd-card-muted {
+  background: var(--surface-muted);
+}
+.ghd-card-dark {
+  background: var(--near-black);
+  border-color: var(--charcoal);
+}
+.ghd-card-body > :first-child {
+  margin-top: 0;
+}
+.ghd-card-body > :last-child {
+  margin-bottom: 0;
+}
+
+/* Callout */
+.ghd-callout {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-5) var(--space-card);
+  background: var(--surface-muted);
+  border-left: 4px solid var(--process-magenta);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+
+/* Ruled list */
+.ghd-ruled {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+.ghd-ruled li {
+  display: grid;
+  grid-template-columns: 40px minmax(120px, 1fr) minmax(0, 2fr) auto;
+  gap: var(--space-3);
+  align-items: baseline;
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+.ghd-ruled-desc {
+  color: var(--text-muted);
+}
+@media (max-width: 560px) {
+  .ghd-ruled li {
+    grid-template-columns: 40px 1fr auto;
+  }
+  .ghd-ruled-desc {
+    grid-column: 2 / -1;
+    grid-row: 2;
+  }
+}
+
+/* Do and don't */
+.ghd-dd {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-6);
+}
+.ghd-dd-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.ghd-dd-head i {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-style: normal;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--near-black);
+  background: var(--process-cyan);
+}
+.ghd-dd-dont .ghd-dd-head i {
+  background: var(--process-magenta);
+  color: var(--paper-white);
+}
+.ghd-dd ul {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+}
+.ghd-dd li {
+  position: relative;
+  padding: var(--space-3) 0 var(--space-3) 20px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+}
+.ghd-dd li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 19px;
+  width: 7px;
+  height: 7px;
+  background: var(--process-cyan);
+}
+.ghd-dd-dont li::before {
+  background: var(--process-magenta);
+}
+
+/* Copy block */
+.ghd-copyblock {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-card);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.ghd-copyrow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-4);
+  align-items: start;
+}
+.ghd-copybody {
+  margin: 0;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+.ghd-copy {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 14px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius-md);
+  padding: 6px 10px;
+  cursor: pointer;
+  min-width: 62px;
+}
+.ghd-copy:hover {
+  background: var(--ink);
+  color: var(--surface);
+}
+
+/* Playbook nav */
+.ghd-pbnav {
+  width: 260px;
+  box-sizing: border-box;
+  background: var(--near-black);
+  border: 1px solid var(--charcoal);
+  color: var(--text);
+  padding: var(--space-5);
+  border-radius: var(--radius-md);
+  font-family: var(--font-body);
+}
+.ghd-pbnav.is-fixed {
+  position: fixed;
+  inset: 0 auto 0 0;
+  border-radius: 0;
+  overflow-y: auto;
+}
+.ghd-pbnav-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+.ghd-pbnav ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+.ghd-pbnav a {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  color: var(--text-muted);
+  text-decoration: none;
+  border-radius: var(--radius-md);
+}
+.ghd-pbnav a:hover {
+  color: var(--ink);
+}
+.ghd-pbnav a.is-active {
+  color: var(--ink);
+  background: var(--charcoal);
+}
+.ghd-pbnav a.is-active .ghd-label {
+  color: var(--process-yellow);
+}
+
+/* Hero */
+.ghd-hero {
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+.ghd-hero-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  background: var(--near-black);
+  border-bottom: 1px solid var(--charcoal);
+  padding: var(--space-3) var(--space-card);
+}
+.ghd-hero-nav {
+  display: flex;
+  gap: var(--space-5);
+  color: var(--text);
+}
+.ghd-hero-body {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-4);
+  padding: var(--space-7) var(--space-card);
+}
+.ghd-hero-body .body-lg {
+  margin: 0;
+  max-width: 56ch;
+  color: var(--text);
+}
+[data-theme='dark'] .ghd-hero {
+  border-color: var(--line);
+}
+
+/* Brand band */
+.ghd-band {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+  padding: var(--space-6) var(--space-card);
+  background: var(--near-black);
+  border: 1px solid var(--charcoal);
+  border-radius: var(--radius-md);
+}
+.ghd-band p {
+  flex: 1 1 280px;
+  max-width: 460px;
+}
+
+/* Stationery and social */
+.ghd-bizcard {
+  width: 336px;
+  max-width: 100%;
+  height: 192px;
+  box-sizing: border-box;
+  padding: var(--space-5);
+  background: var(--near-black);
+  border: 1px solid var(--charcoal);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: var(--shadow-mockup);
+}
+.ghd-bizcard-foot {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+.ghd-bizcard-name {
+  margin: 0 0 2px;
+  font-family: var(--font-headline);
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 20px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.ghd-bizcard .ghd-label {
+  margin: 0;
+}
+.ghd-letterhead {
+  width: 100%;
+  max-width: 408px;
+  aspect-ratio: 8.5 / 11;
+  box-sizing: border-box;
+  padding: var(--space-6);
+  background: var(--paper-white);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  box-shadow: var(--shadow-mockup);
+}
+.ghd-letterhead-body {
+  flex: 1;
+  color: var(--text);
+}
+.ghd-letterhead-body > :first-child {
+  margin-top: 0;
+}
+.ghd-letterhead-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.ghd-social {
+  width: 320px;
+  max-width: 100%;
+  aspect-ratio: 1;
+  box-sizing: border-box;
+  padding: var(--space-5);
+  background: var(--near-black);
+  border: 1px solid var(--charcoal);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  text-align: center;
+  box-shadow: var(--shadow-mockup);
+}
