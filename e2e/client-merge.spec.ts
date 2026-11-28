@@ -67,11 +67,19 @@ test('a client merges into another, and the archived source points at it', async
   await page.setViewportSize({ width: 420, height: 900 });
   const notes = plan.getByRole('group', { name: 'Notes' });
   await expect(notes.getByText(/deliberately long source note/)).toBeVisible();
-  const notesChoiceAlignment = await notes
+  // A stacked choice starts its text at the left edge, neither centered nor stretched. Measured
+  // from the layout, because browsers disagree on how they spell the computed alignment.
+  const labelPlacement = await notes
     .locator('.merge-choice')
     .filter({ hasText: 'Use source' })
-    .evaluate((row) => getComputedStyle(row).alignItems);
-  expect(notesChoiceAlignment).toBe('flex-start');
+    .evaluate((row) => {
+      const bounds = row.getBoundingClientRect();
+      const label = row.querySelector('.merge-choice-label')!.getBoundingClientRect();
+      const contentLeft = bounds.left + parseFloat(getComputedStyle(row).paddingLeft);
+      return { inset: label.left - contentLeft, widthShare: label.width / bounds.width };
+    });
+  expect(Math.abs(labelPlacement.inset)).toBeLessThanOrEqual(2);
+  expect(labelPlacement.widthShare).toBeLessThan(0.9);
   await phone.getByRole('radio', { name: /Use source/ }).click();
   const contact = plan.getByRole('group', { name: 'Contact name' });
   await expect(contact.getByRole('radio', { name: /Keep destination/ })).toBeChecked();
